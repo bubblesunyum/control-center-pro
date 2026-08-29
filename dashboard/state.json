@@ -1,50 +1,180 @@
 {
-  "generated": "13:16:24",
+  "generated": "18:36:44",
   "project": "control-center-pro",
   "git": {
     "branch": "main",
     "upstream": "origin/main",
-    "dirty": 4,
-    "commits_today": 15,
+    "dirty": 5,
+    "commits_today": 30,
     "last": {
-      "sha": "ffb9bbc",
-      "subject": "add the CCP targets and get the fork building",
-      "when": "36 minutes ago"
+      "sha": "095ecf1",
+      "subject": "drop the duplicate beads block from CLAUDE.md ccp-0wa",
+      "when": "16 minutes ago"
     },
-    "unpushed": [],
-    "unpushed_beads": [],
-    "bead_commits": {}
+    "unpushed": [
+      {
+        "sha": "095ecf1",
+        "subject": "drop the duplicate beads block from CLAUDE.md ccp-0wa",
+        "at": 1788045638.0
+      },
+      {
+        "sha": "de7fdc2",
+        "subject": "stop paying for bd prime ccp-038",
+        "at": 1788045331.0
+      },
+      {
+        "sha": "02dd8eb",
+        "subject": "ledger: file ccp-2az (bd self-commits bypass the hook)",
+        "at": 1788040742.0
+      },
+      {
+        "sha": "42be078",
+        "subject": "ledger: wire the dolt transport so memories reach the remote",
+        "at": 1788040705.0
+      },
+      {
+        "sha": "815bc9b",
+        "subject": "bd: update sync.remote",
+        "at": 1788040540.0
+      },
+      {
+        "sha": "fb1da1f",
+        "subject": "ledger: close ccp-e2e (jsonl export enabled)",
+        "at": 1788039708.0
+      },
+      {
+        "sha": "120a1de",
+        "subject": "put the ledger in git \u2014 enable the jsonl export bd init never turns on",
+        "at": 1788039687.0
+      },
+      {
+        "sha": "3d28645",
+        "subject": "fork the docs the README was passing off as CCP's",
+        "at": 1788038621.0
+      },
+      {
+        "sha": "aee08e3",
+        "subject": "stop advertising --no-verify in commit-msg hook",
+        "at": 1788038062.0
+      }
+    ],
+    "unpushed_beads": [
+      "ccp-038",
+      "ccp-0t2",
+      "ccp-0wa",
+      "ccp-2az",
+      "ccp-459",
+      "ccp-e2e",
+      "ccp-jze",
+      "ccp-kcc",
+      "ccp-v64"
+    ],
+    "bead_commits": {
+      "ccp-0wa": {
+        "commits": 1,
+        "at": 1788045638.0,
+        "list": [
+          {
+            "sha": "095ecf1",
+            "subject": "drop the duplicate beads block from CLAUDE.md ccp-0wa"
+          }
+        ]
+      },
+      "ccp-038": {
+        "commits": 1,
+        "at": 1788045331.0,
+        "list": [
+          {
+            "sha": "de7fdc2",
+            "subject": "stop paying for bd prime ccp-038"
+          }
+        ]
+      },
+      "ccp-2az": {
+        "commits": 1,
+        "at": 1788040742.0,
+        "list": [
+          {
+            "sha": "02dd8eb",
+            "subject": "ledger: file ccp-2az (bd self-commits bypass the hook)"
+          }
+        ]
+      },
+      "ccp-0t2": {
+        "commits": 1,
+        "at": 1788040705.0,
+        "list": [
+          {
+            "sha": "42be078",
+            "subject": "ledger: wire the dolt transport so memories reach the remote"
+          }
+        ]
+      },
+      "ccp-e2e": {
+        "commits": 2,
+        "at": 1788039708.0,
+        "list": [
+          {
+            "sha": "fb1da1f",
+            "subject": "ledger: close ccp-e2e (jsonl export enabled)"
+          },
+          {
+            "sha": "120a1de",
+            "subject": "put the ledger in git \u2014 enable the jsonl export bd init never turns on"
+          }
+        ]
+      },
+      "ccp-459": {
+        "commits": 1,
+        "at": 1788038621.0,
+        "list": [
+          {
+            "sha": "3d28645",
+            "subject": "fork the docs the README was passing off as CCP's"
+          }
+        ]
+      },
+      "ccp-v64": {
+        "commits": 1,
+        "at": 1788038621.0,
+        "list": [
+          {
+            "sha": "3d28645",
+            "subject": "fork the docs the README was passing off as CCP's"
+          }
+        ]
+      },
+      "ccp-kcc": {
+        "commits": 1,
+        "at": 1788038621.0,
+        "list": [
+          {
+            "sha": "3d28645",
+            "subject": "fork the docs the README was passing off as CCP's"
+          }
+        ]
+      },
+      "ccp-jze": {
+        "commits": 1,
+        "at": 1788038062.0,
+        "list": [
+          {
+            "sha": "aee08e3",
+            "subject": "stop advertising --no-verify in commit-msg hook"
+          }
+        ]
+      }
+    }
   },
   "ledger": {
     "counts": {
-      "open": 26,
-      "ready": 12,
+      "open": 30,
+      "ready": 16,
       "in_progress": 0,
-      "closed": 5,
+      "closed": 13,
       "blocked": 0
     },
     "issues": [
-      {
-        "id": "ccp-ait.3",
-        "title": "GPLv3 licensing and attribution",
-        "status": "open",
-        "ready": true,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 0,
-        "type": "task",
-        "parent": "ccp-ait",
-        "updated_at": "2026-08-29T17:12:58Z",
-        "created_at": "2026-08-29T17:08:00Z",
-        "deps": [],
-        "description": "LICENSE (GPL-3.0-or-later), SPDX headers on every CCP source file, upstream's headers left intact. README states CCP is a fork of vorssaint-utils (c) Vorssaint contributors, GPL-3.0-or-later, with an independent UI and no use of Vorssaint trademarks. Create PATCHES.md as the register for any local upstream patch.",
-        "design": "",
-        "notes": "",
-        "close_reason": "",
-        "owner": "bubbles@cortico.ai",
-        "children": []
-      },
       {
         "id": "ccp-ait",
         "title": "fork setup and licensing",
@@ -56,20 +186,42 @@
         "priority": 0,
         "type": "epic",
         "parent": "",
-        "updated_at": "2026-08-29T17:12:59Z",
+        "updated_at": "2026-08-29T21:21:12Z",
         "created_at": "2026-08-29T17:07:56Z",
         "deps": [],
         "description": "Stand up the fork-based in-tree strategy from BRIEF.md: vorssaint-utils vendored as our engine layer, our targets added alongside, GPLv3 in place from the first commit. Nothing else can start until the package builds.",
         "design": "",
-        "notes": "",
+        "notes": "Reopened 2026-08-29: closed at 4/4 while its acknowledged remainder (fork bundle identity) sat unparented as ccp-v64. v64 is now a child; the epic is 4/5 and stays open until the fork stops shipping a Vorssaint-identified bundle.",
         "close_reason": "",
         "owner": "bubbles@cortico.ai",
         "children": [
           "ccp-ait.4",
           "ccp-ait.3",
           "ccp-ait.2",
-          "ccp-ait.1"
+          "ccp-ait.1",
+          "ccp-v64"
         ]
+      },
+      {
+        "id": "ccp-veh",
+        "title": "split CLAUDE.md and AGENTS.md \u2014 AGENTS.md is bd boilerplate, CLAUDE.md carries everything",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-29T22:23:01Z",
+        "created_at": "2026-08-29T22:23:01Z",
+        "deps": [],
+        "description": "AGENTS.md is the untouched bd init file from commit 2f4f71e: generic beads text plus advice about rm -i aliases. CLAUDE.md is 266 lines and shares essentially nothing with it. Any agent reading AGENTS.md \u2014 opencode, Codex \u2014 never learns the review pass, that scripts/verify.sh is the gate, that Sources/Vorssaint is read-only, the philosophy, naming, animation, accessibility, or the architecture.\n\nDepends on the harness-starter fix (har-32s) landing first: the agent-agnostic half of this content should arrive by install, not be written twice.",
+        "design": "AGENTS.md takes the harness contract from template/. CLAUDE.md keeps only what is specific to this project: architecture, philosophy, naming, comments, animation, accessibility, testing, upstream rules, build specifics \u2014 with a first line pointing at AGENTS.md. The sections already exist; they move. Drop the duplicated beads managed block from CLAUDE.md. Both files get tracks: comments.",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
       },
       {
         "id": "ccp-lr7.9",
@@ -287,6 +439,104 @@
         ]
       },
       {
+        "id": "ccp-ami",
+        "title": "migrate the MEMORY.md dashboard note into bd remember",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-29T23:34:52Z",
+        "created_at": "2026-08-29T23:34:52Z",
+        "deps": [],
+        "description": "The shared-memory rule now ships in AGENTS.md: bd remember is the durable cross-tool memory because every agent here has bd and the brief already prints the keys, while a tool's own memory stays native and holds pointers.\n\nThis repo's memory directory still has the fact rather than the pointer. ~/.claude/projects/-Users-bubbles-dev-control-center-pro/memory/ holds a note that the dashboard opens in Claude Code's browser pane and never the system browser, on port 7393. That is a project fact every session needs and it is invisible to opencode, Codex, and anything else that isn't Claude Code \u2014 the exact failure the rule exists to prevent, sitting in the file that documents the rule.",
+        "design": "bd remember it, leave a one-line pointer in MEMORY.md. Per .claude/HARNESS.md, anything removed from the memory directory is copied to .claude/memory-archive/ and shown to the user first \u2014 this is a rewrite rather than a removal, but the archive copy is cheap insurance on the one edit in this project that has no git revert behind it.",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-2az",
+        "title": "bd makes its own git commits, and they bypass the commit-msg hook",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "bug",
+        "parent": "",
+        "updated_at": "2026-08-29T21:58:47Z",
+        "created_at": "2026-08-29T21:58:47Z",
+        "deps": [],
+        "description": "Running 'bd dolt remote add' produced commit 815bc9b 'bd: update sync.remote' \u2014 authored as the user, not requested, touching .beads/config.yaml (it stripped the trailing newline, nothing more).\n\nTwo problems:\n1. bd commits to git on its own. This repo's profile is conservative about git actions, and CLAUDE.md says not to commit without authority. A tool that commits as a side effect of a config read/write breaks that expectation silently.\n2. The message names no bead. scripts/hooks/commit-msg would reject 'bd: update sync.remote' \u2014 the regex needs a ccp- id \u2014 so bd is committing with the hook bypassed. That is the same drift ccp-jze was filed for, except the bypass is not a human typing --no-verify, it is a tool doing it invisibly.\n\nNothing was harmed here; the commit is a one-character whitespace change. The concern is the mechanism.",
+        "design": "",
+        "notes": "Found while wiring the Dolt transport (ccp-0t2). Same class of issue as ccp-jze, which removed the --no-verify advertisement from the hook.",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "02dd8eb",
+            "subject": "ledger: file ccp-2az (bd self-commits bypass the hook)"
+          }
+        ]
+      },
+      {
+        "id": "ccp-ojz",
+        "title": "workflow skill staleness gate is blind \u2014 context.py picks first tracks comment",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "chore",
+        "parent": "",
+        "updated_at": "2026-08-29T21:14:35Z",
+        "created_at": "2026-08-29T21:14:35Z",
+        "deps": [],
+        "description": "scripts/context.py:50 uses re.search for '<!-- tracks:' which finds the example comment at .claude/skills/workflow/SKILL.md:108 ('<!-- tracks: \u2026 -->') instead of the real tracks at :196. So lock entry is {'\u2026': ''} and none of the 5 real sources (brief.sh, verify.sh, dashboard.py, hooks/commit-msg, context.py) are actually watched \u2014 e.g. editing scripts/hooks/commit-msg for ccp-jze did not trigger STALE as it should. Same risk for any doc that mentions tracks: in prose. Fix: make tracked_by find the *last* tracks comment, or anchor to end-of-file, and bless afterwards.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-v64",
+        "title": "CCP's own app bundle still inherits upstream's Vorssaint build identity (build.sh EXECUTABLE=Vorssaint, APP_BUNDLE_ID=com.vorssaint.utils)",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "ccp-ait",
+        "updated_at": "2026-08-29T21:21:19Z",
+        "created_at": "2026-08-29T20:36:01Z",
+        "deps": [],
+        "description": "The fork's build path still produces a Vorssaint-identified bundle: build.sh sets EXECUTABLE=Vorssaint and APP_BUNDLE_ID=com.vorssaint.utils, and Resources/com.vorssaint.utils.fan-control.plist exists. This contradicts the fork's no-Vorssaint-branding position for anything the fork ships. Must rename to Control Center Pro's own identity (bundle id, app name) once the fork has its own identity. Out of scope for the ccp-ait.3 licensing/docs bead; belongs to the fork-setup epic.",
+        "design": "",
+        "notes": "Also in scope (same root cause \u2014 build.sh has not caught up to the fork): deployment-target mismatch. build.sh:42 sets TARGET=arm64-apple-macosx14.0 and build.sh:409 passes --minimum-deployment-target 14.0, while Package.swift:22 carries the CCP patch to 14.4 (CATapDescription needs 14.4) and the README badge says 14.4+. Raise build.sh to 14.4 alongside the identity rename.",
+        "close_reason": "",
+        "owner": "",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "3d28645",
+            "subject": "fork the docs the README was passing off as CCP's"
+          }
+        ]
+      },
+      {
         "id": "ccp-9w3",
         "title": "ready lane count disagrees with the ready counter",
         "status": "open",
@@ -301,27 +551,6 @@
         "created_at": "2026-08-29T18:13:51Z",
         "deps": [],
         "description": "dashboard/index.html:1710 rolls child beads into their parent epic's card, so the ready lane draws 4 cards while the header's 'ready to claim' counter says 10 \u2014 same word, two denominators. The roll-up is right; the disagreement is what misleads. Either count cards rather than beads in the header, or have the epic card say how many ready children it stands for.",
-        "design": "",
-        "notes": "",
-        "close_reason": "",
-        "owner": "",
-        "children": []
-      },
-      {
-        "id": "ccp-jze",
-        "title": "commits bypassed the commit-msg hook with --no-verify",
-        "status": "open",
-        "ready": true,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 2,
-        "type": "chore",
-        "parent": "",
-        "updated_at": "2026-08-29T18:13:59Z",
-        "created_at": "2026-08-29T18:13:51Z",
-        "deps": [],
-        "description": "3f01781, 6001d7f and ffb9bbc were all committed after 2897fe7 installed a working blocking commit-msg hook, and none names a bead \u2014 only --no-verify gets past it. Nothing to backfill without rewriting history. The open question is whether the hook should stop advertising 'git commit --no-verify' in its own refusal text, since that is the line that gets taken. Consider requiring a reason, or logging bypasses so the drift is at least visible.",
         "design": "",
         "notes": "",
         "close_reason": "",
@@ -585,6 +814,7 @@
           "ccp-4kq.4",
           "ccp-4kq.3",
           "ccp-4kq.1",
+          "ccp-4kq.5",
           "ccp-4kq.2"
         ]
       },
@@ -617,6 +847,27 @@
         ]
       },
       {
+        "id": "ccp-4kq.5",
+        "title": "revisit the 38-file exclude list once the shell is real",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 3,
+        "type": "task",
+        "parent": "ccp-4kq",
+        "updated_at": "2026-08-29T18:20:52Z",
+        "created_at": "2026-08-29T18:20:52Z",
+        "deps": [],
+        "description": "The exclude list in Package.swift was arrived at by iterating swift build until it went green \u2014 the second, third and fourth waves are files that fell out behind an earlier exclusion, not files with their own UI coupling. Once ccp-4kq.4 (the Permissions PR) or a similar routing lands, some of them may compile again without their blocker. Worth one pass: try removing the cascade entries and see which stick.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
         "id": "ccp-4kq.2",
         "title": "smoke test for the --full gate",
         "status": "open",
@@ -636,6 +887,227 @@
         "design": "",
         "notes": "",
         "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-0wa",
+        "title": "drop the duplicate beads managed block from CLAUDE.md",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-29T23:20:40Z",
+        "created_at": "2026-08-29T23:20:38Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "Removed the 55-line BEADS INTEGRATION block from CLAUDE.md; AGENTS.md keeps the one copy. Always-loaded cost 4022 to 3342 tokens. The verify.sh guard against a second block reappearing is the harness-starter half, still open on har-7xv.",
+        "owner": "",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "095ecf1",
+            "subject": "drop the duplicate beads block from CLAUDE.md ccp-0wa"
+          }
+        ]
+      },
+      {
+        "id": "ccp-038",
+        "title": "remove the bd prime SessionStart hook and pick up the harness gate for it",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-29T23:15:33Z",
+        "created_at": "2026-08-29T23:15:31Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "hook removed, gate applied, verified",
+        "owner": "",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "de7fdc2",
+            "subject": "stop paying for bd prime ccp-038"
+          }
+        ]
+      },
+      {
+        "id": "ccp-0t2",
+        "title": "wire the Dolt transport so the ledger and its memories reach the remote",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-29T21:58:09Z",
+        "created_at": "2026-08-29T21:57:59Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "Registered the Dolt remote (bd dolt remote add origin git+https://github.com/bubblesunyum/control-center-pro.git) and pushed. Verified end to end: refs/dolt/data now exists on the GitHub remote, and a fresh clone + bd init + bd dolt remote add + bd dolt pull returned all 37 issues, both memories, and full close reasons \u2014 while origin/main was still 4 commits behind, proving the Dolt ref carries the ledger independently of the branch. Both transports now live: jsonl export for git-visible diffs, Dolt for memories/history/merges. Recorded the onboarding sequence as a bd memory. Upstream fixes fo",
+        "owner": "",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "42be078",
+            "subject": "ledger: wire the dolt transport so memories reach the remote"
+          }
+        ]
+      },
+      {
+        "id": "ccp-e2e",
+        "title": "beads never export issues.jsonl \u2014 the ledger is invisible to git",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "bug",
+        "parent": "",
+        "updated_at": "2026-08-29T21:41:43Z",
+        "created_at": "2026-08-29T21:38:00Z",
+        "deps": [],
+        "description": "psymail-mini syncs its ledger by committing .beads/issues.jsonl alongside code; its origin has no refs/dolt/data, so git IS the transport. CCP has no issues.jsonl at all: .beads/config.yaml lacks the 'export: auto: true' block (and sync.remote), so bd never writes the export and every bead filed here is invisible to git and lives only in the local embedded Dolt DB. Root cause is upstream in harness-starter \u2014 commands/add.sh runs 'bd init' and stops, and bd's default config ships the export block commented out ('Disabled by default'). psymail-mini's config was hand-edited 3 minutes after its bd init (Aug 10 19:10 -> 19:13); that hand edit is the step the harness extraction never captured.",
+        "design": "",
+        "notes": "",
+        "close_reason": "Added 'sync.remote' + 'export: auto: true' to .beads/config.yaml and generated a clean full .beads/issues.jsonl (37 issues), now tracked in git as of 120a1de. Verified: the export contains this session's beads (ccp-kcc, ccp-459, ccp-v64, ccp-ait, ccp-e2e) and is not gitignored; scripts/verify.sh passed. Root cause is upstream in harness-starter, filed there as har-nqi (P0) with har-xoq/har-638/har-sul. Caveat carried in har-xoq: bd export is incremental and does not drop deleted issues \u2014 a full regen (rm issues.jsonl export-state.json && bd export -o .beads/issues.jsonl) is the only reliably c",
+        "owner": "",
+        "children": [],
+        "commit_count": 2,
+        "commits": [
+          {
+            "sha": "fb1da1f",
+            "subject": "ledger: close ccp-e2e (jsonl export enabled)"
+          },
+          {
+            "sha": "120a1de",
+            "subject": "put the ledger in git \u2014 enable the jsonl export bd init never turns on"
+          }
+        ]
+      },
+      {
+        "id": "ccp-459",
+        "title": "README build instructions advertise a build that produces a Vorssaint bundle",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "bug",
+        "parent": "",
+        "updated_at": "2026-08-29T21:23:52Z",
+        "created_at": "2026-08-29T21:20:54Z",
+        "deps": [],
+        "description": "README.md:71-78 tells people to run ./build.sh and ./build.sh --install, but build.sh is upstream tooling that sets EXECUTABLE=Vorssaint and APP_BUNDLE_ID=com.vorssaint.utils (build.sh:27-36). The same README states CCP 'presents no modified build as Vorssaint', and TRADEMARKS.md requires forks to use a different name, icon and bundle identifier. So the README instructs the reader to do the exact thing the README and TRADEMARKS.md forbid. The underlying identity fix is ccp-v64; this bead is the README not advertising it in the meantime.",
+        "design": "",
+        "notes": "",
+        "close_reason": "README's build section now uses 'swift build' and states plainly that build.sh still emits a com.vorssaint.utils bundle TRADEMARKS.md forbids a fork from shipping, pointing at ccp-v64 for the rename. Placeholder clone URL replaced with the real origin. Committed 3d28645.",
+        "owner": "bubbles@cortico.ai",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "3d28645",
+            "subject": "fork the docs the README was passing off as CCP's"
+          }
+        ]
+      },
+      {
+        "id": "ccp-kcc",
+        "title": "README links upstream's docs as CCP's \u2014 security reports misroute to Vorssaint",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "bug",
+        "parent": "",
+        "updated_at": "2026-08-29T21:23:51Z",
+        "created_at": "2026-08-29T21:20:45Z",
+        "deps": [],
+        "description": "The README rewrite (e9cddfb) presents SUPPORT.md, SECURITY.md, CONTRIBUTING.md and CHANGELOG.md as CCP's docs, but all four are still upstream's, untouched by the fork. SECURITY.md sends vulnerability reports to vorssaintapp/vorssaint-utils/security/advisories/new, so a CCP security report lands in the upstream maintainer's private advisories. SUPPORT.md points bug reports at upstream's issue tracker. CONTRIBUTING.md is titled 'Contributing to Vorssaint' and describes upstream's layout, yet README cites it twice as covering CCP's layout and conventions. CHANGELOG.md is entirely Vorssaint releases with no CCP entries.",
+        "design": "Rewrite SECURITY.md and SUPPORT.md as CCP's (real consequence, and conflicts on upstream merge are rare and cheap). Do NOT overwrite CONTRIBUTING.md or CHANGELOG.md \u2014 they are upstream files that keep receiving upstream commits, and overwriting them makes 'merge upstream/main' expensive, which the fork strategy depends on staying cheap. Relabel those two in the README as upstream's instead.",
+        "notes": "",
+        "close_reason": "Rewrote SECURITY.md and SUPPORT.md as CCP's own; security advisories now route to bubblesunyum/control-center-pro with an explicit split for vendored upstream sources. README no longer presents CONTRIBUTING.md/CHANGELOG.md as CCP's \u2014 labelled as vendored upstream rather than forked, to keep 'merge upstream/main' cheap. Reviewed by reviewer-taste and reviewer-correctness (both clean, all links and claims verified against the repo); scripts/verify.sh passed. Committed 3d28645.",
+        "owner": "bubbles@cortico.ai",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "3d28645",
+            "subject": "fork the docs the README was passing off as CCP's"
+          }
+        ]
+      },
+      {
+        "id": "ccp-jze",
+        "title": "commits bypassed the commit-msg hook with --no-verify",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "chore",
+        "parent": "",
+        "updated_at": "2026-08-29T21:14:20Z",
+        "created_at": "2026-08-29T18:13:51Z",
+        "deps": [],
+        "description": "3f01781, 6001d7f and ffb9bbc were all committed after 2897fe7 installed a working blocking commit-msg hook, and none names a bead \u2014 only --no-verify gets past it. Nothing to backfill without rewriting history. The open question is whether the hook should stop advertising 'git commit --no-verify' in its own refusal text, since that is the line that gets taken. Consider requiring a reason, or logging bypasses so the drift is at least visible.",
+        "design": "",
+        "notes": "",
+        "close_reason": "removed the 'Genuinely unfilable? git commit --no-verify' hint from scripts/hooks/commit-msg:39-41 per option #1. Hook now only directs to bd q / bd ready and the required bead id. Verified: blocks missing bead without advertising bypass, passes with ccp-jze, passes fixup!, and scripts/verify.sh passes.",
+        "owner": "",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "aee08e3",
+            "subject": "stop advertising --no-verify in commit-msg hook"
+          }
+        ]
+      },
+      {
+        "id": "ccp-ait.3",
+        "title": "GPLv3 licensing and attribution",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 0,
+        "type": "task",
+        "parent": "ccp-ait",
+        "updated_at": "2026-08-29T20:43:10Z",
+        "created_at": "2026-08-29T17:08:00Z",
+        "deps": [],
+        "description": "LICENSE (GPL-3.0-or-later), SPDX headers on every CCP source file, upstream's headers left intact. README states CCP is a fork of vorssaint-utils (c) Vorssaint contributors, GPL-3.0-or-later, with an independent UI and no use of Vorssaint trademarks. Create PATCHES.md as the register for any local upstream patch.",
+        "design": "",
+        "notes": "",
+        "close_reason": "LICENSE, PATCHES.md, and SPDX headers were already in place from fork setup. Rewrote README as the CCP fork README with Vorssaint attribution, independent-UI statement, trademark disclaimer, and honest in-development framing. Ran verify + local review pass; two correctness findings fixed (engine code is not literally 'unmodified' \u2014 deviations tracked in PATCHES.md). Filed ccp-v64: the fork's build.sh still emits a Vorssaint bundle identity (out of scope for this docs bead). Build and tests pass.",
         "owner": "bubbles@cortico.ai",
         "children": []
       },
@@ -758,17 +1230,24 @@
       "old_path": null
     },
     {
-      "path": "dashboard/state.json",
+      "path": ".beads/issues.jsonl",
       "staged": false,
       "untracked": false,
       "status": "M",
       "old_path": null
     },
     {
-      "path": "scripts/__pycache__/",
+      "path": ".vscode/",
       "staged": false,
       "untracked": true,
       "status": "?",
+      "old_path": null
+    },
+    {
+      "path": "dashboard/state.json",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
       "old_path": null
     },
     {
@@ -781,7 +1260,7 @@
   ],
   "verify": {
     "status": "passed",
-    "when": "36m ago",
+    "when": "16m ago",
     "tests": "",
     "steps": [
       {
@@ -795,12 +1274,12 @@
     ],
     "unverified": [
       {
-        "sha": "ffb9bbc",
-        "subject": "add the CCP targets and get the fork building"
+        "sha": "095ecf1",
+        "subject": "drop the duplicate beads block from CLAUDE.md ccp-0wa"
       }
     ],
-    "took": "5s",
-    "at": 1788025222.9594219
+    "took": "4s",
+    "at": 1788045627.9904933
   },
   "runs": {
     "verify": {
@@ -879,7 +1358,7 @@
           "path": ".claude/settings.json",
           "origin": "claude",
           "role": "SessionStart and Stop hooks",
-          "tokens": 256
+          "tokens": 207
         },
         {
           "id": "scripts/brief.sh",
@@ -903,7 +1382,15 @@
           "path": "harness/laurels.jsonl",
           "origin": "harness",
           "role": "praise, replayed one at a time",
-          "tokens": 0
+          "tokens": 41
+        },
+        {
+          "id": "harness/handoffs/20260829-155513.md",
+          "name": "20260829-155513.md",
+          "path": "harness/handoffs/20260829-155513.md",
+          "origin": "harness",
+          "role": "the last session's closing note",
+          "tokens": 482
         },
         {
           "id": "CLAUDE.md",
@@ -911,7 +1398,7 @@
           "path": "CLAUDE.md",
           "origin": "claude",
           "role": "project instructions, always loaded",
-          "tokens": 3415
+          "tokens": 2728
         },
         {
           "id": "/Users/bubbles/.claude/projects/-Users-bubbles-dev-control-center-pro/memory/MEMORY.md",
@@ -941,6 +1428,14 @@
       "name": "ledger",
       "blurb": "where work is found and left",
       "nodes": [
+        {
+          "id": ".beads/issues.jsonl",
+          "name": "issues.jsonl",
+          "path": ".beads/issues.jsonl",
+          "origin": "harness",
+          "role": "the issue graph, exported for git",
+          "tokens": 12574
+        },
         {
           "id": ".claude/skills/beads/SKILL.md",
           "name": "beads",
@@ -1051,7 +1546,7 @@
           "path": "scripts/context.py",
           "origin": "harness",
           "role": "stale-doc and context-budget guard",
-          "tokens": 1605
+          "tokens": 2490
         },
         {
           "id": ".claude/context.lock",
@@ -1068,18 +1563,18 @@
     "always": [
       {
         "name": "CLAUDE.md",
-        "tokens": 3415
+        "tokens": 2728
       },
       {
         "name": "session brief",
-        "tokens": 98
+        "tokens": 243
       },
       {
         "name": "skill descriptions",
         "tokens": 334
       }
     ],
-    "always_total": 3847,
+    "always_total": 3305,
     "on_demand": [
       {
         "name": "workflow",
@@ -1114,7 +1609,7 @@
         "tokens": 434
       }
     ],
-    "brief_tokens": 98,
+    "brief_tokens": 243,
     "prime_tokens": 1569
   }
 }
