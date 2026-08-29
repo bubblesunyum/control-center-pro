@@ -19,8 +19,8 @@ E2E/
 # macOS noise
 .DS_Store
 
-# Xcode / SwiftPM user state
-*.xcodeproj
+# Xcode / SwiftPM user state — note *.xcodeproj is deliberately NOT ignored:
+# upstream ignores it, we commit ours. Only the per-user state inside it goes.
 xcuserdata/
 .swiftpm/
 .cursor/
@@ -30,9 +30,6 @@ xcuserdata/
 # Upstream ignores AGENTS.md and CLAUDE.md as local-only working notes. We
 # track both — they are the harness's always-loaded instructions — so those two
 # lines are deliberately absent above. Re-check after every upstream merge.
-#
-# Upstream also ignores *.xcodeproj. If the signing work (ccp-4kq.1) needs a
-# committed Xcode project, that entry has to be narrowed rather than deleted.
 
 # Beads / Dolt files (added by bd init)
 .dolt/

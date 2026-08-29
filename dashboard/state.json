@@ -1,15 +1,15 @@
 {
-  "generated": "12:13:27",
+  "generated": "12:25:27",
   "project": "control-center-pro",
   "git": {
     "branch": "master",
     "upstream": "",
-    "dirty": 10,
-    "commits_today": 1,
+    "dirty": 2,
+    "commits_today": 11,
     "last": {
-      "sha": "2f4f71e",
-      "subject": "bd init: initialize beads issue tracking",
-      "when": "9 minutes ago"
+      "sha": "3f01781",
+      "subject": "scope the review packet so upstream doesn't drown it",
+      "when": "6 minutes ago"
     },
     "unpushed": [],
     "unpushed_beads": [],
@@ -18,12 +18,33 @@
   "ledger": {
     "counts": {
       "open": 25,
-      "ready": 6,
-      "in_progress": 0,
-      "closed": 0,
+      "ready": 7,
+      "in_progress": 2,
+      "closed": 1,
       "blocked": 0
     },
     "issues": [
+      {
+        "id": "ccp-ait.4",
+        "title": "create the GitHub fork and set origin",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 0,
+        "type": "task",
+        "parent": "ccp-ait",
+        "updated_at": "2026-08-29T17:19:30Z",
+        "created_at": "2026-08-29T17:19:30Z",
+        "deps": [],
+        "description": "The upstream merge is done and Sources/Vorssaint is in-tree, but this repo has no origin. Fork vorssaintapp/vorssaint-utils under the user's GitHub account and point origin at it, or decide that origin should be a fresh private repo instead. Needs the user \u2014 it creates something under their account.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
       {
         "id": "ccp-ait.3",
         "title": "GPLv3 licensing and attribution",
@@ -49,7 +70,7 @@
         "id": "ccp-ait.2",
         "title": "add CCP targets to Package.swift",
         "status": "open",
-        "ready": false,
+        "ready": true,
         "in_review": false,
         "backlog": false,
         "labels": [],
@@ -62,27 +83,6 @@
           "ccp-ait.1"
         ],
         "description": "Add our block to upstream's Package.swift, clearly delimited since it is the known merge-conflict hotspot. Prefer option (a) from the BRIEF: a VorssaintEngines library target over Sources/Vorssaint with App/ and UI/ excluded, so the UI-free boundary is compiler-enforced. Then CCPKit, CCPUI, and the ControlCenterPro executable.",
-        "design": "",
-        "notes": "",
-        "close_reason": "",
-        "owner": "bubbles@cortico.ai",
-        "children": []
-      },
-      {
-        "id": "ccp-ait.1",
-        "title": "fork vorssaint-utils and vendor it in-tree",
-        "status": "open",
-        "ready": true,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 0,
-        "type": "task",
-        "parent": "ccp-ait",
-        "updated_at": "2026-08-29T17:12:59Z",
-        "created_at": "2026-08-29T17:07:58Z",
-        "deps": [],
-        "description": "Fork vorssaintapp/vorssaint-utils on GitHub, clone it as this repo's history (or graft it in), add the original as an 'upstream' remote. Note: the BRIEF refers to a vorssaint-src clone that is not present in the working tree yet \u2014 resolving how upstream's sources land here is part of this task.",
         "design": "",
         "notes": "",
         "close_reason": "",
@@ -109,10 +109,53 @@
         "close_reason": "",
         "owner": "bubbles@cortico.ai",
         "children": [
+          "ccp-ait.4",
           "ccp-ait.3",
           "ccp-ait.2",
           "ccp-ait.1"
         ]
+      },
+      {
+        "id": "ccp-4rs",
+        "title": "port psymail-mini's durable taste into CLAUDE.md",
+        "status": "in_progress",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "chore",
+        "parent": "",
+        "updated_at": "2026-08-29T17:14:28Z",
+        "created_at": "2026-08-29T17:14:27Z",
+        "deps": [],
+        "description": "psymail-mini is the same author's macOS menu-bar app and its CLAUDE.md/ARCHITECTURE.md/STYLE.md carry durable taste written for React but meant to transfer to SwiftUI. Translate and port what is relevant, keeping CLAUDE.md's always-loaded cost down by pushing long-form into ARCHITECTURE.md and STYLE.md.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-rqd",
+        "title": "rename bead prefix con- to ccp-",
+        "status": "in_progress",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "chore",
+        "parent": "",
+        "updated_at": "2026-08-29T17:14:28Z",
+        "created_at": "2026-08-29T17:14:27Z",
+        "deps": [],
+        "description": "Prefix and every harness reference to it: bd rename-prefix, plus /tmp paths, the commit-msg hook's id pattern, review.sh capture glob, dashboard's bead-id regex, and the skill docs.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
       },
       {
         "id": "ccp-lr7.9",
@@ -617,90 +660,65 @@
         "close_reason": "",
         "owner": "bubbles@cortico.ai",
         "children": []
+      },
+      {
+        "id": "ccp-ait.1",
+        "title": "fork vorssaint-utils and vendor it in-tree",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 0,
+        "type": "task",
+        "parent": "ccp-ait",
+        "updated_at": "2026-08-29T17:19:31Z",
+        "created_at": "2026-08-29T17:07:58Z",
+        "deps": [],
+        "description": "Fork vorssaintapp/vorssaint-utils on GitHub, clone it as this repo's history (or graft it in), add the original as an 'upstream' remote. Note: the BRIEF refers to a vorssaint-src clone that is not present in the working tree yet \u2014 resolving how upstream's sources land here is part of this task.",
+        "design": "",
+        "notes": "",
+        "close_reason": "upstream added as a remote and its history merged with --allow-unrelated-histories; Sources/Vorssaint is in-tree and swift build is green. one conflict (.gitignore) resolved, with upstream's ignores of AGENTS.md and CLAUDE.md deliberately dropped and noted in the file. setting origin split out \u2014 it needs the user's GitHub account.",
+        "owner": "bubbles@cortico.ai",
+        "children": []
       }
     ],
     "stale": 0
   },
   "worktree": [
     {
-      "path": ".claude/HARNESS.md",
-      "staged": false,
-      "untracked": true,
-      "status": "?",
-      "old_path": null
-    },
-    {
-      "path": ".claude/agents/",
-      "staged": false,
-      "untracked": true,
-      "status": "?",
-      "old_path": null
-    },
-    {
-      "path": ".claude/context.lock",
-      "staged": false,
-      "untracked": true,
-      "status": "?",
-      "old_path": null
-    },
-    {
-      "path": ".claude/memory-archive/",
-      "staged": false,
-      "untracked": true,
-      "status": "?",
-      "old_path": null
-    },
-    {
-      "path": ".claude/skills/",
-      "staged": false,
-      "untracked": true,
-      "status": "?",
-      "old_path": null
-    },
-    {
-      "path": "BRIEF.md",
-      "staged": false,
-      "untracked": true,
-      "status": "?",
-      "old_path": null
-    },
-    {
-      "path": "CLAUDE.md",
+      "path": ".beads/interactions.jsonl",
       "staged": false,
       "untracked": false,
       "status": "M",
       "old_path": null
     },
     {
-      "path": "dashboard/",
+      "path": "dashboard/state.json",
       "staged": false,
-      "untracked": true,
-      "status": "?",
-      "old_path": null
-    },
-    {
-      "path": "harness/",
-      "staged": false,
-      "untracked": true,
-      "status": "?",
-      "old_path": null
-    },
-    {
-      "path": "scripts/",
-      "staged": false,
-      "untracked": true,
-      "status": "?",
+      "untracked": false,
+      "status": "M",
       "old_path": null
     }
   ],
   "verify": {
-    "status": "never run",
-    "when": "",
+    "status": "passed",
+    "when": "6m ago",
     "tests": "",
-    "steps": [],
-    "unverified": 0,
-    "took": "",
-    "at": 0
+    "steps": [
+      {
+        "name": "build",
+        "ok": true
+      }
+    ],
+    "unverified": [
+      {
+        "sha": "3f01781",
+        "subject": "scope the review packet so upstream doesn't drown it"
+      }
+    ],
+    "took": "3s",
+    "at": 1788023953.983907
   },
   "runs": {
     "verify": {
@@ -721,7 +739,7 @@
       "name": "agentic-review",
       "description": "Review a control-center-pro change with agents that didn't write it \u2014 taste against the project's standards, correctness hunting real defects, and design reading screenshots of what actually rendered. Use before committing a non-trivial change, when asked to review work or a branch, or after finishing a feature.",
       "idle": 78,
-      "loaded": 1291
+      "loaded": 1403
     },
     {
       "name": "beads",
@@ -765,7 +783,7 @@
       "name": "reviewer-taste",
       "model": "haiku",
       "description": "Reviews a control-center-pro diff against the project's documented taste \u2014 composition, module size, naming, comments, accessibility. Covers the app and the harness scripts. Reads a review packet and reports violations. Runs on a cheap model; use for every change worth reviewing.",
-      "loaded": 1037
+      "loaded": 1090
     }
   ],
   "harness": [
@@ -811,14 +829,31 @@
           "path": "CLAUDE.md",
           "origin": "claude",
           "role": "project instructions, always loaded",
-          "tokens": 1902
+          "tokens": 3313
+        },
+        {
+          "id": "/Users/bubbles/.claude/projects/-Users-bubbles-dev-control-center-pro/memory/MEMORY.md",
+          "name": "MEMORY.md",
+          "path": "/Users/bubbles/.claude/projects/-Users-bubbles-dev-control-center-pro/memory/MEMORY.md",
+          "origin": "claude",
+          "role": "auto-memory index, loaded every session",
+          "tokens": 37
         }
       ]
     },
     {
       "name": "remember",
       "blurb": "one fact per file, fetched when it turns out to matter",
-      "nodes": []
+      "nodes": [
+        {
+          "id": "/Users/bubbles/.claude/projects/-Users-bubbles-dev-control-center-pro/memory/dashboard-opens-in-claude-code-browser.md",
+          "name": "dashboard-opens-in-claude-code-browser",
+          "path": "/Users/bubbles/.claude/projects/-Users-bubbles-dev-control-center-pro/memory/dashboard-opens-in-claude-code-browser.md",
+          "origin": "claude",
+          "role": "The harness dashboard should always be opened in Claude Code's in-app browser pane, never the system browser.",
+          "tokens": 165
+        }
+      ]
     },
     {
       "name": "ledger",
@@ -852,7 +887,7 @@
           "path": ".claude/skills/agentic-review/SKILL.md",
           "origin": "claude",
           "role": "Review a control-center-pro change with agents that didn't write it \u2014 taste against the project's standards, correctness hunting real defects, and design reading screenshots of what actually rendered. Use before committing a non-trivial change, when asked to review work or a branch, or after finishing a feature.",
-          "tokens": 1291
+          "tokens": 1403
         },
         {
           "id": ".claude/skills/handoff/SKILL.md",
@@ -888,7 +923,7 @@
           "path": "scripts/review.sh",
           "origin": "harness",
           "role": "bundles the diff into one packet",
-          "tokens": 1615
+          "tokens": 1747
         },
         {
           "id": ".claude/agents/librarian.md",
@@ -920,7 +955,7 @@
           "path": ".claude/agents/reviewer-taste.md",
           "origin": "claude",
           "role": "Reviews a control-center-pro diff against the project's documented taste \u2014 composition, module size, naming, comments, accessibility. Covers the app and the harness scripts. Reads a review packet and reports violations. Runs on a cheap model; use for every change worth reviewing.",
-          "tokens": 1037
+          "tokens": 1090
         }
       ]
     },
@@ -951,18 +986,18 @@
     "always": [
       {
         "name": "CLAUDE.md",
-        "tokens": 1902
+        "tokens": 3313
       },
       {
         "name": "session brief",
-        "tokens": 96
+        "tokens": 127
       },
       {
         "name": "skill descriptions",
         "tokens": 334
       }
     ],
-    "always_total": 2332,
+    "always_total": 3774,
     "on_demand": [
       {
         "name": "workflow",
@@ -973,16 +1008,16 @@
         "tokens": 2081
       },
       {
+        "name": "agentic-review",
+        "tokens": 1403
+      },
+      {
         "name": "reviewer-correctness",
         "tokens": 1336
       },
       {
-        "name": "agentic-review",
-        "tokens": 1291
-      },
-      {
         "name": "reviewer-taste",
-        "tokens": 1037
+        "tokens": 1090
       },
       {
         "name": "handoff",
@@ -997,7 +1032,7 @@
         "tokens": 434
       }
     ],
-    "brief_tokens": 96,
+    "brief_tokens": 127,
     "prime_tokens": 1569
   }
 }
