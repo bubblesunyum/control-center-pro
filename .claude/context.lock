@@ -5,9 +5,9 @@
     ".claude/agents/reviewer-design.md": "056a9b0334d8c28c",
     ".claude/agents/reviewer-taste.md": "cfed7953d377c3bc",
     ".claude/skills/workflow/SKILL.md": "ee90149f26075884",
-    "doc": "d45c7efb49ea1cb7",
+    "doc": "7900737303051501",
     "scripts/brief.sh": "58d710492c34dda3",
-    "scripts/context.py": "40194190911d43a9",
+    "scripts/context.py": "c3486d569b2de5e0",
     "scripts/review.sh": "d3108e3d63dcc664",
     "scripts/verify.sh": "078f8430906a286e"
   },
