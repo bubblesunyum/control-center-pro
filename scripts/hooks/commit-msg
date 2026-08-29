@@ -38,8 +38,6 @@ if [ -z "$ids" ]; then
 
     Then put the id in the message: "Closes ccp-abc", or just ccp-abc in the body.
 
-    Genuinely unfilable? git commit --no-verify
-
 EOF
   exit 1
 fi
