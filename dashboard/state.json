@@ -1,0 +1,1003 @@
+{
+  "generated": "12:13:27",
+  "project": "control-center-pro",
+  "git": {
+    "branch": "master",
+    "upstream": "",
+    "dirty": 10,
+    "commits_today": 1,
+    "last": {
+      "sha": "2f4f71e",
+      "subject": "bd init: initialize beads issue tracking",
+      "when": "9 minutes ago"
+    },
+    "unpushed": [],
+    "unpushed_beads": [],
+    "bead_commits": {}
+  },
+  "ledger": {
+    "counts": {
+      "open": 25,
+      "ready": 6,
+      "in_progress": 0,
+      "closed": 0,
+      "blocked": 0
+    },
+    "issues": [
+      {
+        "id": "ccp-ait.3",
+        "title": "GPLv3 licensing and attribution",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 0,
+        "type": "task",
+        "parent": "ccp-ait",
+        "updated_at": "2026-08-29T17:12:58Z",
+        "created_at": "2026-08-29T17:08:00Z",
+        "deps": [],
+        "description": "LICENSE (GPL-3.0-or-later), SPDX headers on every CCP source file, upstream's headers left intact. README states CCP is a fork of vorssaint-utils (c) Vorssaint contributors, GPL-3.0-or-later, with an independent UI and no use of Vorssaint trademarks. Create PATCHES.md as the register for any local upstream patch.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-ait.2",
+        "title": "add CCP targets to Package.swift",
+        "status": "open",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 0,
+        "type": "task",
+        "parent": "ccp-ait",
+        "updated_at": "2026-08-29T17:12:59Z",
+        "created_at": "2026-08-29T17:07:59Z",
+        "deps": [
+          "ccp-ait.1"
+        ],
+        "description": "Add our block to upstream's Package.swift, clearly delimited since it is the known merge-conflict hotspot. Prefer option (a) from the BRIEF: a VorssaintEngines library target over Sources/Vorssaint with App/ and UI/ excluded, so the UI-free boundary is compiler-enforced. Then CCPKit, CCPUI, and the ControlCenterPro executable.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-ait.1",
+        "title": "fork vorssaint-utils and vendor it in-tree",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 0,
+        "type": "task",
+        "parent": "ccp-ait",
+        "updated_at": "2026-08-29T17:12:59Z",
+        "created_at": "2026-08-29T17:07:58Z",
+        "deps": [],
+        "description": "Fork vorssaintapp/vorssaint-utils on GitHub, clone it as this repo's history (or graft it in), add the original as an 'upstream' remote. Note: the BRIEF refers to a vorssaint-src clone that is not present in the working tree yet \u2014 resolving how upstream's sources land here is part of this task.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-ait",
+        "title": "fork setup and licensing",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 0,
+        "type": "epic",
+        "parent": "",
+        "updated_at": "2026-08-29T17:12:59Z",
+        "created_at": "2026-08-29T17:07:56Z",
+        "deps": [],
+        "description": "Stand up the fork-based in-tree strategy from BRIEF.md: vorssaint-utils vendored as our engine layer, our targets added alongside, GPLv3 in place from the first commit. Nothing else can start until the package builds.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": [
+          "ccp-ait.3",
+          "ccp-ait.2",
+          "ccp-ait.1"
+        ]
+      },
+      {
+        "id": "ccp-lr7.9",
+        "title": "activate/deactivate lifecycle and idle CPU",
+        "status": "open",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "ccp-lr7",
+        "updated_at": "2026-08-29T17:12:59Z",
+        "created_at": "2026-08-29T17:08:10Z",
+        "deps": [
+          "ccp-lr7.6"
+        ],
+        "description": "Sampling runs only while the panel is visible, except for widgets that explicitly opt into background sampling for a menu-bar stat. Enforced through activate()/deactivate(). Engine work off the main thread, models publish on main.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-lr7.7",
+        "title": "edit mode: wiggle, remove, and drag between lanes",
+        "status": "open",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "ccp-lr7",
+        "updated_at": "2026-08-29T17:12:59Z",
+        "created_at": "2026-08-29T17:08:07Z",
+        "deps": [
+          "ccp-lr7.6"
+        ],
+        "description": "Long-press or an Edit button enters edit mode. Widgets wiggle via a small repeating rotationEffect with a random per-item phase offset so they do not sync, show remove badges, and become draggable. Prefer a custom drag gesture plus matchedGeometryEffect over .draggable/.dropDestination, which feel clunky for grid reordering. Drop targets: any position in any lane, plus an empty trailing lane that appears as a target to create a new lane.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-lr7.6",
+        "title": "lane layout with placeholder widgets",
+        "status": "open",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "ccp-lr7",
+        "updated_at": "2026-08-29T17:12:59Z",
+        "created_at": "2026-08-29T17:08:06Z",
+        "deps": [
+          "ccp-lr7.2"
+        ],
+        "description": "Vertical lanes stacking widget cards, driven by the layout model and rendering whatever the registry provides. Placeholder widgets only at this stage.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-lr7.5",
+        "title": "glass card design system",
+        "status": "open",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "ccp-lr7",
+        "updated_at": "2026-08-29T17:12:59Z",
+        "created_at": "2026-08-29T17:08:05Z",
+        "deps": [
+          "ccp-lr7.3"
+        ],
+        "description": "The CCPUI vocabulary every widget draws from: spacing scale, corner radii (continuous, ~16-20), thin-material card fill, 1px white-alpha stroke, shadow, type ramp, accent for active toggles. Matches macOS Control Center's language; borrows nothing from Vorssaint, whose design is trademarked.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-lr7.4",
+        "title": "panel dismissal and multi-display behaviour",
+        "status": "open",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "ccp-lr7",
+        "updated_at": "2026-08-29T17:12:59Z",
+        "created_at": "2026-08-29T17:08:04Z",
+        "deps": [
+          "ccp-lr7.3"
+        ],
+        "description": "Dismiss on outside click via a global NSEvent monitor, and on Esc. Show on the display holding the status item (or the mouse). The event monitor must be removed when the panel closes \u2014 a leaked global monitor is the classic version of this bug.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-lr7.3",
+        "title": "status item and non-activating glass panel",
+        "status": "open",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "ccp-lr7",
+        "updated_at": "2026-08-29T17:12:59Z",
+        "created_at": "2026-08-29T17:08:03Z",
+        "deps": [
+          "ccp-ait.2"
+        ],
+        "description": "NSStatusItem toggles an NSPanel: .nonactivatingPanel, level .popUpMenu, collectionBehavior [.canJoinAllSpaces, .fullScreenAuxiliary]. Real blur via NSVisualEffectView (.hudWindow or .popover, blendingMode .behindWindow) wrapped for SwiftUI. Anchored top-right of the screen holding the status item, width growing leftward with lane count up to full width. Pre-warm the window at launch.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-lr7.2",
+        "title": "layout model and persistence",
+        "status": "open",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "ccp-lr7",
+        "updated_at": "2026-08-29T17:12:59Z",
+        "created_at": "2026-08-29T17:08:02Z",
+        "deps": [
+          "ccp-lr7.1"
+        ],
+        "description": "[Lane] where Lane = [WidgetID], Codable, persisted as JSON in Application Support. Decoding must survive a stored layout naming a widget the registry no longer has, without discarding the rest of the arrangement.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-lr7.1",
+        "title": "design the CCPWidget protocol and registry",
+        "status": "open",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "ccp-lr7",
+        "updated_at": "2026-08-29T17:12:59Z",
+        "created_at": "2026-08-29T17:08:01Z",
+        "deps": [
+          "ccp-ait.2"
+        ],
+        "description": "Everything hangs off this, so it comes first. CCPWidget with a static WidgetDescriptor (id, title, icon, default size, required permissions), makeView(), activate()/deactivate(), optional settings and compact/expanded variants. Plus WidgetRegistry listing what is available.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-lr7",
+        "title": "the shell: panel, lanes, edit mode",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "epic",
+        "parent": "",
+        "updated_at": "2026-08-29T17:12:59Z",
+        "created_at": "2026-08-29T17:07:56Z",
+        "deps": [],
+        "description": "The glass panel and everything structural around widgets, built with placeholder widgets only. Per BRIEF: get the shell feeling great before wiring any engine.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": [
+          "ccp-lr7.9",
+          "ccp-lr7.7",
+          "ccp-lr7.6",
+          "ccp-lr7.5",
+          "ccp-lr7.4",
+          "ccp-lr7.3",
+          "ccp-lr7.2",
+          "ccp-lr7.1",
+          "ccp-lr7.8"
+        ]
+      },
+      {
+        "id": "ccp-4kq.3",
+        "title": "prove the upstream merge workflow",
+        "status": "open",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "ccp-4kq",
+        "updated_at": "2026-08-29T17:12:59Z",
+        "created_at": "2026-08-29T17:08:20Z",
+        "deps": [
+          "ccp-ait.2",
+          "ccp-8ld.2"
+        ],
+        "description": "Definition of done requires at least one clean merge upstream/main. Fetch, merge, fix whatever adapters upstream moved, re-verify the VorssaintEngines exclude list still compiles, and write the routine down. Per the BRIEF: always check with the user before updating upstream.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-4kq.1",
+        "title": "signing and entitlements for audio process taps",
+        "status": "open",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "ccp-4kq",
+        "updated_at": "2026-08-29T17:12:59Z",
+        "created_at": "2026-08-29T17:08:18Z",
+        "deps": [
+          "ccp-ait.2"
+        ],
+        "description": "Process taps need proper signing and audio-capture-adjacent entitlements. Check upstream's build.sh for how they sign and bundle; add an Xcode project or XcodeGen if SwiftPM alone cannot express what signing needs.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-8ld.6",
+        "title": "Per-App Audio Mixer widget (Audio adapter)",
+        "status": "open",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "ccp-8ld",
+        "updated_at": "2026-08-29T17:12:59Z",
+        "created_at": "2026-08-29T17:08:17Z",
+        "deps": [
+          "ccp-8ld.1",
+          "ccp-lr7.6"
+        ],
+        "description": "The deepest engine and the one to schedule the most time for: per-app volume via CoreAudio process taps (CATapDescription, macOS 14.4+), plus output/input device switching. Port carefully and mostly intact. Needs the signing and entitlement work to be usable at runtime.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-8ld.5",
+        "title": "Clipboard History widget (Clipboard adapter)",
+        "status": "open",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "ccp-8ld",
+        "updated_at": "2026-08-29T17:12:59Z",
+        "created_at": "2026-08-29T17:08:15Z",
+        "deps": [
+          "ccp-8ld.1",
+          "ccp-lr7.6"
+        ],
+        "description": "History list with ignored-apps and auto-clear settings over the Clipboard engine. Note this is the one v1 widget that must sample with the panel closed to have any history to show \u2014 it is the first real test of the background-sampling opt-out in the lifecycle rules.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-8ld.4",
+        "title": "Now Playing widget (Media adapter)",
+        "status": "open",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "ccp-8ld",
+        "updated_at": "2026-08-29T17:12:59Z",
+        "created_at": "2026-08-29T17:08:14Z",
+        "deps": [
+          "ccp-8ld.1",
+          "ccp-lr7.6"
+        ],
+        "description": "Now-playing info and transport controls over the Media engine.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-8ld.3",
+        "title": "Quick Toggles widget (KeepAwake, Bluetooth, Display)",
+        "status": "open",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "ccp-8ld",
+        "updated_at": "2026-08-29T17:12:59Z",
+        "created_at": "2026-08-29T17:08:13Z",
+        "deps": [
+          "ccp-lr7.6",
+          "ccp-8ld.1"
+        ],
+        "description": "One lane of toggles over three small engines: keep-awake, Bluetooth sleep-toggle, brightness (including external displays, which may need DDC over IOKit) and appearance. Cheap wins that prove the adapter pattern across several engines at once.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-8ld.2",
+        "title": "System Stats widget (Metrics/SystemMonitor adapter)",
+        "status": "open",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "ccp-8ld",
+        "updated_at": "2026-08-29T17:12:59Z",
+        "created_at": "2026-08-29T17:08:12Z",
+        "deps": [
+          "ccp-lr7.6",
+          "ccp-8ld.1"
+        ],
+        "description": "The flagship widget: CPU, memory, temperature, and network graphs over the Metrics and SystemMonitor samplers. Needs VMStatisticsCompat. Adapter exposes an @Observable model; the widget never touches an upstream type.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-8ld.1",
+        "title": "port shared infra from upstream",
+        "status": "open",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "ccp-8ld",
+        "updated_at": "2026-08-29T17:12:59Z",
+        "created_at": "2026-08-29T17:08:11Z",
+        "deps": [
+          "ccp-ait.2"
+        ],
+        "description": "The support layer the widgets lean on: Permissions.swift patterns, HotkeyManager, LaunchAtLogin, Notifier, BoundedProcessRunner, GlobalShortcut, Defaults. Consumed through CCPKit like any other engine \u2014 adapters, not edits.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-lr7.8",
+        "title": "widget gallery for adding widgets",
+        "status": "open",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "ccp-lr7",
+        "updated_at": "2026-08-29T17:13:00Z",
+        "created_at": "2026-08-29T17:08:08Z",
+        "deps": [
+          "ccp-lr7.7"
+        ],
+        "description": "The + affordance in edit mode opens a gallery built from WidgetRegistry, showing each descriptor and whether its permissions are satisfied.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-4kq",
+        "title": "build, signing, and the upstream merge routine",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "epic",
+        "parent": "",
+        "updated_at": "2026-08-29T17:13:00Z",
+        "created_at": "2026-08-29T17:07:57Z",
+        "deps": [],
+        "description": "The parts that make the app shippable and the fork sustainable: entitlements and signing for process taps, a smoke test for the gate, and one proven merge upstream/main.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": [
+          "ccp-4kq.3",
+          "ccp-4kq.1",
+          "ccp-4kq.2"
+        ]
+      },
+      {
+        "id": "ccp-8ld",
+        "title": "v1 widget set",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "epic",
+        "parent": "",
+        "updated_at": "2026-08-29T17:13:00Z",
+        "created_at": "2026-08-29T17:07:57Z",
+        "deps": [],
+        "description": "The five v1 widgets from the definition of done: System Stats, Quick Toggles, Now Playing, Clipboard History, Per-App Audio Mixer. Each is a CCPKit adapter over an upstream engine plus a CCPWidget conformer.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": [
+          "ccp-8ld.6",
+          "ccp-8ld.5",
+          "ccp-8ld.4",
+          "ccp-8ld.3",
+          "ccp-8ld.2",
+          "ccp-8ld.1"
+        ]
+      },
+      {
+        "id": "ccp-4kq.2",
+        "title": "smoke test for the --full gate",
+        "status": "open",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 3,
+        "type": "task",
+        "parent": "ccp-4kq",
+        "updated_at": "2026-08-29T17:13:00Z",
+        "created_at": "2026-08-29T17:08:19Z",
+        "deps": [
+          "ccp-lr7.3"
+        ],
+        "description": "scripts/smoke.sh: launch the built app, assert the status item and panel came up, quit. verify.sh --full already calls it when present. This is the only check that can catch a shell that compiles and does not run.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      }
+    ],
+    "stale": 0
+  },
+  "worktree": [
+    {
+      "path": ".claude/HARNESS.md",
+      "staged": false,
+      "untracked": true,
+      "status": "?",
+      "old_path": null
+    },
+    {
+      "path": ".claude/agents/",
+      "staged": false,
+      "untracked": true,
+      "status": "?",
+      "old_path": null
+    },
+    {
+      "path": ".claude/context.lock",
+      "staged": false,
+      "untracked": true,
+      "status": "?",
+      "old_path": null
+    },
+    {
+      "path": ".claude/memory-archive/",
+      "staged": false,
+      "untracked": true,
+      "status": "?",
+      "old_path": null
+    },
+    {
+      "path": ".claude/skills/",
+      "staged": false,
+      "untracked": true,
+      "status": "?",
+      "old_path": null
+    },
+    {
+      "path": "BRIEF.md",
+      "staged": false,
+      "untracked": true,
+      "status": "?",
+      "old_path": null
+    },
+    {
+      "path": "CLAUDE.md",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
+    },
+    {
+      "path": "dashboard/",
+      "staged": false,
+      "untracked": true,
+      "status": "?",
+      "old_path": null
+    },
+    {
+      "path": "harness/",
+      "staged": false,
+      "untracked": true,
+      "status": "?",
+      "old_path": null
+    },
+    {
+      "path": "scripts/",
+      "staged": false,
+      "untracked": true,
+      "status": "?",
+      "old_path": null
+    }
+  ],
+  "verify": {
+    "status": "never run",
+    "when": "",
+    "tests": "",
+    "steps": [],
+    "unverified": 0,
+    "took": "",
+    "at": 0
+  },
+  "runs": {
+    "verify": {
+      "state": "idle",
+      "output": "",
+      "at": 0,
+      "ago": ""
+    },
+    "push": {
+      "state": "idle",
+      "output": "",
+      "at": 0,
+      "ago": ""
+    }
+  },
+  "skills": [
+    {
+      "name": "agentic-review",
+      "description": "Review a control-center-pro change with agents that didn't write it \u2014 taste against the project's standards, correctness hunting real defects, and design reading screenshots of what actually rendered. Use before committing a non-trivial change, when asked to review work or a branch, or after finishing a feature.",
+      "idle": 78,
+      "loaded": 1291
+    },
+    {
+      "name": "beads",
+      "description": "Use when working in a repository that uses bd or Beads for durable project task tracking, issue dependencies, blocker management, multi-session handoff, or shared work memory. Trigger when the user asks to find ready work, claim or close tasks, create follow-up work, inspect blockers, recover project context, or choose between local planning and persistent project tracking.",
+      "idle": 94,
+      "loaded": 434
+    },
+    {
+      "name": "handoff",
+      "description": "Close out a control-center-pro session on purpose \u2014 settle the ledger, leave a note for whoever wakes up next, and optionally hand straight off to a fresh agent. Use when work is wrapping up, when the context window is getting long, or when the user says to hand off, wrap up, or take a beat.",
+      "idle": 73,
+      "loaded": 824
+    },
+    {
+      "name": "workflow",
+      "description": "How work moves through control-center-pro \u2014 the beads ledger, the verify gate, the review pass, and the token budget that keeps them affordable on one account. Use when starting a work session, deciding where a note or a discovery belongs, planning a multi-step change, handing off at the end of a session, or wondering which skill or script to reach for.",
+      "idle": 89,
+      "loaded": 2642
+    }
+  ],
+  "agents": [
+    {
+      "name": "librarian",
+      "model": "sonnet",
+      "description": "Audits the whole knowledge layer at once \u2014 every skill, every memory, and what a session pays before it starts \u2014 and proposes what to merge, delete, shorten, or promote. Reads a digest rather than the repo. Run on a cadence or when the always-loaded cost climbs, never on the hot path of doing work.",
+      "loaded": 768
+    },
+    {
+      "name": "reviewer-correctness",
+      "model": "sonnet",
+      "description": "Hunts for real defects in a control-center-pro diff \u2014 logic errors, concurrency bugs, lifecycle and state mistakes, and the platform traps this project keeps hitting. Reads a review packet and reports only findings with a concrete failure scenario.",
+      "loaded": 1336
+    },
+    {
+      "name": "reviewer-design",
+      "model": "sonnet",
+      "description": "Reviews screenshots of a control-center-pro change \u2014 what the app actually renders, not what the diff says it should. Hunts clipping, truncation, overflow, misalignment, and drift from the app's established look. Reads a review packet listing captures to look at. Use whenever a change touches anything on screen.",
+      "loaded": 2081
+    },
+    {
+      "name": "reviewer-taste",
+      "model": "haiku",
+      "description": "Reviews a control-center-pro diff against the project's documented taste \u2014 composition, module size, naming, comments, accessibility. Covers the app and the harness scripts. Reads a review packet and reports violations. Runs on a cheap model; use for every change worth reviewing.",
+      "loaded": 1037
+    }
+  ],
+  "harness": [
+    {
+      "name": "wake",
+      "blurb": "what an agent knows before its first tool call",
+      "nodes": [
+        {
+          "id": ".claude/settings.json",
+          "name": "settings.json",
+          "path": ".claude/settings.json",
+          "origin": "claude",
+          "role": "SessionStart and Stop hooks",
+          "tokens": 256
+        },
+        {
+          "id": "scripts/brief.sh",
+          "name": "brief.sh",
+          "path": "scripts/brief.sh",
+          "origin": "harness",
+          "role": "the session brief, in place of bd prime",
+          "tokens": 1967
+        },
+        {
+          "id": "harness/seat.md",
+          "name": "seat.md",
+          "path": "harness/seat.md",
+          "origin": "harness",
+          "role": "the role a session occupies",
+          "tokens": 586
+        },
+        {
+          "id": "harness/laurels.jsonl",
+          "name": "laurels.jsonl",
+          "path": "harness/laurels.jsonl",
+          "origin": "harness",
+          "role": "praise, replayed one at a time",
+          "tokens": 0
+        },
+        {
+          "id": "CLAUDE.md",
+          "name": "CLAUDE.md",
+          "path": "CLAUDE.md",
+          "origin": "claude",
+          "role": "project instructions, always loaded",
+          "tokens": 1902
+        }
+      ]
+    },
+    {
+      "name": "remember",
+      "blurb": "one fact per file, fetched when it turns out to matter",
+      "nodes": []
+    },
+    {
+      "name": "ledger",
+      "blurb": "where work is found and left",
+      "nodes": [
+        {
+          "id": ".claude/skills/beads/SKILL.md",
+          "name": "beads",
+          "path": ".claude/skills/beads/SKILL.md",
+          "origin": "harness",
+          "role": "Use when working in a repository that uses bd or Beads for durable project task tracking, issue dependencies, blocker management, multi-session handoff, or shared work memory. Trigger when the user asks to find ready work, claim or close tasks, create follow-up work, inspect blockers, recover project context, or choose between local planning and persistent project tracking.",
+          "tokens": 434
+        },
+        {
+          "id": ".claude/skills/workflow/SKILL.md",
+          "name": "workflow",
+          "path": ".claude/skills/workflow/SKILL.md",
+          "origin": "harness",
+          "role": "How work moves through control-center-pro \u2014 the beads ledger, the verify gate, the review pass, and the token budget that keeps them affordable on one account. Use when starting a work session, deciding where a note or a discovery belongs, planning a multi-step change, handing off at the end of a session, or wondering which skill or script to reach for.",
+          "tokens": 2642
+        }
+      ]
+    },
+    {
+      "name": "reach",
+      "blurb": "capabilities that cost nothing until invoked",
+      "nodes": [
+        {
+          "id": ".claude/skills/agentic-review/SKILL.md",
+          "name": "agentic-review",
+          "path": ".claude/skills/agentic-review/SKILL.md",
+          "origin": "claude",
+          "role": "Review a control-center-pro change with agents that didn't write it \u2014 taste against the project's standards, correctness hunting real defects, and design reading screenshots of what actually rendered. Use before committing a non-trivial change, when asked to review work or a branch, or after finishing a feature.",
+          "tokens": 1291
+        },
+        {
+          "id": ".claude/skills/handoff/SKILL.md",
+          "name": "handoff",
+          "path": ".claude/skills/handoff/SKILL.md",
+          "origin": "claude",
+          "role": "Close out a control-center-pro session on purpose \u2014 settle the ledger, leave a note for whoever wakes up next, and optionally hand straight off to a fresh agent. Use when work is wrapping up, when the context window is getting long, or when the user says to hand off, wrap up, or take a beat.",
+          "tokens": 824
+        }
+      ]
+    },
+    {
+      "name": "prove",
+      "blurb": "the gate a change passes before it counts",
+      "nodes": [
+        {
+          "id": "scripts/verify.sh",
+          "name": "verify.sh",
+          "path": "scripts/verify.sh",
+          "origin": "harness",
+          "role": "build, tests, and a smoke check, one exit code",
+          "tokens": 992
+        }
+      ]
+    },
+    {
+      "name": "review",
+      "blurb": "agents that didn't write the code reading it",
+      "nodes": [
+        {
+          "id": "scripts/review.sh",
+          "name": "review.sh",
+          "path": "scripts/review.sh",
+          "origin": "harness",
+          "role": "bundles the diff into one packet",
+          "tokens": 1615
+        },
+        {
+          "id": ".claude/agents/librarian.md",
+          "name": "librarian",
+          "path": ".claude/agents/librarian.md",
+          "origin": "claude",
+          "role": "Audits the whole knowledge layer at once \u2014 every skill, every memory, and what a session pays before it starts \u2014 and proposes what to merge, delete, shorten, or promote. Reads a digest rather than the repo. Run on a cadence or when the always-loaded cost climbs, never on the hot path of doing work.",
+          "tokens": 768
+        },
+        {
+          "id": ".claude/agents/reviewer-correctness.md",
+          "name": "reviewer-correctness",
+          "path": ".claude/agents/reviewer-correctness.md",
+          "origin": "claude",
+          "role": "Hunts for real defects in a control-center-pro diff \u2014 logic errors, concurrency bugs, lifecycle and state mistakes, and the platform traps this project keeps hitting. Reads a review packet and reports only findings with a concrete failure scenario.",
+          "tokens": 1336
+        },
+        {
+          "id": ".claude/agents/reviewer-design.md",
+          "name": "reviewer-design",
+          "path": ".claude/agents/reviewer-design.md",
+          "origin": "claude",
+          "role": "Reviews screenshots of a control-center-pro change \u2014 what the app actually renders, not what the diff says it should. Hunts clipping, truncation, overflow, misalignment, and drift from the app's established look. Reads a review packet listing captures to look at. Use whenever a change touches anything on screen.",
+          "tokens": 2081
+        },
+        {
+          "id": ".claude/agents/reviewer-taste.md",
+          "name": "reviewer-taste",
+          "path": ".claude/agents/reviewer-taste.md",
+          "origin": "claude",
+          "role": "Reviews a control-center-pro diff against the project's documented taste \u2014 composition, module size, naming, comments, accessibility. Covers the app and the harness scripts. Reads a review packet and reports violations. Runs on a cheap model; use for every change worth reviewing.",
+          "tokens": 1037
+        }
+      ]
+    },
+    {
+      "name": "tend",
+      "blurb": "keeping the knowledge layer true and small",
+      "nodes": [
+        {
+          "id": "scripts/context.py",
+          "name": "context.py",
+          "path": "scripts/context.py",
+          "origin": "harness",
+          "role": "stale-doc and context-budget guard",
+          "tokens": 1605
+        },
+        {
+          "id": ".claude/context.lock",
+          "name": "context.lock",
+          "path": ".claude/context.lock",
+          "origin": "harness",
+          "role": "hashes of what each doc describes",
+          "tokens": 252
+        }
+      ]
+    }
+  ],
+  "budget": {
+    "always": [
+      {
+        "name": "CLAUDE.md",
+        "tokens": 1902
+      },
+      {
+        "name": "session brief",
+        "tokens": 96
+      },
+      {
+        "name": "skill descriptions",
+        "tokens": 334
+      }
+    ],
+    "always_total": 2332,
+    "on_demand": [
+      {
+        "name": "workflow",
+        "tokens": 2642
+      },
+      {
+        "name": "reviewer-design",
+        "tokens": 2081
+      },
+      {
+        "name": "reviewer-correctness",
+        "tokens": 1336
+      },
+      {
+        "name": "agentic-review",
+        "tokens": 1291
+      },
+      {
+        "name": "reviewer-taste",
+        "tokens": 1037
+      },
+      {
+        "name": "handoff",
+        "tokens": 824
+      },
+      {
+        "name": "librarian",
+        "tokens": 768
+      },
+      {
+        "name": "beads",
+        "tokens": 434
+      }
+    ],
+    "brief_tokens": 96,
+    "prime_tokens": 1569
+  }
+}

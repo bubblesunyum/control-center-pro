@@ -1,0 +1,28 @@
+{
+  ".claude/HARNESS.md": {
+    ".claude/agents/librarian.md": "4b8c643b0a364fd5",
+    ".claude/agents/reviewer-correctness.md": "dfa12aa581b45c70",
+    ".claude/agents/reviewer-design.md": "056a9b0334d8c28c",
+    ".claude/agents/reviewer-taste.md": "cfed7953d377c3bc",
+    ".claude/skills/workflow/SKILL.md": "ee90149f26075884",
+    "doc": "fed832e00a62ec25",
+    "scripts/brief.sh": "58d710492c34dda3",
+    "scripts/context.py": "aedce8b374c06f97",
+    "scripts/review.sh": "1a0f856ee35ec9c8",
+    "scripts/verify.sh": "078f8430906a286e"
+  },
+  ".claude/skills/agentic-review/SKILL.md": {
+    ".claude/agents/reviewer-correctness.md": "dfa12aa581b45c70",
+    ".claude/agents/reviewer-taste.md": "cfed7953d377c3bc",
+    "doc": "05c4d07ea4f056a9",
+    "scripts/review.sh": "1a0f856ee35ec9c8"
+  },
+  ".claude/skills/handoff/SKILL.md": {
+    "doc": "0bc0322a612df8fc",
+    "scripts/brief.sh": "58d710492c34dda3"
+  },
+  ".claude/skills/workflow/SKILL.md": {
+    "doc": "ee90149f26075884",
+    "\u2026": ""
+  }
+}
