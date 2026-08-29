@@ -237,6 +237,29 @@ final class Permissions: ObservableObject {
         return gatedDirs.contains { (try? fm.contentsOfDirectory(atPath: $0)) != nil }
     }
 
+    // ── CCP PATCH ──────────────────────────────────────────────────────
+    /// Which permission a guide card is being shown for. Upstream carries this
+    /// on PermissionGuideOverlay in UI/; the fork needs it here so the engine
+    /// can name a permission without depending on a view. See PATCHES.md.
+    enum GuideKind {
+        case accessibility
+        case screenRecording
+    }
+
+    /// Called when a permission request needs the user sent to System Settings.
+    /// Upstream shows its own overlay; CCP sets this to render the inline grant
+    /// state the panel uses instead. Nil means show nothing, which is correct
+    /// for a headless or test context.
+    ///
+    /// Main-actor isolated because it ends in a view update, and the methods
+    /// that fire it are not: `Permissions` is a plain ObservableObject, and
+    /// this file already hops to `DispatchQueue.global` in `refresh()` and
+    /// `requestFullDiskAccess()`, so a background caller is realistic rather
+    /// than hypothetical. Isolating the property makes the compiler enforce the
+    /// hop at every call site instead of trusting one.
+    @MainActor static var showGuide: ((GuideKind) -> Void)?
+    // ── END CCP PATCH ──────────────────────────────────────────────────
+
     /// Shows the system Accessibility prompt (once per TCC reset) and floats
     /// the little guide card for the System Settings round trip.
     func requestAccessibility() {
@@ -244,7 +267,10 @@ final class Permissions: ObservableObject {
         AXIsProcessTrustedWithOptions(options)
         refreshActivePermissions()
         if !accessibility {
-            PermissionGuideOverlay.shared.show(for: .accessibility)
+            // CCP PATCH: upstream calls PermissionGuideOverlay.shared here, a
+            // type in UI/ that this fork does not build. Routed through a hook
+            // so the engine stays UI-free. See PATCHES.md.
+            Task { @MainActor in Permissions.showGuide?(.accessibility) }
         }
     }
 
@@ -254,7 +280,8 @@ final class Permissions: ObservableObject {
         CGRequestScreenCaptureAccess()
         refreshActivePermissions()
         if !screenRecording {
-            PermissionGuideOverlay.shared.show(for: .screenRecording)
+            // CCP PATCH: see requestAccessibility() above and PATCHES.md.
+            Task { @MainActor in Permissions.showGuide?(.screenRecording) }
         }
     }
 

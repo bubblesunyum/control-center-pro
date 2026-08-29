@@ -244,7 +244,13 @@ screenshots through the review pass and by `scripts/verify.sh --full`.
   `Sources/FanControlHelper`, `Tools/`, `Resources/` are read-only. An awkward
   upstream API gets a CCPKit adapter, not a fix in place — that is what keeps
   `merge upstream/main` cheap. Genuinely needed upstream changes go up as a PR;
-  local patches are a last resort and get recorded in `PATCHES.md`.
+  local patches are a last resort and get recorded in [PATCHES.md](./PATCHES.md).
+- **The engine layer is `VorssaintEngines`, not all of `Sources/Vorssaint`.**
+  `Package.swift` excludes upstream's `App/` and `UI/` plus 38 files under
+  `Core/`, `Services/`, and `Support/` that name a UI type by reference. If an
+  engine you need is missing, check that list before assuming it isn't there —
+  and read `PATCHES.md`, which explains what the list is and why it should
+  shrink.
 - **One adapter per engine.** CCP UI never touches an upstream type directly, so
   an upstream refactor breaks one file instead of the UI layer.
 - Adapters expose `@Observable` models and async APIs; engine work runs off the
