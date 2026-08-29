@@ -8,14 +8,14 @@
     "doc": "fed832e00a62ec25",
     "scripts/brief.sh": "58d710492c34dda3",
     "scripts/context.py": "aedce8b374c06f97",
-    "scripts/review.sh": "1a0f856ee35ec9c8",
+    "scripts/review.sh": "d3108e3d63dcc664",
     "scripts/verify.sh": "078f8430906a286e"
   },
   ".claude/skills/agentic-review/SKILL.md": {
     ".claude/agents/reviewer-correctness.md": "dfa12aa581b45c70",
     ".claude/agents/reviewer-taste.md": "cfed7953d377c3bc",
-    "doc": "05c4d07ea4f056a9",
-    "scripts/review.sh": "1a0f856ee35ec9c8"
+    "doc": "352e64ce4afd5bbe",
+    "scripts/review.sh": "d3108e3d63dcc664"
   },
   ".claude/skills/handoff/SKILL.md": {
     "doc": "0bc0322a612df8fc",

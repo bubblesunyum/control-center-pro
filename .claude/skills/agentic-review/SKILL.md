@@ -24,6 +24,13 @@ the packet path:
 - `reviewer-correctness` — real defects, on Sonnet
 - `reviewer-design` — what it actually renders, on Sonnet
 
+The packet's scope excludes the vendored fork — `Sources/Vorssaint/`,
+`Sources/FanControlHelper/`, `Sources/VMStatisticsCompat/`, `Tools/`, `Tests/`,
+`docs/`. That is upstream's code, not ours, and without the exclusion a
+`merge upstream/main` would drop six figures of lines into the packet and drown
+whatever is actually under review. Our adapters over those engines live in
+`CCPKit` and stay in scope, which is the part worth reviewing anyway.
+
 Give each one only the packet path and one line on what the change was meant to
 do. They read `CLAUDE.md` themselves. Don't paste the diff into the prompt —
 that's the packet's job, and pasting it doubles the cost.

@@ -40,12 +40,20 @@ fi
 # scope that omits it means those never get reviewed. Exclude generated churn: a
 # lockfile or project file whose ids got reshuffled, and the ledger export, are
 # noise that dilutes the read.
-# Add this project's own source globs. The docs are here from the start: a
-# CLAUDE.md or a skill that quietly stopped being true is a defect the reviewers
-# should see, and a suffix-only scope is also how a file with no extension at all
-# stays unreviewable — list such files by path.
-SCOPE=('*.py' '*.sh' '*.md' 'scripts/hooks/*'
-       ':(exclude).beads/*' ':(exclude)dashboard/vendor/*')
+# The docs are here from the start: a CLAUDE.md or a skill that quietly stopped
+# being true is a defect the reviewers should see, and a suffix-only scope is
+# also how a file with no extension stays unreviewable — list those by path.
+#
+# The big exclusion is upstream. Sources/Vorssaint and friends are a vendored
+# fork, not our code, and an upstream merge would otherwise drop six figures of
+# lines into the packet and drown the change actually under review. The one
+# thing worth reviewing at that boundary — our adapters — lives in CCPKit and
+# is still in scope.
+SCOPE=('*.swift' '*.py' '*.sh' '*.md' 'Package.swift' 'scripts/hooks/*'
+       ':(exclude).beads/*' ':(exclude)dashboard/vendor/*'
+       ':(exclude)Sources/Vorssaint/*' ':(exclude)Sources/FanControlHelper/*'
+       ':(exclude)Sources/VMStatisticsCompat/*' ':(exclude)Tools/*'
+       ':(exclude)Tests/*' ':(exclude)docs/*' ':(exclude)CHANGELOG.md')
 
 # Screenshots the design reviewer looks at. Whatever drives your app should
 # write its captures to /tmp with this prefix.
