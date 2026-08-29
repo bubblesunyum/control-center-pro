@@ -134,7 +134,7 @@ def digest():
     out.append(f"\n## Memories ({len(entries)})\n")
     out += [f"\n### {k}\n{v}" for k, v in sorted(entries.items())]
 
-    packet = Path("/tmp/con-knowledge-digest.md")
+    packet = Path("/tmp/ccp-knowledge-digest.md")
     packet.write_text("\n".join(out) + "\n")
     print(packet)
 

@@ -7,7 +7,7 @@
     ".claude/skills/workflow/SKILL.md": "ee90149f26075884",
     "doc": "fed832e00a62ec25",
     "scripts/brief.sh": "58d710492c34dda3",
-    "scripts/context.py": "aedce8b374c06f97",
+    "scripts/context.py": "7697de0ff2ac4f3c",
     "scripts/review.sh": "d3108e3d63dcc664",
     "scripts/verify.sh": "078f8430906a286e"
   },

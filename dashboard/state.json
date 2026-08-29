@@ -1,15 +1,15 @@
 {
-  "generated": "12:25:27",
+  "generated": "13:16:24",
   "project": "control-center-pro",
   "git": {
-    "branch": "master",
-    "upstream": "",
-    "dirty": 2,
-    "commits_today": 11,
+    "branch": "main",
+    "upstream": "origin/main",
+    "dirty": 4,
+    "commits_today": 15,
     "last": {
-      "sha": "3f01781",
-      "subject": "scope the review packet so upstream doesn't drown it",
-      "when": "6 minutes ago"
+      "sha": "ffb9bbc",
+      "subject": "add the CCP targets and get the fork building",
+      "when": "36 minutes ago"
     },
     "unpushed": [],
     "unpushed_beads": [],
@@ -17,34 +17,13 @@
   },
   "ledger": {
     "counts": {
-      "open": 25,
-      "ready": 7,
-      "in_progress": 2,
-      "closed": 1,
+      "open": 26,
+      "ready": 12,
+      "in_progress": 0,
+      "closed": 5,
       "blocked": 0
     },
     "issues": [
-      {
-        "id": "ccp-ait.4",
-        "title": "create the GitHub fork and set origin",
-        "status": "open",
-        "ready": true,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 0,
-        "type": "task",
-        "parent": "ccp-ait",
-        "updated_at": "2026-08-29T17:19:30Z",
-        "created_at": "2026-08-29T17:19:30Z",
-        "deps": [],
-        "description": "The upstream merge is done and Sources/Vorssaint is in-tree, but this repo has no origin. Fork vorssaintapp/vorssaint-utils under the user's GitHub account and point origin at it, or decide that origin should be a fresh private repo instead. Needs the user \u2014 it creates something under their account.",
-        "design": "",
-        "notes": "",
-        "close_reason": "",
-        "owner": "bubbles@cortico.ai",
-        "children": []
-      },
       {
         "id": "ccp-ait.3",
         "title": "GPLv3 licensing and attribution",
@@ -60,29 +39,6 @@
         "created_at": "2026-08-29T17:08:00Z",
         "deps": [],
         "description": "LICENSE (GPL-3.0-or-later), SPDX headers on every CCP source file, upstream's headers left intact. README states CCP is a fork of vorssaint-utils (c) Vorssaint contributors, GPL-3.0-or-later, with an independent UI and no use of Vorssaint trademarks. Create PATCHES.md as the register for any local upstream patch.",
-        "design": "",
-        "notes": "",
-        "close_reason": "",
-        "owner": "bubbles@cortico.ai",
-        "children": []
-      },
-      {
-        "id": "ccp-ait.2",
-        "title": "add CCP targets to Package.swift",
-        "status": "open",
-        "ready": true,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 0,
-        "type": "task",
-        "parent": "ccp-ait",
-        "updated_at": "2026-08-29T17:12:59Z",
-        "created_at": "2026-08-29T17:07:59Z",
-        "deps": [
-          "ccp-ait.1"
-        ],
-        "description": "Add our block to upstream's Package.swift, clearly delimited since it is the known merge-conflict hotspot. Prefer option (a) from the BRIEF: a VorssaintEngines library target over Sources/Vorssaint with App/ and UI/ excluded, so the UI-free boundary is compiler-enforced. Then CCPKit, CCPUI, and the ControlCenterPro executable.",
         "design": "",
         "notes": "",
         "close_reason": "",
@@ -114,48 +70,6 @@
           "ccp-ait.2",
           "ccp-ait.1"
         ]
-      },
-      {
-        "id": "ccp-4rs",
-        "title": "port psymail-mini's durable taste into CLAUDE.md",
-        "status": "in_progress",
-        "ready": false,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 1,
-        "type": "chore",
-        "parent": "",
-        "updated_at": "2026-08-29T17:14:28Z",
-        "created_at": "2026-08-29T17:14:27Z",
-        "deps": [],
-        "description": "psymail-mini is the same author's macOS menu-bar app and its CLAUDE.md/ARCHITECTURE.md/STYLE.md carry durable taste written for React but meant to transfer to SwiftUI. Translate and port what is relevant, keeping CLAUDE.md's always-loaded cost down by pushing long-form into ARCHITECTURE.md and STYLE.md.",
-        "design": "",
-        "notes": "",
-        "close_reason": "",
-        "owner": "bubbles@cortico.ai",
-        "children": []
-      },
-      {
-        "id": "ccp-rqd",
-        "title": "rename bead prefix con- to ccp-",
-        "status": "in_progress",
-        "ready": false,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 1,
-        "type": "chore",
-        "parent": "",
-        "updated_at": "2026-08-29T17:14:28Z",
-        "created_at": "2026-08-29T17:14:27Z",
-        "deps": [],
-        "description": "Prefix and every harness reference to it: bd rename-prefix, plus /tmp paths, the commit-msg hook's id pattern, review.sh capture glob, dashboard's bead-id regex, and the skill docs.",
-        "design": "",
-        "notes": "",
-        "close_reason": "",
-        "owner": "bubbles@cortico.ai",
-        "children": []
       },
       {
         "id": "ccp-lr7.9",
@@ -276,7 +190,7 @@
         "id": "ccp-lr7.3",
         "title": "status item and non-activating glass panel",
         "status": "open",
-        "ready": false,
+        "ready": true,
         "in_review": false,
         "backlog": false,
         "labels": [],
@@ -322,7 +236,7 @@
         "id": "ccp-lr7.1",
         "title": "design the CCPWidget protocol and registry",
         "status": "open",
-        "ready": false,
+        "ready": true,
         "in_review": false,
         "backlog": false,
         "labels": [],
@@ -373,6 +287,69 @@
         ]
       },
       {
+        "id": "ccp-9w3",
+        "title": "ready lane count disagrees with the ready counter",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-29T18:13:59Z",
+        "created_at": "2026-08-29T18:13:51Z",
+        "deps": [],
+        "description": "dashboard/index.html:1710 rolls child beads into their parent epic's card, so the ready lane draws 4 cards while the header's 'ready to claim' counter says 10 \u2014 same word, two denominators. The roll-up is right; the disagreement is what misleads. Either count cards rather than beads in the header, or have the epic card say how many ready children it stands for.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-jze",
+        "title": "commits bypassed the commit-msg hook with --no-verify",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "chore",
+        "parent": "",
+        "updated_at": "2026-08-29T18:13:59Z",
+        "created_at": "2026-08-29T18:13:51Z",
+        "deps": [],
+        "description": "3f01781, 6001d7f and ffb9bbc were all committed after 2897fe7 installed a working blocking commit-msg hook, and none names a bead \u2014 only --no-verify gets past it. Nothing to backfill without rewriting history. The open question is whether the hook should stop advertising 'git commit --no-verify' in its own refusal text, since that is the line that gets taken. Consider requiring a reason, or logging bypasses so the drift is at least visible.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-4kq.4",
+        "title": "PR the Permissions guide hook upstream",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "ccp-4kq",
+        "updated_at": "2026-08-29T17:36:05Z",
+        "created_at": "2026-08-29T17:36:05Z",
+        "deps": [],
+        "description": "Core/Permissions.swift is patched locally: two direct calls to PermissionGuideOverlay (a UI/ type) routed through an optional Permissions.showGuide closure, plus a Permissions.GuideKind enum. Small, strictly more flexible than what is there, and costs upstream nothing \u2014 they set showGuide to their overlay at startup. Landing it upstream deletes the only real patch in PATCHES.md.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
         "id": "ccp-4kq.3",
         "title": "prove the upstream merge workflow",
         "status": "open",
@@ -400,7 +377,7 @@
         "id": "ccp-4kq.1",
         "title": "signing and entitlements for audio process taps",
         "status": "open",
-        "ready": false,
+        "ready": true,
         "in_review": false,
         "backlog": false,
         "labels": [],
@@ -454,7 +431,7 @@
         "priority": 2,
         "type": "task",
         "parent": "ccp-8ld",
-        "updated_at": "2026-08-29T17:12:59Z",
+        "updated_at": "2026-08-29T17:36:06Z",
         "created_at": "2026-08-29T17:08:15Z",
         "deps": [
           "ccp-8ld.1",
@@ -462,7 +439,7 @@
         ],
         "description": "History list with ignored-apps and auto-clear settings over the Clipboard engine. Note this is the one v1 widget that must sample with the panel closed to have any history to show \u2014 it is the first real test of the background-sampling opt-out in the lifecycle rules.",
         "design": "",
-        "notes": "",
+        "notes": "BLOCKED ON A UI LEAK: ClipboardHistoryService.swift and ClipboardAutoClearService.swift are excluded from VorssaintEngines because the former names ClipboardQuickPanelView (a UI/ type) at line 1097. Before this widget can be built, that call-site has to be routed around the way Core/Permissions.swift was \u2014 see PATCHES.md. One reference, so it should be a small patch plus an upstream PR.",
         "close_reason": "",
         "owner": "bubbles@cortico.ai",
         "children": []
@@ -526,7 +503,7 @@
         "priority": 2,
         "type": "task",
         "parent": "ccp-8ld",
-        "updated_at": "2026-08-29T17:12:59Z",
+        "updated_at": "2026-08-29T17:36:06Z",
         "created_at": "2026-08-29T17:08:12Z",
         "deps": [
           "ccp-lr7.6",
@@ -534,7 +511,7 @@
         ],
         "description": "The flagship widget: CPU, memory, temperature, and network graphs over the Metrics and SystemMonitor samplers. Needs VMStatisticsCompat. Adapter exposes an @Observable model; the widget never touches an upstream type.",
         "design": "",
-        "notes": "",
+        "notes": "PARTIAL UI LEAK: SystemMonitor/ProcessUsageService.swift is excluded from VorssaintEngines \u2014 it names BreakdownKind, a UI/ type. The other 3 SystemMonitor files and all 16 Metrics files build fine, so the CPU/mem/temp/net graphs are unaffected; only per-process usage needs the leak dealt with. See PATCHES.md.",
         "close_reason": "",
         "owner": "bubbles@cortico.ai",
         "children": []
@@ -543,7 +520,7 @@
         "id": "ccp-8ld.1",
         "title": "port shared infra from upstream",
         "status": "open",
-        "ready": false,
+        "ready": true,
         "in_review": false,
         "backlog": false,
         "labels": [],
@@ -605,6 +582,7 @@
         "close_reason": "",
         "owner": "bubbles@cortico.ai",
         "children": [
+          "ccp-4kq.4",
           "ccp-4kq.3",
           "ccp-4kq.1",
           "ccp-4kq.2"
@@ -662,6 +640,92 @@
         "children": []
       },
       {
+        "id": "ccp-4rs",
+        "title": "port psymail-mini's durable taste into CLAUDE.md",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "chore",
+        "parent": "",
+        "updated_at": "2026-08-29T18:10:28Z",
+        "created_at": "2026-08-29T17:14:27Z",
+        "deps": [],
+        "description": "psymail-mini is the same author's macOS menu-bar app and its CLAUDE.md/ARCHITECTURE.md/STYLE.md carry durable taste written for React but meant to transfer to SwiftUI. Translate and port what is relevant, keeping CLAUDE.md's always-loaded cost down by pushing long-form into ARCHITECTURE.md and STYLE.md.",
+        "design": "",
+        "notes": "",
+        "close_reason": "taste ported: CLAUDE.md carries philosophy/naming/comments/animation/a11y/testing, long form lives in ARCHITECTURE.md and STYLE.md",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-rqd",
+        "title": "rename bead prefix con- to ccp-",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "chore",
+        "parent": "",
+        "updated_at": "2026-08-29T18:10:27Z",
+        "created_at": "2026-08-29T17:14:27Z",
+        "deps": [],
+        "description": "Prefix and every harness reference to it: bd rename-prefix, plus /tmp paths, the commit-msg hook's id pattern, review.sh capture glob, dashboard's bead-id regex, and the skill docs.",
+        "design": "",
+        "notes": "",
+        "close_reason": "prefix is ccp- everywhere: config, ids, commit-msg hook, review.sh captures, dashboard regex, verify/brief tmp paths; fixed the last straggler (context.py knowledge-digest path)",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-ait.2",
+        "title": "add CCP targets to Package.swift",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 0,
+        "type": "task",
+        "parent": "ccp-ait",
+        "updated_at": "2026-08-29T17:40:44Z",
+        "created_at": "2026-08-29T17:07:59Z",
+        "deps": [
+          "ccp-ait.1"
+        ],
+        "description": "Add our block to upstream's Package.swift, clearly delimited since it is the known merge-conflict hotspot. Prefer option (a) from the BRIEF: a VorssaintEngines library target over Sources/Vorssaint with App/ and UI/ excluded, so the UI-free boundary is compiler-enforced. Then CCPKit, CCPUI, and the ControlCenterPro executable.",
+        "design": "",
+        "notes": "",
+        "close_reason": "VorssaintEngines library target over Sources/Vorssaint with App/, UI/, main.swift and 38 UI-coupled files excluded; CCPKit/CCPUI/ControlCenterPro/CCPKitTests added; deployment target 14.4. swift build and swift test green, verify.sh no longer skips. Core/Permissions.swift patched (MainActor showGuide hook) rather than excluded \u2014 see PATCHES.md. Reviewed by taste + correctness; the showGuide isolation finding was fixed before commit.",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-ait.4",
+        "title": "create the GitHub fork and set origin",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 0,
+        "type": "task",
+        "parent": "ccp-ait",
+        "updated_at": "2026-08-29T17:29:54Z",
+        "created_at": "2026-08-29T17:19:30Z",
+        "deps": [],
+        "description": "The upstream merge is done and Sources/Vorssaint is in-tree, but this repo has no origin. Fork vorssaintapp/vorssaint-utils under the user's GitHub account and point origin at it, or decide that origin should be a fresh private repo instead. Needs the user \u2014 it creates something under their account.",
+        "design": "",
+        "notes": "",
+        "close_reason": "origin set to github.com/bubblesunyum/control-center-pro (a fork of vorssaint-utils), upstream kept alongside. local branch renamed master -> main to match; merged the one upstream commit the fork was cut ahead of, and pushed. gh CLI is not installed on this machine \u2014 the user created the fork themselves.",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
         "id": "ccp-ait.1",
         "title": "fork vorssaint-utils and vendor it in-tree",
         "status": "closed",
@@ -699,26 +763,44 @@
       "untracked": false,
       "status": "M",
       "old_path": null
+    },
+    {
+      "path": "scripts/__pycache__/",
+      "staged": false,
+      "untracked": true,
+      "status": "?",
+      "old_path": null
+    },
+    {
+      "path": "scripts/context.py",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
     }
   ],
   "verify": {
     "status": "passed",
-    "when": "6m ago",
+    "when": "36m ago",
     "tests": "",
     "steps": [
       {
         "name": "build",
         "ok": true
+      },
+      {
+        "name": "tests",
+        "ok": true
       }
     ],
     "unverified": [
       {
-        "sha": "3f01781",
-        "subject": "scope the review packet so upstream doesn't drown it"
+        "sha": "ffb9bbc",
+        "subject": "add the CCP targets and get the fork building"
       }
     ],
-    "took": "3s",
-    "at": 1788023953.983907
+    "took": "5s",
+    "at": 1788025222.9594219
   },
   "runs": {
     "verify": {
@@ -829,7 +911,7 @@
           "path": "CLAUDE.md",
           "origin": "claude",
           "role": "project instructions, always loaded",
-          "tokens": 3313
+          "tokens": 3415
         },
         {
           "id": "/Users/bubbles/.claude/projects/-Users-bubbles-dev-control-center-pro/memory/MEMORY.md",
@@ -986,18 +1068,18 @@
     "always": [
       {
         "name": "CLAUDE.md",
-        "tokens": 3313
+        "tokens": 3415
       },
       {
         "name": "session brief",
-        "tokens": 127
+        "tokens": 98
       },
       {
         "name": "skill descriptions",
         "tokens": 334
       }
     ],
-    "always_total": 3774,
+    "always_total": 3847,
     "on_demand": [
       {
         "name": "workflow",
@@ -1032,7 +1114,7 @@
         "tokens": 434
       }
     ],
-    "brief_tokens": 127,
+    "brief_tokens": 98,
     "prime_tokens": 1569
   }
 }
