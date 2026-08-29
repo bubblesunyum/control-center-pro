@@ -9,8 +9,7 @@
   <a href="#what-it-is">About</a> ·
   <a href="#build-it-yourself">Build</a> ·
   <a href="#fork-and-attribution">Fork &amp; attribution</a> ·
-  <a href="CHANGELOG.md">Changelog</a> ·
-  <a href="CONTRIBUTING.md">Contributing</a>
+  <a href="ARCHITECTURE.md">Architecture</a>
 </p>
 
 <p align="center">
@@ -71,14 +70,20 @@ intact under `Sources/Vorssaint/`.
 ### Build it yourself
 
 ```sh
-git clone <your-fork-or-ccp-repo-url>
+git clone https://github.com/bubblesunyum/control-center-pro.git
 cd control-center-pro
-./build.sh            # compile, generate the icon, assemble the signed bundle
-./build.sh --install  # the same, then install into Applications and launch
+swift build           # compile the package
 ```
 
-Xcode Command Line Tools are the only requirement. The
-[contributing guide](CONTRIBUTING.md) covers the layout and conventions, and
+Xcode Command Line Tools are the only requirement.
+
+There is no CCP app bundle to install yet. `build.sh` is upstream's packaging
+script, inherited by the fork: it still builds a bundle named and identified as
+Vorssaint (`com.vorssaint.utils`), which is exactly what
+[TRADEMARKS.md](./TRADEMARKS.md) says a fork must not ship. Giving CCP its own
+bundle identity is tracked as `ccp-v64`; until that lands, don't use `build.sh`
+to produce something you intend to run or distribute as Control Center Pro.
+
 [ARCHITECTURE.md](./ARCHITECTURE.md) documents the fork boundary and design
 philosophy.
 
@@ -87,10 +92,13 @@ philosophy.
 - [Architecture](ARCHITECTURE.md), the fork boundary and design philosophy
 - [Brief](BRIEF.md), the implementation plan and feature inventory
 - [Patches](PATCHES.md), local deviations from upstream
-- [Contributing](CONTRIBUTING.md), build, layout and conventions
 - [Support](SUPPORT.md), where to get help
 - [Security](SECURITY.md), how to report a vulnerability
 - [Trademarks](TRADEMARKS.md), the Vorssaint mark and fork identity
+
+Vendored from upstream and describing upstream's shipping app, not CCP:
+[CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md), and
+everything under [docs/](docs/).
 
 ## Acknowledgements
 

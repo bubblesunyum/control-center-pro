@@ -1,29 +1,49 @@
 # Support
 
-Vorssaint is a free and open source project, looked after on a best effort basis. There is no support contract and no promised response time, though every issue and question gets read and appreciated.
+Control Center Pro is a free and open source project, looked after on a best
+effort basis. There is no support contract and no promised response time.
 
-Before you reach out, the [documentation](#documentation) below answers most of what comes up, and the [troubleshooting guide](docs/TROUBLESHOOTING.md) covers the usual fixes.
+CCP is **in development** — there are no releases yet, and the panel, lanes and
+widget set are still being built. If you are here to use the app rather than
+work on it, upstream's
+[vorssaint-utils](https://github.com/vorssaintapp/vorssaint-utils) is the
+shipping project.
 
 ## Report a bug
 
-Open the bug report form from the [new issue](https://github.com/vorssaintapp/vorssaint-utils/issues/new/choose) page. Please bring your Vorssaint version from Settings under About, your macOS version, and clear steps to reproduce. The notes on [reporting a useful bug](docs/TROUBLESHOOTING.md#reporting-a-useful-bug) spell out what helps.
+Open an issue on
+[bubblesunyum/control-center-pro](https://github.com/bubblesunyum/control-center-pro/issues/new).
+Please bring your macOS version, the commit you built from, and clear steps to
+reproduce.
+
+If the bug reproduces in upstream's app too, it is upstream's engine code and
+belongs on [their tracker](https://github.com/vorssaintapp/vorssaint-utils/issues)
+— we vendor that code and cannot fix it here without a patch that makes merges
+more expensive.
 
 ## Request a feature
 
-Open the feature request form from the same [new issue](https://github.com/vorssaintapp/vorssaint-utils/issues/new/choose) page. Describe the problem you want solved rather than only a specific solution, since that makes the need much clearer. You can also browse and back existing ideas in the [open issues](https://github.com/vorssaintapp/vorssaint-utils/issues).
+Open an issue on the same tracker. Describe the problem you want solved rather
+than only a specific solution, since that makes the need much clearer.
 
 ## Report a security issue
 
-Please keep security vulnerabilities out of public issues. The [security policy](SECURITY.md) explains how to share them privately.
+Please keep security vulnerabilities out of public issues. The
+[security policy](SECURITY.md) explains how to share them privately, and which
+project to send them to.
 
 ## Documentation
 
-- [README](README.md), the overview, install and features
+- [README](README.md), what CCP is and how to build it
+- [Architecture](ARCHITECTURE.md), the fork boundary and design philosophy
+- [Brief](BRIEF.md), the implementation plan and feature inventory
+- [Patches](PATCHES.md), local deviations from upstream
+- [Trademarks](TRADEMARKS.md), the Vorssaint mark and fork identity
+
+The following are upstream's documentation, kept as vendored from
+vorssaint-utils. They describe upstream's shipping app, not CCP.
+
 - [Privacy](docs/PRIVACY.md), what does and does not leave your Mac
 - [Permissions](docs/PERMISSIONS.md), every macOS permission explained
 - [Troubleshooting](docs/TROUBLESHOOTING.md), the common fixes
-- [Contributing](CONTRIBUTING.md), building and contributing
-
-## Supporting the project
-
-Vorssaint is free and it will stay that way. If it is useful to you, a ⭐ on the repository helps other people find it. Contributions of code, translations and bug reports are all welcome, and the [contributing guide](CONTRIBUTING.md) shows where to start.
+- [Contributing](CONTRIBUTING.md), upstream's build and contribution guide
