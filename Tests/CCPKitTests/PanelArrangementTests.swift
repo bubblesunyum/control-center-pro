@@ -165,3 +165,69 @@ final class PanelArrangementRearrangingTests: XCTestCase {
         XCTAssertEqual(store.load().lanes, [[stub, other]])
     }
 }
+
+/// The gallery: what the panel could hold, and putting one on it.
+@MainActor
+final class PanelArrangementGalleryTests: XCTestCase {
+    private let log = WidgetLifecycleLog.shared
+    private let stub = StubWidget.descriptor.id
+    private let other = OtherStubWidget.descriptor.id
+
+    override func setUp() {
+        super.setUp()
+        log.reset()
+    }
+
+    private func arrangement(_ layout: PanelLayout) -> PanelArrangement {
+        PanelArrangement(layout, registry: stubRegistry())
+    }
+
+    func testTheGalleryListsEverythingTheBuildOffers() {
+        let panel = arrangement(PanelLayout([[stub]]))
+
+        XCTAssertEqual(panel.gallery.map(\.id), [stub, other], "registry order, not layout order")
+    }
+
+    func testItSaysWhichOnesArePlaced() {
+        let panel = arrangement(PanelLayout([[stub]]))
+
+        XCTAssertEqual(panel.gallery.map(\.isPlaced), [true, false])
+    }
+
+    func testAddingPlacesItAndTheGallerySaysSo() {
+        let panel = arrangement(PanelLayout([[stub]]))
+
+        panel.add(other)
+
+        XCTAssertNotNil(panel.slot(for: other))
+        XCTAssertEqual(panel.gallery.map(\.isPlaced), [true, true])
+    }
+
+    /// It arrives on a panel where everything else is already running.
+    func testAWidgetAddedToAnOpenPanelStartsSampling() {
+        let panel = arrangement(PanelLayout([[stub]]))
+        panel.activate()
+        log.reset()
+
+        panel.add(other)
+
+        XCTAssertEqual(log.activated, [other])
+    }
+
+    func testAWidgetAddedToAClosedPanelDoesNotStart() {
+        let panel = arrangement(PanelLayout([[stub]]))
+
+        panel.add(other)
+
+        XCTAssertEqual(log.activated, [])
+    }
+
+    func testAddingOneThisBuildDoesNotHaveIsStillAPosition() {
+        let panel = arrangement(PanelLayout([[stub]]))
+
+        panel.add("widget-from-a-newer-build")
+
+        XCTAssertEqual(panel.layout.lanes, [[stub, "widget-from-a-newer-build"]])
+        XCTAssertNil(panel.slot(for: "widget-from-a-newer-build")?.instance)
+    }
+}

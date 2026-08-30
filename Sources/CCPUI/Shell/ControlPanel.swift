@@ -23,13 +23,13 @@ public struct ControlPanel: View {
 
     public var body: some View {
         VStack(alignment: .trailing, spacing: Space.oneHalf) {
-            if editor.isEditing { EditingBar(editor: editor) }
+            if editor.isEditing { EditingBar(arrangement: arrangement, editor: editor) }
             lanes
         }
         .padding(Space.oneHalf)
         .coordinateSpace(.panel)
         .onPreferenceChange(DropZonePreference.self) { zones in
-            MainActor.assumeIsolated { editor.zones = zones }
+            editor.zones = zones
         }
         .overlay(alignment: .topLeading) { cardInTheAir }
         .animation(.snappy(duration: 0.28), value: arrangement.layout)
@@ -73,16 +73,33 @@ public struct ControlPanel: View {
     }
 }
 
-/// The one control edit mode needs: a way out of it.
+/// The two controls edit mode needs: something to add with, and a way out.
 private struct EditingBar: View {
+    let arrangement: PanelArrangement
     let editor: PanelEditor
 
+    @State private var isShowingGallery = false
+
     var body: some View {
-        Button("Done") {
-            withAnimation(.snappy) { editor.stopEditing() }
+        HStack(spacing: Space.one) {
+            Button {
+                isShowingGallery = true
+            } label: {
+                Image(systemName: "plus")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityLabel("Add a widget")
+            .popover(isPresented: $isShowingGallery, arrowEdge: .bottom) {
+                WidgetGallery(arrangement: arrangement) { isShowingGallery = false }
+            }
+
+            Button("Done") {
+                withAnimation(.snappy) { editor.stopEditing() }
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.small)
         .transition(.move(edge: .top).combined(with: .opacity))
     }
 }

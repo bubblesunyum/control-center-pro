@@ -85,6 +85,22 @@ public struct PanelLayout: Codable, Hashable, Sendable {
         return PanelLayout(opened).normalized()
     }
 
+    /// The layout with `id` added to whichever lane is carrying the least.
+    ///
+    /// The gallery says *what* to place, not where — there is no gesture in
+    /// "add this one" to read a position out of, and the shortest lane is the
+    /// one whose shape the panel changes least by growing. Already placed and
+    /// nothing happens: a widget is on the panel once.
+    public func adding(_ id: WidgetID) -> PanelLayout {
+        guard position(of: id) == nil else { return self }
+
+        var grown = lanes
+        let shortest = grown.indices.min { grown[$0].count < grown[$1].count } ?? 0
+        guard grown.indices.contains(shortest) else { return PanelLayout([[id]]) }
+        grown[shortest].append(id)
+        return PanelLayout(grown).normalized()
+    }
+
     /// The layout without `id`. Removing the last widget leaves ``empty``
     /// rather than a panel with no width.
     public func removing(_ id: WidgetID) -> PanelLayout {

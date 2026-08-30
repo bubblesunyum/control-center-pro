@@ -155,3 +155,33 @@ final class PanelLayoutNewLaneTests: XCTestCase {
         XCTAssertEqual(layout.moving(a, toNewLaneAt: -1), layout)
     }
 }
+
+/// Adding, which is the gallery's whole vocabulary.
+@MainActor
+final class PanelLayoutAddingTests: XCTestCase {
+    private let a: WidgetID = "a"
+    private let b: WidgetID = "b"
+    private let c: WidgetID = "c"
+
+    func testItLandsInTheLaneCarryingTheLeast() {
+        let layout = PanelLayout([[a, b], [c]])
+
+        XCTAssertEqual(layout.adding("d").lanes, [[a, b], [c, "d"]])
+    }
+
+    func testTheFirstOfTwoEqualLanesWins() {
+        let layout = PanelLayout([[a], [b]])
+
+        XCTAssertEqual(layout.adding(c).lanes, [[a, c], [b]])
+    }
+
+    func testAddingToAnEmptyPanel() {
+        XCTAssertEqual(PanelLayout.empty.adding(a).lanes, [[a]])
+    }
+
+    func testAWidgetAlreadyOnThePanelIsNotAddedTwice() {
+        let layout = PanelLayout([[a, b]])
+
+        XCTAssertEqual(layout.adding(a), layout)
+    }
+}

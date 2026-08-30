@@ -48,6 +48,18 @@ public final class PanelArrangement {
         lanes.flatMap { $0 }.compactMap(\.instance)
     }
 
+    /// Every widget this build offers, and whether it is already on the panel.
+    ///
+    /// The gallery is built from this rather than from the registry directly,
+    /// because "what exists" and "what is placed" are two different objects
+    /// and the answer needs both.
+    public var gallery: [GalleryEntry] {
+        let placed = Set(layout.lanes.joined())
+        return registry.descriptors.map {
+            GalleryEntry(descriptor: $0, isPlaced: placed.contains($0.id))
+        }
+    }
+
     // MARK: - Rearranging
 
     /// Put `id` down in `lane` at `index`. A lane one past the last makes a
@@ -59,6 +71,13 @@ public final class PanelArrangement {
     /// Put `id` in a lane of its own, opened at `lane`.
     public func move(_ id: WidgetID, toNewLaneAt lane: Int) {
         apply(layout.moving(id, toNewLaneAt: lane))
+    }
+
+    /// Put `id` on the panel, in whichever lane is carrying the least. It
+    /// starts sampling straight away if the panel is open, because it arrived
+    /// on screen already running everything else is.
+    public func add(_ id: WidgetID) {
+        apply(layout.adding(id))
     }
 
     /// Take `id` off the panel. Its widget is stopped on the way out — a

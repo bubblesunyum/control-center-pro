@@ -14,11 +14,20 @@ import Foundation
 ///
 /// `flush()` is the other half. A debounce that can be outrun by quitting is a
 /// debounce that loses work, so the panel closing and the app terminating both
-/// force the pending write out synchronously.
+/// force the pending write out.
+///
+/// Every write goes through one serial queue, and that ordering is the whole
+/// correctness argument: cancelling the timer cannot recall a write already on
+/// its way, so a flush racing a write that is already going out would otherwise
+/// let the older arrangement land last and quietly undo the newer one. First
+/// scheduled, first written, and `flush()` waits for the queue to drain — which
+/// is also why this is a queue rather than a task: the callers are
+/// `applicationWillTerminate` and the panel closing, neither of which can await.
 @MainActor
 public final class LayoutAutosave {
     private let store: JSONFileStore<PanelLayout>
     private let delay: Duration
+    private let writes = DispatchQueue(label: "com.controlcenterpro.layout-autosave")
     private var pending: Task<Void, Never>?
     private var unwritten: PanelLayout?
 
@@ -31,22 +40,30 @@ public final class LayoutAutosave {
         pending?.cancel()
         unwritten = layout
 
-        pending = Task { [store, delay] in
+        pending = Task { [weak self, delay] in
             try? await Task.sleep(for: delay)
-            guard !Task.isCancelled else { return }
-            await Task.detached { try? store.save(layout) }.value
-            self.settled(layout)
+            guard !Task.isCancelled, let self else { return }
+            write(layout)
+            settled(layout)
         }
     }
 
-    /// Write anything still waiting, now. Blocking on purpose: the caller is
-    /// on its way out and there is nothing left to be responsive for.
+    /// Write anything still waiting, and don't come back until everything
+    /// already on its way has landed. Blocking on purpose: the caller is on
+    /// its way out and there is nothing left to be responsive for.
     public func flush() {
         pending?.cancel()
         pending = nil
-        guard let layout = unwritten else { return }
-        unwritten = nil
-        try? store.save(layout)
+
+        if let layout = unwritten {
+            unwritten = nil
+            write(layout)
+        }
+        writes.sync {}
+    }
+
+    private func write(_ layout: PanelLayout) {
+        writes.async { [store] in try? store.save(layout) }
     }
 
     private func settled(_ layout: PanelLayout) {

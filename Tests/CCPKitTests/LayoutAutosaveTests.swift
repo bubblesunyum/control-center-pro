@@ -53,6 +53,37 @@ final class LayoutAutosaveTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.url.path))
     }
 
+    /// The write a flush races. A scheduled write is already on its way by the
+    /// time the panel closes, and cancelling its timer cannot recall it — so
+    /// the older arrangement must not be allowed to land last and undo the
+    /// newer one. Found by reviewer-correctness on ccp-lr7.7.
+    func testAFlushIsNotOvertakenByAWriteAlreadyOnItsWay() async throws {
+        let store = temporaryStore(default: PanelLayout.empty)
+        let autosave = LayoutAutosave(store: store, delay: .milliseconds(10))
+
+        autosave.schedule(PanelLayout([[a]]))
+        // Long enough for the first write to have been handed off, short
+        // enough that it may well still be in flight.
+        try await Task.sleep(for: .milliseconds(12))
+        autosave.schedule(PanelLayout([[a, b]]))
+        autosave.flush()
+
+        XCTAssertEqual(store.load().lanes, [[a, b]], "the last arrangement is the one on disk")
+    }
+
+    func testTheLastOfSeveralQueuedWritesWins() async throws {
+        let store = temporaryStore(default: PanelLayout.empty)
+        let autosave = LayoutAutosave(store: store, delay: .milliseconds(1))
+
+        for lane in [[a], [b], [a, b]] {
+            autosave.schedule(PanelLayout([lane]))
+            try await Task.sleep(for: .milliseconds(3))
+        }
+        autosave.flush()
+
+        XCTAssertEqual(store.load().lanes, [[a, b]])
+    }
+
     /// Quitting during the debounce must not lose the edit, and flushing must
     /// not leave the timer behind to write the same thing again.
     func testFlushingCancelsThePendingWrite() async throws {
