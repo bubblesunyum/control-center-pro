@@ -43,6 +43,18 @@ public enum Layout {
     public static let laneWidth: CGFloat = 240
     /// How far the panel sits from the screen's top-right corner.
     public static let panelInset: CGFloat = Space.one
+
+    /// How many lanes a display this wide can actually show.
+    ///
+    /// The panel is anchored top-right and does not scroll, so a lane past
+    /// this is a column hanging off the left edge of the screen with nothing
+    /// to say it is there. Edit mode refuses the drop that would make one
+    /// rather than letting the arrangement grow somewhere the user can't see
+    /// it (ccp-p6g).
+    public static func laneCapacity(inWidth width: CGFloat) -> Int {
+        let usable = width - panelInset * 2 - Space.oneHalf * 2
+        return max(1, Int((usable + Space.oneHalf) / (laneWidth + Space.oneHalf)))
+    }
 }
 
 public extension WidgetSize {

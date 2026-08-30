@@ -14,11 +14,19 @@ import AppKit
 /// removes every handle it holds.
 @MainActor
 final class PanelDismissalMonitor {
+    /// Which gesture asked. They are not the same request: Esc means "back out
+    /// of this", which while the panel is being rearranged is edit mode rather
+    /// than the panel, and a click in another app means the user has gone.
+    enum Reason: Equatable {
+        case clickElsewhere
+        case escapeKey
+    }
+
     private let monitors: EventMonitors
-    private let dismiss: () -> Void
+    private let dismiss: (Reason) -> Void
     private var handles: [Any] = []
 
-    init(monitors: EventMonitors = .system, dismiss: @escaping () -> Void) {
+    init(monitors: EventMonitors = .system, dismiss: @escaping (Reason) -> Void) {
         self.monitors = monitors
         self.dismiss = dismiss
     }
@@ -33,7 +41,7 @@ final class PanelDismissalMonitor {
         // panel — the panel would close here and reopen there, and the item
         // would look like it had stopped working.
         let outsideClick = monitors.addGlobal([.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
-            self?.dismiss()
+            self?.dismiss(.clickElsewhere)
         }
 
         // Esc arrives locally because the panel is key, which is what keeps
@@ -42,7 +50,7 @@ final class PanelDismissalMonitor {
         // meant for is gone by then.
         let escape = monitors.addLocal(.keyDown) { [weak self] event in
             guard event.isEscape else { return event }
-            self?.dismiss()
+            self?.dismiss(.escapeKey)
             return nil
         }
 

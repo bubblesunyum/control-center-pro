@@ -5,6 +5,7 @@
 #   scripts/app.sh                        # build + assemble, print the bundle path
 #   scripts/app.sh --launch               # ... and restart the running copy
 #   scripts/app.sh --launch --show-panel  # ... with the panel already open
+#   scripts/app.sh --edit-mode            # ... open, and in edit mode
 #   scripts/app.sh --release              # optimized build
 #
 # build.sh at the repo root is upstream's and stays upstream's: it hand-rolls a
@@ -25,6 +26,7 @@ for arg in "$@"; do
     --release)    CONFIGURATION=release ;;
     --launch)     LAUNCH=1 ;;
     --show-panel) LAUNCH=1; APP_ARGS+=(--show-panel) ;;
+    --edit-mode)  LAUNCH=1; APP_ARGS+=(--show-panel --edit-mode) ;;
     *) echo "unknown flag: $arg" >&2; exit 2 ;;
   esac
 done

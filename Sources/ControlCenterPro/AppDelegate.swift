@@ -14,19 +14,17 @@ import CCPUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: StatusItemController?
+    private var arrangement: PanelArrangement?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let registry = makeStandardRegistry()
         let store = JSONFileStore(filename: "layout.json", default: standardLayout)
-        let arrangement = PanelArrangement(store.load(), registry: registry)
-
-        // Written back on every launch so the file always describes what is on
-        // screen: it is how the arrangement exists at all before anyone has
-        // edited one, and normalizing is not a change worth keeping in memory
-        // only. A layout naming widgets this build lacks survives the round
-        // trip intact. Nothing to do if the write fails — the panel is already
-        // built, and the next launch reads the defaults again.
-        try? store.save(arrangement.layout)
+        let arrangement = PanelArrangement(
+            store.load(),
+            registry: registry,
+            autosave: LayoutAutosave(store: store)
+        )
+        self.arrangement = arrangement
 
         let panel = ControlPanelController(arrangement: arrangement)
         statusItem = StatusItemController(panel: panel)
@@ -37,5 +35,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--show-panel") {
             panel.show(from: nil)
         }
+        if CommandLine.arguments.contains("--edit-mode") {
+            panel.startEditing()
+        }
+    }
+
+    /// The autosave is deliberately lazy, so quitting is the one moment it has
+    /// to stop being.
+    func applicationWillTerminate(_ notification: Notification) {
+        arrangement?.flush()
     }
 }

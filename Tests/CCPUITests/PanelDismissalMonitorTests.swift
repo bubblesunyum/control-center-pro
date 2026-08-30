@@ -9,7 +9,7 @@ import XCTest
 final class PanelDismissalMonitorTests: XCTestCase {
     func testWatchingStopsWhenThePanelDoes() {
         let events = FakeEventMonitors()
-        let monitor = PanelDismissalMonitor(monitors: events.interface) {}
+        let monitor = PanelDismissalMonitor(monitors: events.interface) { _ in }
 
         monitor.start()
         XCTAssertEqual(events.installed, 2, "one monitor for the click, one for the key")
@@ -23,7 +23,7 @@ final class PanelDismissalMonitorTests: XCTestCase {
     /// stopped being able to see.
     func testTwentyOpensAndClosesLeaveNothingInstalled() {
         let events = FakeEventMonitors()
-        let monitor = PanelDismissalMonitor(monitors: events.interface) {}
+        let monitor = PanelDismissalMonitor(monitors: events.interface) { _ in }
 
         for _ in 0..<20 {
             monitor.start()
@@ -38,7 +38,7 @@ final class PanelDismissalMonitorTests: XCTestCase {
 
     func testStartingTwiceInstallsOneSet() {
         let events = FakeEventMonitors()
-        let monitor = PanelDismissalMonitor(monitors: events.interface) {}
+        let monitor = PanelDismissalMonitor(monitors: events.interface) { _ in }
 
         monitor.start()
         monitor.start()
@@ -49,35 +49,35 @@ final class PanelDismissalMonitorTests: XCTestCase {
 
     func testAClickElsewhereDismisses() {
         let events = FakeEventMonitors()
-        var dismissals = 0
-        let monitor = PanelDismissalMonitor(monitors: events.interface) { dismissals += 1 }
+        var reasons: [PanelDismissalMonitor.Reason] = []
+        let monitor = PanelDismissalMonitor(monitors: events.interface) { reasons.append($0) }
 
         monitor.start()
         events.sendGlobal(.init())
 
-        XCTAssertEqual(dismissals, 1)
+        XCTAssertEqual(reasons, [.clickElsewhere])
     }
 
     func testEscapeDismissesAndIsSwallowed() {
         let events = FakeEventMonitors()
-        var dismissals = 0
-        let monitor = PanelDismissalMonitor(monitors: events.interface) { dismissals += 1 }
+        var reasons: [PanelDismissalMonitor.Reason] = []
+        let monitor = PanelDismissalMonitor(monitors: events.interface) { reasons.append($0) }
 
         monitor.start()
 
         XCTAssertNil(events.sendLocal(keyCode: 53), "Esc is consumed by the dismissal")
-        XCTAssertEqual(dismissals, 1)
+        XCTAssertEqual(reasons, [.escapeKey], "so the panel can tell it apart from a click away")
     }
 
     func testAnyOtherKeyIsLeftAlone() {
         let events = FakeEventMonitors()
-        var dismissals = 0
-        let monitor = PanelDismissalMonitor(monitors: events.interface) { dismissals += 1 }
+        var reasons: [PanelDismissalMonitor.Reason] = []
+        let monitor = PanelDismissalMonitor(monitors: events.interface) { reasons.append($0) }
 
         monitor.start()
 
         XCTAssertNotNil(events.sendLocal(keyCode: 0), "a widget's own keystrokes still reach it")
-        XCTAssertEqual(dismissals, 0)
+        XCTAssertEqual(reasons, [])
     }
 }
 
