@@ -1,17 +1,27 @@
 {
-  "generated": "22:17:26",
+  "generated": "22:19:21",
   "project": "control-center-pro",
   "git": {
     "branch": "main",
     "upstream": "origin/main",
-    "dirty": 15,
-    "commits_today": 36,
+    "dirty": 1,
+    "commits_today": 38,
     "last": {
-      "sha": "58f5594",
-      "subject": "handoff: close the CLAUDE.md/AGENTS.md split session ccp-veh",
-      "when": "11 minutes ago"
+      "sha": "0903f6f",
+      "subject": "ledger: close the harness resync ccp-g7l",
+      "when": "12 seconds ago"
     },
     "unpushed": [
+      {
+        "sha": "0903f6f",
+        "subject": "ledger: close the harness resync ccp-g7l",
+        "at": 1788059948.0
+      },
+      {
+        "sha": "01a6848",
+        "subject": "resync the harness from harness-starter ccp-g7l",
+        "at": 1788059932.0
+      },
       {
         "sha": "58f5594",
         "subject": "handoff: close the CLAUDE.md/AGENTS.md split session ccp-veh",
@@ -24,9 +34,24 @@
       }
     ],
     "unpushed_beads": [
+      "ccp-g7l",
       "ccp-veh"
     ],
     "bead_commits": {
+      "ccp-g7l": {
+        "commits": 2,
+        "at": 1788059948.0,
+        "list": [
+          {
+            "sha": "0903f6f",
+            "subject": "ledger: close the harness resync ccp-g7l"
+          },
+          {
+            "sha": "01a6848",
+            "subject": "resync the harness from harness-starter ccp-g7l"
+          }
+        ]
+      },
       "ccp-veh": {
         "commits": 2,
         "at": 1788059176.0,
@@ -47,8 +72,8 @@
     "counts": {
       "open": 29,
       "ready": 15,
-      "in_progress": 1,
-      "closed": 15,
+      "in_progress": 0,
+      "closed": 16,
       "blocked": 0
     },
     "issues": [
@@ -293,27 +318,6 @@
           "ccp-lr7.1",
           "ccp-lr7.8"
         ]
-      },
-      {
-        "id": "ccp-g7l",
-        "title": "resync harness scripts from harness-starter \u2014 opencode-agents.py, .opencode/agent, verify.sh step",
-        "status": "in_progress",
-        "ready": false,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 2,
-        "type": "task",
-        "parent": "",
-        "updated_at": "2026-08-30T03:10:25Z",
-        "created_at": "2026-08-30T02:39:36Z",
-        "deps": [],
-        "description": "ccp installed template/AGENTS.md and opencode.json for ccp-veh, but the rest of the harness scripts are behind harness-starter: brief.sh, context.py, review.sh, verify.sh and dashboard.py all differ from the starter's copies, and ccp has no scripts/opencode-agents.py and no .opencode/agent/. The starter's verify.sh runs 'scripts/opencode-agents.py check' as a gate step; ccp's does not, so the reviewers exist only for Claude Code here. Until this lands, an opencode session can read AGENTS.md and CLAUDE.md (opencode.json points at both) but cannot run reviewer-taste / reviewer-correctness / reviewer-design.",
-        "design": "",
-        "notes": "",
-        "close_reason": "",
-        "owner": "",
-        "children": []
       },
       {
         "id": "ccp-ami",
@@ -754,6 +758,38 @@
         "children": []
       },
       {
+        "id": "ccp-g7l",
+        "title": "resync harness scripts from harness-starter \u2014 opencode-agents.py, .opencode/agent, verify.sh step",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-30T03:19:02Z",
+        "created_at": "2026-08-30T02:39:36Z",
+        "deps": [],
+        "description": "ccp installed template/AGENTS.md and opencode.json for ccp-veh, but the rest of the harness scripts are behind harness-starter: brief.sh, context.py, review.sh, verify.sh and dashboard.py all differ from the starter's copies, and ccp has no scripts/opencode-agents.py and no .opencode/agent/. The starter's verify.sh runs 'scripts/opencode-agents.py check' as a gate step; ccp's does not, so the reviewers exist only for Claude Code here. Until this lands, an opencode session can read AGENTS.md and CLAUDE.md (opencode.json points at both) but cannot run reviewer-taste / reviewer-correctness / reviewer-design.",
+        "design": "",
+        "notes": "",
+        "close_reason": "Resynced against harness-starter. Took the template for HARNESS.md, workflow skill, dashboard/index.html, dashboard.py and commit-msg; merged verify.sh (gained the opencode-agents check step) and review.sh (kept the upstream exclusions, regained *.json/*.html). Installed scripts/opencode-agents.py and .opencode/agent/, so opencode can now run all three reviewers and the gate checks the two halves match. Drift 7+1 -> 3, and those 3 are ccp's own filled-in content. Two permanent divergences recorded: no bd-setup-codex block in AGENTS.md, no --no-verify line in commit-msg. All three reviewers cle",
+        "owner": "",
+        "children": [],
+        "commit_count": 2,
+        "commits": [
+          {
+            "sha": "0903f6f",
+            "subject": "ledger: close the harness resync ccp-g7l"
+          },
+          {
+            "sha": "01a6848",
+            "subject": "resync the harness from harness-starter ccp-g7l"
+          }
+        ]
+      },
+      {
         "id": "ccp-veh",
         "title": "split CLAUDE.md and AGENTS.md \u2014 AGENTS.md is bd boilerplate, CLAUDE.md carries everything",
         "status": "closed",
@@ -1086,108 +1122,10 @@
   },
   "worktree": [
     {
-      "path": ".beads/issues.jsonl",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": ".claude/HARNESS.md",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": ".claude/context.lock",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": ".claude/skills/agentic-review/SKILL.md",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": ".claude/skills/workflow/SKILL.md",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": ".gitignore",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": ".opencode/",
-      "staged": false,
-      "untracked": true,
-      "status": "?",
-      "old_path": null
-    },
-    {
       "path": ".vscode/",
       "staged": false,
       "untracked": true,
       "status": "?",
-      "old_path": null
-    },
-    {
-      "path": "dashboard/index.html",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": "dashboard/state.json",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": "scripts/dashboard.py",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": "scripts/hooks/commit-msg",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": "scripts/opencode-agents.py",
-      "staged": false,
-      "untracked": true,
-      "status": "?",
-      "old_path": null
-    },
-    {
-      "path": "scripts/review.sh",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": "scripts/verify.sh",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
       "old_path": null
     }
   ],
@@ -1205,9 +1143,18 @@
         "ok": true
       }
     ],
-    "unverified": [],
-    "took": "5s",
-    "at": 1788059818.4612718
+    "unverified": [
+      {
+        "sha": "0903f6f",
+        "subject": "ledger: close the harness resync ccp-g7l"
+      },
+      {
+        "sha": "01a6848",
+        "subject": "resync the harness from harness-starter ccp-g7l"
+      }
+    ],
+    "took": "3s",
+    "at": 1788059921.7054713
   },
   "runs": {
     "verify": {
@@ -1368,7 +1315,7 @@
           "path": ".beads/issues.jsonl",
           "origin": "harness",
           "role": "the issue graph, exported for git",
-          "tokens": 13143
+          "tokens": 13307
         },
         {
           "id": ".claude/skills/beads/SKILL.md",
@@ -1501,14 +1448,14 @@
       },
       {
         "name": "session brief",
-        "tokens": 282
+        "tokens": 250
       },
       {
         "name": "skill descriptions",
         "tokens": 334
       }
     ],
-    "always_total": 2740,
+    "always_total": 2708,
     "on_demand": [
       {
         "name": "workflow",
@@ -1543,7 +1490,7 @@
         "tokens": 434
       }
     ],
-    "brief_tokens": 282,
+    "brief_tokens": 250,
     "prime_tokens": 1569
   }
 }
