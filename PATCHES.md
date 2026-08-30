@@ -65,6 +65,24 @@ hook rather than taking their overlay call.
 
 ---
 
+## Not a patch: `build.sh` is upstream's, and CCP doesn't use it
+
+`build.sh` at the repo root hand-rolls a `swiftc` build of upstream's
+`Vorssaint` executable target, assembles their bundle, and signs it with their
+identity. That target no longer exists in this fork — the `Package.swift` patch
+above replaced it with the `VorssaintEngines` library — so the script cannot
+build anything here.
+
+It is left exactly as upstream wrote it anyway. Editing 631 lines of someone
+else's build to produce our bundle would make every upstream merge a conflict
+over a code path we don't run. CCP's own bundle is `scripts/app.sh`: twenty
+lines, SwiftPM underneath, `AppBundle/Info.plist` for the identity, the same
+compiler the gate uses.
+
+Closed as ccp-v64, which had asked for the identity rename in place.
+
+---
+
 ## Not a patch: the `exclude` list
 
 `Package.swift` excludes 38 files under `Core/`, `Services/`, and `Support/`.
