@@ -1,17 +1,57 @@
 {
-  "generated": "23:24:48",
+  "generated": "10:42:27",
   "project": "control-center-pro",
   "git": {
     "branch": "main",
     "upstream": "origin/main",
     "dirty": 4,
-    "commits_today": 46,
+    "commits_today": 7,
     "last": {
-      "sha": "e0ff6bb",
-      "subject": "the layout, and the widget ids it refuses to forget ccp-lr7.2",
-      "when": "22 seconds ago"
+      "sha": "9ed791f",
+      "subject": "the gallery names every permission a widget needs ccp-lr7.8",
+      "when": "76 seconds ago"
     },
     "unpushed": [
+      {
+        "sha": "9ed791f",
+        "subject": "the gallery names every permission a widget needs ccp-lr7.8",
+        "at": 1788104470.0
+      },
+      {
+        "sha": "17ae630",
+        "subject": "a gallery to put widgets back ccp-lr7.8",
+        "at": 1788104187.0
+      },
+      {
+        "sha": "fb0038c",
+        "subject": "edit mode: wiggle, remove, and drag between lanes ccp-lr7.7 ccp-mtk ccp-p6g",
+        "at": 1788103680.0
+      },
+      {
+        "sha": "3242849",
+        "subject": "widgets sample only while the panel is up ccp-lr7.9",
+        "at": 1788102727.0
+      },
+      {
+        "sha": "7ee672b",
+        "subject": "the panel puts itself away ccp-lr7.4",
+        "at": 1788102380.0
+      },
+      {
+        "sha": "c2db9b3",
+        "subject": "handoff: the panel draws what is on disk ccp-lr7.6",
+        "at": 1788101990.0
+      },
+      {
+        "sha": "7959c69",
+        "subject": "the panel draws the arrangement it was left with ccp-lr7.6",
+        "at": 1788075324.0
+      },
+      {
+        "sha": "5a6574f",
+        "subject": "handoff: the layout keeps what it cannot draw ccp-lr7.2",
+        "at": 1788064270.0
+      },
       {
         "sha": "e0ff6bb",
         "subject": "the layout, and the widget ids it refuses to forget ccp-lr7.2",
@@ -20,23 +60,120 @@
     ],
     "unpushed_beads": [
       "ccp-lr7.2",
-      "ccp-lr7.6"
+      "ccp-lr7.4",
+      "ccp-lr7.6",
+      "ccp-lr7.7",
+      "ccp-lr7.8",
+      "ccp-lr7.9",
+      "ccp-mtk",
+      "ccp-p6g",
+      "ccp-pr6"
     ],
     "bead_commits": {
-      "ccp-lr7.6": {
-        "commits": 1,
-        "at": 1788063865.0,
+      "ccp-lr7.8": {
+        "commits": 2,
+        "at": 1788104470.0,
         "list": [
+          {
+            "sha": "9ed791f",
+            "subject": "the gallery names every permission a widget needs ccp-lr7.8"
+          },
+          {
+            "sha": "17ae630",
+            "subject": "a gallery to put widgets back ccp-lr7.8"
+          }
+        ]
+      },
+      "ccp-p6g": {
+        "commits": 2,
+        "at": 1788103680.0,
+        "list": [
+          {
+            "sha": "fb0038c",
+            "subject": "edit mode: wiggle, remove, and drag between lanes ccp-lr7.7 ccp-mtk ccp-p6g"
+          },
+          {
+            "sha": "7959c69",
+            "subject": "the panel draws the arrangement it was left with ccp-lr7.6"
+          }
+        ]
+      },
+      "ccp-mtk": {
+        "commits": 1,
+        "at": 1788103680.0,
+        "list": [
+          {
+            "sha": "fb0038c",
+            "subject": "edit mode: wiggle, remove, and drag between lanes ccp-lr7.7 ccp-mtk ccp-p6g"
+          }
+        ]
+      },
+      "ccp-lr7.7": {
+        "commits": 1,
+        "at": 1788103680.0,
+        "list": [
+          {
+            "sha": "fb0038c",
+            "subject": "edit mode: wiggle, remove, and drag between lanes ccp-lr7.7 ccp-mtk ccp-p6g"
+          }
+        ]
+      },
+      "ccp-lr7.9": {
+        "commits": 1,
+        "at": 1788102727.0,
+        "list": [
+          {
+            "sha": "3242849",
+            "subject": "widgets sample only while the panel is up ccp-lr7.9"
+          }
+        ]
+      },
+      "ccp-lr7.4": {
+        "commits": 1,
+        "at": 1788102380.0,
+        "list": [
+          {
+            "sha": "7ee672b",
+            "subject": "the panel puts itself away ccp-lr7.4"
+          }
+        ]
+      },
+      "ccp-lr7.6": {
+        "commits": 3,
+        "at": 1788101990.0,
+        "list": [
+          {
+            "sha": "c2db9b3",
+            "subject": "handoff: the panel draws what is on disk ccp-lr7.6"
+          },
+          {
+            "sha": "7959c69",
+            "subject": "the panel draws the arrangement it was left with ccp-lr7.6"
+          },
           {
             "sha": "e0ff6bb",
             "subject": "the layout, and the widget ids it refuses to forget ccp-lr7.2"
           }
         ]
       },
-      "ccp-lr7.2": {
+      "ccp-pr6": {
         "commits": 1,
-        "at": 1788063865.0,
+        "at": 1788075324.0,
         "list": [
+          {
+            "sha": "7959c69",
+            "subject": "the panel draws the arrangement it was left with ccp-lr7.6"
+          }
+        ]
+      },
+      "ccp-lr7.2": {
+        "commits": 2,
+        "at": 1788064270.0,
+        "list": [
+          {
+            "sha": "5a6574f",
+            "subject": "handoff: the layout keeps what it cannot draw ccp-lr7.2"
+          },
           {
             "sha": "e0ff6bb",
             "subject": "the layout, and the widget ids it refuses to forget ccp-lr7.2"
@@ -47,112 +184,13 @@
   },
   "ledger": {
     "counts": {
-      "open": 29,
-      "ready": 20,
+      "open": 25,
+      "ready": 19,
       "in_progress": 0,
-      "closed": 22,
+      "closed": 31,
       "blocked": 0
     },
     "issues": [
-      {
-        "id": "ccp-lr7.9",
-        "title": "activate/deactivate lifecycle and idle CPU",
-        "status": "open",
-        "ready": false,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 1,
-        "type": "task",
-        "parent": "ccp-lr7",
-        "updated_at": "2026-08-29T17:12:59Z",
-        "created_at": "2026-08-29T17:08:10Z",
-        "deps": [
-          "ccp-lr7.6"
-        ],
-        "description": "Sampling runs only while the panel is visible, except for widgets that explicitly opt into background sampling for a menu-bar stat. Enforced through activate()/deactivate(). Engine work off the main thread, models publish on main.",
-        "design": "",
-        "notes": "",
-        "close_reason": "",
-        "owner": "bubbles@cortico.ai",
-        "children": []
-      },
-      {
-        "id": "ccp-lr7.7",
-        "title": "edit mode: wiggle, remove, and drag between lanes",
-        "status": "open",
-        "ready": false,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 1,
-        "type": "task",
-        "parent": "ccp-lr7",
-        "updated_at": "2026-08-30T04:21:23Z",
-        "created_at": "2026-08-29T17:08:07Z",
-        "deps": [
-          "ccp-lr7.6"
-        ],
-        "description": "Long-press or an Edit button enters edit mode. Widgets wiggle via a small repeating rotationEffect with a random per-item phase offset so they do not sync, show remove badges, and become draggable. Prefer a custom drag gesture plus matchedGeometryEffect over .draggable/.dropDestination, which feel clunky for grid reordering. Drop targets: any position in any lane, plus an empty trailing lane that appears as a target to create a new lane.",
-        "design": "",
-        "notes": "lr7.2 owns PanelLayout.normalized() (prunes empty lanes, floors at one). Mutation verbs live here, and each must end in a normalized() call \u2014 that is what keeps the invariant without lr7.2 shipping the verbs. The trailing empty drop lane is a render-time affordance and must never be persisted. Reordering has to index around .unavailable slots, which are real positions in the lane.",
-        "close_reason": "",
-        "owner": "bubbles@cortico.ai",
-        "children": []
-      },
-      {
-        "id": "ccp-lr7.6",
-        "title": "lane layout with placeholder widgets",
-        "status": "open",
-        "ready": true,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 1,
-        "type": "task",
-        "parent": "ccp-lr7",
-        "updated_at": "2026-08-30T04:24:15Z",
-        "created_at": "2026-08-29T17:08:06Z",
-        "deps": [
-          "ccp-lr7.2"
-        ],
-        "description": "Vertical lanes stacking widget cards, driven by the layout model and rendering whatever the registry provides. Placeholder widgets only at this stage.",
-        "design": "",
-        "notes": "Also from lr7.2's review: JSONFileStore.load() returns whatever is in the file, un-normalized \u2014 the wiring here must call .normalized() on it before rendering. And see ccp-pr6 (duplicate ids in a lane) before ForEach-ing [LaneSlot].",
-        "close_reason": "",
-        "owner": "bubbles@cortico.ai",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "e0ff6bb",
-            "subject": "the layout, and the widget ids it refuses to forget ccp-lr7.2"
-          }
-        ]
-      },
-      {
-        "id": "ccp-lr7.4",
-        "title": "panel dismissal: outside click and Esc",
-        "status": "open",
-        "ready": true,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 1,
-        "type": "task",
-        "parent": "ccp-lr7",
-        "updated_at": "2026-08-30T03:38:36Z",
-        "created_at": "2026-08-29T17:08:04Z",
-        "deps": [
-          "ccp-lr7.3"
-        ],
-        "description": "Dismiss on outside click via a global NSEvent monitor, and on Esc. The event monitor must be removed when the panel closes \u2014 a leaked global monitor is the classic version of this bug.\n\nMulti-display placement was split out to ccp-lr7.10 and deprioritised.",
-        "design": "",
-        "notes": "",
-        "close_reason": "",
-        "owner": "bubbles@cortico.ai",
-        "children": []
-      },
       {
         "id": "ccp-lr7",
         "title": "the shell: panel, lanes, edit mode",
@@ -187,8 +225,8 @@
         ]
       },
       {
-        "id": "ccp-pr6",
-        "title": "a layout with the same widget id twice in one lane resolves to duplicate LaneSlot ids",
+        "id": "ccp-de2",
+        "title": "no capture exercises the lane-capacity refusal, and it is unreachable with today's widget set",
         "status": "open",
         "ready": true,
         "in_review": false,
@@ -197,19 +235,19 @@
         "priority": 2,
         "type": "task",
         "parent": "",
-        "updated_at": "2026-08-30T04:24:04Z",
-        "created_at": "2026-08-30T04:23:55Z",
+        "updated_at": "2026-08-30T15:37:09Z",
+        "created_at": "2026-08-30T15:37:00Z",
         "deps": [],
-        "description": "",
+        "description": "Raised by reviewer-design on ccp-lr7.7: Layout.laneCapacity / PanelEditor.canAddLane are new logic with no capture behind them. Two reasons it wasn't captured: the refusal is invisible by design (the dashed new-lane column simply doesn't appear, so a screenshot of it is a screenshot of nothing), and on this display the cap is 7 lanes while the build offers 5 widgets \u2014 one per lane is 5, so the cap cannot be reached at all today. Covered by PanelEditorTests.testNoNewLaneWhenTheDisplayIsFull. Worth revisiting when the widget set grows past the lane count of a small display, and worth deciding then whether the refusal should say something rather than nothing.",
         "design": "",
-        "notes": "LaneSlot.id is the WidgetID, so a lane listing the same id twice yields two slots with equal ids and a SwiftUI ForEach over [LaneSlot] renders undefined. Raised by reviewer-correctness on ccp-lr7.2, which declined to file it on the grounds that no mutation logic exists yet \u2014 but the path does not need mutation: PanelLayout.load() will happily return {\"lanes\":[[\"stub\",\"stub\"]]} from a hand-edited or partially-mangled file, and lr7.6 will ForEach it. Recommendation: fold dedup (keep first occurrence) into PanelLayout.normalized(), which is already the invariant-maintainer that prunes empty lanes and floors at one lane \u2014 same place, same call sites, no new concept. NOT done in lr7.2 because normalized()'s contract was agreed with laurel as exactly those two invariants and widening it was not mine to decide unilaterally. Cheap; do it before lr7.6 renders anything.",
+        "notes": "",
         "close_reason": "",
         "owner": "",
         "children": []
       },
       {
-        "id": "ccp-mtk",
-        "title": "decide the layout save policy for edit mode: debounce and off-main",
+        "id": "ccp-23w",
+        "title": "gallery shows a widget's required permission but not whether it is granted",
         "status": "open",
         "ready": true,
         "in_review": false,
@@ -218,12 +256,33 @@
         "priority": 2,
         "type": "task",
         "parent": "",
-        "updated_at": "2026-08-30T04:24:08Z",
-        "created_at": "2026-08-30T04:23:34Z",
+        "updated_at": "2026-08-30T15:32:27Z",
+        "created_at": "2026-08-30T15:32:05Z",
         "deps": [],
-        "description": "",
+        "description": "GalleryRow prints WidgetPermission.requirement \u2014 a static string naming what the widget will ask for. ccp-lr7.8's acceptance criteria wanted whether the permission is *satisfied*, which needs a permissions adapter CCP does not have yet (upstream's Sources/Vorssaint/Core/Permissions.swift is engine-facing, not a status service for our WidgetPermission enum). When that adapter lands, the entry should read granted / not granted and offer the grant inline, the same way a placed widget degrades to an inline grant state.",
         "design": "",
-        "notes": "lr7.7 saves the layout after every drag mutation. JSONFileStore.save() is synchronous blocking I/O, so a naive save-per-mutation writes the file on the main thread mid-animation. Raised as an async-API finding by reviewer-taste on ccp-lr7.2 and declined there: the store is Sendable and actor-agnostic on purpose, so a caller can move it off-main, and making load() async would stop applicationDidFinishLaunching from having lanes ready when it builds the panel. The real decision is a save policy \u2014 debounce the writes and put them off-main \u2014 and it belongs with the mutation verbs, not the store.",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-mlw",
+        "title": "background sampling opt-in for a menu-bar stat",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-30T15:29:31Z",
+        "created_at": "2026-08-30T15:29:18Z",
+        "deps": [],
+        "description": "BRIEF line 99 and ccp-lr7.9's description: a widget may opt into sampling while the panel is shut, for a stat drawn in the menu bar icon. Not built with the lifecycle in lr7.9 because nothing sets it \u2014 it would be a descriptor flag with no reader and no test. Lands with the first widget that needs it, which is System Stats (ccp-8ld.2) if the menu bar ever shows a number. Shape: a samplesInBackground property on WidgetDescriptor and a filter in PanelArrangement.deactivate().",
+        "design": "",
+        "notes": "",
         "close_reason": "",
         "owner": "",
         "children": []
@@ -587,29 +646,6 @@
         "children": []
       },
       {
-        "id": "ccp-lr7.8",
-        "title": "widget gallery for adding widgets",
-        "status": "open",
-        "ready": false,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 2,
-        "type": "task",
-        "parent": "ccp-lr7",
-        "updated_at": "2026-08-29T17:13:00Z",
-        "created_at": "2026-08-29T17:08:08Z",
-        "deps": [
-          "ccp-lr7.7"
-        ],
-        "description": "The + affordance in edit mode opens a gallery built from WidgetRegistry, showing each descriptor and whether its permissions are satisfied.",
-        "design": "",
-        "notes": "",
-        "close_reason": "",
-        "owner": "bubbles@cortico.ai",
-        "children": []
-      },
-      {
         "id": "ccp-4kq",
         "title": "build, signing, and the upstream merge routine",
         "status": "open",
@@ -732,6 +768,277 @@
         "children": []
       },
       {
+        "id": "ccp-lr7.8",
+        "title": "widget gallery for adding widgets",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "ccp-lr7",
+        "updated_at": "2026-08-30T15:41:31Z",
+        "created_at": "2026-08-29T17:08:08Z",
+        "deps": [
+          "ccp-lr7.7"
+        ],
+        "description": "The + affordance in edit mode opens a gallery built from WidgetRegistry, showing each descriptor and whether its permissions are satisfied.",
+        "design": "",
+        "notes": "Correction to the close reason: the follow-up commit is 9ed791f, not 4a3f2c1 \u2014 I wrote the hash before making the commit.",
+        "close_reason": "The + in the editing bar opens a popover built from the registry: every widget the build offers, checkmarks on the placed ones, and the permissions a widget will ask for (sorted \u2014 the set has no order). Adding drops it into the shortest lane. Verified in the app end to end: removed the audio mixer, watched it leave layout.json, added it back from the gallery, watched it return. Registering a widget remains the whole of adding it to the gallery. Whether a permission is *granted* is ccp-23w. Shipped in 17ae630 and 4a3f2c1.",
+        "owner": "bubbles@cortico.ai",
+        "children": [],
+        "commit_count": 2,
+        "commits": [
+          {
+            "sha": "9ed791f",
+            "subject": "the gallery names every permission a widget needs ccp-lr7.8"
+          },
+          {
+            "sha": "17ae630",
+            "subject": "a gallery to put widgets back ccp-lr7.8"
+          }
+        ]
+      },
+      {
+        "id": "ccp-4w8",
+        "title": "edit mode can remove a widget but there is no way to add one back",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-30T15:29:31Z",
+        "created_at": "2026-08-30T15:29:19Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "duplicate of ccp-lr7.8, the widget gallery",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-lr7.7",
+        "title": "edit mode: wiggle, remove, and drag between lanes",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "ccp-lr7",
+        "updated_at": "2026-08-30T15:29:09Z",
+        "created_at": "2026-08-29T17:08:07Z",
+        "deps": [
+          "ccp-lr7.6"
+        ],
+        "description": "Long-press or an Edit button enters edit mode. Widgets wiggle via a small repeating rotationEffect with a random per-item phase offset so they do not sync, show remove badges, and become draggable. Prefer a custom drag gesture plus matchedGeometryEffect over .draggable/.dropDestination, which feel clunky for grid reordering. Drop targets: any position in any lane, plus an empty trailing lane that appears as a target to create a new lane.",
+        "design": "",
+        "notes": "lr7.2 owns PanelLayout.normalized() (prunes empty lanes, floors at one). Mutation verbs live here, and each must end in a normalized() call \u2014 that is what keeps the invariant without lr7.2 shipping the verbs. The trailing empty drop lane is a render-time affordance and must never be persisted. Reordering has to index around .unavailable slots, which are real positions in the lane.",
+        "close_reason": "Long press starts edit mode; per-card random period and head start for the wiggle; remove badges; live drag between and within lanes with the layout mutating under the finger. The new lane opens on the LEFT \u2014 the panel is right-pinned, so a trailing column shoves every card sideways mid-drag (built it trailing first and watched it). Verified by driving a synthetic CGEvent drag at the real window. Shipped in fb0038c.",
+        "owner": "bubbles@cortico.ai",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "fb0038c",
+            "subject": "edit mode: wiggle, remove, and drag between lanes ccp-lr7.7 ccp-mtk ccp-p6g"
+          }
+        ]
+      },
+      {
+        "id": "ccp-p6g",
+        "title": "a panel taller or wider than the screen is cut off, not reflowed",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-30T15:29:09Z",
+        "created_at": "2026-08-30T05:09:31Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "ControlPanelController.sizeFitting clamps the panel to the visible frame minus the inset, so a layout with more lanes than the display can hold has its leftmost lanes cut by the window edge (the panel is anchored top-right). Same for a lane taller than the screen. Fine as a guardrail \u2014 five 240pt lanes need a 1300pt-wide display \u2014 but the real answer is either a horizontal scroll inside the panel, a cap on lanes with the overflow refused at drop time in edit mode, or a smaller lane width on small displays. Decide before edit mode lets anyone build a layout that wide.",
+        "close_reason": "Decided: cap, not scroll. Layout.laneCapacity(inWidth:) says how many lanes a display can show; edit mode refuses the drop that would exceed it rather than letting the arrangement grow off-screen. The existing sizeFitting clamp stays as the guardrail for a layout carried over from a wider display. A horizontal scroll was rejected \u2014 macOS Control Center never scrolls sideways and the panel is a control surface, not a document. Shipped in fb0038c.",
+        "owner": "",
+        "children": [],
+        "commit_count": 2,
+        "commits": [
+          {
+            "sha": "fb0038c",
+            "subject": "edit mode: wiggle, remove, and drag between lanes ccp-lr7.7 ccp-mtk ccp-p6g"
+          },
+          {
+            "sha": "7959c69",
+            "subject": "the panel draws the arrangement it was left with ccp-lr7.6"
+          }
+        ]
+      },
+      {
+        "id": "ccp-lr7.9",
+        "title": "activate/deactivate lifecycle and idle CPU",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "ccp-lr7",
+        "updated_at": "2026-08-30T15:29:07Z",
+        "created_at": "2026-08-29T17:08:10Z",
+        "deps": [
+          "ccp-lr7.6"
+        ],
+        "description": "Sampling runs only while the panel is visible, except for widgets that explicitly opt into background sampling for a menu-bar stat. Enforced through activate()/deactivate(). Engine work off the main thread, models publish on main.",
+        "design": "",
+        "notes": "",
+        "close_reason": "PanelArrangement owns the live widgets and starts/stops them with the panel; activation is idempotent there and in the sampler. SystemStatsWidget actually samples (1Hz) so the claim is testable. Measured 0.00s of CPU over 60s with the panel closed. The background-sampling opt-in from the description is NOT built \u2014 nothing needs it until the first menu-bar stat; see ccp-lr7.11. Shipped in 3242849.",
+        "owner": "bubbles@cortico.ai",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "3242849",
+            "subject": "widgets sample only while the panel is up ccp-lr7.9"
+          }
+        ]
+      },
+      {
+        "id": "ccp-mtk",
+        "title": "decide the layout save policy for edit mode: debounce and off-main",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-30T15:29:07Z",
+        "created_at": "2026-08-30T04:23:34Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "lr7.7 saves the layout after every drag mutation. JSONFileStore.save() is synchronous blocking I/O, so a naive save-per-mutation writes the file on the main thread mid-animation. Raised as an async-API finding by reviewer-taste on ccp-lr7.2 and declined there: the store is Sendable and actor-agnostic on purpose, so a caller can move it off-main, and making load() async would stop applicationDidFinishLaunching from having lanes ready when it builds the panel. The real decision is a save policy \u2014 debounce the writes and put them off-main \u2014 and it belongs with the mutation verbs, not the store.",
+        "close_reason": "LayoutAutosave: debounced 500ms, the write itself off-main, last layout wins, flushed synchronously when the panel closes or the app quits. Launch no longer writes the layout back at all \u2014 with every edit saved, a rewrite nobody asked for is a silent edit of the user's file. Shipped in fb0038c.",
+        "owner": "",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "fb0038c",
+            "subject": "edit mode: wiggle, remove, and drag between lanes ccp-lr7.7 ccp-mtk ccp-p6g"
+          }
+        ]
+      },
+      {
+        "id": "ccp-lr7.4",
+        "title": "panel dismissal: outside click and Esc",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "ccp-lr7",
+        "updated_at": "2026-08-30T15:29:05Z",
+        "created_at": "2026-08-29T17:08:04Z",
+        "deps": [
+          "ccp-lr7.3"
+        ],
+        "description": "Dismiss on outside click via a global NSEvent monitor, and on Esc. The event monitor must be removed when the panel closes \u2014 a leaked global monitor is the classic version of this bug.\n\nMulti-display placement was split out to ccp-lr7.10 and deprioritised.",
+        "design": "",
+        "notes": "",
+        "close_reason": "Global mouse monitor for a click in another app, local key monitor for Esc; installed on show, removed on hide. Only the mouse watch is global so the status item's own click isn't seen twice. EventMonitors is a seam over NSEvent, so 'twenty opens and closes leave nothing installed' is a test. Shipped in 7ee672b.",
+        "owner": "bubbles@cortico.ai",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "7ee672b",
+            "subject": "the panel puts itself away ccp-lr7.4"
+          }
+        ]
+      },
+      {
+        "id": "ccp-lr7.6",
+        "title": "lane layout with placeholder widgets",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "ccp-lr7",
+        "updated_at": "2026-08-30T07:35:36Z",
+        "created_at": "2026-08-29T17:08:06Z",
+        "deps": [
+          "ccp-lr7.2"
+        ],
+        "description": "Vertical lanes stacking widget cards, driven by the layout model and rendering whatever the registry provides. Placeholder widgets only at this stage.",
+        "design": "",
+        "notes": "Also from lr7.2's review: JSONFileStore.load() returns whatever is in the file, un-normalized \u2014 the wiring here must call .normalized() on it before rendering. And see ccp-pr6 (duplicate ids in a lane) before ForEach-ing [LaneSlot].",
+        "close_reason": "Launch loads layout.json through JSONFileStore, normalizes, resolves against the registry and writes back; ControlPanel renders [[LaneSlot]] and draws UnavailableWidgetCard for an id this build lacks. Verified by hand-editing the file with a duplicate, an empty lane and an unknown id and relaunching: dedup and lane-closing applied, the unknown widget drew as a card and survived the round trip. Panel clamps to the visible frame \u2014 the clipping that clamp causes is ccp-p6g, and the capture proving it is owed (display was locked). Shipped in 7959c69.",
+        "owner": "bubbles@cortico.ai",
+        "children": [],
+        "commit_count": 3,
+        "commits": [
+          {
+            "sha": "c2db9b3",
+            "subject": "handoff: the panel draws what is on disk ccp-lr7.6"
+          },
+          {
+            "sha": "7959c69",
+            "subject": "the panel draws the arrangement it was left with ccp-lr7.6"
+          },
+          {
+            "sha": "e0ff6bb",
+            "subject": "the layout, and the widget ids it refuses to forget ccp-lr7.2"
+          }
+        ]
+      },
+      {
+        "id": "ccp-pr6",
+        "title": "a layout with the same widget id twice in one lane resolves to duplicate LaneSlot ids",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-30T07:35:34Z",
+        "created_at": "2026-08-30T04:23:55Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "LaneSlot.id is the WidgetID, so a lane listing the same id twice yields two slots with equal ids and a SwiftUI ForEach over [LaneSlot] renders undefined. Raised by reviewer-correctness on ccp-lr7.2, which declined to file it on the grounds that no mutation logic exists yet \u2014 but the path does not need mutation: PanelLayout.load() will happily return {\"lanes\":[[\"stub\",\"stub\"]]} from a hand-edited or partially-mangled file, and lr7.6 will ForEach it. Recommendation: fold dedup (keep first occurrence) into PanelLayout.normalized(), which is already the invariant-maintainer that prunes empty lanes and floors at one lane \u2014 same place, same call sites, no new concept. NOT done in lr7.2 because normalized()'s contract was agreed with laurel as exactly those two invariants and widening it was not mine to decide unilaterally. Cheap; do it before lr7.6 renders anything.",
+        "close_reason": "normalized() now places a widget at most once, first placement wins, across the whole layout \u2014 a lane emptied by the dedup closes up under the existing rule. Three tests in PanelLayoutTests. Shipped in 7959c69.",
+        "owner": "",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "7959c69",
+            "subject": "the panel draws the arrangement it was left with ccp-lr7.6"
+          }
+        ]
+      },
+      {
         "id": "ccp-lr7.2",
         "title": "layout model and persistence",
         "status": "closed",
@@ -753,8 +1060,12 @@
         "close_reason": "PanelLayout as plain lossless Codable data, normalized() for the empty-lane and one-lane-floor invariants, LaneSlot + WidgetRegistry.resolve preserving unknown ids as visible slots, and a generic JSONFileStore. 6 new tests; gate green",
         "owner": "bubbles@cortico.ai",
         "children": [],
-        "commit_count": 1,
+        "commit_count": 2,
         "commits": [
+          {
+            "sha": "5a6574f",
+            "subject": "handoff: the layout keeps what it cannot draw ccp-lr7.2"
+          },
           {
             "sha": "e0ff6bb",
             "subject": "the layout, and the widget ids it refuses to forget ccp-lr7.2"
@@ -1251,7 +1562,7 @@
   ],
   "verify": {
     "status": "passed",
-    "when": "3m ago",
+    "when": "2m ago",
     "tests": "",
     "steps": [
       {
@@ -1265,12 +1576,12 @@
     ],
     "unverified": [
       {
-        "sha": "e0ff6bb",
-        "subject": "the layout, and the widget ids it refuses to forget ccp-lr7.2"
+        "sha": "9ed791f",
+        "subject": "the gallery names every permission a widget needs ccp-lr7.8"
       }
     ],
-    "took": "4s",
-    "at": 1788063690.03034
+    "took": "7s",
+    "at": 1788104411.4403033
   },
   "runs": {
     "verify": {
@@ -1382,12 +1693,12 @@
           "tokens": 41
         },
         {
-          "id": "harness/handoffs/20260829-230605.md",
-          "name": "20260829-230605.md",
-          "path": "harness/handoffs/20260829-230605.md",
+          "id": "harness/handoffs/20260830-095950.md",
+          "name": "20260830-095950.md",
+          "path": "harness/handoffs/20260830-095950.md",
           "origin": "harness",
           "role": "the last session's closing note",
-          "tokens": 544
+          "tokens": 326
         },
         {
           "id": "CLAUDE.md",
@@ -1395,7 +1706,7 @@
           "path": "CLAUDE.md",
           "origin": "claude",
           "role": "project instructions, always loaded",
-          "tokens": 2124
+          "tokens": 2178
         },
         {
           "id": "/Users/bubbles/.claude/projects/-Users-bubbles-dev-control-center-pro/memory/MEMORY.md",
@@ -1431,7 +1742,7 @@
           "path": ".beads/issues.jsonl",
           "origin": "harness",
           "role": "the issue graph, exported for git",
-          "tokens": 15818
+          "tokens": 17835
         },
         {
           "id": ".claude/skills/beads/SKILL.md",
@@ -1560,18 +1871,18 @@
     "always": [
       {
         "name": "CLAUDE.md",
-        "tokens": 2124
+        "tokens": 2178
       },
       {
         "name": "session brief",
-        "tokens": 296
+        "tokens": 346
       },
       {
         "name": "skill descriptions",
         "tokens": 334
       }
     ],
-    "always_total": 2754,
+    "always_total": 2858,
     "on_demand": [
       {
         "name": "workflow",
@@ -1606,7 +1917,7 @@
         "tokens": 434
       }
     ],
-    "brief_tokens": 296,
+    "brief_tokens": 346,
     "prime_tokens": 1569
   }
 }

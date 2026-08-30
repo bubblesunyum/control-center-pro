@@ -1,0 +1,24 @@
+{
+  "configurations": [
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:control-center-pro}",
+      "name": "Debug ControlCenterPro",
+      "target": "ControlCenterPro",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug ControlCenterPro"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:control-center-pro}",
+      "name": "Release ControlCenterPro",
+      "target": "ControlCenterPro",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release ControlCenterPro"
+    }
+  ]
+}
