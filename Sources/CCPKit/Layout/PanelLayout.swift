@@ -21,15 +21,24 @@ public struct PanelLayout: Codable, Hashable, Sendable {
     /// arrangement emptied of every widget collapses to.
     public static let empty = PanelLayout([[]])
 
-    /// The layout with its empty lanes closed up.
+    /// The layout with each widget placed at most once and its empty lanes
+    /// closed up.
     ///
     /// Applied when a layout is loaded and after anything rearranges one —
     /// never inside `init(from:)`, which stays a faithful reading of the file.
     /// A lane emptied of its last widget would otherwise open the panel onto a
     /// blank column that looks like a bug, and removing the last widget
     /// altogether would leave a panel with no width at all.
+    ///
+    /// A widget is placed once because a panel holding two of the same card is
+    /// a file that was hand-edited or half-written, not an arrangement anyone
+    /// asked for — and the shell keys its lanes on the widget id, so the
+    /// duplicate would render undefined. The first placement is the one kept.
     public func normalized() -> PanelLayout {
-        let occupied = lanes.filter { !$0.isEmpty }
+        var placed: Set<WidgetID> = []
+        let occupied = lanes
+            .map { $0.filter { placed.insert($0).inserted } }
+            .filter { !$0.isEmpty }
         return occupied.isEmpty ? .empty : PanelLayout(occupied)
     }
 }

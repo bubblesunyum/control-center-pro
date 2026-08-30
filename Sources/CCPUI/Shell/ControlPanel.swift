@@ -6,20 +6,20 @@ import SwiftUI
 
 /// Everything inside the glass: vertical lanes of widget cards.
 ///
-/// The panel renders the lanes it is handed and holds no opinion about how they
-/// came to be — the layout model that reads them off disk and lets them be
-/// rearranged lands in ccp-lr7.2 and ccp-lr7.6.
+/// The panel renders the slots it is handed and holds no opinion about how they
+/// came to be — reading the arrangement off disk and resolving it against the
+/// registry happens before this, and rearranging it is edit mode's business.
 public struct ControlPanel: View {
-    private let lanes: [[WidgetInstance]]
+    private let lanes: [[LaneSlot]]
 
-    public init(lanes: [[WidgetInstance]]) {
+    public init(lanes: [[LaneSlot]]) {
         self.lanes = lanes
     }
 
     public var body: some View {
         HStack(alignment: .top, spacing: Space.oneHalf) {
-            ForEach(Array(lanes.enumerated()), id: \.offset) { _, lane in
-                WidgetLane(widgets: lane)
+            ForEach(lanes.indices, id: \.self) { index in
+                WidgetLane(slots: lanes[index])
             }
         }
         .padding(Space.oneHalf)
@@ -27,14 +27,14 @@ public struct ControlPanel: View {
 }
 
 private struct WidgetLane: View {
-    let widgets: [WidgetInstance]
+    let slots: [LaneSlot]
 
     var body: some View {
         VStack(spacing: Space.oneHalf) {
-            ForEach(widgets) { widget in
-                widget.view
+            ForEach(slots) { slot in
+                LaneSlotCard(slot: slot)
                     .frame(width: Layout.laneWidth)
-                    .frame(minHeight: widget.descriptor.size.height)
+                    .frame(minHeight: slot.height)
                     // Ideal height, then rigid: without this a lane's spare
                     // room is shared out among its cards and three widgets
                     // that each declared a different size come out the same.
@@ -45,6 +45,29 @@ private struct WidgetLane: View {
             // — three cards that each declared a different size come out the
             // same height.
             Spacer(minLength: 0)
+        }
+    }
+}
+
+private struct LaneSlotCard: View {
+    let slot: LaneSlot
+
+    var body: some View {
+        switch slot {
+        case .widget(let widget): widget.view
+        case .unavailable(let id): UnavailableWidgetCard(id: id)
+        }
+    }
+}
+
+private extension LaneSlot {
+    /// A slot standing in for a widget this build doesn't have has no
+    /// descriptor to ask, and the smallest card is the least the lane's shape
+    /// can be wrong by.
+    var height: CGFloat {
+        switch self {
+        case .widget(let widget): widget.descriptor.size.height
+        case .unavailable: WidgetSize.compact.height
         }
     }
 }

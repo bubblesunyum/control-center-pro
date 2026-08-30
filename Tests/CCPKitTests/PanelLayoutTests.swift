@@ -76,4 +76,34 @@ final class PanelLayoutTests: XCTestCase {
             [unknown, OtherStubWidget.descriptor.id],
         ])
     }
+
+    func testAWidgetIsPlacedOnlyOnce() {
+        let layout = PanelLayout([
+            [StubWidget.descriptor.id, OtherStubWidget.descriptor.id, StubWidget.descriptor.id],
+            [OtherStubWidget.descriptor.id],
+        ])
+        XCTAssertEqual(layout.normalized().lanes, [
+            [StubWidget.descriptor.id, OtherStubWidget.descriptor.id],
+        ])
+    }
+
+    func testDroppingADuplicateCanEmptyALane() {
+        let layout = PanelLayout([
+            [StubWidget.descriptor.id],
+            [StubWidget.descriptor.id],
+        ])
+        XCTAssertEqual(layout.normalized().lanes, [[StubWidget.descriptor.id]])
+    }
+
+    func testResolvedSlotIDsAreUniqueWithinALane() {
+        let file = Data(#"{"lanes":[["stub","stub"]]}"#.utf8)
+        let layout = try? JSONDecoder().decode(PanelLayout.self, from: file)
+        let lanes = stubRegistry().resolve(layout?.normalized() ?? .empty)
+
+        XCTAssertEqual(
+            lanes.map { $0.map(\.id) },
+            [[StubWidget.descriptor.id]],
+            "a lane's slot ids are its ForEach identity and cannot repeat"
+        )
+    }
 }

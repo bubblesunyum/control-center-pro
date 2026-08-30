@@ -17,17 +17,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let registry = makeStandardRegistry()
+        let store = JSONFileStore(filename: "layout.json", default: standardLayout)
+        let layout = store.load().normalized()
 
-        // The starting arrangement, until the persisted layout lands in
-        // ccp-lr7.2. Ids the registry doesn't know are dropped, which is the
-        // same thing a stored layout from another build has to survive.
-        let seed: [[WidgetID]] = [
-            ["system-stats", "clipboard"],
-            ["quick-toggles", "now-playing", "audio-mixer"],
-        ]
-        let lanes = seed.map { $0.compactMap(registry.makeInstance(of:)) }
+        // Written back on every launch so the file always describes what is on
+        // screen: it is how the arrangement exists at all before anyone has
+        // edited one, and normalizing is not a change worth keeping in memory
+        // only. A layout naming widgets this build lacks survives the round
+        // trip intact. Nothing to do if the write fails — the panel is already
+        // built, and the next launch reads the defaults again.
+        try? store.save(layout)
 
-        let panel = ControlPanelController(lanes: lanes)
+        let panel = ControlPanelController(lanes: registry.resolve(layout))
         statusItem = StatusItemController(panel: panel)
 
         // An agent can't click a menu bar item, and a screenshot of a panel

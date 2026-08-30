@@ -56,6 +56,16 @@ final class AudioMixerWidget: PlaceholderWidget {
     )
 }
 
+/// Where the widgets sit before anyone has moved them.
+///
+/// It lives beside the registry because it names the same ids: a widget added
+/// to one and forgotten in the other is a first launch missing a card. Only
+/// first launch reads it — once the arrangement is on disk, that file wins.
+public let standardLayout = PanelLayout([
+    ["system-stats", "clipboard"],
+    ["quick-toggles", "now-playing", "audio-mixer"],
+])
+
 /// Every widget this build offers, in the order a gallery lists them.
 @MainActor
 public func makeStandardRegistry() -> WidgetRegistry {

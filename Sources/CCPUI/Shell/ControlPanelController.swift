@@ -14,10 +14,14 @@ import SwiftUI
 @MainActor
 public final class ControlPanelController {
     private let window: ControlPanelWindow
+    /// What the lanes actually asked for, measured once. `show` clamps this to
+    /// the screen rather than remeasuring, so a panel that had to be cut down
+    /// on a small display comes back whole on a large one.
+    private let contentSize: NSSize
 
     public private(set) var isVisible = false
 
-    public init(lanes: [[WidgetInstance]]) {
+    public init(lanes: [[LaneSlot]]) {
         window = ControlPanelWindow(contentRect: NSRect(origin: .zero, size: .zero))
 
         // Transparent all the way through: each card blurs the desktop for
@@ -31,7 +35,8 @@ public final class ControlPanelController {
         // wider, a taller widget is a taller panel, and no arithmetic here has
         // to agree with the layout SwiftUI actually performed.
         content.layoutSubtreeIfNeeded()
-        window.setContentSize(content.fittingSize)
+        contentSize = content.fittingSize
+        window.setContentSize(contentSize)
 
         // Lay the SwiftUI graph out now rather than on the first open, where it
         // would land inside the 100ms.
@@ -49,7 +54,8 @@ public final class ControlPanelController {
 
         // visibleFrame already excludes the menu bar, including when it is set
         // to auto-hide and currently hidden.
-        let size = window.frame.size
+        let size = sizeFitting(visible)
+        if window.frame.size != size { window.setContentSize(size) }
         window.setFrameOrigin(NSPoint(
             x: visible.maxX - size.width - Layout.panelInset,
             y: visible.maxY - size.height - Layout.panelInset
@@ -58,6 +64,17 @@ public final class ControlPanelController {
         window.orderFrontRegardless()
         window.makeKey()
         isVisible = true
+    }
+
+    /// The panel never grows past the space it is shown in: a panel wider than
+    /// the display has a lane hanging off the far edge with nothing to say it
+    /// is there. Cards beyond the edge are cut rather than reflowed — ccp-p6g
+    /// decides whether the real answer is scrolling or a lane cap.
+    private func sizeFitting(_ visible: NSRect) -> NSSize {
+        NSSize(
+            width: min(contentSize.width, visible.width - Layout.panelInset * 2),
+            height: min(contentSize.height, visible.height - Layout.panelInset * 2)
+        )
     }
 
     public func hide() {
