@@ -1,166 +1,34 @@
 {
-  "generated": "18:36:44",
+  "generated": "22:05:49",
   "project": "control-center-pro",
   "git": {
     "branch": "main",
     "upstream": "origin/main",
-    "dirty": 5,
-    "commits_today": 30,
+    "dirty": 4,
+    "commits_today": 35,
     "last": {
-      "sha": "095ecf1",
-      "subject": "drop the duplicate beads block from CLAUDE.md ccp-0wa",
-      "when": "16 minutes ago"
+      "sha": "d5a8092",
+      "subject": "split the harness contract out of CLAUDE.md ccp-veh",
+      "when": "26 minutes ago"
     },
     "unpushed": [
       {
-        "sha": "095ecf1",
-        "subject": "drop the duplicate beads block from CLAUDE.md ccp-0wa",
-        "at": 1788045638.0
-      },
-      {
-        "sha": "de7fdc2",
-        "subject": "stop paying for bd prime ccp-038",
-        "at": 1788045331.0
-      },
-      {
-        "sha": "02dd8eb",
-        "subject": "ledger: file ccp-2az (bd self-commits bypass the hook)",
-        "at": 1788040742.0
-      },
-      {
-        "sha": "42be078",
-        "subject": "ledger: wire the dolt transport so memories reach the remote",
-        "at": 1788040705.0
-      },
-      {
-        "sha": "815bc9b",
-        "subject": "bd: update sync.remote",
-        "at": 1788040540.0
-      },
-      {
-        "sha": "fb1da1f",
-        "subject": "ledger: close ccp-e2e (jsonl export enabled)",
-        "at": 1788039708.0
-      },
-      {
-        "sha": "120a1de",
-        "subject": "put the ledger in git \u2014 enable the jsonl export bd init never turns on",
-        "at": 1788039687.0
-      },
-      {
-        "sha": "3d28645",
-        "subject": "fork the docs the README was passing off as CCP's",
-        "at": 1788038621.0
-      },
-      {
-        "sha": "aee08e3",
-        "subject": "stop advertising --no-verify in commit-msg hook",
-        "at": 1788038062.0
+        "sha": "d5a8092",
+        "subject": "split the harness contract out of CLAUDE.md ccp-veh",
+        "at": 1788057594.0
       }
     ],
     "unpushed_beads": [
-      "ccp-038",
-      "ccp-0t2",
-      "ccp-0wa",
-      "ccp-2az",
-      "ccp-459",
-      "ccp-e2e",
-      "ccp-jze",
-      "ccp-kcc",
-      "ccp-v64"
+      "ccp-veh"
     ],
     "bead_commits": {
-      "ccp-0wa": {
+      "ccp-veh": {
         "commits": 1,
-        "at": 1788045638.0,
+        "at": 1788057594.0,
         "list": [
           {
-            "sha": "095ecf1",
-            "subject": "drop the duplicate beads block from CLAUDE.md ccp-0wa"
-          }
-        ]
-      },
-      "ccp-038": {
-        "commits": 1,
-        "at": 1788045331.0,
-        "list": [
-          {
-            "sha": "de7fdc2",
-            "subject": "stop paying for bd prime ccp-038"
-          }
-        ]
-      },
-      "ccp-2az": {
-        "commits": 1,
-        "at": 1788040742.0,
-        "list": [
-          {
-            "sha": "02dd8eb",
-            "subject": "ledger: file ccp-2az (bd self-commits bypass the hook)"
-          }
-        ]
-      },
-      "ccp-0t2": {
-        "commits": 1,
-        "at": 1788040705.0,
-        "list": [
-          {
-            "sha": "42be078",
-            "subject": "ledger: wire the dolt transport so memories reach the remote"
-          }
-        ]
-      },
-      "ccp-e2e": {
-        "commits": 2,
-        "at": 1788039708.0,
-        "list": [
-          {
-            "sha": "fb1da1f",
-            "subject": "ledger: close ccp-e2e (jsonl export enabled)"
-          },
-          {
-            "sha": "120a1de",
-            "subject": "put the ledger in git \u2014 enable the jsonl export bd init never turns on"
-          }
-        ]
-      },
-      "ccp-459": {
-        "commits": 1,
-        "at": 1788038621.0,
-        "list": [
-          {
-            "sha": "3d28645",
-            "subject": "fork the docs the README was passing off as CCP's"
-          }
-        ]
-      },
-      "ccp-v64": {
-        "commits": 1,
-        "at": 1788038621.0,
-        "list": [
-          {
-            "sha": "3d28645",
-            "subject": "fork the docs the README was passing off as CCP's"
-          }
-        ]
-      },
-      "ccp-kcc": {
-        "commits": 1,
-        "at": 1788038621.0,
-        "list": [
-          {
-            "sha": "3d28645",
-            "subject": "fork the docs the README was passing off as CCP's"
-          }
-        ]
-      },
-      "ccp-jze": {
-        "commits": 1,
-        "at": 1788038062.0,
-        "list": [
-          {
-            "sha": "aee08e3",
-            "subject": "stop advertising --no-verify in commit-msg hook"
+            "sha": "d5a8092",
+            "subject": "split the harness contract out of CLAUDE.md ccp-veh"
           }
         ]
       }
@@ -171,7 +39,7 @@
       "open": 30,
       "ready": 16,
       "in_progress": 0,
-      "closed": 13,
+      "closed": 15,
       "blocked": 0
     },
     "issues": [
@@ -201,27 +69,6 @@
           "ccp-ait.1",
           "ccp-v64"
         ]
-      },
-      {
-        "id": "ccp-veh",
-        "title": "split CLAUDE.md and AGENTS.md \u2014 AGENTS.md is bd boilerplate, CLAUDE.md carries everything",
-        "status": "open",
-        "ready": true,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 1,
-        "type": "task",
-        "parent": "",
-        "updated_at": "2026-08-29T22:23:01Z",
-        "created_at": "2026-08-29T22:23:01Z",
-        "deps": [],
-        "description": "AGENTS.md is the untouched bd init file from commit 2f4f71e: generic beads text plus advice about rm -i aliases. CLAUDE.md is 266 lines and shares essentially nothing with it. Any agent reading AGENTS.md \u2014 opencode, Codex \u2014 never learns the review pass, that scripts/verify.sh is the gate, that Sources/Vorssaint is read-only, the philosophy, naming, animation, accessibility, or the architecture.\n\nDepends on the harness-starter fix (har-32s) landing first: the agent-agnostic half of this content should arrive by install, not be written twice.",
-        "design": "AGENTS.md takes the harness contract from template/. CLAUDE.md keeps only what is specific to this project: architecture, philosophy, naming, comments, animation, accessibility, testing, upstream rules, build specifics \u2014 with a first line pointing at AGENTS.md. The sections already exist; they move. Drop the duplicated beads managed block from CLAUDE.md. Both files get tracks: comments.",
-        "notes": "",
-        "close_reason": "",
-        "owner": "bubbles@cortico.ai",
-        "children": []
       },
       {
         "id": "ccp-lr7.9",
@@ -439,6 +286,27 @@
         ]
       },
       {
+        "id": "ccp-g7l",
+        "title": "resync harness scripts from harness-starter \u2014 opencode-agents.py, .opencode/agent, verify.sh step",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-30T02:39:43Z",
+        "created_at": "2026-08-30T02:39:36Z",
+        "deps": [],
+        "description": "ccp installed template/AGENTS.md and opencode.json for ccp-veh, but the rest of the harness scripts are behind harness-starter: brief.sh, context.py, review.sh, verify.sh and dashboard.py all differ from the starter's copies, and ccp has no scripts/opencode-agents.py and no .opencode/agent/. The starter's verify.sh runs 'scripts/opencode-agents.py check' as a gate step; ccp's does not, so the reviewers exist only for Claude Code here. Until this lands, an opencode session can read AGENTS.md and CLAUDE.md (opencode.json points at both) but cannot run reviewer-taste / reviewer-correctness / reviewer-design.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
         "id": "ccp-ami",
         "title": "migrate the MEMORY.md dashboard note into bd remember",
         "status": "open",
@@ -478,14 +346,7 @@
         "notes": "Found while wiring the Dolt transport (ccp-0t2). Same class of issue as ccp-jze, which removed the --no-verify advertisement from the hook.",
         "close_reason": "",
         "owner": "bubbles@cortico.ai",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "02dd8eb",
-            "subject": "ledger: file ccp-2az (bd self-commits bypass the hook)"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-ojz",
@@ -527,14 +388,7 @@
         "notes": "Also in scope (same root cause \u2014 build.sh has not caught up to the fork): deployment-target mismatch. build.sh:42 sets TARGET=arm64-apple-macosx14.0 and build.sh:409 passes --minimum-deployment-target 14.0, while Package.swift:22 carries the CCP patch to 14.4 (CATapDescription needs 14.4) and the README badge says 14.4+. Raise build.sh to 14.4 alongside the identity rename.",
         "close_reason": "",
         "owner": "",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "3d28645",
-            "subject": "fork the docs the README was passing off as CCP's"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-9w3",
@@ -891,6 +745,55 @@
         "children": []
       },
       {
+        "id": "ccp-veh",
+        "title": "split CLAUDE.md and AGENTS.md \u2014 AGENTS.md is bd boilerplate, CLAUDE.md carries everything",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-30T02:39:54Z",
+        "created_at": "2026-08-29T22:23:01Z",
+        "deps": [],
+        "description": "AGENTS.md is the untouched bd init file from commit 2f4f71e: generic beads text plus advice about rm -i aliases. CLAUDE.md is 266 lines and shares essentially nothing with it. Any agent reading AGENTS.md \u2014 opencode, Codex \u2014 never learns the review pass, that scripts/verify.sh is the gate, that Sources/Vorssaint is read-only, the philosophy, naming, animation, accessibility, or the architecture.\n\nDepends on the harness-starter fix (har-32s) landing first: the agent-agnostic half of this content should arrive by install, not be written twice.",
+        "design": "AGENTS.md takes the harness contract from template/. CLAUDE.md keeps only what is specific to this project: architecture, philosophy, naming, comments, animation, accessibility, testing, upstream rules, build specifics \u2014 with a first line pointing at AGENTS.md. The sections already exist; they move. Drop the duplicated beads managed block from CLAUDE.md. Both files get tracks: comments.",
+        "notes": "",
+        "close_reason": "split done: AGENTS.md is the installed harness contract from template/, CLAUDE.md keeps only architecture, philosophy, naming, comments, animation, accessibility, testing and the upstream rules, and imports AGENTS.md so Claude Code still gets the contract. opencode.json installed so the file AGENTS.md names actually exists. Always-loaded cost 4148 \u2192 3818.",
+        "owner": "bubbles@cortico.ai",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "d5a8092",
+            "subject": "split the harness contract out of CLAUDE.md ccp-veh"
+          }
+        ]
+      },
+      {
+        "id": "ccp-623",
+        "title": "opencode readiness: apply the harness contract here once har-gdz lands",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-29T23:40:36Z",
+        "created_at": "2026-08-29T23:40:32Z",
+        "deps": [],
+        "description": "Bookkeeping bead for the gate work that landed alongside ccp-veh's prerequisites. The AGENTS.md rewrite itself is ccp-veh and is deliberately NOT done here \u2014 template/AGENTS.md should arrive by install once har-gdz adds opencode.json and the generated agents, rather than being hand-written here and diverging.",
+        "design": "",
+        "notes": "",
+        "close_reason": "Gate applied, AGENTS.md deduped, both docs blessed. The contract rewrite stays with ccp-veh.",
+        "owner": "",
+        "children": []
+      },
+      {
         "id": "ccp-0wa",
         "title": "drop the duplicate beads managed block from CLAUDE.md",
         "status": "closed",
@@ -909,14 +812,7 @@
         "notes": "",
         "close_reason": "Removed the 55-line BEADS INTEGRATION block from CLAUDE.md; AGENTS.md keeps the one copy. Always-loaded cost 4022 to 3342 tokens. The verify.sh guard against a second block reappearing is the harness-starter half, still open on har-7xv.",
         "owner": "",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "095ecf1",
-            "subject": "drop the duplicate beads block from CLAUDE.md ccp-0wa"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-038",
@@ -937,14 +833,7 @@
         "notes": "",
         "close_reason": "hook removed, gate applied, verified",
         "owner": "",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "de7fdc2",
-            "subject": "stop paying for bd prime ccp-038"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-0t2",
@@ -965,14 +854,7 @@
         "notes": "",
         "close_reason": "Registered the Dolt remote (bd dolt remote add origin git+https://github.com/bubblesunyum/control-center-pro.git) and pushed. Verified end to end: refs/dolt/data now exists on the GitHub remote, and a fresh clone + bd init + bd dolt remote add + bd dolt pull returned all 37 issues, both memories, and full close reasons \u2014 while origin/main was still 4 commits behind, proving the Dolt ref carries the ledger independently of the branch. Both transports now live: jsonl export for git-visible diffs, Dolt for memories/history/merges. Recorded the onboarding sequence as a bd memory. Upstream fixes fo",
         "owner": "",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "42be078",
-            "subject": "ledger: wire the dolt transport so memories reach the remote"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-e2e",
@@ -993,18 +875,7 @@
         "notes": "",
         "close_reason": "Added 'sync.remote' + 'export: auto: true' to .beads/config.yaml and generated a clean full .beads/issues.jsonl (37 issues), now tracked in git as of 120a1de. Verified: the export contains this session's beads (ccp-kcc, ccp-459, ccp-v64, ccp-ait, ccp-e2e) and is not gitignored; scripts/verify.sh passed. Root cause is upstream in harness-starter, filed there as har-nqi (P0) with har-xoq/har-638/har-sul. Caveat carried in har-xoq: bd export is incremental and does not drop deleted issues \u2014 a full regen (rm issues.jsonl export-state.json && bd export -o .beads/issues.jsonl) is the only reliably c",
         "owner": "",
-        "children": [],
-        "commit_count": 2,
-        "commits": [
-          {
-            "sha": "fb1da1f",
-            "subject": "ledger: close ccp-e2e (jsonl export enabled)"
-          },
-          {
-            "sha": "120a1de",
-            "subject": "put the ledger in git \u2014 enable the jsonl export bd init never turns on"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-459",
@@ -1025,14 +896,7 @@
         "notes": "",
         "close_reason": "README's build section now uses 'swift build' and states plainly that build.sh still emits a com.vorssaint.utils bundle TRADEMARKS.md forbids a fork from shipping, pointing at ccp-v64 for the rename. Placeholder clone URL replaced with the real origin. Committed 3d28645.",
         "owner": "bubbles@cortico.ai",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "3d28645",
-            "subject": "fork the docs the README was passing off as CCP's"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-kcc",
@@ -1053,14 +917,7 @@
         "notes": "",
         "close_reason": "Rewrote SECURITY.md and SUPPORT.md as CCP's own; security advisories now route to bubblesunyum/control-center-pro with an explicit split for vendored upstream sources. README no longer presents CONTRIBUTING.md/CHANGELOG.md as CCP's \u2014 labelled as vendored upstream rather than forked, to keep 'merge upstream/main' cheap. Reviewed by reviewer-taste and reviewer-correctness (both clean, all links and claims verified against the repo); scripts/verify.sh passed. Committed 3d28645.",
         "owner": "bubbles@cortico.ai",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "3d28645",
-            "subject": "fork the docs the README was passing off as CCP's"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-jze",
@@ -1081,14 +938,7 @@
         "notes": "",
         "close_reason": "removed the 'Genuinely unfilable? git commit --no-verify' hint from scripts/hooks/commit-msg:39-41 per option #1. Hook now only directs to bd q / bd ready and the required bead id. Verified: blocks missing bead without advertising bypass, passes with ccp-jze, passes fixup!, and scripts/verify.sh passes.",
         "owner": "",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "aee08e3",
-            "subject": "stop advertising --no-verify in commit-msg hook"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-ait.3",
@@ -1249,18 +1099,11 @@
       "untracked": false,
       "status": "M",
       "old_path": null
-    },
-    {
-      "path": "scripts/context.py",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
     }
   ],
   "verify": {
     "status": "passed",
-    "when": "16m ago",
+    "when": "26m ago",
     "tests": "",
     "steps": [
       {
@@ -1274,12 +1117,12 @@
     ],
     "unverified": [
       {
-        "sha": "095ecf1",
-        "subject": "drop the duplicate beads block from CLAUDE.md ccp-0wa"
+        "sha": "d5a8092",
+        "subject": "split the harness contract out of CLAUDE.md ccp-veh"
       }
     ],
-    "took": "4s",
-    "at": 1788045627.9904933
+    "took": "6s",
+    "at": 1788057569.2757847
   },
   "runs": {
     "verify": {
@@ -1385,12 +1228,12 @@
           "tokens": 41
         },
         {
-          "id": "harness/handoffs/20260829-155513.md",
-          "name": "20260829-155513.md",
-          "path": "harness/handoffs/20260829-155513.md",
+          "id": "harness/handoffs/20260829-184053.md",
+          "name": "20260829-184053.md",
+          "path": "harness/handoffs/20260829-184053.md",
           "origin": "harness",
           "role": "the last session's closing note",
-          "tokens": 482
+          "tokens": 538
         },
         {
           "id": "CLAUDE.md",
@@ -1398,7 +1241,7 @@
           "path": "CLAUDE.md",
           "origin": "claude",
           "role": "project instructions, always loaded",
-          "tokens": 2728
+          "tokens": 2124
         },
         {
           "id": "/Users/bubbles/.claude/projects/-Users-bubbles-dev-control-center-pro/memory/MEMORY.md",
@@ -1434,7 +1277,7 @@
           "path": ".beads/issues.jsonl",
           "origin": "harness",
           "role": "the issue graph, exported for git",
-          "tokens": 12574
+          "tokens": 13124
         },
         {
           "id": ".claude/skills/beads/SKILL.md",
@@ -1554,7 +1397,7 @@
           "path": ".claude/context.lock",
           "origin": "harness",
           "role": "hashes of what each doc describes",
-          "tokens": 252
+          "tokens": 322
         }
       ]
     }
@@ -1563,18 +1406,18 @@
     "always": [
       {
         "name": "CLAUDE.md",
-        "tokens": 2728
+        "tokens": 2124
       },
       {
         "name": "session brief",
-        "tokens": 243
+        "tokens": 240
       },
       {
         "name": "skill descriptions",
         "tokens": 334
       }
     ],
-    "always_total": 3305,
+    "always_total": 2698,
     "on_demand": [
       {
         "name": "workflow",
@@ -1609,7 +1452,7 @@
         "tokens": 434
       }
     ],
-    "brief_tokens": 243,
+    "brief_tokens": 240,
     "prime_tokens": 1569
   }
 }
