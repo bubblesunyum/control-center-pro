@@ -1,17 +1,22 @@
 {
-  "generated": "22:05:49",
+  "generated": "22:17:26",
   "project": "control-center-pro",
   "git": {
     "branch": "main",
     "upstream": "origin/main",
-    "dirty": 4,
-    "commits_today": 35,
+    "dirty": 15,
+    "commits_today": 36,
     "last": {
-      "sha": "d5a8092",
-      "subject": "split the harness contract out of CLAUDE.md ccp-veh",
-      "when": "26 minutes ago"
+      "sha": "58f5594",
+      "subject": "handoff: close the CLAUDE.md/AGENTS.md split session ccp-veh",
+      "when": "11 minutes ago"
     },
     "unpushed": [
+      {
+        "sha": "58f5594",
+        "subject": "handoff: close the CLAUDE.md/AGENTS.md split session ccp-veh",
+        "at": 1788059176.0
+      },
       {
         "sha": "d5a8092",
         "subject": "split the harness contract out of CLAUDE.md ccp-veh",
@@ -23,9 +28,13 @@
     ],
     "bead_commits": {
       "ccp-veh": {
-        "commits": 1,
-        "at": 1788057594.0,
+        "commits": 2,
+        "at": 1788059176.0,
         "list": [
+          {
+            "sha": "58f5594",
+            "subject": "handoff: close the CLAUDE.md/AGENTS.md split session ccp-veh"
+          },
           {
             "sha": "d5a8092",
             "subject": "split the harness contract out of CLAUDE.md ccp-veh"
@@ -36,9 +45,9 @@
   },
   "ledger": {
     "counts": {
-      "open": 30,
-      "ready": 16,
-      "in_progress": 0,
+      "open": 29,
+      "ready": 15,
+      "in_progress": 1,
       "closed": 15,
       "blocked": 0
     },
@@ -288,15 +297,15 @@
       {
         "id": "ccp-g7l",
         "title": "resync harness scripts from harness-starter \u2014 opencode-agents.py, .opencode/agent, verify.sh step",
-        "status": "open",
-        "ready": true,
+        "status": "in_progress",
+        "ready": false,
         "in_review": false,
         "backlog": false,
         "labels": [],
         "priority": 2,
         "type": "task",
         "parent": "",
-        "updated_at": "2026-08-30T02:39:43Z",
+        "updated_at": "2026-08-30T03:10:25Z",
         "created_at": "2026-08-30T02:39:36Z",
         "deps": [],
         "description": "ccp installed template/AGENTS.md and opencode.json for ccp-veh, but the rest of the harness scripts are behind harness-starter: brief.sh, context.py, review.sh, verify.sh and dashboard.py all differ from the starter's copies, and ccp has no scripts/opencode-agents.py and no .opencode/agent/. The starter's verify.sh runs 'scripts/opencode-agents.py check' as a gate step; ccp's does not, so the reviewers exist only for Claude Code here. Until this lands, an opencode session can read AGENTS.md and CLAUDE.md (opencode.json points at both) but cannot run reviewer-taste / reviewer-correctness / reviewer-design.",
@@ -764,8 +773,12 @@
         "close_reason": "split done: AGENTS.md is the installed harness contract from template/, CLAUDE.md keeps only architecture, philosophy, naming, comments, animation, accessibility, testing and the upstream rules, and imports AGENTS.md so Claude Code still gets the contract. opencode.json installed so the file AGENTS.md names actually exists. Always-loaded cost 4148 \u2192 3818.",
         "owner": "bubbles@cortico.ai",
         "children": [],
-        "commit_count": 1,
+        "commit_count": 2,
         "commits": [
+          {
+            "sha": "58f5594",
+            "subject": "handoff: close the CLAUDE.md/AGENTS.md split session ccp-veh"
+          },
           {
             "sha": "d5a8092",
             "subject": "split the harness contract out of CLAUDE.md ccp-veh"
@@ -1073,17 +1086,52 @@
   },
   "worktree": [
     {
-      "path": ".beads/interactions.jsonl",
+      "path": ".beads/issues.jsonl",
       "staged": false,
       "untracked": false,
       "status": "M",
       "old_path": null
     },
     {
-      "path": ".beads/issues.jsonl",
+      "path": ".claude/HARNESS.md",
       "staged": false,
       "untracked": false,
       "status": "M",
+      "old_path": null
+    },
+    {
+      "path": ".claude/context.lock",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
+    },
+    {
+      "path": ".claude/skills/agentic-review/SKILL.md",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
+    },
+    {
+      "path": ".claude/skills/workflow/SKILL.md",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
+    },
+    {
+      "path": ".gitignore",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
+    },
+    {
+      "path": ".opencode/",
+      "staged": false,
+      "untracked": true,
+      "status": "?",
       "old_path": null
     },
     {
@@ -1094,7 +1142,49 @@
       "old_path": null
     },
     {
+      "path": "dashboard/index.html",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
+    },
+    {
       "path": "dashboard/state.json",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
+    },
+    {
+      "path": "scripts/dashboard.py",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
+    },
+    {
+      "path": "scripts/hooks/commit-msg",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
+    },
+    {
+      "path": "scripts/opencode-agents.py",
+      "staged": false,
+      "untracked": true,
+      "status": "?",
+      "old_path": null
+    },
+    {
+      "path": "scripts/review.sh",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
+    },
+    {
+      "path": "scripts/verify.sh",
       "staged": false,
       "untracked": false,
       "status": "M",
@@ -1103,7 +1193,7 @@
   ],
   "verify": {
     "status": "passed",
-    "when": "26m ago",
+    "when": "just now",
     "tests": "",
     "steps": [
       {
@@ -1115,27 +1205,28 @@
         "ok": true
       }
     ],
-    "unverified": [
-      {
-        "sha": "d5a8092",
-        "subject": "split the harness contract out of CLAUDE.md ccp-veh"
-      }
-    ],
-    "took": "6s",
-    "at": 1788057569.2757847
+    "unverified": [],
+    "took": "5s",
+    "at": 1788059818.4612718
   },
   "runs": {
     "verify": {
       "state": "idle",
       "output": "",
       "at": 0,
-      "ago": ""
+      "ago": "",
+      "label": "run",
+      "busy": "running\u2026",
+      "where": "gate"
     },
     "push": {
       "state": "idle",
       "output": "",
       "at": 0,
-      "ago": ""
+      "ago": "",
+      "label": "push",
+      "busy": "pushing\u2026",
+      "where": "lane:staging"
     }
   },
   "skills": [
@@ -1143,7 +1234,7 @@
       "name": "agentic-review",
       "description": "Review a control-center-pro change with agents that didn't write it \u2014 taste against the project's standards, correctness hunting real defects, and design reading screenshots of what actually rendered. Use before committing a non-trivial change, when asked to review work or a branch, or after finishing a feature.",
       "idle": 78,
-      "loaded": 1403
+      "loaded": 1476
     },
     {
       "name": "beads",
@@ -1161,7 +1252,7 @@
       "name": "workflow",
       "description": "How work moves through control-center-pro \u2014 the beads ledger, the verify gate, the review pass, and the token budget that keeps them affordable on one account. Use when starting a work session, deciding where a note or a discovery belongs, planning a multi-step change, handing off at the end of a session, or wondering which skill or script to reach for.",
       "idle": 89,
-      "loaded": 2642
+      "loaded": 2739
     }
   ],
   "agents": [
@@ -1228,12 +1319,12 @@
           "tokens": 41
         },
         {
-          "id": "harness/handoffs/20260829-184053.md",
-          "name": "20260829-184053.md",
-          "path": "harness/handoffs/20260829-184053.md",
+          "id": "harness/handoffs/20260829-220611.md",
+          "name": "20260829-220611.md",
+          "path": "harness/handoffs/20260829-220611.md",
           "origin": "harness",
           "role": "the last session's closing note",
-          "tokens": 538
+          "tokens": 576
         },
         {
           "id": "CLAUDE.md",
@@ -1277,7 +1368,7 @@
           "path": ".beads/issues.jsonl",
           "origin": "harness",
           "role": "the issue graph, exported for git",
-          "tokens": 13124
+          "tokens": 13143
         },
         {
           "id": ".claude/skills/beads/SKILL.md",
@@ -1293,7 +1384,7 @@
           "path": ".claude/skills/workflow/SKILL.md",
           "origin": "harness",
           "role": "How work moves through control-center-pro \u2014 the beads ledger, the verify gate, the review pass, and the token budget that keeps them affordable on one account. Use when starting a work session, deciding where a note or a discovery belongs, planning a multi-step change, handing off at the end of a session, or wondering which skill or script to reach for.",
-          "tokens": 2642
+          "tokens": 2739
         }
       ]
     },
@@ -1307,7 +1398,7 @@
           "path": ".claude/skills/agentic-review/SKILL.md",
           "origin": "claude",
           "role": "Review a control-center-pro change with agents that didn't write it \u2014 taste against the project's standards, correctness hunting real defects, and design reading screenshots of what actually rendered. Use before committing a non-trivial change, when asked to review work or a branch, or after finishing a feature.",
-          "tokens": 1403
+          "tokens": 1476
         },
         {
           "id": ".claude/skills/handoff/SKILL.md",
@@ -1329,7 +1420,7 @@
           "path": "scripts/verify.sh",
           "origin": "harness",
           "role": "build, tests, and a smoke check, one exit code",
-          "tokens": 992
+          "tokens": 1109
         }
       ]
     },
@@ -1343,7 +1434,7 @@
           "path": "scripts/review.sh",
           "origin": "harness",
           "role": "bundles the diff into one packet",
-          "tokens": 1747
+          "tokens": 1832
         },
         {
           "id": ".claude/agents/librarian.md",
@@ -1397,7 +1488,7 @@
           "path": ".claude/context.lock",
           "origin": "harness",
           "role": "hashes of what each doc describes",
-          "tokens": 322
+          "tokens": 336
         }
       ]
     }
@@ -1410,18 +1501,18 @@
       },
       {
         "name": "session brief",
-        "tokens": 240
+        "tokens": 282
       },
       {
         "name": "skill descriptions",
         "tokens": 334
       }
     ],
-    "always_total": 2698,
+    "always_total": 2740,
     "on_demand": [
       {
         "name": "workflow",
-        "tokens": 2642
+        "tokens": 2739
       },
       {
         "name": "reviewer-design",
@@ -1429,7 +1520,7 @@
       },
       {
         "name": "agentic-review",
-        "tokens": 1403
+        "tokens": 1476
       },
       {
         "name": "reviewer-correctness",
@@ -1452,7 +1543,7 @@
         "tokens": 434
       }
     ],
-    "brief_tokens": 240,
+    "brief_tokens": 282,
     "prime_tokens": 1569
   }
 }

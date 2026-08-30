@@ -25,6 +25,13 @@ case "$message" in fixup!*|squash!*|amend!*) exit 0 ;; esac
 
 ids="$(printf '%s' "$message" | grep -oE '\bccp-[a-z0-9]+(\.[0-9]+)?\b' | sort -u)"
 
+# The starter's template ends this message with "Genuinely unfilable? git commit
+# --no-verify". It is deliberately absent here and must stay absent: filing a
+# bead costs one line, and a bypass printed by the thing enforcing the rule is a
+# bypass that becomes the habit — which is how the ledger quietly stops being
+# the record. `harness update` will keep reporting this file as drifted from the
+# template; that report is expected, and taking the template version wholesale
+# is the mistake it looks like a fix for.
 if [ -z "$ids" ]; then
   cat >&2 <<'EOF'
 

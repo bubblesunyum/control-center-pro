@@ -31,6 +31,11 @@ The packet's scope excludes the vendored fork — `Sources/Vorssaint/`,
 whatever is actually under review. Our adapters over those engines live in
 `CCPKit` and stay in scope, which is the part worth reviewing anyway.
 
+Config and the board are in scope too — `opencode.json` is three lines deciding
+what every session loads, and `dashboard/index.html` is the board itself. Only
+the generated files are cut: the ledger export, `dashboard/state.json`, and
+`.claude/context.lock` are churn that dilutes the read.
+
 Give each one only the packet path and one line on what the change was meant to
 do. They read `CLAUDE.md` themselves. Don't paste the diff into the prompt —
 that's the packet's job, and pasting it doubles the cost.

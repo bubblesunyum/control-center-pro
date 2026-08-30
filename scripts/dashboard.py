@@ -1,16 +1,25 @@
 #!/usr/bin/env python3
 """The harness dashboard: what the development system is doing, as a live picture.
 
-    scripts/dashboard.py            # serve at localhost:7391 (or the next free port) and open it
-    scripts/dashboard.py up         # serve only if nothing is (what the Stop hook runs)
+    scripts/dashboard.py            # start it in the background if nothing is serving
+    scripts/dashboard.py up          # the same thing, spelled the way the hooks call it
+    scripts/dashboard.py serve      # stay in the foreground instead (ctrl-c to stop)
     scripts/dashboard.py snapshot   # just write dashboard/state.json
     scripts/dashboard.py shot [png] # photograph it, for the design review pass
     scripts/dashboard.py --port N   # serve somewhere else
 
-State is rebuilt from bd and git behind a few seconds of cache, so the page is
-live — claim a bead in one terminal and the diagram moves — without the polling
-outrunning the generation. The snapshot form exists for the Stop hook, which
-leaves a readable file behind even when nothing is serving.
+Backgrounding is the default because of who runs this: a hook at the end of a
+turn, or an agent that has other work to get to. A foreground server there is a
+terminal nobody gets back. `serve` is the one that blocks, and it is also what
+the background form re-runs as its own detached child.
+
+State is rebuilt from bd and git by a thread of its own, and a request is only
+ever handed the snapshot that thread last finished — so the page is live (claim a
+bead in one terminal and the diagram moves) and every poll after the first is
+answered at once, however long bd takes. Only the first waits, for the first
+build. Building state on the request instead is what made the server fall behind
+its own polling. The snapshot form exists for the Stop hook, which leaves
+a readable file behind even when nothing is serving.
 """
 
 import http.server
@@ -22,8 +31,8 @@ import subprocess
 import sys
 import threading
 import time
-import webbrowser
 from pathlib import Path
+import urllib.request
 from urllib.parse import parse_qs, unquote, urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -515,6 +524,21 @@ def harness():
     return stages, index
 
 
+# The budget runs brief.sh, which runs bd, and that is 1.7s of a 3s state build
+# — over half of it — for a number that moves when a doc is edited, not between
+# two polls a few seconds apart. On its own slower clock it stops dominating the
+# refresh it rides on. Only the refresher thread builds state, so no lock.
+_budget = {"at": 0.0, "data": None}
+BUDGET_TTL = 60.0
+
+
+def cached_budget(skills, agents):
+    if _budget["data"] is None or time.time() - _budget["at"] > BUDGET_TTL:
+        _budget["data"] = budget(skills, agents)
+        _budget["at"] = time.time()
+    return _budget["data"]
+
+
 def budget(skills, agents):
     claude_md = (ROOT / "CLAUDE.md")
     brief = run("bash", str(ROOT / "scripts/brief.sh"))
@@ -606,7 +630,7 @@ def state():
         "skills": skills,
         "agents": agents,
         "harness": stages,
-        "budget": budget(skills, agents),
+        "budget": cached_budget(skills, agents),
     }
 
 
@@ -661,19 +685,36 @@ def commit(message, amend):
 
 # The loops a human still triggers by hand. Kept as a fixed table rather than
 # anything the page can name, so the only commands this server will ever run are
-# the ones written here.
+# the ones written here. It is also the only place a run button is described:
+# label, the label while it's going, and where on the page it belongs. The page
+# draws slots from this and names no task of its own.
+#
+#   where = "header"       the strip at the top right
+#           "gate"         inside the gate popover, next to the word it proves
+#           "lane:<key>"   in a board lane's header, e.g. lane:staging
 #
 # ── FILL THIS IN ──────────────────────────────────────────────────────────
-# Add the ones that put the app in front of you — installing it, launching it
-# on a device — and give each a matching entry in TASKS in dashboard/index.html,
-# which is what draws the buttons. Both lists start empty of them on purpose: a
-# button for a script that doesn't exist is worse than no button.
+# Add the ones that put the app in front of you — installing it, launching it on
+# a device — with where="header". Nothing else to edit: a new entry here is a new
+# button. Start empty of them on purpose; a button for a script that doesn't
+# exist is worse than no button.
 TASKS = {
-    "verify": ["scripts/verify.sh"],
+    "verify": {
+        "command": ["scripts/verify.sh"],
+        "label": "run",
+        "busy": "running…",
+        "where": "gate",
+    },
     # The only one that leaves this machine. It stays a plain `git push` with no
     # arguments so it can only ever do what the branch is already tracking.
-    "push": ["git", "push"],
+    "push": {
+        "command": ["git", "push"],
+        "label": "push",
+        "busy": "pushing…",
+        "where": "lane:staging",
+    },
 }
+
 _runs = {}
 
 
@@ -690,7 +731,7 @@ def start_task(name):
 
     def work():
         try:
-            r = subprocess.run(TASKS[name], capture_output=True, text=True,
+            r = subprocess.run(TASKS[name]["command"], capture_output=True, text=True,
                                cwd=ROOT, timeout=900)
             tail = (r.stdout + r.stderr).strip().splitlines()
             _runs[name] = {
@@ -707,46 +748,84 @@ def start_task(name):
         # tracking ref, so the beads named in those commits stop being unpushed
         # and fall back to done. Drop the cache so the next poll sees it rather
         # than showing work that has already left the machine.
-        _cache["at"] = 0
+        touch()
 
     threading.Thread(target=work, daemon=True).start()
     return _runs[name]
 
 
 def runs_state():
+    """Every task's last result, plus the label and placement the page draws it
+    with. Presentation travels with the state so that TASKS above stays the one
+    description of a run button."""
     out = {}
-    for name in TASKS:
+    for name, task in TASKS.items():
         r = _runs.get(name, {"state": "idle", "output": "", "at": 0})
         ago = ""
         if r["at"]:
             mins = int((time.time() - r["at"]) / 60)
             ago = "just now" if mins < 1 else f"{mins}m ago"
-        out[name] = {**r, "ago": ago}
+        out[name] = {**r, "ago": ago, "label": task["label"],
+                     "busy": task["busy"], "where": task["where"]}
     return out
 
 
-# Building the state shells out to bd several times and takes a second or two.
-# The page polls faster than that, so without a cache each poll piles another
-# generation on top of the last, several embedded Dolt engines end up contending
-# for the same lock, and the server stops answering entirely — which is exactly
-# what it did. One generation at a time, and everyone else gets the last one.
-_cache = {"at": 0.0, "data": None}
-_lock = threading.Lock()
-CACHE_TTL = 4.0
+# Building the state shells out to bd several times and takes two or three
+# seconds — longer than the page's poll interval. Generating it on the request
+# meant the cache expired between polls, so roughly every other request paid the
+# whole build while holding the lock; responses arriving slower than the poll
+# cadence backed up until the browser dropped the connection, and the page,
+# seeing a failed fetch, stopped repainting. Retuning the TTL only moves that
+# collision around. So a thread owns the build and requests only ever read the
+# snapshot it last finished: a poll never waits on bd, however slow bd is.
+_snapshot = {"data": None}
+_built = threading.Event()
+_wake = threading.Event()
+
+# How long the refresher rests between builds, not how long a build takes — a
+# build is a second or two here and will be longer on a big ledger, so the real
+# cycle is that plus this. Nothing downstream depends on the number: the page
+# shows when the snapshot it is drawing was generated, so a slow machine reads
+# as an honest timestamp rather than a board that lies about being current.
+REFRESH = 2.0
+# Long enough to cover a cold bd on a big ledger. Past it, something is wrong in
+# a way that silence would hide.
+FIRST_BUILD_TIMEOUT = 60.0
+
+
+def refresher():
+    """Rebuild the state forever, resting REFRESH between builds."""
+    while True:
+        try:
+            data = state()
+            # One assignment, so a reader gets the previous dict or this one and
+            # never a half-filled one. Nothing here mutates a published snapshot.
+            _snapshot["data"] = data
+            _built.set()
+        except Exception as e:
+            # A build that throws leaves the last good snapshot up rather than
+            # blanking the board. Said out loud, because a dashboard quietly
+            # serving a frozen picture is the failure this file is arranged
+            # against.
+            print(f"! state build failed: {e}", flush=True)
+        # Woken early by anything that changes the answer — a run finishing, a
+        # file staged — so those land on the next poll instead of waiting out
+        # the rest.
+        _wake.wait(REFRESH)
+        _wake.clear()
+
+
+def touch():
+    """Something changed the world the page describes; rebuild without waiting."""
+    _wake.set()
 
 
 def cached_state():
-    fresh = time.time() - _cache["at"] < CACHE_TTL
-    if fresh and _cache["data"] is not None:
-        return _cache["data"]
-    # A blocked thread re-checks under the lock: by the time it gets in, the
-    # thread ahead of it has usually already refreshed.
-    with _lock:
-        if time.time() - _cache["at"] < CACHE_TTL and _cache["data"] is not None:
-            return _cache["data"]
-        _cache["data"] = state()
-        _cache["at"] = time.time()
-        return _cache["data"]
+    """The snapshot the refresher last finished. Waits only for the first one."""
+    if not _built.wait(FIRST_BUILD_TIMEOUT):
+        raise RuntimeError(
+            f"no state built in {FIRST_BUILD_TIMEOUT:.0f}s — is `bd` answering in {ROOT}?")
+    return _snapshot["data"]
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -765,7 +844,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(body)
             # A run changes what the page should show, so don't make it wait out
             # the cache before it finds out.
-            _cache["at"] = 0
+            touch()
             return
         if self.path.startswith("/worktree/"):
             action = self.path[len("/worktree/"):].split("?")[0]
@@ -793,7 +872,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 else:
                     return self.send_error(404)
             self.send_json(result)
-            _cache["at"] = 0
+            touch()
             return
         self.send_error(404)
 
@@ -872,11 +951,124 @@ def free_port(start):
     raise SystemExit(f"no free port in {start}–{start + 19}")
 
 
+def wait_until_serving(port, timeout=5.0):
+    """True once something answers on `port`. A just-spawned child needs a
+    moment to bind, and the alternative to waiting for it is handing over a
+    link before anyone knows whether it resolves."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if is_serving(port):
+            return True
+        time.sleep(0.1)
+    return False
+
+
 def write_snapshot():
     out = ROOT / "dashboard/state.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(state(), indent=2))
     return out
+
+
+# The dashboard opens in Claude Code's own browser pane and nowhere else. Two
+# reasons it is worth enforcing rather than suggesting: the pane is the only
+# browser the agent can see into — it can read the page, screenshot it, and
+# check its own work — and a system browser puts the board behind whatever
+# window the human was already in, where it goes unread. Nothing here shells out
+# to `open`; instead the port is published two ways, and both point at the pane.
+LAUNCH_NAME = "harness-dashboard"
+
+
+def write_launch_config(port):
+    """Publish the live port as a `.claude/launch.json` entry, so the agent's
+    `preview_start` can find the board by name however the port landed.
+
+    An entry with a url and no command attaches to the server already running
+    rather than starting a second one. The port moves between checkouts and
+    across restarts, so this is rewritten on every bind — a stale entry points
+    the pane at someone else's dashboard, which is worse than no entry at all.
+    """
+    path = ROOT / ".claude/launch.json"
+    config = {"version": "0.0.1", "configurations": []}
+    if path.exists():
+        try:
+            existing = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            # Hand-edited into something unreadable: say so and keep serving.
+            # A dashboard with no launch entry still works, the agent just has
+            # to navigate to the printed URL by hand. Bailing out rather than
+            # overwriting, because whatever is in there is someone's, and this
+            # runs from a hook at the end of every turn.
+            print(f"! {path} is not readable JSON — leaving it alone")
+            return
+        # Valid JSON of the wrong shape is the same situation, and it has to be
+        # checked before `.get`: a top-level list parses fine and then raises
+        # AttributeError, out of a hook, on every invocation until a human
+        # notices.
+        if not isinstance(existing, dict) or not isinstance(
+                existing.get("configurations"), list):
+            print(f"! {path} is not a launch config — leaving it alone")
+            return
+        config = existing
+    # `isinstance` first, because an entry that isn't an object is someone
+    # else's problem to fix and `.get` on it is this hook crashing every turn.
+    # Left in place rather than dropped: this function's business is one entry.
+    config["configurations"] = [c for c in config["configurations"]
+                                if not isinstance(c, dict)
+                                or c.get("name") != LAUNCH_NAME]
+    config["configurations"].append({
+        "name": LAUNCH_NAME,
+        "url": f"http://localhost:{port}",
+        "port": port,
+    })
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(config, indent=2) + "\n")
+
+
+# Portside (the menubar app for this machine's servers) gives every listener a
+# stable one-word name and answers it at <alias>.local, so the board has a name
+# worth saying out loud instead of a port worth forgetting. Read-only, and best
+# effort: the map is a cache the app republishes every few seconds, so a
+# dashboard that just started has no entry yet, and that is not an error.
+PORTSIDE_ALIASES = Path.home() / ".portside/aliases.json"
+
+
+def portside_alias(port):
+    """This dashboard's Portside name, or None.
+
+    Matched on the launch directory as well as the port. The map is only as
+    fresh as the last scan, and a port this checkout just took may still be
+    recorded against whatever held it before — naming the board after someone
+    else's server is worse than not naming it.
+    """
+    try:
+        aliases = json.loads(PORTSIDE_ALIASES.read_text())
+    except (OSError, ValueError):
+        # ValueError rather than JSONDecodeError: this file belongs to another
+        # program, and the read can land mid-write. Bad UTF-8 raises
+        # UnicodeDecodeError — a ValueError, not an OSError — and a nicety that
+        # takes the Stop hook down every turn is not a nicety.
+        return None
+    if not isinstance(aliases, dict):
+        return None
+    for alias, server in aliases.items():
+        if not isinstance(server, dict):
+            continue
+        if str(server.get("port")) == str(port) and server.get("directory") == str(ROOT):
+            return alias
+    return None
+
+
+def announce(url, note):
+    """Hand the link over. Printed rather than opened, because the only thing
+    that can open Claude Code's browser pane is the agent reading this line —
+    hook output is context, so the instruction travels with the URL."""
+    print(f"harness dashboard → {url}   ({note})")
+    alias = portside_alias(urlparse(url).port)
+    if alias:
+        print(f"portside calls it {alias} → http://{alias}.local")
+    print(f"open it in Claude Code's browser pane — preview_start "
+          f"{LAUNCH_NAME}, or navigate to {url}. Not the system browser.")
 
 
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
@@ -894,6 +1086,19 @@ def shot(path, port, width=900, height=1400):
         return f"no Chrome at {CHROME} — install it or capture by hand"
     if not is_serving(port):
         return f"nothing serving on {port} — run `dashboard.py up` first"
+    # Warmed on real time first. Chrome's virtual clock stops while a request is
+    # outstanding, so against a server that hasn't built its first snapshot the
+    # page's own poll spends the whole budget waiting — and the capture comes
+    # back with a header, no board, and nothing to say it was photographed too
+    # early. The design reviewer reads that as a blank page, which is worse than
+    # no capture at all.
+    try:
+        with urllib.request.urlopen(f"http://localhost:{port}/state.json",
+                                    timeout=FIRST_BUILD_TIMEOUT + 5) as r:
+            r.read()
+    except Exception as e:
+        return (f"the dashboard on {port} gave no state in "
+                f"{FIRST_BUILD_TIMEOUT + 5:.0f}s, so there is nothing to photograph: {e}")
     # A budget rather than a sleep: the page paints once its first poll lands,
     # and virtual time runs it forward without waiting in real seconds.
     subprocess.run([CHROME, "--headless", "--disable-gpu", "--hide-scrollbars",
@@ -903,9 +1108,20 @@ def shot(path, port, width=900, height=1400):
     return path if Path(path).exists() else "chrome wrote nothing"
 
 
+COMMANDS = ("up", "serve", "snapshot", "shot")
+
+
 def main():
     args = sys.argv[1:]
-    if args and args[0] == "snapshot":
+    # Bare flags are arguments to the default command, not a command. Anything
+    # else that isn't in the table is a typo, and a typo that silently starts a
+    # server is one nobody notices until they look for the thing they asked for.
+    command = args[0] if args and not args[0].startswith("-") else "up"
+    if command not in COMMANDS:
+        raise SystemExit(f"{Path(__file__).name}: no such command: {command}\n"
+                         f"  try: {', '.join(COMMANDS)}")
+
+    if command == "snapshot":
         print(write_snapshot())
         return
 
@@ -913,17 +1129,18 @@ def main():
     port = int(args[args.index("--port") + 1]) if explicit_port else free_port(PORT)
 
     # Named so `scripts/review.sh` picks it up with the app's own captures.
-    if args and args[0] == "shot":
+    if command == "shot":
         target = args[1] if len(args) > 1 else "/tmp/ccp-dashboard.png"
         print(shot(target, port))
         return
 
-    # `up` is what the Stop hook calls: leave a dashboard running at the end of
-    # every turn, so the link handed to the user always resolves. Detached and
-    # in a session of its own, or it dies with the hook that started it.
-    if args and args[0] == "up":
+    # The default, and what both hooks call: leave a dashboard running at the
+    # end of every turn, so the link handed to the user always resolves.
+    # Detached and in a session of its own, or it dies with the hook that
+    # started it.
+    if command == "up":
         if holder(port) is not None:
-            print(f"already serving on {port}")
+            note = "already serving"
         else:
             log = open("/tmp/ccp-dash.log", "a")
             # --port, or the child re-runs free_port() from scratch and can
@@ -931,11 +1148,26 @@ def main():
             # starting at once then both claim to have started on 7391, one
             # child dies binding it, and its parent has already handed over the
             # link. The process that binds must be told which port was chosen.
+            # `serve`, explicitly: the child is the process that blocks, and
+            # a child that inherited the backgrounding default would fork
+            # again and again, each one handing off and exiting.
             subprocess.Popen([sys.executable, str(Path(__file__).resolve()),
-                              "--no-open", "--port", str(port)],
+                              "serve", "--port", str(port)],
                              cwd=ROOT, stdout=log, stderr=log,
                              stdin=subprocess.DEVNULL, start_new_session=True)
-            print(f"started on {port}")
+            # Watched rather than assumed. The child was pinned to this port
+            # and has no second candidate, so a sibling that won the race
+            # leaves it dead — and publishing the port would then persist a
+            # link to nothing until some later `up` overwrites it.
+            note = "started" if wait_until_serving(port) else ""
+        if not note:
+            print(f"! nothing came up on {port} — see " + "/tmp/ccp-dash.log")
+        else:
+            # Written here rather than left to the child: the hook output the
+            # agent reads is this process's, and a launch entry that lands
+            # after it is a `preview_start` that misses by a second.
+            write_launch_config(port)
+            announce(f"http://localhost:{port}/", note)
         write_snapshot()
         return
 
@@ -962,10 +1194,8 @@ def main():
             # Ours, or unclaimed and therefore not ours to displace: either way
             # the dashboard the caller wanted is already there.
             if holder(candidate) in (str(ROOT), "unknown"):
-                url = f"http://localhost:{candidate}/"
-                print(f"harness dashboard → {url}   (already running)")
-                if "--no-open" not in args:
-                    webbrowser.open(url)
+                write_launch_config(candidate)
+                announce(f"http://localhost:{candidate}/", "already running")
                 return
             # Another checkout holds it. Keep looking.
     if srv is None:
@@ -975,9 +1205,11 @@ def main():
     url = f"http://localhost:{port}/"
     with srv:
         claim_file(port).write_text(json.dumps({"root": str(ROOT)}))
-        print(f"harness dashboard → {url}   (ctrl-c to stop)")
-        if "--no-open" not in args:
-            webbrowser.open(url)
+        write_launch_config(port)
+        announce(url, "ctrl-c to stop")
+        # Started before the first request, so the opening poll usually finds a
+        # snapshot already waiting rather than paying for the build itself.
+        threading.Thread(target=refresher, daemon=True).start()
         try:
             srv.serve_forever()
         except KeyboardInterrupt:

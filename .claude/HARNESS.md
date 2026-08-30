@@ -6,6 +6,7 @@
   .claude/skills/workflow/SKILL.md
   scripts/brief.sh
   scripts/context.py
+  scripts/opencode-agents.py
   scripts/review.sh
   scripts/verify.sh
 -->
@@ -37,9 +38,54 @@ how the pieces fit together.
 - **Librarian:** `.claude/agents/librarian` (sonnet) audits the knowledge layer
   from a digest, on a cadence, never on the hot path. It proposes; the calling
   session decides.
+- **opencode:** `opencode.json` names the always-loaded files, and
+  `.opencode/agent/` holds the reviewers translated into opencode's dialect by
+  `scripts/opencode-agents.py`. See below — two of the obvious moves here are
+  traps.
 - **Gate:** `scripts/verify.sh` — build, tests, optional smoke, plus doc
   staleness. Tiny output on purpose.
 - **Dashboard:** `scripts/dashboard.py` serves a live diagram at localhost:7391.
+  It never opens a browser itself. It publishes the live port to
+  `.claude/launch.json` and prints the link with the instruction to open it in
+  Claude Code's browser pane — the one browser the agent can read back and
+  screenshot, and the one that doesn't land behind whatever window the human was
+  already in. It backgrounds by default — the callers are hooks and
+  agents, and a foreground server there is a terminal nobody gets back;
+  `dashboard.py serve` is the form that blocks. If Portside knows the port it
+  also prints the alias, matched on the launch directory too so a stale map
+  can't name the board after someone else's server.
+
+## Delivering fixes to installs that already exist
+
+`harness add` never overwrites. That is what makes re-running it safe, and it is
+also how a fix stops travelling: a project that already has `AGENTS.md` gets
+`skip (already there)`, the line scrolls past among thirty other skips, and the
+broken copy stays. The failure is silent, and silence on a broken install is the
+worst outcome this starter has.
+
+So the skip is split in two. Files the project is meant to edit — anything whose
+template carries a `FILL THIS IN` block, plus the data files it accumulates —
+skip quietly, because them differing is the harness working. Everything else is
+a **contract file**: `AGENTS.md`, `opencode.json`, the skills, the scripts behind
+them. Those the project has no reason to touch, so a difference means a starter
+fix never arrived, and `add` says so by name instead of skipping. `harness
+update` is the same check standing alone, with `--diff` for what actually
+changed.
+
+Which set a file is in is read off the template's own content rather than kept as
+a list. A list goes stale in the direction that produces false alarms, and a
+warning nobody believes is worth less than no warning.
+
+Nothing is ever overwritten, here or there. Half these files have local edits in
+them by design, so merging is a judgment call — and a command that overwrote
+them would be a command nobody could afford to run.
+
+The comparison has to allow for the installer's own post-copy edits, or every
+fresh install reads as stale: `bd setup codex` appends a block to `AGENTS.md`,
+and the tidier rewrites `.claude/settings.json` through `json.dumps`, reordering
+every key. Both are normalised away on both sides. The gate has a step that
+installs into a throwaway repo and asserts the result reads as current, because
+that particular false alarm is invisible in the diff that causes it.
 
 ## Why it's shaped this way
 
@@ -88,6 +134,50 @@ it has been since someone argued with the layer, and the librarian does that
 better. Three things beside it *are* gates, because each is a silent regression
 rather than a judgment call — a SessionStart hook the harness didn't install, a
 bd managed block outside AGENTS.md, and a doc whose sources moved without it.
+
+## opencode gets a config and generated agents, never a symlink
+
+Three things were checked against the installed binary rather than assumed, and
+each one rules out a shortcut somebody will otherwise reach for:
+
+**Skills need nothing.** opencode already discovers `.claude/skills/` natively —
+`opencode debug skill` finds `workflow`, `beads` and `handoff` with no
+`.opencode/` directory present at all, and the binary carries an
+`OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` switch, so it is deliberate rather than
+incidental. Do not add a skills symlink.
+
+**Agents cannot be symlinked.** opencode does not read `.claude/agents/`, and
+pointing it at those files is worse than leaving them: the frontmatter loads and
+then corrupts. `model: haiku` parses as provider "haiku" with an empty model id,
+the comma-separated `tools:` string resolves to invalid, and `mode: all` puts
+each reviewer in the primary agent picker beside build and plan. It looks like
+it worked and fails at spawn. So the prompt body has one home,
+`.claude/agents/`, and `scripts/opencode-agents.py` writes the other dialect's
+header around it into `.opencode/agent/`. The gate checks the two match, because
+nothing about editing the source makes opencode complain.
+
+The generated agents carry no `model:`. Claude's tier names are aliases opencode
+doesn't have — it wants a provider-qualified id, and which provider a given
+install has authenticated isn't knowable from the starter. Omitted, the agent
+inherits the session's model and always resolves; the cost is that
+`reviewer-taste` stops being the cheap one under opencode until there's a real
+tier→model roster.
+
+**There is no session-start hook to write.** opencode's plugin hooks are
+`event`, `chat.message`, `chat.params`, `chat.headers`, `chat.completion`,
+`tool.execute.before/after`, `auth`, `config`, and `permission.*`. None of them
+can inject context at session start — `event` is a notification sink with no
+return channel. So the dynamic half of the brief has no automatic path here, and
+AGENTS.md's "run `scripts/brief.sh` yourself" line is the fallback that covers
+it. Don't build the plugin.
+
+`opencode.json`'s `instructions` list is `AGENTS.md` and `CLAUDE.md` — exactly
+what Claude Code always-loads, since `CLAUDE.md` imports `AGENTS.md`. opencode
+finds `AGENTS.md` on its own and dedupes by resolved path, so naming it there
+costs nothing and says what the harness intends. `HARNESS.md` is deliberately
+not in the list: it is the rationale, read when the pieces are being rearranged,
+and always-loading it in one tool and not the other would put the two sessions
+on different budgets while `context.py` counted neither.
 
 ## Staleness is the failure review can't catch
 

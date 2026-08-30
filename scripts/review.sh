@@ -49,8 +49,13 @@ fi
 # lines into the packet and drown the change actually under review. The one
 # thing worth reviewing at that boundary — our adapters — lives in CCPKit and
 # is still in scope.
-SCOPE=('*.swift' '*.py' '*.sh' '*.md' 'Package.swift' 'scripts/hooks/*'
+# Config files are in scope: opencode.json is three lines that decide what every
+# session in the project loads, and dashboard/index.html is the board itself —
+# both went through a full review pass invisible while the scope had no *.json
+# or *.html.
+SCOPE=('*.swift' '*.py' '*.sh' '*.md' '*.html' '*.json' 'Package.swift' 'scripts/hooks/*'
        ':(exclude).beads/*' ':(exclude)dashboard/vendor/*'
+       ':(exclude)dashboard/state.json' ':(exclude).claude/context.lock'
        ':(exclude)Sources/Vorssaint/*' ':(exclude)Sources/FanControlHelper/*'
        ':(exclude)Sources/VMStatisticsCompat/*' ':(exclude)Tools/*'
        ':(exclude)Tests/*' ':(exclude)docs/*' ':(exclude)CHANGELOG.md')
