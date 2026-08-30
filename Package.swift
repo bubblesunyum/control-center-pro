@@ -48,9 +48,17 @@ let package = Package(
         .target(
             name: "VorssaintEngines",
             dependencies: ["VMStatisticsCompat"],
-            path: "Sources/Vorssaint",
+            //
+            // The target's path is Sources rather than Sources/Vorssaint so it
+            // can compile a second directory, VorssaintBridge, as a module-mate
+            // of upstream. Every upstream type is internal, so nothing in the
+            // engine layer is visible across a module boundary; the bridge sits
+            // inside the module and re-exports what CCPKit needs as public. It
+            // is the reason every exclude below carries a "Vorssaint/" prefix.
+            // See PATCHES.md.
+            path: "Sources",
             exclude: [
-                "App", "UI", "main.swift",
+                "Vorssaint/App", "Vorssaint/UI", "Vorssaint/main.swift",
 
                 // The BRIEF measured upstream's Services as "mostly UI-free"
                 // by counting SwiftUI imports. Reference coupling is wider:
@@ -68,50 +76,67 @@ let package = Package(
                 // beads: Clipboard/ClipboardHistoryService.swift and
                 // SystemMonitor/ProcessUsageService.swift. The rest are the
                 // "Later/No" column of the BRIEF's engine inventory.
-                "Support/SelfTest.swift",
-                "Services/SettingsBackup.swift",
-                "Services/ShortcutCapture.swift",
-                "Services/CleaningMode/CleaningModeManager.swift",
-                "Services/Clipboard/ClipboardHistoryService.swift",
-                "Services/CommandBar/CommandBarCatalog.swift",
-                "Services/CommandBar/CommandBarService.swift",
-                "Services/DockPreview/DockPreviewService.swift",
-                "Services/Finder/FinderCutPaste.swift",
-                "Services/QuickTools/CameraPreviewService.swift",
-                "Services/QuickTools/QuickLauncherService.swift",
-                "Services/QuickTools/QuickTogglesService.swift",
-                "Services/QuickTools/RecentCaptureService.swift",
-                "Services/QuickTools/ScratchpadService.swift",
-                "Services/QuickTools/ScreenshotEditorController.swift",
-                "Services/QuickTools/ScreenshotQuickPreviewController.swift",
-                "Services/RadialMenu/RadialMenuService.swift",
-                "Services/RadialMenu/RadialNowPlayingService.swift",
-                "Services/Recorder/RecorderEditorController.swift",
-                "Services/Shelf/ShelfService.swift",
-                "Services/Snippets/SnippetLibraryService.swift",
-                "Services/Switcher/AppSwitcher.swift",
-                "Services/SystemMonitor/ProcessUsageService.swift",
+                "Vorssaint/Support/SelfTest.swift",
+                "Vorssaint/Services/SettingsBackup.swift",
+                "Vorssaint/Services/ShortcutCapture.swift",
+                "Vorssaint/Services/CleaningMode/CleaningModeManager.swift",
+                "Vorssaint/Services/Clipboard/ClipboardHistoryService.swift",
+                "Vorssaint/Services/CommandBar/CommandBarCatalog.swift",
+                "Vorssaint/Services/CommandBar/CommandBarService.swift",
+                "Vorssaint/Services/DockPreview/DockPreviewService.swift",
+                "Vorssaint/Services/Finder/FinderCutPaste.swift",
+                "Vorssaint/Services/QuickTools/CameraPreviewService.swift",
+                "Vorssaint/Services/QuickTools/QuickLauncherService.swift",
+                "Vorssaint/Services/QuickTools/QuickTogglesService.swift",
+                "Vorssaint/Services/QuickTools/RecentCaptureService.swift",
+                "Vorssaint/Services/QuickTools/ScratchpadService.swift",
+                "Vorssaint/Services/QuickTools/ScreenshotEditorController.swift",
+                "Vorssaint/Services/QuickTools/ScreenshotQuickPreviewController.swift",
+                "Vorssaint/Services/RadialMenu/RadialMenuService.swift",
+                "Vorssaint/Services/RadialMenu/RadialNowPlayingService.swift",
+                "Vorssaint/Services/Recorder/RecorderEditorController.swift",
+                "Vorssaint/Services/Shelf/ShelfService.swift",
+                "Vorssaint/Services/Snippets/SnippetLibraryService.swift",
+                "Vorssaint/Services/Switcher/AppSwitcher.swift",
+                "Vorssaint/Services/SystemMonitor/ProcessUsageService.swift",
 
                 // Second wave: these compile fine themselves but name a service
                 // excluded above, so they fall out with it. Same rule applies —
                 // when a leaker above comes back, check whether its dependents
                 // can too.
-                "Services/SelfUninstall.swift",
-                "Services/TransientPaste.swift",
-                "Services/Clipboard/ClipboardAutoClearService.swift",
-                "Services/DockClick/DockClickService.swift",
-                "Services/QuickTools/ScreenshotPinController.swift",
-                "Services/QuickTools/ScreenshotService.swift",
-                "Services/Recorder/ScreenRecorderService.swift",
-                "Services/Snippets/TextSnippetService.swift",
-                "Services/CommandBar/CommandBarExtras.swift",
-                "Services/QuickTools/PastePlainService.swift",
-                "Services/QuickTools/ScreenCaptureService.swift",
-                "Services/QuickTools/ScreenshotSelectionController.swift",
-                "Services/QuickTools/ColorSamplerService.swift",
-                "Services/QuickTools/ScreenTextService.swift",
-                "Services/QuickTools/ScreenshotScrollingCapture.swift",
-            ]
+                "Vorssaint/Services/SelfUninstall.swift",
+                "Vorssaint/Services/TransientPaste.swift",
+                "Vorssaint/Services/Clipboard/ClipboardAutoClearService.swift",
+                "Vorssaint/Services/DockClick/DockClickService.swift",
+                "Vorssaint/Services/QuickTools/ScreenshotPinController.swift",
+                "Vorssaint/Services/QuickTools/ScreenshotService.swift",
+                "Vorssaint/Services/Recorder/ScreenRecorderService.swift",
+                "Vorssaint/Services/Snippets/TextSnippetService.swift",
+                "Vorssaint/Services/CommandBar/CommandBarExtras.swift",
+                "Vorssaint/Services/QuickTools/PastePlainService.swift",
+                "Vorssaint/Services/QuickTools/ScreenCaptureService.swift",
+                "Vorssaint/Services/QuickTools/ScreenshotSelectionController.swift",
+                "Vorssaint/Services/QuickTools/ColorSamplerService.swift",
+                "Vorssaint/Services/QuickTools/ScreenTextService.swift",
+                "Vorssaint/Services/QuickTools/ScreenshotScrollingCapture.swift",
+
+                // Ours: the bridge's own documentation, not a source file.
+                "VorssaintBridge/README.md",
+
+                // Siblings of Vorssaint under path: "Sources" that are not part
+                // of this target's sources — without these SwiftPM warns "found
+                // 34 file(s) which are unhandled" and hides a real "unexpected
+                // input file" when an upstream file is missed in the lists above.
+                "CCPKit",
+                "CCPUI",
+                "ControlCenterPro",
+                "FanControlHelper",
+                "VMStatisticsCompat",
+            ],
+            // Upstream's sources, plus our visibility shims. Two directories
+            // in one module: VorssaintBridge is ours and never conflicts on
+            // merge, and it holds shims only — no logic, no state, no policy.
+            sources: ["Vorssaint", "VorssaintBridge"]
         ),
         // ── END CCP PATCH ──────────────────────────────────────────────────
 

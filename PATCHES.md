@@ -33,6 +33,36 @@ directory under `Sources/Vorssaint`.
 
 ---
 
+## `Sources/VorssaintBridge/` — the visibility shims
+
+**What.** The `VorssaintEngines` target's path is `Sources` rather than
+`Sources/Vorssaint`, and it compiles two directories:
+`sources: ["Vorssaint", "VorssaintBridge"]`. The second is ours. Every entry in
+`exclude` carries a `Vorssaint/` prefix as a result.
+
+**Why.** Every upstream type is `internal`, so *nothing* in the engine layer is
+visible across a module boundary — `import VorssaintEngines; Permissions.shared`
+fails to compile from CCPKit. Files in `VorssaintBridge/` are module-mates of
+upstream, so they can see internal types and re-export what CCP needs as
+`public`. The alternative was `-enable-testing` plus `@testable import`, which
+puts a test-only facility on the production path and gives up cross-module
+optimization. This costs no upstream edits at all.
+
+**The rule.** A shim may restate a type; it may not decide anything about one.
+No stored state, no policy, no branch that could have gone the other way. A
+`switch` mapping an upstream enum onto a public one is a restatement — it has
+one correct form. Anything with a judgement call in it is an adapter, and
+adapters live in `Sources/CCPKit/Adapters`. See `Sources/VorssaintBridge/README.md`.
+
+**Deleting it.** Same as the manifest block above: if upstream ships a
+`VorssaintKit` library product with public API, the shims evaporate with it.
+
+**On merge.** `VorssaintBridge/` is ours and never conflicts. The `exclude`
+prefixes do — if upstream adds a file that must be excluded, remember the
+`Vorssaint/` prefix or the manifest will fail with "unexpected input file".
+
+---
+
 ## `Sources/Vorssaint/Core/Permissions.swift` — UI overlay behind a hook
 
 **What.** Four lines. `requestAccessibility()` and `requestScreenRecording()`

@@ -1681,6 +1681,10 @@
         })
         const kids = i.children || []
         const parent = ledger.epicName(i.parent)
+        // A rolled-up parent stands for its children on the board, so the header's
+        // ready count — which still means beads — can outrun the cards. Saying how
+        // many of the children are ready is what lets the two reconcile.
+        const readyKids = kids.filter((k) => (ledger.byId[k] || {}).ready)
         return `<button class="card" data-bead="${esc(i.id)}">
           <span class="chip prio">P${esc(i.priority)}</span>
           <b>${esc(i.title)}</b>
@@ -1688,6 +1692,7 @@
             ${i.type !== 'task' ? `<span class="chip">${esc(i.type)}</span>` : ''}
             ${parent ? `<span class="chip epic">${esc(parent)}</span>` : ''}
             ${kids.length ? `<span class="chip">${kids.length} sub-bead${kids.length === 1 ? '' : 's'}</span>` : ''}
+            ${readyKids.length ? `<span class="chip">${readyKids.length} ready</span>` : ''}
             ${i.commit_count ? `<span>${i.commit_count} commit${i.commit_count === 1 ? '' : 's'}</span>` : ''}
             ${waiting.length ? `<span class="waits">waits on ${waiting.map(esc).join(', ')}</span>` : ''}
           </div>
