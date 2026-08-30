@@ -21,6 +21,13 @@ public final class ControlPanelController {
 
     public private(set) var isVisible = false
 
+    /// Watches for a click elsewhere or an Esc only while the panel is up.
+    /// Built lazily because it dismisses this controller and so cannot be made
+    /// before there is one.
+    private lazy var dismissal = PanelDismissalMonitor { [weak self] in
+        self?.hide()
+    }
+
     public init(lanes: [[LaneSlot]]) {
         window = ControlPanelWindow(contentRect: NSRect(origin: .zero, size: .zero))
 
@@ -64,6 +71,7 @@ public final class ControlPanelController {
         window.orderFrontRegardless()
         window.makeKey()
         isVisible = true
+        dismissal.start()
     }
 
     /// The panel never grows past the space it is shown in: a panel wider than
@@ -78,6 +86,7 @@ public final class ControlPanelController {
     }
 
     public func hide() {
+        dismissal.stop()
         window.orderOut(nil)
         isVisible = false
     }

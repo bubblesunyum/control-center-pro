@@ -131,8 +131,11 @@ bespoke scale.
 
 Mock at the boundary — the engine's data source, the system API — not internals.
 Build fixture factories (`fakeCPUSample()`) rather than inlining ad-hoc values.
-Engines and adapters get unit tests against fake sources; the UI is verified by
-screenshots through the review pass and by `scripts/verify.sh --full`.
+Engines and adapters get unit tests against fake sources in `CCPKitTests`. What
+a view *draws* is verified by screenshots through the review pass and by
+`scripts/verify.sh --full`; the logic a shell type carries around its drawing —
+event monitors installed and removed, lifecycle calls, layout mutation — is
+`CCPUITests`, against a fake standing in for the AppKit API.
 
 ## Conventions & Patterns
 

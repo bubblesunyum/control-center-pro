@@ -145,6 +145,12 @@ let package = Package(
             dependencies: ["CCPKit"],
             path: "Tests/CCPKitTests"
         ),
+
+        .testTarget(
+            name: "CCPUITests",
+            dependencies: ["CCPUI"],
+            path: "Tests/CCPUITests"
+        ),
         // ── END CCP TARGETS ────────────────────────────────────────────────
     ]
 )
