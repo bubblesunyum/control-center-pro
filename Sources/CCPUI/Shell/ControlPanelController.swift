@@ -14,6 +14,7 @@ import SwiftUI
 @MainActor
 public final class ControlPanelController {
     private let window: ControlPanelWindow
+    private let arrangement: PanelArrangement
     /// What the lanes actually asked for, measured once. `show` clamps this to
     /// the screen rather than remeasuring, so a panel that had to be cut down
     /// on a small display comes back whole on a large one.
@@ -28,14 +29,15 @@ public final class ControlPanelController {
         self?.hide()
     }
 
-    public init(lanes: [[LaneSlot]]) {
+    public init(arrangement: PanelArrangement) {
+        self.arrangement = arrangement
         window = ControlPanelWindow(contentRect: NSRect(origin: .zero, size: .zero))
 
         // Transparent all the way through: each card blurs the desktop for
         // itself, and the space between them is desktop. A backdrop view here
         // would put the cards inside a container, and the container is the
         // thing this panel is deliberately not.
-        let content = NSHostingView(rootView: ControlPanel(lanes: lanes))
+        let content = NSHostingView(rootView: ControlPanel(arrangement: arrangement))
         window.contentView = content
 
         // The panel is exactly as big as what it holds: a lane more is a column
@@ -68,6 +70,7 @@ public final class ControlPanelController {
             y: visible.maxY - size.height - Layout.panelInset
         ))
 
+        arrangement.activate()
         window.orderFrontRegardless()
         window.makeKey()
         isVisible = true
@@ -89,6 +92,9 @@ public final class ControlPanelController {
         dismissal.stop()
         window.orderOut(nil)
         isVisible = false
+        // After the window is down, not before: a widget stopped first would
+        // have the panel drawing a frame of whatever it left behind.
+        arrangement.deactivate()
     }
 
     public func toggle(from statusItemButton: NSStatusBarButton?) {

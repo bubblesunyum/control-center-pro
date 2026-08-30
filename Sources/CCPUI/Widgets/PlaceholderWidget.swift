@@ -24,8 +24,13 @@ extension PlaceholderWidget {
 
 /// Muted bars roughly where the real content will sit — enough to judge the
 /// glass, the gutters and the type against, and unmistakably not real data.
-private struct ContentSkeleton: View {
+///
+/// Handed a sampler, the bars move with it: the one placeholder that actually
+/// samples looks like it is doing something, and the panel shows at a glance
+/// whether sampling stopped when it should have.
+struct ContentSkeleton: View {
     let size: WidgetSize
+    var sampler: PlaceholderSampler?
 
     private static let widths: [CGFloat] = [1, 0.72, 0.88, 0.6]
 
@@ -46,9 +51,20 @@ private struct ContentSkeleton: View {
                     .fill(Color.controlFill)
                     .frame(height: Space.one)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .scaleEffect(x: widths[index], anchor: .leading)
+                    .scaleEffect(x: width(at: index), anchor: .leading)
             }
         }
         .accessibilityHidden(true)
+        .animation(.easeInOut(duration: 0.6), value: sampler?.tick)
+    }
+
+    /// A bar's resting width, nudged by the sample count. Derived rather than
+    /// random so the same tick always draws the same skeleton — a screenshot
+    /// of this card is worth comparing against the last one.
+    private func width(at index: Int) -> CGFloat {
+        let resting = widths[index]
+        guard let sampler else { return resting }
+        let phase = Double(sampler.tick + index)
+        return resting * (0.88 + 0.12 * (sin(phase) + 1) / 2)
     }
 }

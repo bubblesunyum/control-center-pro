@@ -18,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let registry = makeStandardRegistry()
         let store = JSONFileStore(filename: "layout.json", default: standardLayout)
-        let layout = store.load().normalized()
+        let arrangement = PanelArrangement(store.load(), registry: registry)
 
         // Written back on every launch so the file always describes what is on
         // screen: it is how the arrangement exists at all before anyone has
@@ -26,9 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // only. A layout naming widgets this build lacks survives the round
         // trip intact. Nothing to do if the write fails — the panel is already
         // built, and the next launch reads the defaults again.
-        try? store.save(layout)
+        try? store.save(arrangement.layout)
 
-        let panel = ControlPanelController(lanes: registry.resolve(layout))
+        let panel = ControlPanelController(arrangement: arrangement)
         statusItem = StatusItemController(panel: panel)
 
         // An agent can't click a menu bar item, and a screenshot of a panel

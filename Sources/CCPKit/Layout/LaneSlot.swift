@@ -19,6 +19,16 @@ public enum LaneSlot: Identifiable {
         case .unavailable(let id): id
         }
     }
+
+    /// The live widget here, or `nil` where the slot is only holding a name's
+    /// place. Anything done to the widgets on the panel — starting them,
+    /// stopping them — is done to these.
+    public var instance: WidgetInstance? {
+        switch self {
+        case .widget(let widget): widget
+        case .unavailable: nil
+        }
+    }
 }
 
 public extension WidgetRegistry {

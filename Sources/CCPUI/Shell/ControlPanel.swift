@@ -6,20 +6,21 @@ import SwiftUI
 
 /// Everything inside the glass: vertical lanes of widget cards.
 ///
-/// The panel renders the slots it is handed and holds no opinion about how they
-/// came to be — reading the arrangement off disk and resolving it against the
-/// registry happens before this, and rearranging it is edit mode's business.
+/// The panel draws the arrangement and holds no opinion about how it came to
+/// be: reading it off disk and resolving it against the registry happens
+/// before this, and starting the widgets it placed belongs to the arrangement
+/// itself.
 public struct ControlPanel: View {
-    private let lanes: [[LaneSlot]]
+    private let arrangement: PanelArrangement
 
-    public init(lanes: [[LaneSlot]]) {
-        self.lanes = lanes
+    public init(arrangement: PanelArrangement) {
+        self.arrangement = arrangement
     }
 
     public var body: some View {
         HStack(alignment: .top, spacing: Space.oneHalf) {
-            ForEach(lanes.indices, id: \.self) { index in
-                WidgetLane(slots: lanes[index])
+            ForEach(arrangement.lanes.indices, id: \.self) { index in
+                WidgetLane(slots: arrangement.lanes[index])
             }
         }
         .padding(Space.oneHalf)
