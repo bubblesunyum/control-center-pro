@@ -1,168 +1,45 @@
 {
-  "generated": "23:04:25",
+  "generated": "23:24:48",
   "project": "control-center-pro",
   "git": {
     "branch": "main",
     "upstream": "origin/main",
-    "dirty": 2,
-    "commits_today": 44,
+    "dirty": 4,
+    "commits_today": 46,
     "last": {
-      "sha": "d49de5d",
-      "subject": "ledger: file the capture-coverage follow-up ccp-lmr",
-      "when": "14 seconds ago"
+      "sha": "e0ff6bb",
+      "subject": "the layout, and the widget ids it refuses to forget ccp-lr7.2",
+      "when": "22 seconds ago"
     },
     "unpushed": [
       {
-        "sha": "d49de5d",
-        "subject": "ledger: file the capture-coverage follow-up ccp-lmr",
-        "at": 1788062649.0
-      },
-      {
-        "sha": "91cd3d0",
-        "subject": "ledger: close the shell's first three beads ccp-lr7",
-        "at": 1788062555.0
-      },
-      {
-        "sha": "63fb1a1",
-        "subject": "ccp builds and launches its own app bundle ccp-v64",
-        "at": 1788062507.0
-      },
-      {
-        "sha": "14bc955",
-        "subject": "the glass panel, and the vocabulary it is drawn in ccp-lr7.5 ccp-lr7.3",
-        "at": 1788062498.0
-      },
-      {
-        "sha": "e37483a",
-        "subject": "the widget protocol and registry ccp-lr7.1",
-        "at": 1788062486.0
-      },
-      {
-        "sha": "186d20a",
-        "subject": "handoff: close the harness resync session ccp-g7l",
-        "at": 1788060226.0
-      },
-      {
-        "sha": "0903f6f",
-        "subject": "ledger: close the harness resync ccp-g7l",
-        "at": 1788059948.0
-      },
-      {
-        "sha": "01a6848",
-        "subject": "resync the harness from harness-starter ccp-g7l",
-        "at": 1788059932.0
-      },
-      {
-        "sha": "58f5594",
-        "subject": "handoff: close the CLAUDE.md/AGENTS.md split session ccp-veh",
-        "at": 1788059176.0
-      },
-      {
-        "sha": "d5a8092",
-        "subject": "split the harness contract out of CLAUDE.md ccp-veh",
-        "at": 1788057594.0
+        "sha": "e0ff6bb",
+        "subject": "the layout, and the widget ids it refuses to forget ccp-lr7.2",
+        "at": 1788063865.0
       }
     ],
     "unpushed_beads": [
-      "ccp-g7l",
-      "ccp-lmr",
-      "ccp-lr7",
-      "ccp-lr7.1",
-      "ccp-lr7.3",
-      "ccp-lr7.5",
-      "ccp-v64",
-      "ccp-veh"
+      "ccp-lr7.2",
+      "ccp-lr7.6"
     ],
     "bead_commits": {
-      "ccp-lmr": {
+      "ccp-lr7.6": {
         "commits": 1,
-        "at": 1788062649.0,
+        "at": 1788063865.0,
         "list": [
           {
-            "sha": "d49de5d",
-            "subject": "ledger: file the capture-coverage follow-up ccp-lmr"
+            "sha": "e0ff6bb",
+            "subject": "the layout, and the widget ids it refuses to forget ccp-lr7.2"
           }
         ]
       },
-      "ccp-lr7": {
+      "ccp-lr7.2": {
         "commits": 1,
-        "at": 1788062555.0,
+        "at": 1788063865.0,
         "list": [
           {
-            "sha": "91cd3d0",
-            "subject": "ledger: close the shell's first three beads ccp-lr7"
-          }
-        ]
-      },
-      "ccp-v64": {
-        "commits": 1,
-        "at": 1788062507.0,
-        "list": [
-          {
-            "sha": "63fb1a1",
-            "subject": "ccp builds and launches its own app bundle ccp-v64"
-          }
-        ]
-      },
-      "ccp-lr7.5": {
-        "commits": 1,
-        "at": 1788062498.0,
-        "list": [
-          {
-            "sha": "14bc955",
-            "subject": "the glass panel, and the vocabulary it is drawn in ccp-lr7.5 ccp-lr7.3"
-          }
-        ]
-      },
-      "ccp-lr7.3": {
-        "commits": 1,
-        "at": 1788062498.0,
-        "list": [
-          {
-            "sha": "14bc955",
-            "subject": "the glass panel, and the vocabulary it is drawn in ccp-lr7.5 ccp-lr7.3"
-          }
-        ]
-      },
-      "ccp-lr7.1": {
-        "commits": 1,
-        "at": 1788062486.0,
-        "list": [
-          {
-            "sha": "e37483a",
-            "subject": "the widget protocol and registry ccp-lr7.1"
-          }
-        ]
-      },
-      "ccp-g7l": {
-        "commits": 3,
-        "at": 1788060226.0,
-        "list": [
-          {
-            "sha": "186d20a",
-            "subject": "handoff: close the harness resync session ccp-g7l"
-          },
-          {
-            "sha": "0903f6f",
-            "subject": "ledger: close the harness resync ccp-g7l"
-          },
-          {
-            "sha": "01a6848",
-            "subject": "resync the harness from harness-starter ccp-g7l"
-          }
-        ]
-      },
-      "ccp-veh": {
-        "commits": 2,
-        "at": 1788059176.0,
-        "list": [
-          {
-            "sha": "58f5594",
-            "subject": "handoff: close the CLAUDE.md/AGENTS.md split session ccp-veh"
-          },
-          {
-            "sha": "d5a8092",
-            "subject": "split the harness contract out of CLAUDE.md ccp-veh"
+            "sha": "e0ff6bb",
+            "subject": "the layout, and the widget ids it refuses to forget ccp-lr7.2"
           }
         ]
       }
@@ -170,40 +47,13 @@
   },
   "ledger": {
     "counts": {
-      "open": 28,
-      "ready": 18,
+      "open": 29,
+      "ready": 20,
       "in_progress": 0,
-      "closed": 20,
+      "closed": 22,
       "blocked": 0
     },
     "issues": [
-      {
-        "id": "ccp-ait",
-        "title": "fork setup and licensing",
-        "status": "open",
-        "ready": true,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 0,
-        "type": "epic",
-        "parent": "",
-        "updated_at": "2026-08-29T21:21:12Z",
-        "created_at": "2026-08-29T17:07:56Z",
-        "deps": [],
-        "description": "Stand up the fork-based in-tree strategy from BRIEF.md: vorssaint-utils vendored as our engine layer, our targets added alongside, GPLv3 in place from the first commit. Nothing else can start until the package builds.",
-        "design": "",
-        "notes": "Reopened 2026-08-29: closed at 4/4 while its acknowledged remainder (fork bundle identity) sat unparented as ccp-v64. v64 is now a child; the epic is 4/5 and stays open until the fork stops shipping a Vorssaint-identified bundle.",
-        "close_reason": "",
-        "owner": "bubbles@cortico.ai",
-        "children": [
-          "ccp-ait.4",
-          "ccp-ait.3",
-          "ccp-ait.2",
-          "ccp-ait.1",
-          "ccp-v64"
-        ]
-      },
       {
         "id": "ccp-lr7.9",
         "title": "activate/deactivate lifecycle and idle CPU",
@@ -238,14 +88,14 @@
         "priority": 1,
         "type": "task",
         "parent": "ccp-lr7",
-        "updated_at": "2026-08-29T17:12:59Z",
+        "updated_at": "2026-08-30T04:21:23Z",
         "created_at": "2026-08-29T17:08:07Z",
         "deps": [
           "ccp-lr7.6"
         ],
         "description": "Long-press or an Edit button enters edit mode. Widgets wiggle via a small repeating rotationEffect with a random per-item phase offset so they do not sync, show remove badges, and become draggable. Prefer a custom drag gesture plus matchedGeometryEffect over .draggable/.dropDestination, which feel clunky for grid reordering. Drop targets: any position in any lane, plus an empty trailing lane that appears as a target to create a new lane.",
         "design": "",
-        "notes": "",
+        "notes": "lr7.2 owns PanelLayout.normalized() (prunes empty lanes, floors at one). Mutation verbs live here, and each must end in a normalized() call \u2014 that is what keeps the invariant without lr7.2 shipping the verbs. The trailing empty drop lane is a render-time affordance and must never be persisted. Reordering has to index around .unavailable slots, which are real positions in the lane.",
         "close_reason": "",
         "owner": "bubbles@cortico.ai",
         "children": []
@@ -254,24 +104,31 @@
         "id": "ccp-lr7.6",
         "title": "lane layout with placeholder widgets",
         "status": "open",
-        "ready": false,
+        "ready": true,
         "in_review": false,
         "backlog": false,
         "labels": [],
         "priority": 1,
         "type": "task",
         "parent": "ccp-lr7",
-        "updated_at": "2026-08-29T17:12:59Z",
+        "updated_at": "2026-08-30T04:24:15Z",
         "created_at": "2026-08-29T17:08:06Z",
         "deps": [
           "ccp-lr7.2"
         ],
         "description": "Vertical lanes stacking widget cards, driven by the layout model and rendering whatever the registry provides. Placeholder widgets only at this stage.",
         "design": "",
-        "notes": "",
+        "notes": "Also from lr7.2's review: JSONFileStore.load() returns whatever is in the file, un-normalized \u2014 the wiring here must call .normalized() on it before rendering. And see ccp-pr6 (duplicate ids in a lane) before ForEach-ing [LaneSlot].",
         "close_reason": "",
         "owner": "bubbles@cortico.ai",
-        "children": []
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "e0ff6bb",
+            "subject": "the layout, and the widget ids it refuses to forget ccp-lr7.2"
+          }
+        ]
       },
       {
         "id": "ccp-lr7.4",
@@ -290,29 +147,6 @@
           "ccp-lr7.3"
         ],
         "description": "Dismiss on outside click via a global NSEvent monitor, and on Esc. The event monitor must be removed when the panel closes \u2014 a leaked global monitor is the classic version of this bug.\n\nMulti-display placement was split out to ccp-lr7.10 and deprioritised.",
-        "design": "",
-        "notes": "",
-        "close_reason": "",
-        "owner": "bubbles@cortico.ai",
-        "children": []
-      },
-      {
-        "id": "ccp-lr7.2",
-        "title": "layout model and persistence",
-        "status": "open",
-        "ready": true,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 1,
-        "type": "task",
-        "parent": "ccp-lr7",
-        "updated_at": "2026-08-29T17:12:59Z",
-        "created_at": "2026-08-29T17:08:02Z",
-        "deps": [
-          "ccp-lr7.1"
-        ],
-        "description": "[Lane] where Lane = [WidgetID], Codable, persisted as JSON in Application Support. Decoding must survive a stored layout naming a widget the registry no longer has, without discarding the rest of the arrangement.",
         "design": "",
         "notes": "",
         "close_reason": "",
@@ -350,14 +184,70 @@
           "ccp-lmr",
           "ccp-lr7.8",
           "ccp-lr7.10"
-        ],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "91cd3d0",
-            "subject": "ledger: close the shell's first three beads ccp-lr7"
-          }
         ]
+      },
+      {
+        "id": "ccp-pr6",
+        "title": "a layout with the same widget id twice in one lane resolves to duplicate LaneSlot ids",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-30T04:24:04Z",
+        "created_at": "2026-08-30T04:23:55Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "LaneSlot.id is the WidgetID, so a lane listing the same id twice yields two slots with equal ids and a SwiftUI ForEach over [LaneSlot] renders undefined. Raised by reviewer-correctness on ccp-lr7.2, which declined to file it on the grounds that no mutation logic exists yet \u2014 but the path does not need mutation: PanelLayout.load() will happily return {\"lanes\":[[\"stub\",\"stub\"]]} from a hand-edited or partially-mangled file, and lr7.6 will ForEach it. Recommendation: fold dedup (keep first occurrence) into PanelLayout.normalized(), which is already the invariant-maintainer that prunes empty lanes and floors at one lane \u2014 same place, same call sites, no new concept. NOT done in lr7.2 because normalized()'s contract was agreed with laurel as exactly those two invariants and widening it was not mine to decide unilaterally. Cheap; do it before lr7.6 renders anything.",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-mtk",
+        "title": "decide the layout save policy for edit mode: debounce and off-main",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-30T04:24:08Z",
+        "created_at": "2026-08-30T04:23:34Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "lr7.7 saves the layout after every drag mutation. JSONFileStore.save() is synchronous blocking I/O, so a naive save-per-mutation writes the file on the main thread mid-animation. Raised as an async-API finding by reviewer-taste on ccp-lr7.2 and declined there: the store is Sendable and actor-agnostic on purpose, so a caller can move it off-main, and making load() async would stop applicationDidFinishLaunching from having lanes ready when it builds the panel. The real decision is a save policy \u2014 debounce the writes and put them off-main \u2014 and it belongs with the mutation verbs, not the store.",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-cvh",
+        "title": "review packet excludes Tests/*, so test quality is never reviewed",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-30T04:22:14Z",
+        "created_at": "2026-08-30T04:22:06Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "scripts/review.sh:61 puts ':(exclude)Tests/*' in SCOPE, so no reviewer has ever seen a test file. Found on ccp-lr7.2, whose acceptance criteria is literally 'covered by tests' \u2014 the packet held the 3 source files and none of the 3 test files. The exclusion is presumably there to keep the packet cheap, and upstream's Tests/ would be noise, but our Tests/CCPKitTests/* is our code and carries real taste risk (fixture factories, naming, what is actually asserted). Options: narrow the exclusion to upstream's test paths only, or include our tests behind a flag. Tests are also where a wrong assertion silently buys a false green.",
+        "close_reason": "",
+        "owner": "",
+        "children": []
       },
       {
         "id": "ccp-lmr",
@@ -378,14 +268,7 @@
         "notes": "",
         "close_reason": "",
         "owner": "",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "d49de5d",
-            "subject": "ledger: file the capture-coverage follow-up ccp-lmr"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-dz0",
@@ -849,6 +732,63 @@
         "children": []
       },
       {
+        "id": "ccp-lr7.2",
+        "title": "layout model and persistence",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "ccp-lr7",
+        "updated_at": "2026-08-30T04:24:26Z",
+        "created_at": "2026-08-29T17:08:02Z",
+        "deps": [
+          "ccp-lr7.1"
+        ],
+        "description": "[Lane] where Lane = [WidgetID], Codable, persisted as JSON in Application Support. Decoding must survive a stored layout naming a widget the registry no longer has, without discarding the rest of the arrangement.",
+        "design": "",
+        "notes": "",
+        "close_reason": "PanelLayout as plain lossless Codable data, normalized() for the empty-lane and one-lane-floor invariants, LaneSlot + WidgetRegistry.resolve preserving unknown ids as visible slots, and a generic JSONFileStore. 6 new tests; gate green",
+        "owner": "bubbles@cortico.ai",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "e0ff6bb",
+            "subject": "the layout, and the widget ids it refuses to forget ccp-lr7.2"
+          }
+        ]
+      },
+      {
+        "id": "ccp-ait",
+        "title": "fork setup and licensing",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 0,
+        "type": "epic",
+        "parent": "",
+        "updated_at": "2026-08-30T04:09:20Z",
+        "created_at": "2026-08-29T17:07:56Z",
+        "deps": [],
+        "description": "Stand up the fork-based in-tree strategy from BRIEF.md: vorssaint-utils vendored as our engine layer, our targets added alongside, GPLv3 in place from the first commit. Nothing else can start until the package builds.",
+        "design": "",
+        "notes": "Reopened 2026-08-29: closed at 4/4 while its acknowledged remainder (fork bundle identity) sat unparented as ccp-v64. v64 is now a child; the epic is 4/5 and stays open until the fork stops shipping a Vorssaint-identified bundle.",
+        "close_reason": "all 5 children complete: fork vendored, targets added, GPLv3 in place, origin set, and the bundle now ships CCP's own identity",
+        "owner": "bubbles@cortico.ai",
+        "children": [
+          "ccp-ait.4",
+          "ccp-ait.3",
+          "ccp-ait.2",
+          "ccp-ait.1",
+          "ccp-v64"
+        ]
+      },
+      {
         "id": "ccp-lr7.5",
         "title": "glass card design system",
         "status": "closed",
@@ -869,14 +809,7 @@
         "notes": "",
         "close_reason": "CCPUI design system: Space/Radius/Stroke/Layout in Dimensions.swift, a deliberately tiny Palette (semantic aliases over four white/black alphas; everything else is a system colour), GlassCard as the surface and WidgetCard as what a widget writes. A widget is buildable with no spacing, radius or colour literal.",
         "owner": "bubbles@cortico.ai",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "14bc955",
-            "subject": "the glass panel, and the vocabulary it is drawn in ccp-lr7.5 ccp-lr7.3"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-v64",
@@ -897,14 +830,7 @@
         "notes": "Also in scope (same root cause \u2014 build.sh has not caught up to the fork): deployment-target mismatch. build.sh:42 sets TARGET=arm64-apple-macosx14.0 and build.sh:409 passes --minimum-deployment-target 14.0, while Package.swift:22 carries the CCP patch to 14.4 (CATapDescription needs 14.4) and the README badge says 14.4+. Raise build.sh to 14.4 alongside the identity rename.",
         "close_reason": "Reframed: build.sh is upstream's and could not build this fork at all (it compiles the Vorssaint executable target, which our Package.swift patch replaced with a library). Rather than rewrite 631 lines of it, CCP got scripts/app.sh \u2014 twenty lines over SwiftPM, AppBundle/Info.plist for the identity, LSUIElement, 14.4 floor \u2014 plus scripts/capture.sh for design-review screenshots. build.sh left untouched; recorded in PATCHES.md.",
         "owner": "",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "63fb1a1",
-            "subject": "ccp builds and launches its own app bundle ccp-v64"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-lr7.3",
@@ -927,14 +853,7 @@
         "notes": "",
         "close_reason": "Status item toggles a borderless non-activating NSPanel at .popUpMenu, canJoinAllSpaces, anchored top-right of visibleFrame (so an auto-hidden menu bar is not a special case). Window and SwiftUI graph built at launch and never torn down. Blur ended up per-card rather than per-panel at the user's direction: the window is transparent and each GlassCard carries its own behind-window NSVisualEffectView, because a panel-wide backdrop reads as a dark container and SwiftUI materials can't blur the desktop. Panel size comes from the hosting view's fittingSize.",
         "owner": "bubbles@cortico.ai",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "14bc955",
-            "subject": "the glass panel, and the vocabulary it is drawn in ccp-lr7.5 ccp-lr7.3"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-lr7.1",
@@ -957,14 +876,7 @@
         "notes": "",
         "close_reason": "CCPWidget + WidgetDescriptor + WidgetRegistry in CCPKit/Widgets. Registry is composed by the app rather than a self-assembling shared instance, so tests stand up fixture registries; re-registering an id replaces it in place so gallery order stays declaration order. WidgetSize is a named enum in CCPKit and the points live in CCPUI. 10 tests.",
         "owner": "bubbles@cortico.ai",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "e37483a",
-            "subject": "the widget protocol and registry ccp-lr7.1"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-g7l",
@@ -985,22 +897,7 @@
         "notes": "",
         "close_reason": "Resynced against harness-starter. Took the template for HARNESS.md, workflow skill, dashboard/index.html, dashboard.py and commit-msg; merged verify.sh (gained the opencode-agents check step) and review.sh (kept the upstream exclusions, regained *.json/*.html). Installed scripts/opencode-agents.py and .opencode/agent/, so opencode can now run all three reviewers and the gate checks the two halves match. Drift 7+1 -> 3, and those 3 are ccp's own filled-in content. Two permanent divergences recorded: no bd-setup-codex block in AGENTS.md, no --no-verify line in commit-msg. All three reviewers cle",
         "owner": "",
-        "children": [],
-        "commit_count": 3,
-        "commits": [
-          {
-            "sha": "186d20a",
-            "subject": "handoff: close the harness resync session ccp-g7l"
-          },
-          {
-            "sha": "0903f6f",
-            "subject": "ledger: close the harness resync ccp-g7l"
-          },
-          {
-            "sha": "01a6848",
-            "subject": "resync the harness from harness-starter ccp-g7l"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-veh",
@@ -1021,18 +918,7 @@
         "notes": "",
         "close_reason": "split done: AGENTS.md is the installed harness contract from template/, CLAUDE.md keeps only architecture, philosophy, naming, comments, animation, accessibility, testing and the upstream rules, and imports AGENTS.md so Claude Code still gets the contract. opencode.json installed so the file AGENTS.md names actually exists. Always-loaded cost 4148 \u2192 3818.",
         "owner": "bubbles@cortico.ai",
-        "children": [],
-        "commit_count": 2,
-        "commits": [
-          {
-            "sha": "58f5594",
-            "subject": "handoff: close the CLAUDE.md/AGENTS.md split session ccp-veh"
-          },
-          {
-            "sha": "d5a8092",
-            "subject": "split the harness contract out of CLAUDE.md ccp-veh"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-623",
@@ -1335,6 +1221,13 @@
   },
   "worktree": [
     {
+      "path": ".beads/interactions.jsonl",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
+    },
+    {
       "path": ".beads/issues.jsonl",
       "staged": false,
       "untracked": false,
@@ -1347,11 +1240,18 @@
       "untracked": true,
       "status": "?",
       "old_path": null
+    },
+    {
+      "path": "dashboard/state.json",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
     }
   ],
   "verify": {
     "status": "passed",
-    "when": "just now",
+    "when": "3m ago",
     "tests": "",
     "steps": [
       {
@@ -1363,9 +1263,14 @@
         "ok": true
       }
     ],
-    "unverified": [],
-    "took": "5s",
-    "at": 1788062656.199387
+    "unverified": [
+      {
+        "sha": "e0ff6bb",
+        "subject": "the layout, and the widget ids it refuses to forget ccp-lr7.2"
+      }
+    ],
+    "took": "4s",
+    "at": 1788063690.03034
   },
   "runs": {
     "verify": {
@@ -1477,12 +1382,12 @@
           "tokens": 41
         },
         {
-          "id": "harness/handoffs/20260829-222339.md",
-          "name": "20260829-222339.md",
-          "path": "harness/handoffs/20260829-222339.md",
+          "id": "harness/handoffs/20260829-230605.md",
+          "name": "20260829-230605.md",
+          "path": "harness/handoffs/20260829-230605.md",
           "origin": "harness",
           "role": "the last session's closing note",
-          "tokens": 674
+          "tokens": 544
         },
         {
           "id": "CLAUDE.md",
@@ -1526,7 +1431,7 @@
           "path": ".beads/issues.jsonl",
           "origin": "harness",
           "role": "the issue graph, exported for git",
-          "tokens": 14768
+          "tokens": 15818
         },
         {
           "id": ".claude/skills/beads/SKILL.md",
@@ -1659,14 +1564,14 @@
       },
       {
         "name": "session brief",
-        "tokens": 278
+        "tokens": 296
       },
       {
         "name": "skill descriptions",
         "tokens": 334
       }
     ],
-    "always_total": 2736,
+    "always_total": 2754,
     "on_demand": [
       {
         "name": "workflow",
@@ -1701,7 +1606,7 @@
         "tokens": 434
       }
     ],
-    "brief_tokens": 278,
+    "brief_tokens": 296,
     "prime_tokens": 1569
   }
 }
