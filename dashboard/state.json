@@ -1,17 +1,22 @@
 {
-  "generated": "23:02:52",
+  "generated": "23:04:25",
   "project": "control-center-pro",
   "git": {
     "branch": "main",
     "upstream": "origin/main",
     "dirty": 2,
-    "commits_today": 43,
+    "commits_today": 44,
     "last": {
-      "sha": "91cd3d0",
-      "subject": "ledger: close the shell's first three beads ccp-lr7",
-      "when": "16 seconds ago"
+      "sha": "d49de5d",
+      "subject": "ledger: file the capture-coverage follow-up ccp-lmr",
+      "when": "14 seconds ago"
     },
     "unpushed": [
+      {
+        "sha": "d49de5d",
+        "subject": "ledger: file the capture-coverage follow-up ccp-lmr",
+        "at": 1788062649.0
+      },
       {
         "sha": "91cd3d0",
         "subject": "ledger: close the shell's first three beads ccp-lr7",
@@ -60,6 +65,7 @@
     ],
     "unpushed_beads": [
       "ccp-g7l",
+      "ccp-lmr",
       "ccp-lr7",
       "ccp-lr7.1",
       "ccp-lr7.3",
@@ -68,6 +74,16 @@
       "ccp-veh"
     ],
     "bead_commits": {
+      "ccp-lmr": {
+        "commits": 1,
+        "at": 1788062649.0,
+        "list": [
+          {
+            "sha": "d49de5d",
+            "subject": "ledger: file the capture-coverage follow-up ccp-lmr"
+          }
+        ]
+      },
       "ccp-lr7": {
         "commits": 1,
         "at": 1788062555.0,
@@ -88,7 +104,7 @@
           }
         ]
       },
-      "ccp-lr7.3": {
+      "ccp-lr7.5": {
         "commits": 1,
         "at": 1788062498.0,
         "list": [
@@ -98,7 +114,7 @@
           }
         ]
       },
-      "ccp-lr7.5": {
+      "ccp-lr7.3": {
         "commits": 1,
         "at": 1788062498.0,
         "list": [
@@ -154,8 +170,8 @@
   },
   "ledger": {
     "counts": {
-      "open": 27,
-      "ready": 17,
+      "open": 28,
+      "ready": 18,
       "in_progress": 0,
       "closed": 20,
       "blocked": 0
@@ -331,6 +347,7 @@
           "ccp-lr7.3",
           "ccp-lr7.2",
           "ccp-lr7.1",
+          "ccp-lmr",
           "ccp-lr7.8",
           "ccp-lr7.10"
         ],
@@ -339,6 +356,34 @@
           {
             "sha": "91cd3d0",
             "subject": "ledger: close the shell's first three beads ccp-lr7"
+          }
+        ]
+      },
+      {
+        "id": "ccp-lmr",
+        "title": "capture the panel in light appearance and with a control in its active state",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "ccp-lr7",
+        "updated_at": "2026-08-30T04:04:09Z",
+        "created_at": "2026-08-30T04:04:00Z",
+        "deps": [],
+        "description": "The design reviewer can only judge the glass vocabulary against what a capture shows, and right now that is one resting state over a dark wallpaper. STYLE.md's claim is that the panel works over an unknown wallpaper in either appearance and that an active toggle reads by the accent \u2014 neither is in evidence.\n\nBlocked on there being something interactive to capture: it wants a real toggle in its on state and a row under hover. Worth doing alongside ccp-8ld.3 (Quick Toggles), not before.\n\nNote scripts/capture.sh screenshots whatever is on screen, so getting the wallpaper behind the panel means no window covering the top-right corner.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "d49de5d",
+            "subject": "ledger: file the capture-coverage follow-up ccp-lmr"
           }
         ]
       },
@@ -1306,7 +1351,7 @@
   ],
   "verify": {
     "status": "passed",
-    "when": "1m ago",
+    "when": "just now",
     "tests": "",
     "steps": [
       {
@@ -1318,26 +1363,9 @@
         "ok": true
       }
     ],
-    "unverified": [
-      {
-        "sha": "91cd3d0",
-        "subject": "ledger: close the shell's first three beads ccp-lr7"
-      },
-      {
-        "sha": "63fb1a1",
-        "subject": "ccp builds and launches its own app bundle ccp-v64"
-      },
-      {
-        "sha": "14bc955",
-        "subject": "the glass panel, and the vocabulary it is drawn in ccp-lr7.5 ccp-lr7.3"
-      },
-      {
-        "sha": "e37483a",
-        "subject": "the widget protocol and registry ccp-lr7.1"
-      }
-    ],
-    "took": "4s",
-    "at": 1788062462.6681192
+    "unverified": [],
+    "took": "5s",
+    "at": 1788062656.199387
   },
   "runs": {
     "verify": {
@@ -1498,7 +1526,7 @@
           "path": ".beads/issues.jsonl",
           "origin": "harness",
           "role": "the issue graph, exported for git",
-          "tokens": 14451
+          "tokens": 14768
         },
         {
           "id": ".claude/skills/beads/SKILL.md",
