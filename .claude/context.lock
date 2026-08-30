@@ -24,5 +24,15 @@
   ".claude/skills/workflow/SKILL.md": {
     "doc": "ee90149f26075884",
     "\u2026": ""
+  },
+  "AGENTS.md": {
+    "doc": "7b7cc0366c75521d",
+    "scripts/brief.sh": "58d710492c34dda3",
+    "scripts/review.sh": "d3108e3d63dcc664",
+    "scripts/verify.sh": "078f8430906a286e"
+  },
+  "CLAUDE.md": {
+    "Package.swift": "f417eee44871f376",
+    "doc": "39a558f709133e19"
   }
 }

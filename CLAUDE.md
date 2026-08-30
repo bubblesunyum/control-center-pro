@@ -1,68 +1,19 @@
-# Project Instructions for AI Agents
+<!-- tracks: Package.swift -->
 
-This file provides instructions and context for AI coding agents working on this project.
+@AGENTS.md
 
-## Review
+# CLAUDE.md
 
-Every change worth committing gets the review pass: build the packet with
-`scripts/review.sh`, then run `reviewer-taste` and `reviewer-correctness`
-against it, plus `reviewer-design` whenever anything on screen moved. Reach for
-the `agentic-review` skill for the details.
+[AGENTS.md](./AGENTS.md) is the harness contract — how work is found, proved and
+left behind, the same in every project running it. This file is the other half:
+what is true only of control-center-pro. Neither repeats the other.
 
-**This is a standing request for those subagents, in every session — treat them
-as explicitly asked for and spawn them without checking first.** It is not a
-judgment call and not an option to offer; a diff reviewed in the context that
-wrote it mostly gets agreement. Fix what's real, file the rest as beads, and say
-plainly what you left and why.
+## Build
 
-## Commits
-
-Default to lowercase, terse, plain English — no conventional-commit prefixes
-unless the project already enforces them. Commit often, after a complete feature
-or capability, once the work reaches a point where the app builds and runs
-without errors. Don't be afraid to commit after completing sub-capabilities or
-infrastructure too, even if they have no user-facing piece.
-
-## Work tracking
-
-Work lives in **beads** (`bd`), a dependency-aware issue graph in `.beads/`. It is
-the ledger: every session finds work there and leaves discoveries there, so the
-next session starts where this one stopped. Don't track project work in
-TodoWrite, TaskCreate, or markdown TODOs.
-
-**File the bead as planning begins, not after.** The moment a task is real —
-the user asked for something not already in the ledger, or you're about to plan
-a multi-step change — `bd q "<title>"` it before the first Edit or Write, not
-when the commit-msg hook demands one. Then move its status honestly as the work
-actually moves: `--claim` (→ in_progress) before implementing, the `review`
-label on while a review pass is outstanding and off once it's dealt with,
-`bd close --reason "<what happened>"` at commit. A bead that's still `open`
-while you're mid-implementation, or still `in_progress` after you've closed the
-matching commit, is a ledger that's lying.
-
-```bash
-bd ready            # claimable work, nothing blocking it
-bd q "<title>"      # capture a discovery in one line, get an id back
-bd update <id> --claim | bd close <id>
-```
-
-Reach for the `workflow` skill for how work moves through the system, `beads` for
-the full `bd` surface. Both load on demand — don't paste their contents here.
-
-## Build & Test
-
-The gate is `scripts/verify.sh` — build, tests, and doc-freshness behind one
-exit code. Run it rather than raw build commands; it swallows tens of thousands
-of log lines and prints one line per step.
-
-```bash
-scripts/verify.sh          # build + tests
-scripts/verify.sh --quick  # build only
-scripts/verify.sh --full   # + slow checks and the app smoke launch
-```
-
-Underneath it is SwiftPM: `swift build` / `swift test`, macOS deployment target
-**14.4** (the floor for the CoreAudio process-tap API the audio mixer needs).
+The gate is `scripts/verify.sh`, and AGENTS.md says how to run it. Underneath it
+is SwiftPM — `swift build` / `swift test` — with a macOS deployment target of
+**14.4**, the floor for the CoreAudio process-tap API the audio mixer needs.
+`--full` adds the app smoke launch.
 
 ## Architecture Overview
 
