@@ -46,8 +46,11 @@ private struct GalleryRow: View {
 
                 VStack(alignment: .leading, spacing: 0) {
                     Text(entry.descriptor.title)
-                    if let permission = entry.descriptor.permissions.first {
-                        Text(permission.requirement)
+                    // Every permission, in a settled order: they arrive as a
+                    // Set, so showing "the first one" would name a different
+                    // one run to run once a widget declares two.
+                    ForEach(entry.descriptor.requirements, id: \.self) { requirement in
+                        Text(requirement)
                             .font(.caption)
                             .foregroundStyle(Color.labelMuted)
                     }
@@ -70,9 +73,15 @@ private struct GalleryRow: View {
     }
 }
 
+private extension WidgetDescriptor {
+    /// What the widget will have to ask the user for, in a stable order.
+    /// Whether any of it has been granted is not known here — see ccp-23w.
+    var requirements: [String] {
+        permissions.map(\.requirement).sorted()
+    }
+}
+
 private extension WidgetPermission {
-    /// What the widget will have to ask the user for. Whether it has been
-    /// granted is not known here — see ccp-23w.
     var requirement: String {
         switch self {
         case .audioCapture: "Needs audio recording access"
