@@ -85,6 +85,7 @@ public protocol ClipboardSource: AnyObject {
     var isRunning: Bool { get }
     var changes: AnyPublisher<Void, Never> { get }
     func ensureHistoryEnabled()
+    func setHistoryEnabled(_ enabled: Bool)
     func copy(_ entry: ClipboardEntry, completion: @escaping (Bool) -> Void)
     func togglePin(_ entry: ClipboardEntry)
     func remove(_ entry: ClipboardEntry)
@@ -107,6 +108,10 @@ public final class LiveClipboardSource: ClipboardSource {
 
     public func ensureHistoryEnabled() {
         BridgedClipboardHistory.ensureHistoryEnabled()
+    }
+
+    public func setHistoryEnabled(_ enabled: Bool) {
+        BridgedClipboardHistory.setHistoryEnabled(enabled)
     }
 
     public func copy(_ entry: ClipboardEntry, completion: @escaping (Bool) -> Void) {
@@ -196,7 +201,7 @@ public final class ClipboardAdapter {
     var isObserving: Bool { observation != nil }
 
     public func enableHistory() {
-        source.ensureHistoryEnabled()
+        source.setHistoryEnabled(true)
         entries = source.snapshot
         isHistoryEnabled = source.isRunning
     }

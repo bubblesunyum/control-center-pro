@@ -170,6 +170,10 @@ final class FakeClipboardSource: ClipboardSource {
         isRunning = true
     }
 
+    func setHistoryEnabled(_ enabled: Bool) {
+        isRunning = enabled
+    }
+
     func copy(_ entry: ClipboardEntry, completion: @escaping (Bool) -> Void) {
         copied.append(entry.id)
         completion(true)

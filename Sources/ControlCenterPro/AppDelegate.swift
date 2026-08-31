@@ -4,6 +4,7 @@
 import AppKit
 import CCPKit
 import CCPUI
+import VorssaintEngines
 
 /// Wires the app together: the widgets it offers, the arrangement they start
 /// in, the panel that draws them, and the menu bar item that opens it.
@@ -17,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var arrangement: PanelArrangement?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        BridgedDefaults.register()
         let registry = makeStandardRegistry()
         let store = JSONFileStore(filename: "layout.json", default: standardLayout)
         let arrangement = PanelArrangement(

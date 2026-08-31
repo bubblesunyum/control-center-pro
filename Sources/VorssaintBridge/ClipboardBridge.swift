@@ -120,6 +120,11 @@ public enum BridgedClipboardHistory {
         service.syncWithPreferences()
     }
 
+    public static func setHistoryEnabled(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: DefaultsKey.clipboardHistoryEnabled)
+        service.syncWithPreferences()
+    }
+
     public static func flushBeforeTermination() {
         service.flushBeforeTermination()
     }
