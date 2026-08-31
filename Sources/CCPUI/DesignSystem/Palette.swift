@@ -38,4 +38,8 @@ public extension Color {
     /// would go if one is ever needed.
     static let widgetAccent = Color.accentColor
     static let labelMuted = Color.secondary
+    /// Baseline drawn behind a sparkline so its zero is readable.
+    static let sparklineBaseline = Color.secondary.opacity(0.28)
+    /// Faint fill under the secondary network line.
+    static let sparklineSecondaryFill = Color.green.opacity(0.08)
 }

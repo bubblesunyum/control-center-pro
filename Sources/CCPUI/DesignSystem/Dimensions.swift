@@ -32,6 +32,8 @@ public enum Radius {
     public static let panel: CGFloat = 24
     /// Controls that sit inside a card — a toggle tile, a segmented row.
     public static let control: CGFloat = 10
+    /// Small readouts inside a card, e.g. the sparkline container.
+    public static let sparkline: CGFloat = 6
 }
 
 /// How big the shell's boxes are.
@@ -68,4 +70,9 @@ public extension WidgetSize {
         case .tall: 232
         }
     }
+}
+
+public extension Layout {
+    /// Height of the miniature graphs in the System Stats card.
+    static let sparklineHeight: CGFloat = Space.three + Space.half // 28
 }

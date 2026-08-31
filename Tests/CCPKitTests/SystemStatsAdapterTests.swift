@@ -8,16 +8,16 @@ import XCTest
 final class SystemStatsAdapterTests: XCTestCase {
     // MARK: - Reporting
 
-    func testReportsCPUUsageFromSource() {
+    func testReportsCPUUsageFromSource() async {
         let source = FakeSystemStatsSource(sample: SystemStatsSample(cpuUsage: 0.42))
         let adapter = SystemStatsAdapter(source: source)
 
-        adapter.refresh()
+        await adapter.refresh()
 
         XCTAssertEqual(adapter.snapshot.cpuUsage, 0.42)
     }
 
-    func testReportsMemoryFromSource() {
+    func testReportsMemoryFromSource() async {
         let source = FakeSystemStatsSource(sample: SystemStatsSample(
             memoryUsed: 4_000_000_000,
             memoryTotal: 16_000_000_000,
@@ -25,34 +25,34 @@ final class SystemStatsAdapterTests: XCTestCase {
         ))
         let adapter = SystemStatsAdapter(source: source)
 
-        adapter.refresh()
+        await adapter.refresh()
 
         XCTAssertEqual(adapter.snapshot.memoryUsed, 4_000_000_000)
         XCTAssertEqual(adapter.snapshot.memoryTotal, 16_000_000_000)
         XCTAssertEqual(adapter.snapshot.memoryPressure, .warning)
     }
 
-    func testReportsTemperaturesFromSource() {
+    func testReportsTemperaturesFromSource() async {
         let source = FakeSystemStatsSource(sample: SystemStatsSample(
             cpuTemperature: 65,
             gpuTemperature: 72
         ))
         let adapter = SystemStatsAdapter(source: source)
 
-        adapter.refresh()
+        await adapter.refresh()
 
         XCTAssertEqual(adapter.snapshot.cpuTemperature, 65)
         XCTAssertEqual(adapter.snapshot.gpuTemperature, 72)
     }
 
-    func testReportsNetworkFromSource() {
+    func testReportsNetworkFromSource() async {
         let source = FakeSystemStatsSource(sample: SystemStatsSample(
             netDownBytesPerSec: 1_000_000,
             netUpBytesPerSec: 500_000
         ))
         let adapter = SystemStatsAdapter(source: source)
 
-        adapter.refresh()
+        await adapter.refresh()
 
         XCTAssertEqual(adapter.snapshot.netDownBytesPerSec, 1_000_000)
         XCTAssertEqual(adapter.snapshot.netUpBytesPerSec, 500_000)
@@ -60,67 +60,67 @@ final class SystemStatsAdapterTests: XCTestCase {
 
     // MARK: - History
 
-    func testCPUHistoryAccumulates() {
+    func testCPUHistoryAccumulates() async {
         let source = FakeSystemStatsSource()
         let adapter = SystemStatsAdapter(source: source, historyCapacity: 10)
 
         source.nextSample = SystemStatsSample(cpuUsage: 0.1)
-        adapter.refresh()
+        await adapter.refresh()
         source.nextSample = SystemStatsSample(cpuUsage: 0.2)
-        adapter.refresh()
+        await adapter.refresh()
         source.nextSample = SystemStatsSample(cpuUsage: 0.3)
-        adapter.refresh()
+        await adapter.refresh()
 
         XCTAssertEqual(adapter.snapshot.cpuHistory, [0.1, 0.2, 0.3])
     }
 
-    func testMemoryHistoryIsFraction() {
+    func testMemoryHistoryIsFraction() async {
         let source = FakeSystemStatsSource()
         let adapter = SystemStatsAdapter(source: source, historyCapacity: 10)
 
         source.nextSample = SystemStatsSample(memoryUsed: 4_000, memoryTotal: 16_000, memoryPressure: .normal)
-        adapter.refresh()
+        await adapter.refresh()
         source.nextSample = SystemStatsSample(memoryUsed: 8_000, memoryTotal: 16_000, memoryPressure: .normal)
-        adapter.refresh()
+        await adapter.refresh()
 
         XCTAssertEqual(adapter.snapshot.memoryHistory, [0.25, 0.5])
     }
 
-    func testNetworkHistoryAccumulates() {
+    func testNetworkHistoryAccumulates() async {
         let source = FakeSystemStatsSource()
         let adapter = SystemStatsAdapter(source: source, historyCapacity: 10)
 
         source.nextSample = SystemStatsSample(netDownBytesPerSec: 100, netUpBytesPerSec: 50)
-        adapter.refresh()
+        await adapter.refresh()
         source.nextSample = SystemStatsSample(netDownBytesPerSec: 200, netUpBytesPerSec: 60)
-        adapter.refresh()
+        await adapter.refresh()
 
         XCTAssertEqual(adapter.snapshot.netDownHistory, [100, 200])
         XCTAssertEqual(adapter.snapshot.netUpHistory, [50, 60])
     }
 
-    func testHistoryCapsAtCapacity() {
+    func testHistoryCapsAtCapacity() async {
         let source = FakeSystemStatsSource()
         let adapter = SystemStatsAdapter(source: source, historyCapacity: 3)
 
         for i in 1...5 {
             source.nextSample = SystemStatsSample(cpuUsage: Double(i) / 10)
-            adapter.refresh()
+            await adapter.refresh()
         }
 
         XCTAssertEqual(adapter.snapshot.cpuHistory, [0.3, 0.4, 0.5])
     }
 
-    func testNilSampleDoesNotAdvanceHistory() {
+    func testNilSampleDoesNotAdvanceHistory() async {
         let source = FakeSystemStatsSource()
         let adapter = SystemStatsAdapter(source: source, historyCapacity: 10)
 
         source.nextSample = SystemStatsSample(cpuUsage: 0.5)
-        adapter.refresh()
+        await adapter.refresh()
         let historyAfterFirst = adapter.snapshot.cpuHistory
 
         source.nextSample = SystemStatsSample(cpuUsage: nil)
-        adapter.refresh()
+        await adapter.refresh()
 
         XCTAssertEqual(adapter.snapshot.cpuHistory, historyAfterFirst)
         XCTAssertEqual(adapter.snapshot.cpuUsage, 0.5, "nil sample should keep last known value")
@@ -128,27 +128,31 @@ final class SystemStatsAdapterTests: XCTestCase {
 
     // MARK: - Lifecycle
 
-    func testActivateRefreshesImmediately() {
+    func testActivateSamplesOffMain() async {
         let source = FakeSystemStatsSource(sample: SystemStatsSample(cpuUsage: 0.9))
-        let adapter = SystemStatsAdapter(source: source)
+        let adapter = SystemStatsAdapter(source: source, interval: .milliseconds(50))
 
         XCTAssertNil(adapter.snapshot.cpuUsage)
 
         adapter.activate()
-
-        XCTAssertEqual(adapter.snapshot.cpuUsage, 0.9)
+        // First sample is now off the main thread; give it a turn.
+        let saw = await becomesTrue { adapter.snapshot.cpuUsage == 0.9 }
+        XCTAssertTrue(saw, "activate should sample without blocking main")
         XCTAssertTrue(adapter.isSampling)
 
         adapter.deactivate()
     }
 
-    func testActivateIsIdempotent() {
+    func testActivateIsIdempotent() async {
         let source = FakeSystemStatsSource(sample: SystemStatsSample(cpuUsage: 0.5))
         let adapter = SystemStatsAdapter(source: source, interval: .milliseconds(20))
 
         adapter.activate()
+        // Wait for first async sample
+        _ = await becomesTrue { source.sampleCount >= 1 }
         let countAfterFirst = source.sampleCount
         adapter.activate()
+        try? await Task.sleep(for: .milliseconds(10))
         XCTAssertEqual(source.sampleCount, countAfterFirst, "second activate should not trigger another immediate sample")
 
         adapter.deactivate()
@@ -159,19 +163,17 @@ final class SystemStatsAdapterTests: XCTestCase {
         let adapter = SystemStatsAdapter(source: source, interval: .milliseconds(20))
 
         adapter.activate()
-        // Let a couple of interval ticks fire
-        try? await Task.sleep(for: .milliseconds(60))
+        _ = await becomesTrue { source.sampleCount >= 2 }
         let countWhileActive = source.sampleCount
 
         adapter.deactivate()
         XCTAssertFalse(adapter.isSampling)
 
-        // Wait another interval; no new samples should arrive
         try? await Task.sleep(for: .milliseconds(60))
         XCTAssertEqual(source.sampleCount, countWhileActive, "a deactivated adapter kept sampling")
     }
 
-    func testDeactivateCancelsImmediately() {
+    func testDeactivateCancelsImmediately() async {
         let source = FakeSystemStatsSource(sample: SystemStatsSample(cpuUsage: 0.1))
         let adapter = SystemStatsAdapter(source: source, interval: .milliseconds(10))
 
@@ -182,17 +184,18 @@ final class SystemStatsAdapterTests: XCTestCase {
         XCTAssertFalse(adapter.isSampling)
     }
 
-    func testReactivatingSamplesAgain() {
+    func testReactivatingSamplesAgain() async {
         let source = FakeSystemStatsSource(sample: SystemStatsSample(cpuUsage: 0.3))
-        let adapter = SystemStatsAdapter(source: source)
+        let adapter = SystemStatsAdapter(source: source, interval: .milliseconds(50))
 
         adapter.activate()
+        _ = await becomesTrue { adapter.snapshot.cpuUsage == 0.3 }
         adapter.deactivate()
 
         source.nextSample = SystemStatsSample(cpuUsage: 0.7)
         adapter.activate()
-
-        XCTAssertEqual(adapter.snapshot.cpuUsage, 0.7)
+        let saw = await becomesTrue { adapter.snapshot.cpuUsage == 0.7 }
+        XCTAssertTrue(saw)
 
         adapter.deactivate()
     }
@@ -215,7 +218,7 @@ final class SystemStatsAdapterTests: XCTestCase {
         XCTAssertEqual(adapter.snapshot.cpuHistory, historyAtClose, "graph kept growing after close")
     }
 
-    func testIdleCPUWithPanelShutIsZero() {
+    func testIdleCPUWithPanelShutIsZero() async {
         let source = FakeSystemStatsSource(sample: SystemStatsSample(cpuUsage: 0.5))
         let adapter = SystemStatsAdapter(source: source, interval: .milliseconds(10))
 
@@ -223,6 +226,7 @@ final class SystemStatsAdapterTests: XCTestCase {
         XCTAssertEqual(source.sampleCount, 0)
 
         adapter.activate()
+        _ = await becomesTrue { source.sampleCount >= 1 }
         adapter.deactivate()
 
         XCTAssertFalse(adapter.isSampling)
@@ -240,7 +244,7 @@ final class FakeSystemStatsSource: SystemStatsSource {
         self.nextSample = sample
     }
 
-    func sample(now: TimeInterval) -> SystemStatsSample {
+    func sample(now: TimeInterval) async -> SystemStatsSample {
         sampleCount += 1
         if let handler = sampleHandler {
             return handler(now)

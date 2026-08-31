@@ -68,7 +68,12 @@ public struct BridgedTemperatureSample: Sendable, Equatable {
 /// does, with no policy about when to sample, how often, or what to do with
 /// the result. The adapter in `CCPKit` owns intervals, history and the
 /// `activate`/`deactivate` lifecycle.
-public final class BridgedMetricsSampler: @unchecked Sendable {
+/// Actor-isolated so a `Task.detached` off the main thread and a
+/// synchronous `activate`/`refresh` on the main thread never touch
+/// `NetworkSampler.previous` or `SMCClient.connection` at the same time.
+/// Upstream's own `SystemMonitor` serializes on its own queue; this is the
+/// same invariant for the shim.
+public actor BridgedMetricsSampler {
     private var previousCPUTicks: (busy: UInt64, total: UInt64)?
     private let networkSampler = NetworkSampler()
     private var smc: SMCClient?

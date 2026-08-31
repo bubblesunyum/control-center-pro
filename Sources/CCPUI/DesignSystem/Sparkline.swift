@@ -37,7 +37,7 @@ struct Sparkline: View {
                             path.move(to: CGPoint(x: 0, y: baselineY))
                             path.addLine(to: CGPoint(x: geometry.size.width, y: baselineY))
                         }
-                        .stroke(Color.secondary.opacity(0.28), lineWidth: 1)
+                        .stroke(Color.sparklineBaseline, lineWidth: Stroke.hairline)
                     }
                     Path { path in
                         path.move(to: points[0])

@@ -41,7 +41,7 @@ public final class SystemStatsWidget: CCPWidget {
 // MARK: - Content
 
 private struct SystemStatsContent: View {
-    var adapter: SystemStatsAdapter
+    @Bindable var adapter: SystemStatsAdapter
 
     var body: some View {
         WidgetCard(SystemStatsWidget.descriptor) {
@@ -70,8 +70,8 @@ private struct SystemStatsContent: View {
 
     private var memoryRow: some View {
         let snapshot = adapter.snapshot
-        let used = snapshot.memoryUsed.map { bytes($0) } ?? "--"
-        let total = snapshot.memoryTotal.map { bytes($0) } ?? "--"
+        let used = snapshot.memoryUsed.map { Self.bytes($0) } ?? "--"
+        let total = snapshot.memoryTotal.map { Self.bytes($0) } ?? "--"
         return StatRow(
             symbol: "memorychip",
             title: "Memory",
@@ -90,18 +90,18 @@ private struct SystemStatsContent: View {
         let down = snapshot.netDownBytesPerSec.map { bytesPerSec($0) } ?? "--"
         let up = snapshot.netUpBytesPerSec.map { bytesPerSec($0) } ?? "--"
         let peak = max(snapshot.netDownHistory.max() ?? 0, snapshot.netUpHistory.max() ?? 0, 1)
-        return VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 4) {
+        return VStack(alignment: .leading, spacing: Space.half) {
+            HStack(spacing: Space.half) {
                 Image(systemName: "network")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: 14)
                 Text("Network")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
                 Text("↓\(down) ↑\(up)")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.caption.weight(.medium))
                     .monospacedDigit()
                     .foregroundStyle(.primary)
                     .lineLimit(1)
@@ -114,17 +114,17 @@ private struct SystemStatsContent: View {
                     Sparkline(values: snapshot.netUpHistory, color: .green, maxValue: peak, fillOpacity: 0.08)
                 }
                 if snapshot.netDownHistory.count < 2 && snapshot.netUpHistory.count < 2 {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
                         .fill(Color.controlFill)
                         .overlay(
                             Text("Measuring…")
-                                .font(.system(size: 10))
+                                .font(.caption2)
                                 .foregroundStyle(.secondary)
                         )
                 }
             }
-            .frame(height: 28)
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .frame(height: Layout.sparklineHeight)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Network download \(down) upload \(up)")
@@ -136,32 +136,32 @@ private struct SystemStatsContent: View {
         let gpuTemp = snapshot.gpuTemperature.map { temperature($0) } ?? "--"
         return HStack(spacing: Space.one) {
             Label {
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("CPU")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.caption2.weight(.medium))
                         .foregroundStyle(.secondary)
                     Text(cpuTemp)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                         .monospacedDigit()
                 }
             } icon: {
                 Image(systemName: "thermometer")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
             Spacer()
             Label {
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("GPU")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.caption2.weight(.medium))
                         .foregroundStyle(.secondary)
                     Text(gpuTemp)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                         .monospacedDigit()
                 }
             } icon: {
                 Image(systemName: "thermometer.sun")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
@@ -176,11 +176,15 @@ private struct SystemStatsContent: View {
         "\(Int((max(0, min(1, fraction)) * 100).rounded()))%"
     }
 
-    private func bytes(_ value: UInt64) -> String {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .memory
-        formatter.allowedUnits = [.useBytes, .useKB, .useMB, .useGB]
-        return formatter.string(fromByteCount: Int64(value))
+    private static let byteFormatter: ByteCountFormatter = {
+        let f = ByteCountFormatter()
+        f.countStyle = .memory
+        f.allowedUnits = [.useBytes, .useKB, .useMB, .useGB]
+        return f
+    }()
+
+    private static func bytes(_ value: UInt64) -> String {
+        byteFormatter.string(fromByteCount: Int64(value))
     }
 
     private func bytesPerSec(_ value: Double) -> String {
@@ -219,18 +223,18 @@ private struct StatRow: View {
     var maxValue: Double? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 4) {
+        VStack(alignment: .leading, spacing: Space.half) {
+            HStack(spacing: Space.half) {
                 Image(systemName: symbol)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: 14)
                 Text(title)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
                 Text(value)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .monospacedDigit()
                     .foregroundStyle(.primary)
                     .lineLimit(1)
@@ -239,17 +243,17 @@ private struct StatRow: View {
                 if history.count >= 2 {
                     Sparkline(values: history, color: color, maxValue: maxValue, showsZeroBaseline: showsZeroBaseline)
                 } else {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
                         .fill(Color.controlFill)
                         .overlay(
                             Text(history.isEmpty ? "Measuring…" : "Collecting…")
-                                .font(.system(size: 10))
+                                .font(.caption2)
                                 .foregroundStyle(.secondary)
                         )
                 }
             }
-            .frame(height: 28)
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .frame(height: Layout.sparklineHeight)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
         }
     }
 }

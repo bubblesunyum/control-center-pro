@@ -71,7 +71,7 @@ public enum SystemMemoryPressure: String, Sendable, Equatable, CaseIterable {
 /// something a test can arrange, so nothing above this protocol talks to the
 /// system directly.
 public protocol SystemStatsSource: AnyObject, Sendable {
-    func sample(now: TimeInterval) -> SystemStatsSample
+    func sample(now: TimeInterval) async -> SystemStatsSample
 }
 
 /// One instantaneous reading from the system. Histories are the adapter's job;
@@ -114,16 +114,18 @@ public struct SystemStatsSample: Sendable, Equatable {
 }
 
 /// The real one, reading through the engine bridge.
+/// Isolated to the sampler actor so `NetworkSampler.previous` and `SMCClient`
+/// are never touched concurrently from `activate` and the interval loop.
 public final class LiveSystemStatsSource: SystemStatsSource {
     private let sampler = BridgedMetricsSampler()
 
     public init() {}
 
-    public func sample(now: TimeInterval) -> SystemStatsSample {
-        let cpu = sampler.cpuUsage()
-        let memory = sampler.memorySample()
-        let temps = sampler.temperatureSample(now: now)
-        let network = sampler.networkSample(now: now)
+    public func sample(now: TimeInterval) async -> SystemStatsSample {
+        let cpu = await sampler.cpuUsage()
+        let memory = await sampler.memorySample()
+        let temps = await sampler.temperatureSample(now: now)
+        let network = await sampler.networkSample(now: now)
         return SystemStatsSample(
             cpuUsage: cpu,
             memoryUsed: memory?.used,
@@ -179,18 +181,27 @@ public final class SystemStatsAdapter {
 
     /// Start sampling. Idempotent — a second open while already open does not
     /// stack a second timer.
+    ///
+    /// The first sample is taken off the main thread: `BridgedMetricsSampler`
+    /// touches `SMCClient` and `host_statistics`, and the first call enumerates
+    /// hundreds of SMC keys. Doing that on `MainActor` would stall the panel's
+    /// 100ms open animation (see `SystemMetricsBridge.swift:211`).
     public func activate() {
         guard task == nil else { return }
-        // One immediate sample so the card does not first draw a graph of
-        // nothing while the interval waits out its first second.
-        refresh()
         task = Task { [weak self] in
             guard let self else { return }
+            // Immediate sample off main so the card has something to draw within
+            // one tick without paying main-thread cost.
+            await self.refresh()
             let interval = await self.interval
             while !Task.isCancelled {
-                try? await Task.sleep(for: interval)
+                do {
+                    try await Task.sleep(for: interval)
+                } catch {
+                    return
+                }
                 guard !Task.isCancelled else { return }
-                await self.refreshAsync()
+                await self.refresh()
             }
         }
     }
@@ -204,19 +215,12 @@ public final class SystemStatsAdapter {
 
     public var isSampling: Bool { task != nil }
 
-    /// One synchronous sample, published on main. Useful for tests and for the
+    /// One sample, published on main. Engine work runs on the sampler actor;
+    /// this hop keeps the main thread free. Useful for tests and for the
     /// immediate sample in `activate()`.
-    public func refresh() {
+    public func refresh() async {
         let now = ProcessInfo.processInfo.systemUptime
-        let sample = source.sample(now: now)
-        apply(sample)
-    }
-
-    private func refreshAsync() async {
-        let now = ProcessInfo.processInfo.systemUptime
-        let sample = await Task.detached { [source] in
-            source.sample(now: now)
-        }.value
+        let sample = await source.sample(now: now)
         guard !Task.isCancelled else { return }
         apply(sample)
     }
