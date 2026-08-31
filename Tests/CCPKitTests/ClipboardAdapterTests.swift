@@ -165,7 +165,10 @@ final class FakeClipboardSource: ClipboardSource {
             .eraseToAnyPublisher()
     }
 
-    func ensureHistoryEnabled() { ensureCount += 1 }
+    func ensureHistoryEnabled() {
+        ensureCount += 1
+        isRunning = true
+    }
 
     func copy(_ entry: ClipboardEntry, completion: @escaping (Bool) -> Void) {
         copied.append(entry.id)

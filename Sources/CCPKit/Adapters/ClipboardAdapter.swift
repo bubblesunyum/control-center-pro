@@ -138,6 +138,7 @@ public final class LiveClipboardSource: ClipboardSource {
 @Observable
 public final class ClipboardAdapter {
     public private(set) var entries: [ClipboardEntry]
+    public private(set) var isHistoryEnabled: Bool
 
     @ObservationIgnored private let source: ClipboardSource
     @ObservationIgnored private var observation: AnyCancellable?
@@ -150,10 +151,12 @@ public final class ClipboardAdapter {
     public init(source: ClipboardSource) {
         self.source = source
         self.entries = source.snapshot
+        self.isHistoryEnabled = source.isRunning
         // History must already be warm even before the first panel open — a
         // copy made while the panel is shut is exactly the one the widget will
         // show next time it opens.
         source.ensureHistoryEnabled()
+        self.isHistoryEnabled = source.isRunning
         // Start observing immediately so background copies land in `entries`
         // without waiting for the first `activate()`.
         observe()
@@ -167,6 +170,7 @@ public final class ClipboardAdapter {
         // Re-read in case `ensureHistoryEnabled` just started the timer and the
         // publisher hasn't fired yet.
         entries = source.snapshot
+        isHistoryEnabled = source.isRunning
         if observation == nil { observe() }
     }
 
@@ -191,11 +195,10 @@ public final class ClipboardAdapter {
 
     var isObserving: Bool { observation != nil }
 
-    public var isHistoryEnabled: Bool { source.isRunning }
-
     public func enableHistory() {
         source.ensureHistoryEnabled()
         entries = source.snapshot
+        isHistoryEnabled = source.isRunning
     }
 
     public func copy(_ entry: ClipboardEntry, completion: ((Bool) -> Void)? = nil) {
@@ -240,6 +243,7 @@ public final class ClipboardAdapter {
     private func readSnapshot() {
         guard observation != nil else { return }
         entries = source.snapshot
+        isHistoryEnabled = source.isRunning
     }
 }
 
