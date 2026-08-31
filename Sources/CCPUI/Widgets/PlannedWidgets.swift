@@ -31,16 +31,6 @@ final class QuickTogglesWidget: PlaceholderWidget {
 }
 
 @MainActor
-final class ClipboardWidget: PlaceholderWidget {
-    static let descriptor = WidgetDescriptor(
-        id: "clipboard",
-        title: "Clipboard",
-        symbolName: "doc.on.clipboard",
-        size: .tall
-    )
-}
-
-@MainActor
 final class AudioMixerWidget: PlaceholderWidget {
     static let descriptor = WidgetDescriptor(
         id: "audio-mixer",

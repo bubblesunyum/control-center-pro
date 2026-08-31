@@ -42,4 +42,8 @@ public extension Color {
     static let sparklineBaseline = Color.secondary.opacity(0.28)
     /// Faint fill under the secondary network line.
     static let sparklineSecondaryFill = Color.green.opacity(0.08)
+
+    /// Pinned clipboard row — faint accent so a pinned entry reads as kept.
+    static let pinnedFill = Color.accentColor.opacity(0.09)
+    static let pinnedStroke = Color.accentColor.opacity(0.22)
 }

@@ -72,15 +72,14 @@ let package = Package(
                 // should shrink. Core/Permissions.swift is NOT on it: it is
                 // foundational — excluding it caused 1336 errors on its own —
                 // so its four lines of UI coupling are patched out instead.
-                // Two files here are still needed for v1 and have their own
-                // beads: Clipboard/ClipboardHistoryService.swift and
-                // SystemMonitor/ProcessUsageService.swift. The rest are the
+                // One file here is still needed for v1 and has its own bead:
+                // SystemMonitor/ProcessUsageService.swift. The clipboard pair
+                // previously here was patched in ccp-8ld.5. The rest are the
                 // "Later/No" column of the BRIEF's engine inventory.
                 "Vorssaint/Support/SelfTest.swift",
                 "Vorssaint/Services/SettingsBackup.swift",
                 "Vorssaint/Services/ShortcutCapture.swift",
                 "Vorssaint/Services/CleaningMode/CleaningModeManager.swift",
-                "Vorssaint/Services/Clipboard/ClipboardHistoryService.swift",
                 "Vorssaint/Services/CommandBar/CommandBarCatalog.swift",
                 "Vorssaint/Services/CommandBar/CommandBarService.swift",
                 "Vorssaint/Services/DockPreview/DockPreviewService.swift",
@@ -106,7 +105,6 @@ let package = Package(
                 // can too.
                 "Vorssaint/Services/SelfUninstall.swift",
                 "Vorssaint/Services/TransientPaste.swift",
-                "Vorssaint/Services/Clipboard/ClipboardAutoClearService.swift",
                 "Vorssaint/Services/DockClick/DockClickService.swift",
                 "Vorssaint/Services/QuickTools/ScreenshotPinController.swift",
                 "Vorssaint/Services/QuickTools/ScreenshotService.swift",

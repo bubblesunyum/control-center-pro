@@ -10,6 +10,7 @@ import SwiftUI
 /// eye tests every difference before discarding it. Reach for a step; a raw
 /// number is a decision to justify.
 public enum Space {
+    public static let quarter: CGFloat = 2
     public static let half: CGFloat = 4
     public static let one: CGFloat = 8
     public static let oneHalf: CGFloat = 12
@@ -42,6 +43,10 @@ public enum Radius {
 /// is one more column, not a reflow — and a widget's height comes from the size
 /// it declares. `WidgetSize` names the intent; the points belong here.
 public enum Layout {
+    /// Height of the scrollable clipboard list.
+    static let clipboardListHeight: CGFloat = 220
+    /// Size of a row's leading icon and trailing menu button.
+    static let rowActionSize: CGFloat = 22
     public static let laneWidth: CGFloat = 240
     /// How far the panel sits from the screen's top-right corner.
     public static let panelInset: CGFloat = Space.one

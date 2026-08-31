@@ -19,6 +19,12 @@ enum ClipboardHistoryMoveDirection {
 /// images and files; keeps a small local history and avoids obvious
 /// secret-looking strings by default.
 final class ClipboardHistoryService: ObservableObject {
+    // ── CCP PATCH ─────────────────────────────────────────────────────────
+    /// Hook so the engine can vend its quick-panel without naming a UI type.
+    /// Upstream sets this to `ClipboardQuickPanelView()` at launch; CCP leaves
+    /// it nil and shows history in its own widget instead. See PATCHES.md.
+    static var makeQuickPanelContent: (() -> NSViewController)?
+    // ── END CCP PATCH ─────────────────────────────────────────────────────
     static let shared = ClipboardHistoryService()
     static let quickPanelCompactSize = NSSize(width: 560, height: 420)
     static let quickPanelPreviewSize = NSSize(width: 840, height: 500)
@@ -1094,11 +1100,19 @@ final class ClipboardHistoryService: ObservableObject {
         panel.hidesOnDeactivate = false
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
-        let host = NSHostingController(rootView: ClipboardQuickPanelView())
-        // The SwiftUI root owns the exact compact/preview frames and extends
-        // under the title bar, so preferred-size tracking would add that bar
-        // to the panel height a second time.
-        host.sizingOptions = []
+        // ── CCP PATCH: UI type lives in Vorssaint/UI, which this fork does not
+        // build. The panel content is vended through the hook; without it CCP
+        // shows an empty panel (its own widget owns the UI). See PATCHES.md.
+        // Upstream's original `host.sizingOptions = []` is set inside the
+        // factory when the type is known.
+        let host: NSViewController = {
+            if let factory = Self.makeQuickPanelContent {
+                return factory()
+            }
+            let fallback = NSViewController()
+            fallback.view = NSView(frame: NSRect(origin: .zero, size: initialSize))
+            return fallback
+        }()
         panel.contentViewController = host
         panel.setFrame(NSRect(origin: .zero, size: initialSize),
                        display: false)

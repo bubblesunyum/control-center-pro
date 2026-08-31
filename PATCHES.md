@@ -63,6 +63,18 @@ prefixes do — if upstream adds a file that must be excluded, remember the
 
 ---
 
+## `Sources/Vorssaint/Services/Clipboard/ClipboardHistoryService.swift` — quick panel behind a hook
+
+**What.** `ensurePanel()` constructed `NSHostingController(rootView: ClipboardQuickPanelView())` directly; it now calls an optional `makeQuickPanelContent` factory. Added `static var makeQuickPanelContent: (() -> NSViewController)?` fenced in `CCP PATCH`. The original `host.sizingOptions = []` is now set inside the factory when the type is known.
+
+**Why.** `ClipboardQuickPanelView` lives in `UI/`, which this fork does not build. The hook mirrors `Permissions.showGuide`: upstream sets the factory to its view at launch, CCP leaves it nil and shows history in its own widget. Without the hook the file cannot compile in `VorssaintEngines`.
+
+**Deleting it.** Send the hook upstream — small, strictly more flexible, costs them nothing. If accepted, this entry goes away.
+
+**On merge.** Conflicts only if upstream edits `ensurePanel()`. Reapply the hook.
+
+---
+
 ## `Sources/Vorssaint/Core/Permissions.swift` — UI overlay behind a hook
 
 **What.** Four lines. `requestAccessibility()` and `requestScreenRecording()`
@@ -115,7 +127,7 @@ Closed as ccp-v64, which had asked for the identity rename in place.
 
 ## Not a patch: the `exclude` list
 
-`Package.swift` excludes 38 files under `Core/`, `Services/`, and `Support/`.
+`Package.swift` excludes 36 files under `Core/`, `Services/`, and `Support/`.
 Those files are unmodified — they are simply not compiled, because they name a
 type that lives in `UI/`.
 
@@ -125,17 +137,16 @@ upstream's `Services/` as "mostly UI-free" by counting SwiftUI imports (22 of
 UI type directly, and another 14 fall out behind them.
 
 Almost all of it is the BRIEF's own "Later/No" column: CommandBar, QuickTools,
-Recorder, Shelf, Snippets, Switcher, RadialMenu, DockPreview, Cleaner. Three
-v1-relevant files are casualties and have beads of their own:
+Recorder, Shelf, Snippets, Switcher, RadialMenu, DockPreview, Cleaner. One
+v1-relevant file is still a casualty and has its own bead; the clipboard pair
+was patched in `ccp-8ld.5` and now builds:
 
 | File | Needs | Bead |
 |---|---|---|
-| `Services/Clipboard/ClipboardHistoryService.swift` | `ClipboardQuickPanelView` | ccp-8ld.5 |
-| `Services/Clipboard/ClipboardAutoClearService.swift` | the above | ccp-8ld.5 |
 | `Services/SystemMonitor/ProcessUsageService.swift` | `BreakdownKind` | ccp-8ld.2 |
 
 Every other v1 engine came through whole: Metrics 16/16, Audio 10/10, Media 3/3,
-Display 5/5, Bluetooth 2/2, KeepAwake, and 3 of 4 SystemMonitor files.
+Display 5/5, Bluetooth 2/2, KeepAwake, Clipboard 5/5, and 3 of 4 SystemMonitor files.
 
 **The list should shrink.** It is the honest measure of the fork boundary, and
 each file that leaves it is either an upstream PR that landed or a leak we
