@@ -76,6 +76,22 @@ final class PermissionsAdapterTests: XCTestCase {
         XCTAssertEqual(adapter.state(of: .accessibility), .granted)
     }
 
+    /// The engine schedules its permission reads rather than making them, so an
+    /// adapter that trusted the value sitting there when `refresh()` returned
+    /// would open the panel showing the state from when it last closed.
+    func testActivateShowsAGrantThatLandsAfterRefreshReturns() async {
+        let source = FakePermissionSource()
+        source.refreshLandsLater = true
+        source.refreshedSnapshot = permissions(accessibility: .granted)
+        let adapter = PermissionsAdapter(source: source)
+
+        adapter.activate()
+        XCTAssertEqual(adapter.state(of: .accessibility), .undetermined, "nothing has landed yet")
+
+        let caughtUp = await becomesTrue { adapter.state(of: .accessibility) == .granted }
+        XCTAssertTrue(caughtUp, "the panel never caught up with the refresh it asked for")
+    }
+
     func testActivateIsIdempotent() {
         let source = FakePermissionSource()
         let adapter = PermissionsAdapter(source: source)
@@ -105,6 +121,40 @@ final class PermissionsAdapterTests: XCTestCase {
 
         let arrived = await becomesTrue { adapter.state(of: .accessibility) == .granted }
         XCTAssertFalse(arrived, "a deactivated adapter kept listening")
+    }
+
+    /// The panel spends most of its life shut, and an observation that only
+    /// tears down at the next permission change would run for that whole time.
+    func testDeactivateCancelsTheObservationImmediately() {
+        let source = FakePermissionSource()
+        let adapter = PermissionsAdapter(source: source)
+
+        adapter.activate()
+        XCTAssertEqual(source.observerCount, 1)
+
+        adapter.deactivate()
+        XCTAssertEqual(source.observerCount, 0, "a shut panel is still observing permissions")
+    }
+
+    func testOpenAndShutRepeatedlyLeavesNothingObserving() {
+        let source = FakePermissionSource()
+        let adapter = PermissionsAdapter(source: source)
+
+        for _ in 0..<5 {
+            adapter.activate()
+            adapter.deactivate()
+        }
+
+        XCTAssertEqual(source.observerCount, 0)
+    }
+
+    func testReactivatingObservesExactlyOnce() {
+        let source = FakePermissionSource()
+        let adapter = PermissionsAdapter(source: source)
+        adapter.activate()
+        adapter.deactivate()
+        adapter.activate()
+        XCTAssertEqual(source.observerCount, 1)
     }
 
     func testDeactivateThenActivateWatchesAgain() {

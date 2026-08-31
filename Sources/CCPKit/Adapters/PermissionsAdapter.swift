@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Control Center Pro contributors
 
+import Combine
+import Foundation
 import Observation
 import VorssaintEngines
 
@@ -28,8 +30,7 @@ public final class PermissionsAdapter {
     public private(set) var snapshot: PermissionSnapshot
 
     @ObservationIgnored private let source: PermissionSource
-    // nonisolated(unsafe): written only on MainActor, cancelled from deinit which is non-isolated.
-    @ObservationIgnored private nonisolated(unsafe) var watch: Task<Void, Never>?
+    @ObservationIgnored private var observation: AnyCancellable?
 
     public convenience init() {
         self.init(source: SystemPermissionSource())
@@ -40,24 +41,34 @@ public final class PermissionsAdapter {
         self.snapshot = source.snapshot
     }
 
-    deinit { watch?.cancel() }
 
     public func activate() {
-        guard watch == nil else { return }
+        guard observation == nil else { return }
         source.refresh()
         snapshot = source.snapshot
-        let updates = source.updates
-        watch = Task { @MainActor [weak self] in
-            for await snapshot in updates {
-                guard !Task.isCancelled else { return }
-                self?.snapshot = snapshot
-            }
+        observation = source.changes.sink { [weak self] in
+            // The engine emits in willSet, before its storage is updated, so
+            // the new values are only in place on the next turn.
+            DispatchQueue.main.async { self?.readSnapshot() }
         }
+        // `refresh()` schedules its writes rather than making them, so the read
+        // above sees the state as it was when the panel last closed. The main
+        // queue is FIFO, so re-reading behind those writes is what actually
+        // shows a permission granted while the panel was shut.
+        DispatchQueue.main.async { [weak self] in self?.readSnapshot() }
     }
 
+    /// Cancels synchronously: idle CPU with the panel shut is a feature, and a
+    /// teardown that only takes effect at the next permission change would
+    /// leave an observation running against it for as long as nothing changed.
     public func deactivate() {
-        watch?.cancel()
-        watch = nil
+        observation?.cancel()
+        observation = nil
+    }
+
+    private func readSnapshot() {
+        guard observation != nil else { return }
+        snapshot = source.snapshot
     }
 
     public func state(of permission: WidgetPermission) -> PermissionState {

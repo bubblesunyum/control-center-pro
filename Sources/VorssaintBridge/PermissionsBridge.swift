@@ -126,20 +126,20 @@ public enum SystemPermissions {
         }
     }
 
-    /// The engine publishes through `ObservableObject`; CCP works in
-    /// async/await, and this is the seam where that conversion belongs.
-    public static var updates: AsyncStream<PermissionSnapshot> {
-        AsyncStream { continuation in
-            let cancellable = Permissions.shared.objectWillChange
-                .receive(on: DispatchQueue.main)
-                .sink { _ in
-                    // objectWillChange fires in willSet before the @Published storage updates,
-                    // so reading snapshot here would yield the previous value. Defer to the
-                    // next run-loop turn where the new values are in place.
-                    DispatchQueue.main.async { continuation.yield(snapshot) }
-                }
-            continuation.onTermination = { _ in cancellable.cancel() }
-        }
+    /// Fires when any permission state changes.
+    ///
+    /// Re-exported in the engine's own shape: `Permissions` is an
+    /// `ObservableObject`, so a publisher is what it has to offer. Converting
+    /// that to CCP's async/await is a decision about how the app observes, and
+    /// decisions live in the adapter.
+    ///
+    /// Emits in `willSet`, before the published storage is updated — a
+    /// subscriber that reads ``snapshot`` synchronously sees the previous
+    /// values.
+    public static var changes: AnyPublisher<Void, Never> {
+        Permissions.shared.objectWillChange
+            .map { _ in () }
+            .eraseToAnyPublisher()
     }
 
     private static func authorization(

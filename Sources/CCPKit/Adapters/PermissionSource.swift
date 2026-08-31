@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Control Center Pro contributors
 
+import Combine
 import VorssaintEngines
 
 /// Where permission answers come from.
@@ -10,8 +11,8 @@ import VorssaintEngines
 @MainActor
 public protocol PermissionSource: AnyObject {
     var snapshot: PermissionSnapshot { get }
-    /// A stream of snapshots, one per change the system reports.
-    var updates: AsyncStream<PermissionSnapshot> { get }
+    /// Fires when any permission state changes.
+    var changes: AnyPublisher<Void, Never> { get }
     func refresh()
     func request(_ kind: PermissionKind)
     func openSettings(for kind: PermissionKind)
@@ -23,7 +24,7 @@ public final class SystemPermissionSource: PermissionSource {
     public init() {}
 
     public var snapshot: PermissionSnapshot { SystemPermissions.snapshot }
-    public var updates: AsyncStream<PermissionSnapshot> { SystemPermissions.updates }
+    public var changes: AnyPublisher<Void, Never> { SystemPermissions.changes }
     public func refresh() { SystemPermissions.refresh() }
     public func request(_ kind: PermissionKind) { SystemPermissions.request(kind) }
     public func openSettings(for kind: PermissionKind) { SystemPermissions.openSettings(for: kind) }
