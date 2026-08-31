@@ -32,7 +32,7 @@ public final class ShelfWindowController {
         if let token = moveObserver { NotificationCenter.default.removeObserver(token) }
     }
 
-    public var isVisible: Bool { panel?.isVisible == true }
+    public private(set) var isVisible = false
 
     public func toggle() {
         isVisible ? hide() : show()
@@ -47,6 +47,7 @@ public final class ShelfWindowController {
         }
         panel.orderFrontRegardless()
         panel.makeKey()
+        isVisible = true
         // Pinning semantics: while pinned the window stays even if focus leaves;
         // AppKit's .nonactivatingPanel already hides on deactivate = false, so
         // nothing extra to manage there. The pin just suppresses auto-hide that
@@ -59,6 +60,7 @@ public final class ShelfWindowController {
 
     public func hide() {
         panel?.orderOut(nil)
+        isVisible = false
     }
 
     private func ensurePanel() -> NSPanel {
@@ -120,7 +122,7 @@ public final class ShelfWindowController {
     private final class ShelfFloatingPanel: NSPanel {
         override var canBecomeKey: Bool { true }
         override func cancelOperation(_ sender: Any?) {
-            ShelfWindowController.shared.hide()
+            Task { @MainActor in ShelfWindowController.shared.hide() }
         }
     }
 }

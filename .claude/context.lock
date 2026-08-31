@@ -2,7 +2,7 @@
   ".claude/HARNESS.md": {
     ".claude/agents/librarian.md": "4b8c643b0a364fd5",
     ".claude/agents/reviewer-correctness.md": "dfa12aa581b45c70",
-    ".claude/agents/reviewer-design.md": "056a9b0334d8c28c",
+    ".claude/agents/reviewer-design.md": "e33457cee19285cc",
     ".claude/agents/reviewer-taste.md": "cfed7953d377c3bc",
     ".claude/skills/workflow/SKILL.md": "04b12f89702a42bc",
     "doc": "95103ee2509b42c5",
@@ -33,7 +33,7 @@
     "scripts/verify.sh": "0f8dfc7567660e4e"
   },
   "CLAUDE.md": {
-    "Package.swift": "f417eee44871f376",
-    "doc": "39a558f709133e19"
+    "Package.swift": "f6dc26098d25ca1e",
+    "doc": "286b049fa6af4f6d"
   }
 }

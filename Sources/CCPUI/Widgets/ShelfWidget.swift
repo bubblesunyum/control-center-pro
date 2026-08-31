@@ -41,8 +41,8 @@ private struct ShelfWidgetContent: View {
                     emptyState
                 } else {
                     preview
+                    actions
                 }
-                actions
             }
             .padding(Space.oneHalf)
         }
@@ -54,15 +54,15 @@ private struct ShelfWidgetContent: View {
     private var header: some View {
         HStack(spacing: Space.half) {
             Image(systemName: "tray.full")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             Text("Shelf")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.caption.weight(.semibold))
                 .lineLimit(1)
             if !store.items.isEmpty {
                 Text("\(store.items.count)")
-                    .font(.system(size: 11, weight: .bold))
-                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .font(.caption2.weight(.bold))
+                    .padding(.horizontal, Space.half + Space.quarter).padding(.vertical, Space.quarter / 2)
                     .background(Capsule().fill(Color.secondary.opacity(0.18)))
                     .accessibilityLabel("\(store.items.count) items on shelf")
             }
@@ -71,7 +71,7 @@ private struct ShelfWidgetContent: View {
                 window.toggle()
             } label: {
                 Image(systemName: window.isVisible ? "xmark" : "arrow.up.forward.app")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .frame(width: 28, height: 28)
                     .background(Circle().fill(Color.controlFill))
                     .overlay(Circle().strokeBorder(Color.cardStroke, lineWidth: Stroke.hairline))
@@ -96,7 +96,7 @@ private struct ShelfWidgetContent: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, Space.one)
+        .padding(Space.one)
         .background(Color.controlFill, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
         .accessibilityElement(children: .combine)
     }
@@ -114,29 +114,26 @@ private struct ShelfWidgetContent: View {
                         .padding(.horizontal, Space.half)
                 }
             }
-            .padding(.vertical, Space.quarter)
         }
+        .contentMargins(.horizontal, Space.one, for: .scrollContent)
+        .contentMargins(.vertical, Space.one, for: .scrollContent)
+        .background(Color.controlFill, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
     }
 
     private var actions: some View {
-        HStack(spacing: Space.half) {
-            Button {
-                window.show()
-            } label: {
-                Label(store.items.isEmpty ? "Open Shelf" : "Open (\(store.items.count))",
-                      systemImage: "tray.full")
-                    .font(.caption.weight(.medium))
-                    .frame(maxWidth: .infinity)
+        HStack {
+            Spacer(minLength: 0)
+            Button(store.selection.isEmpty ? "Clear" : "Remove Selected", role: .destructive) {
+                if store.selection.isEmpty {
+                    store.clear()
+                } else {
+                    store.removeSelected()
+                }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
             .controlSize(.small)
-
-            if !store.items.isEmpty {
-                Button("Clear", role: .destructive) { store.clear() }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .accessibilityLabel("Clear shelf")
-            }
+            .accessibilityLabel(store.selection.isEmpty ? "Clear shelf" : "Remove selected from shelf")
         }
     }
 }
@@ -147,10 +144,10 @@ private struct ShelfWidgetChip: View {
     var body: some View {
         VStack(spacing: Space.quarter) {
             Image(systemName: symbol)
-                .font(.system(size: 14))
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .frame(width: 36, height: 28)
-                .background(Color.controlFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .background(Color.cardFill, in: RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
             Text(item.title)
                 .font(.caption2)
                 .lineLimit(1)
