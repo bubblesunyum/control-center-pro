@@ -48,6 +48,7 @@ final class AudioMixerWidget: PlaceholderWidget {
 public let standardLayout = PanelLayout([
     ["system-stats", "clipboard"],
     ["quick-toggles", "now-playing", "audio-mixer"],
+    ["shelf"],
 ])
 
 /// Every widget this build offers, in the order a gallery lists them.
@@ -59,5 +60,6 @@ public func makeStandardRegistry() -> WidgetRegistry {
     registry.register(NowPlayingWidget.self)
     registry.register(AudioMixerWidget.self)
     registry.register(ClipboardWidget.self)
+    registry.register(ShelfWidget.self)
     return registry
 }

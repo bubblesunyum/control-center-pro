@@ -40,11 +40,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--edit-mode") {
             panel.startEditing()
         }
+        if CommandLine.arguments.contains("--show-shelf") {
+            ShelfWindowController.shared.show()
+        }
     }
 
     /// The autosave is deliberately lazy, so quitting is the one moment it has
     /// to stop being.
     func applicationWillTerminate(_ notification: Notification) {
         arrangement?.flush()
+        ShelfStore.shared.flush()
     }
 }
