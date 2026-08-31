@@ -25,11 +25,13 @@ public final class ShelfWidget: CCPWidget {
 
     public func makeView() -> some View {
         ShelfWidgetContent()
+            .environment(ShelfStore.shared)
     }
 }
 
 private struct ShelfWidgetContent: View {
-    @State private var store = ShelfStore.shared
+    @Environment(ShelfStore.self) private var store
+    @State private var window = ShelfWindowController.shared
 
     var body: some View {
         GlassCard {
@@ -66,17 +68,17 @@ private struct ShelfWidgetContent: View {
             }
             Spacer(minLength: 0)
             Button {
-                ShelfWindowController.shared.toggle()
+                window.toggle()
             } label: {
-                Image(systemName: ShelfWindowController.shared.isVisible ? "xmark" : "arrow.up.forward.app")
+                Image(systemName: window.isVisible ? "xmark" : "arrow.up.forward.app")
                     .font(.system(size: 12, weight: .semibold))
                     .frame(width: 28, height: 28)
                     .background(Circle().fill(Color.controlFill))
                     .overlay(Circle().strokeBorder(Color.cardStroke, lineWidth: Stroke.hairline))
             }
             .buttonStyle(.plain)
-            .help(ShelfWindowController.shared.isVisible ? "Hide shelf" : "Open shelf")
-            .accessibilityLabel(ShelfWindowController.shared.isVisible ? "Hide shelf" : "Open shelf")
+            .help(window.isVisible ? "Hide shelf" : "Open shelf")
+            .accessibilityLabel(window.isVisible ? "Hide shelf" : "Open shelf")
         }
     }
 
@@ -119,7 +121,7 @@ private struct ShelfWidgetContent: View {
     private var actions: some View {
         HStack(spacing: Space.half) {
             Button {
-                ShelfWindowController.shared.show()
+                window.show()
             } label: {
                 Label(store.items.isEmpty ? "Open Shelf" : "Open (\(store.items.count))",
                       systemImage: "tray.full")

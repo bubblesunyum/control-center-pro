@@ -28,31 +28,31 @@ struct ShelfView: View {
     static let tileAreaHeight: CGFloat = 188
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 11) {
+        VStack(alignment: .leading, spacing: Space.oneHalf) {
             header
             tiles
             if !shelf.items.isEmpty {
                 bottomBar
             }
         }
-        .padding(14)
+        .padding(Space.oneHalf)
         .frame(width: Self.panelWidth)
         .background(
             ZStack {
                 VisualEffectViewRepresentable(material: .popover)
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
                 Color.cardFill
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
             }
         )
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(isDropTargeted ? Color.accentColor : Color.white.opacity(0.12),
-                              lineWidth: isDropTargeted ? 2 : 1)
+            RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                .strokeBorder(isDropTargeted ? Color.accentColor : Color.cardStroke,
+                              lineWidth: isDropTargeted ? 2 : Stroke.hairline)
         )
         .overlay(alignment: .topLeading) {
-            ShelfMoveHandle()
+            ShelfPanelMoveViewRepresentable()
                 .frame(width: Self.panelWidth - 96, height: 55)
         }
         .animation(.easeOut(duration: 0.15), value: isDropTargeted)
@@ -64,25 +64,25 @@ struct ShelfView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(spacing: 7) {
-            HStack(spacing: 7) {
+        HStack(spacing: Space.half) {
+            HStack(spacing: Space.half) {
                 Image(systemName: "tray.full")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Text(title)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .lineLimit(1)
                     .truncationMode(.middle)
                 if !shelf.items.isEmpty {
                     Text("\(shelf.items.count)")
-                        .font(.system(size: 11, weight: .bold))
-                        .padding(.horizontal, 6).padding(.vertical, 1)
+                        .font(.caption2.weight(.bold))
+                        .padding(.horizontal, Space.half + Space.quarter).padding(.vertical, 1)
                         .background(Capsule().fill(Color.secondary.opacity(0.18)))
                 }
                 Spacer(minLength: 0)
             }
             .contentShape(Rectangle())
-            .overlay(ShelfMoveHandle())
+            .overlay(ShelfPanelMoveViewRepresentable())
 
             pinButton
             closeButton
@@ -92,18 +92,18 @@ struct ShelfView: View {
     private var pinButton: some View {
         Button { shelf.togglePin() } label: {
             Image(systemName: shelf.isPinned ? "pin.fill" : "pin")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.caption.weight(.semibold))
                 .frame(width: 30, height: 30)
                 .background(
                     Circle().fill(shelf.isPinned
                                   ? Color.accentColor.opacity(pinHovered ? 0.30 : 0.20)
-                                  : Color.white.opacity(pinHovered ? 0.18 : 0.11))
+                                  : Color.controlFill)
                 )
                 .overlay(
                     Circle().strokeBorder(shelf.isPinned
                                           ? Color.accentColor.opacity(0.65)
-                                          : Color.white.opacity(pinHovered ? 0.75 : 0.32),
-                                          lineWidth: 1)
+                                          : Color.cardStroke,
+                                          lineWidth: Stroke.hairline)
                 )
                 .contentShape(Circle())
         }
@@ -117,10 +117,10 @@ struct ShelfView: View {
     private var closeButton: some View {
         Button { (onDismiss ?? { ShelfWindowController.shared.hide() })() } label: {
             Image(systemName: "xmark")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.caption.weight(.semibold))
                 .frame(width: 30, height: 30)
-                .background(Circle().fill(Color.white.opacity(closeHovered ? 0.18 : 0.11)))
-                .overlay(Circle().strokeBorder(Color.white.opacity(closeHovered ? 0.75 : 0.32), lineWidth: 1))
+                .background(Circle().fill(Color.controlFill))
+                .overlay(Circle().strokeBorder(Color.cardStroke, lineWidth: Stroke.hairline))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -133,12 +133,12 @@ struct ShelfView: View {
     // MARK: - Bottom bar
 
     private var bottomBar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Space.one) {
             Text("Drop files here — drag out to any app")
-                .font(.system(size: 10))
+                .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
-            Spacer(minLength: 8)
+            Spacer(minLength: Space.half)
             clearButton
         }
         .frame(minHeight: 30)
@@ -153,22 +153,24 @@ struct ShelfView: View {
             }
         } label: {
             Image(systemName: shelf.selection.isEmpty ? "trash" : "trash.fill")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.caption.weight(.semibold))
                 .frame(width: 42, height: 28)
                 .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
                         .fill(Color.red.opacity(clearHovered ? 0.20 : 0.07))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .strokeBorder(Color.red.opacity(clearHovered ? 0.34 : 0.12), lineWidth: 0.8)
+                    RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                        .strokeBorder(Color.red.opacity(clearHovered ? 0.34 : 0.12), lineWidth: Stroke.hairline)
                 )
-                .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
         }
         .buttonStyle(.plain)
         .foregroundStyle(clearHovered ? Color.red.opacity(0.82) : Color.secondary)
         .onHover { clearHovered = $0 }
         .help(shelf.selection.isEmpty ? "Clear all" : "Remove selected")
+        .accessibilityLabel(shelf.selection.isEmpty ? "Clear all" : "Remove selected")
+        .accessibilityHint(shelf.selection.isEmpty ? "Removes all items from the shelf" : "Removes selected items")
     }
 
     private var title: String {
@@ -189,29 +191,29 @@ struct ShelfView: View {
     }
 
     private var emptyState: some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
+        RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+            .strokeBorder(style: StrokeStyle(lineWidth: Stroke.hairline, dash: [6, 5]))
             .foregroundStyle(.secondary.opacity(0.4))
             .frame(height: Self.tileAreaHeight)
             .overlay(
-                VStack(spacing: 8) {
+                VStack(spacing: Space.half) {
                     Image(systemName: "arrow.down.to.line")
-                        .font(.system(size: 21))
+                        .font(.title3)
                         .foregroundStyle(.secondary)
                     Text("Drop files, images, links or text here")
-                        .font(.system(size: 12))
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
                 }
             )
-            .overlay(ShelfMoveHandle())
+            .overlay(ShelfPanelMoveViewRepresentable())
     }
 }
 
 // MARK: - Move handle (AppKit drag)
 
-private struct ShelfMoveHandle: NSViewRepresentable {
+private struct ShelfPanelMoveViewRepresentable: NSViewRepresentable {
     func makeNSView(context: Context) -> ShelfPanelMoveView {
         ShelfPanelMoveView()
     }
@@ -234,21 +236,20 @@ final class ShelfPanelMoveView: NSView {
 private struct ShelfTilesGrid: View {
     @Environment(ShelfStore.self) private var shelf
 
-    private let columns = [GridItem(.fixed(78), spacing: 10),
-                           GridItem(.fixed(78), spacing: 10),
-                           GridItem(.fixed(78), spacing: 10)]
+    private let columns = [GridItem(.fixed(78), spacing: Space.one),
+                           GridItem(.fixed(78), spacing: Space.one),
+                           GridItem(.fixed(78), spacing: Space.one)]
     private let tileSize = CGSize(width: 78, height: 88)
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            LazyVGrid(columns: columns, spacing: 10) {
+        ScrollView(.vertical, showsIndicators: true) {
+            LazyVGrid(columns: columns, spacing: Space.one) {
                 ForEach(shelf.items) { item in
-                    ShelfTile(item: item,
-                              isSelected: shelf.selection.contains(item.id))
+                    ShelfTile(item: item)
                         .frame(width: tileSize.width, height: tileSize.height)
                 }
             }
-            .padding(4)
+            .padding(Space.half)
         }
         .frame(height: ShelfView.tileAreaHeight)
     }
@@ -256,63 +257,74 @@ private struct ShelfTilesGrid: View {
 
 private struct ShelfTile: View {
     let item: ShelfItem
-    let isSelected: Bool
     @Environment(ShelfStore.self) private var shelf
     @State private var hover = false
 
+    private var isSelected: Bool { shelf.selection.contains(item.id) }
+
     var body: some View {
         ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
                 .fill(isSelected ? Color.accentColor.opacity(0.16) : Color.clear)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+                    RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                        .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: isSelected ? 2 : Stroke.hairline)
                 )
 
             VStack(spacing: 0) {
                 iconWell
                 Text(item.title)
-                    .font(.system(size: 10))
+                    .font(.caption2)
                     .lineLimit(2)
                     .truncationMode(.middle)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
-                    .frame(height: 24)
-                    .padding(.horizontal, 3)
-                    .padding(.top, 2)
+                    .frame(minHeight: 24)
+                    .padding(.horizontal, Space.quarter)
+                    .padding(.top, Space.quarter)
             }
-            .padding(.top, 6)
+            .padding(.top, Space.half)
 
             if isSelected {
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 14))
+                    .font(.caption)
                     .foregroundStyle(Color.accentColor)
-                    .padding(4)
+                    .padding(Space.half)
+                    .accessibilityHidden(true)
             }
 
             if hover {
                 Button { shelf.remove(item.id) } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 14))
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                         .background(Color.white.opacity(0.9).clipShape(Circle()))
                 }
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(4)
+                .padding(Space.half)
+                .accessibilityLabel("Remove \(item.title)")
             }
         }
-        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
         .onHover { hover = $0 }
         .onTapGesture {
             shelf.toggleSelection(item.id)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(item.title)
+        .accessibilityValue(isSelected ? "Selected" : "")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityAction { shelf.toggleSelection(item.id) }
         .onDrag {
             let writer = shelf.pasteboardWriter(for: item)
             let provider = NSItemProvider()
-            // Prefer file URL when available, else string
             if let url = writer as? NSURL, url.isFileURL {
                 provider.registerObject(url, visibility: .all)
+                // Fallback for plain-text consumers
+                if let str = item.text ?? item.urlString {
+                    provider.registerObject(str as NSString, visibility: .all)
+                }
             } else if let str = writer as? NSString {
                 provider.registerObject(str, visibility: .all)
             } else if let url = writer as? NSURL {
@@ -343,8 +355,8 @@ private struct ShelfTile: View {
     private var iconWell: some View {
         let isThumbnail = item.kind == .image && item.imageFileName != nil
         ZStack {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(0.06))
+            RoundedRectangle(cornerRadius: Radius.control - 2, style: .continuous)
+                .fill(Color.controlFill)
                 .frame(width: 64, height: 50)
 
             if let image = resolvedImage {
@@ -355,7 +367,7 @@ private struct ShelfTile: View {
                     .clipShape(RoundedRectangle(cornerRadius: isThumbnail ? 4 : 0))
             } else {
                 Image(systemName: symbolName)
-                    .font(.system(size: 22))
+                    .font(.title3)
                     .foregroundStyle(.secondary)
             }
         }

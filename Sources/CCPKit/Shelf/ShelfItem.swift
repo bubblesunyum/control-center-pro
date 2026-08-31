@@ -28,6 +28,12 @@ public struct ShelfItem: Identifiable, Codable, Equatable, Sendable, Hashable {
         case text
         case link
         case image
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            let raw = try container.decode(String.self)
+            self = Kind(rawValue: raw) ?? .file
+        }
     }
 
     public init(
@@ -50,6 +56,5 @@ public struct ShelfItem: Identifiable, Codable, Equatable, Sendable, Hashable {
         self.createdAt = createdAt
     }
 
-    public var isFile: Bool { kind == .file }
-    public var isBatch: Bool { false }
+
 }

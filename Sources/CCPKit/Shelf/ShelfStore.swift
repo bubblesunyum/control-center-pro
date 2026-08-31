@@ -2,7 +2,6 @@
 // Copyright (C) 2026 Control Center Pro contributors
 
 import AppKit
-import Combine
 import Foundation
 import Observation
 import UniformTypeIdentifiers
@@ -33,17 +32,32 @@ public final class ShelfStore {
 
     /// Files for pasted images / GIF data, alongside the clipboard images.
     public static var storeDirectory: URL {
-        let base = URL.applicationSupport.appendingPathComponent("ShelfFiles", isDirectory: true)
-        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        return base
+        URL.applicationSupport.appendingPathComponent("ShelfFiles", isDirectory: true)
+    }
+
+    public static func ensureStoreDirectory() {
+        try? FileManager.default.createDirectory(at: storeDirectory, withIntermediateDirectories: true)
     }
 
     public var itemCount: Int { items.count }
 
     init() {
-        items = fileStore.load()
-        // Heal missing image files: keep the entry but mark missing on read
-        // is the UI's job; persistence just drops what it can't decode.
+        items = Self.tolerantLoad(from: fileStore)
+    }
+
+    private static func tolerantLoad(from store: JSONFileStore<[ShelfItem]>) -> [ShelfItem] {
+        // JSONFileStore.load is atomic: one bad item throws and the whole
+        // file is moved to *.corrupt. Decode leniently per-item instead.
+        guard let data = try? Data(contentsOf: store.url) else { return store.load() }
+        if let decoded = try? JSONDecoder().decode([ShelfItem].self, from: data) {
+            return decoded
+        }
+        // Lenient: ignore items whose kind or required fields fail.
+        struct Failable: Decodable { let item: ShelfItem?; init(from d: Decoder) throws { item = try? ShelfItem(from: d) } }
+        if let wrapped = try? JSONDecoder().decode([Failable].self, from: data) {
+            return wrapped.compactMap(\.item)
+        }
+        return store.load()
     }
 
     // MARK: - Pin
@@ -72,7 +86,7 @@ public final class ShelfStore {
 
     @discardableResult
     public func addFile(url: URL) -> ShelfItem? {
-        guard fileExists(url) || url.isFileURL else { return nil }
+        guard url.isFileURL, fileExists(url) else { return nil }
         guard canAdd(additional: 1) else { return nil }
         let item = ShelfItem(
             kind: .file,
@@ -106,8 +120,13 @@ public final class ShelfStore {
               let png = rep.representation(using: .png, properties: [:])
         else { return }
         let filename = UUID().uuidString + ".png"
+        Self.ensureStoreDirectory()
         let dest = Self.storeDirectory.appendingPathComponent(filename)
-        try? png.write(to: dest)
+        do {
+            try png.write(to: dest)
+        } catch {
+            return
+        }
         let item = ShelfItem(kind: .image, title: filename, imageFileName: filename)
         items.insert(item, at: 0)
         selection = [item.id]
@@ -116,8 +135,13 @@ public final class ShelfStore {
     public func addImageData(_ data: Data, ext: String = "png") {
         guard canAdd(additional: 1) else { return }
         let filename = UUID().uuidString + "." + ext
+        Self.ensureStoreDirectory()
         let dest = Self.storeDirectory.appendingPathComponent(filename)
-        try? data.write(to: dest)
+        do {
+            try data.write(to: dest)
+        } catch {
+            return
+        }
         let item = ShelfItem(kind: .image, title: filename, imageFileName: filename)
         items.insert(item, at: 0)
         selection = [item.id]
@@ -176,22 +200,21 @@ public final class ShelfStore {
 
         group.notify(queue: .main) { [weak self] in
             guard let self else { return }
-            let ordered = resolved.sorted { $0.0 < $1.0 }.map(\.1)
-            guard !ordered.isEmpty else { return }
-            // Insert in provider order, but at the front so the last provider
-            // ends up topmost is wrong — preserve first-dropped-first.
-            for item in ordered.reversed() {
-                let stored: ShelfItem
-                switch item.kind {
-                case .file: stored = item
-                case .text: stored = item
-                case .link: stored = item
-                case .image: stored = item
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let ordered = resolved.sorted { $0.0 < $1.0 }.map(\.1)
+                guard !ordered.isEmpty else { return }
+                // Re-check capacity at insert time — two concurrent drops
+                // could have raced the initial canAdd check.
+                let remaining = max(0, 400 - self.items.count)
+                let toInsert = Array(ordered.prefix(remaining))
+                guard !toInsert.isEmpty else { return }
+                for item in toInsert.reversed() {
+                    self.items.insert(item, at: 0)
                 }
-                self.items.insert(stored, at: 0)
-            }
-            if let first = ordered.first {
-                self.selection = [first.id]
+                if let first = toInsert.first {
+                    self.selection = [first.id]
+                }
             }
         }
     }
@@ -199,41 +222,54 @@ public final class ShelfStore {
     private func resolve(provider: NSItemProvider, completion: @escaping (ShelfItem?) -> Void) {
         if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
             _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                DispatchQueue.main.async {
-                    guard let url, url.isFileURL else { return completion(nil) }
+                Task { @MainActor in
+                    guard let url, url.isFileURL, FileManager.default.fileExists(atPath: url.path) else {
+                        return completion(nil)
+                    }
                     let item = ShelfItem(kind: .file, title: url.lastPathComponent, filePath: url.path)
                     completion(item)
                 }
             }
         } else if provider.hasItemConformingToTypeIdentifier(UTType.gif.identifier) {
             _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.gif.identifier) { data, _ in
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     guard let data, !data.isEmpty else { return completion(nil) }
                     let filename = UUID().uuidString + ".gif"
+                    Self.ensureStoreDirectory()
                     let dest = Self.storeDirectory.appendingPathComponent(filename)
-                    try? data.write(to: dest)
+                    do {
+                        try data.write(to: dest)
+                    } catch {
+                        return completion(nil)
+                    }
                     completion(ShelfItem(kind: .image, title: filename, imageFileName: filename))
                 }
             }
         } else if provider.canLoadObject(ofClass: NSImage.self) {
             _ = provider.loadObject(ofClass: NSImage.self) { image, _ in
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     guard let nsImage = image as? NSImage,
                           let data = nsImage.tiffRepresentation,
                           let rep = NSBitmapImageRep(data: data),
                           let png = rep.representation(using: .png, properties: [:])
                     else { return completion(nil) }
                     let filename = UUID().uuidString + ".png"
+                    Self.ensureStoreDirectory()
                     let dest = Self.storeDirectory.appendingPathComponent(filename)
-                    try? png.write(to: dest)
+                    do {
+                        try png.write(to: dest)
+                    } catch {
+                        return completion(nil)
+                    }
                     completion(ShelfItem(kind: .image, title: filename, imageFileName: filename))
                 }
             }
         } else if provider.canLoadObject(ofClass: URL.self) {
             _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     guard let url else { return completion(nil) }
                     if url.isFileURL {
+                        guard FileManager.default.fileExists(atPath: url.path) else { return completion(nil) }
                         completion(ShelfItem(kind: .file, title: url.lastPathComponent, filePath: url.path))
                     } else {
                         completion(ShelfItem(kind: .link, title: url.absoluteString, urlString: url.absoluteString))
@@ -242,7 +278,7 @@ public final class ShelfStore {
             }
         } else if provider.canLoadObject(ofClass: NSString.self) {
             _ = provider.loadObject(ofClass: NSString.self) { string, _ in
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     guard let str = string as? String,
                           !str.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     else { return completion(nil) }
@@ -250,13 +286,13 @@ public final class ShelfStore {
                     if let url = URL(string: str), url.scheme != nil, url.host != nil {
                         completion(ShelfItem(kind: .link, title: str, urlString: str))
                     } else {
-                        let preview = String(str.components(separatedBy: .newlines).first?.prefix(36) ?? Substring(str.prefix(36)))
+                        let preview = self.preview(for: str)
                         completion(ShelfItem(kind: .text, title: preview, text: str))
                     }
                 }
             }
         } else {
-            DispatchQueue.main.async { completion(nil) }
+            Task { @MainActor in completion(nil) }
         }
     }
 
@@ -328,21 +364,39 @@ public final class ShelfStore {
             switch item.kind {
             case .file:
                 guard let p = item.filePath else { return nil }
-                return URL(fileURLWithPath: p)
+                let url = URL(fileURLWithPath: p)
+                guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+                return url
             case .image:
                 guard let n = item.imageFileName else { return nil }
-                return Self.storeDirectory.appendingPathComponent(n)
+                let url = Self.storeDirectory.appendingPathComponent(n)
+                guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+                return url
             case .text:
-                // Write a temp file so dragging text out still drops a file
+                // Write a temp file so dragging text out still drops a file.
+                // Use a UUID filename to avoid collisions when two items share
+                // the same preview title; sanitize the preview for the
+                // user-visible name is not needed — the URL is what Finder
+                // consumes.
                 guard let t = item.text else { return nil }
-                let url = FileManager.default.temporaryDirectory.appendingPathComponent(item.title + ".txt")
+                let sanitized = item.title.replacingOccurrences(of: "/", with: ":")
+                let filename = "\(sanitized)-\(item.id.uuidString.prefix(8)).txt"
+                let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
                 try? t.write(to: url, atomically: true, encoding: .utf8)
                 return url
             case .link:
-                guard let s = item.urlString else { return nil }
-                let url = FileManager.default.temporaryDirectory.appendingPathComponent("link.url")
-                try? "[InternetShortcut]\nURL=\(s)\n".write(to: url, atomically: true, encoding: .utf8)
-                return URL(string: s)
+                guard let s = item.urlString, let target = URL(string: s) else { return nil }
+                // macOS expects a .webloc (plist); write one so double-click
+                // opens the link regardless of consumer.
+                let filename = "link-\(item.id.uuidString.prefix(8)).webloc"
+                let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+                let plist: [String: Any] = ["URL": s]
+                if let data = try? PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0) {
+                    try? data.write(to: url, options: .atomic)
+                }
+                // Return the file URL we just wrote; the remote URL is not a file.
+                if FileManager.default.fileExists(atPath: url.path) { return url }
+                return target
             }
         }
     }
@@ -376,8 +430,13 @@ public final class ShelfStore {
 
     private func schedulePersist() {
         persistWork?.cancel()
-        let work = DispatchWorkItem { [fileStore, items] in
-            try? fileStore.save(items)
+        let snapshot = items
+        let store = fileStore
+        let work = DispatchWorkItem {
+            // Off main — JSON encode + atomic write can be ~3 MB at 400 items.
+            DispatchQueue.global(qos: .utility).async {
+                try? store.save(snapshot)
+            }
         }
         persistWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
@@ -385,7 +444,11 @@ public final class ShelfStore {
 
     public func flush() {
         persistWork?.cancel()
-        try? fileStore.save(items)
+        let snapshot = items
+        let store = fileStore
+        // Called from willTerminate — must drain before exit, off-main not needed
+        // there since the process is quitting, but keep it synchronous.
+        try? store.save(snapshot)
     }
 
     // For previews / tests

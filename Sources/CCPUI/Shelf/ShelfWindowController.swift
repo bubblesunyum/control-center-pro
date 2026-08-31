@@ -15,16 +15,22 @@ import SwiftUI
 /// card with thin stroke, 78×88 tiles) stays as close to upstream as the CCP
 /// design system allows so the copy is honest.
 @MainActor
+@Observable
 public final class ShelfWindowController {
     public static let shared = ShelfWindowController()
 
     private var panel: NSPanel?
     private var host: NSHostingController<ShelfPanelRoot>?
+    nonisolated(unsafe) private var moveObserver: NSObjectProtocol?
 
     /// Position the next show at the mouse, unless it has been moved.
     private var hasBeenMoved = false
 
     private init() {}
+
+    deinit {
+        if let token = moveObserver { NotificationCenter.default.removeObserver(token) }
+    }
 
     public var isVisible: Bool { panel?.isVisible == true }
 
@@ -34,7 +40,9 @@ public final class ShelfWindowController {
 
     public func show(at anchor: NSRect? = nil) {
         let panel = ensurePanel()
-        if !hasBeenMoved {
+        // Re-clamp even after a move: an external display gone or a resolution
+        // change can leave the saved origin off-screen forever.
+        if !hasBeenMoved || !isOnScreen(panel.frame) {
             position(panel, anchor: anchor)
         }
         panel.orderFrontRegardless()
@@ -43,6 +51,10 @@ public final class ShelfWindowController {
         // AppKit's .nonactivatingPanel already hides on deactivate = false, so
         // nothing extra to manage there. The pin just suppresses auto-hide that
         // we don't have yet — kept for parity.
+    }
+
+    private func isOnScreen(_ frame: NSRect) -> Bool {
+        NSScreen.screens.contains { $0.frame.intersects(frame) }
     }
 
     public func hide() {
@@ -55,7 +67,7 @@ public final class ShelfWindowController {
         let root = ShelfPanelRoot { [weak self] in self?.hide() }
         let host = NSHostingController(rootView: root)
         host.view.wantsLayer = true
-        host.view.layer?.cornerRadius = 18
+        host.view.layer?.cornerRadius = Radius.card
         host.sizingOptions = .preferredContentSize
 
         let panel = ShelfFloatingPanel(contentRect: .zero,
@@ -64,7 +76,7 @@ public final class ShelfWindowController {
         panel.level = .floating
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = false
+        panel.hasShadow = true
         panel.becomesKeyOnlyIfNeeded = true
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
@@ -73,9 +85,9 @@ public final class ShelfWindowController {
         panel.isMovableByWindowBackground = false
 
         // Track moves so we don't snap back to the mouse after the user placed it.
-        NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification,
-                                               object: panel, queue: .main) { [weak self] _ in
-            self?.hasBeenMoved = true
+        moveObserver = NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification,
+                                                              object: panel, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.hasBeenMoved = true }
         }
 
         self.panel = panel
