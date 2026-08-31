@@ -1,17 +1,22 @@
 {
-  "generated": "10:04:58",
+  "generated": "11:26:54",
   "project": "control-center-pro",
   "git": {
     "branch": "main",
     "upstream": "origin/main",
-    "dirty": 4,
-    "commits_today": 1,
+    "dirty": 2,
+    "commits_today": 2,
     "last": {
-      "sha": "d5d4dec",
-      "subject": "a shut panel stops observing permissions ccp-ec8 ccp-bn9",
-      "when": "14 seconds ago"
+      "sha": "0efe580",
+      "subject": "handoff: the permission observation stops when the panel does ccp-ec8 ccp-bn9",
+      "when": "13 seconds ago"
     },
     "unpushed": [
+      {
+        "sha": "0efe580",
+        "subject": "handoff: the permission observation stops when the panel does ccp-ec8 ccp-bn9",
+        "at": 1788193599.0
+      },
       {
         "sha": "d5d4dec",
         "subject": "a shut panel stops observing permissions ccp-ec8 ccp-bn9",
@@ -100,20 +105,28 @@
       "ccp-pr6"
     ],
     "bead_commits": {
-      "ccp-ec8": {
-        "commits": 1,
-        "at": 1788188683.0,
+      "ccp-bn9": {
+        "commits": 2,
+        "at": 1788193599.0,
         "list": [
+          {
+            "sha": "0efe580",
+            "subject": "handoff: the permission observation stops when the panel does ccp-ec8 ccp-bn9"
+          },
           {
             "sha": "d5d4dec",
             "subject": "a shut panel stops observing permissions ccp-ec8 ccp-bn9"
           }
         ]
       },
-      "ccp-bn9": {
-        "commits": 1,
-        "at": 1788188683.0,
+      "ccp-ec8": {
+        "commits": 2,
+        "at": 1788193599.0,
         "list": [
+          {
+            "sha": "0efe580",
+            "subject": "handoff: the permission observation stops when the panel does ccp-ec8 ccp-bn9"
+          },
           {
             "sha": "d5d4dec",
             "subject": "a shut panel stops observing permissions ccp-ec8 ccp-bn9"
@@ -186,16 +199,6 @@
           }
         ]
       },
-      "ccp-mtk": {
-        "commits": 1,
-        "at": 1788103680.0,
-        "list": [
-          {
-            "sha": "fb0038c",
-            "subject": "edit mode: wiggle, remove, and drag between lanes ccp-lr7.7 ccp-mtk ccp-p6g"
-          }
-        ]
-      },
       "ccp-p6g": {
         "commits": 2,
         "at": 1788103680.0,
@@ -207,6 +210,16 @@
           {
             "sha": "7959c69",
             "subject": "the panel draws the arrangement it was left with ccp-lr7.6"
+          }
+        ]
+      },
+      "ccp-mtk": {
+        "commits": 1,
+        "at": 1788103680.0,
+        "list": [
+          {
+            "sha": "fb0038c",
+            "subject": "edit mode: wiggle, remove, and drag between lanes ccp-lr7.7 ccp-mtk ccp-p6g"
           }
         ]
       },
@@ -888,8 +901,12 @@
         "close_reason": "shim re-exports upstream's publisher as changes:; the Combine->async conversion and its lifecycle moved to the adapter",
         "owner": "",
         "children": [],
-        "commit_count": 1,
+        "commit_count": 2,
         "commits": [
+          {
+            "sha": "0efe580",
+            "subject": "handoff: the permission observation stops when the panel does ccp-ec8 ccp-bn9"
+          },
           {
             "sha": "d5d4dec",
             "subject": "a shut panel stops observing permissions ccp-ec8 ccp-bn9"
@@ -916,8 +933,12 @@
         "close_reason": "adapter owns the subscription and cancels it synchronously in deactivate(); a shut panel now observes nothing",
         "owner": "",
         "children": [],
-        "commit_count": 1,
+        "commit_count": 2,
         "commits": [
+          {
+            "sha": "0efe580",
+            "subject": "handoff: the permission observation stops when the panel does ccp-ec8 ccp-bn9"
+          },
           {
             "sha": "d5d4dec",
             "subject": "a shut panel stops observing permissions ccp-ec8 ccp-bn9"
@@ -1797,13 +1818,6 @@
   },
   "worktree": [
     {
-      "path": ".beads/issues.jsonl",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
       "path": ".opencode/opencode.json",
       "staged": false,
       "untracked": true,
@@ -1815,13 +1829,6 @@
       "staged": false,
       "untracked": true,
       "status": "?",
-      "old_path": null
-    },
-    {
-      "path": "dashboard/state.json",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
       "old_path": null
     }
   ],
@@ -1841,12 +1848,12 @@
     ],
     "unverified": [
       {
-        "sha": "d5d4dec",
-        "subject": "a shut panel stops observing permissions ccp-ec8 ccp-bn9"
+        "sha": "0efe580",
+        "subject": "handoff: the permission observation stops when the panel does ccp-ec8 ccp-bn9"
       }
     ],
-    "took": "10s",
-    "at": 1788188656.1661425
+    "took": "8s",
+    "at": 1788193598.767451
   },
   "runs": {
     "verify": {
@@ -1955,15 +1962,15 @@
           "path": "harness/laurels.jsonl",
           "origin": "harness",
           "role": "praise, replayed one at a time",
-          "tokens": 65
+          "tokens": 84
         },
         {
-          "id": "harness/handoffs/20260830-140849.md",
-          "name": "20260830-140849.md",
-          "path": "harness/handoffs/20260830-140849.md",
+          "id": "harness/handoffs/20260831-112618.md",
+          "name": "20260831-112618.md",
+          "path": "harness/handoffs/20260831-112618.md",
           "origin": "harness",
           "role": "the last session's closing note",
-          "tokens": 203
+          "tokens": 519
         },
         {
           "id": "CLAUDE.md",
@@ -2140,14 +2147,14 @@
       },
       {
         "name": "session brief",
-        "tokens": 373
+        "tokens": 376
       },
       {
         "name": "skill descriptions",
         "tokens": 334
       }
     ],
-    "always_total": 2885,
+    "always_total": 2888,
     "on_demand": [
       {
         "name": "workflow",
@@ -2182,7 +2189,7 @@
         "tokens": 434
       }
     ],
-    "brief_tokens": 373,
+    "brief_tokens": 376,
     "prime_tokens": 1569
   }
 }

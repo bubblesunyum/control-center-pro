@@ -7,32 +7,9 @@ import SwiftUI
 // The v1 set, declared ahead of the engines behind it. The ids are the ones the
 // real widgets will keep, so a layout saved against these placeholders survives
 // each engine landing.
-
-/// The one placeholder that samples, standing in for the engine that will.
-///
-/// It is this one because it is the widget whose real content is a graph that
-/// updates — and because the shell's promise that a shut panel costs nothing
-/// needs at least one widget capable of costing something to be a claim at all.
-@MainActor
-final class SystemStatsWidget: PlaceholderWidget {
-    static let descriptor = WidgetDescriptor(
-        id: "system-stats",
-        title: "System",
-        symbolName: "chart.bar.xaxis",
-        size: .tall
-    )
-
-    let sampler = PlaceholderSampler()
-
-    func makeView() -> some View {
-        WidgetCard(Self.descriptor) {
-            ContentSkeleton(size: Self.descriptor.size, sampler: sampler)
-        }
-    }
-
-    func activate() { sampler.start() }
-    func deactivate() { sampler.stop() }
-}
+//
+// SystemStatsWidget lives in `SystemStatsWidget.swift` — it is the first real
+// widget, over the Metrics and SystemMonitor samplers.
 
 @MainActor
 final class NowPlayingWidget: PlaceholderWidget {
