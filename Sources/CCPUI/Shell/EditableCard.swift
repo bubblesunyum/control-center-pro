@@ -30,8 +30,7 @@ struct EditableCard: View {
             // a control belonging to nothing.
             .opacity(isInTheAir ? 0 : 1)
             .background { frameReporter }
-            .gesture(longPressToEdit)
-            .gesture(dragToRearrange)
+            .highPriorityGesture(dragToRearrange)
     }
 
     @ViewBuilder private var removeBadge: some View {
@@ -61,12 +60,6 @@ struct EditableCard: View {
                 key: DropZonePreference.self,
                 value: [PanelEditor.DropZone(id: slot.id, lane: lane, frame: proxy.frame(in: .panel))]
             )
-        }
-    }
-
-    private var longPressToEdit: some Gesture {
-        LongPressGesture(minimumDuration: 0.4).onEnded { _ in
-            withAnimation(.snappy) { editor.startEditing() }
         }
     }
 

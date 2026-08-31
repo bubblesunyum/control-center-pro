@@ -58,14 +58,7 @@ public final class ControlPanelController {
     /// Multi-display placement is ccp-lr7.10; this asks the status item which
     /// screen it is on and falls back to the main one.
     public func show(from statusItemButton: NSStatusBarButton?) {
-        anchor = statusItemButton?.window?.screen ?? NSScreen.main
-        arrangement.activate()
-        place()
-
-        window.orderFrontRegardless()
-        window.makeKey()
-        isVisible = true
-        dismissal.start()
+        present(from: statusItemButton, editing: false)
     }
 
     public func hide() {
@@ -88,6 +81,35 @@ public final class ControlPanelController {
     /// screenshot has never been able to show.
     public func startEditing() {
         editor.startEditing()
+    }
+
+    /// Show the panel and enter edit mode in one step. When the panel is
+    /// already visible this re-anchors to the screen that owns the status
+    /// item that was clicked and then enters edit mode.
+    public func showAndStartEditing(from statusItemButton: NSStatusBarButton?) {
+        if isVisible {
+            anchor = statusItemButton?.window?.screen ?? anchor ?? NSScreen.main
+            withAnimation(.snappy) { editor.startEditing() }
+            // `editor.isEditing` propagates to the SwiftUI graph asynchronously;
+            // `place()` here sizes without the `EditingBar` and the
+            // `trackContentChanges` task corrects it a frame later. That
+            // one-frame growth is the cost of entering edit while open and is
+            // preferable to a synchronous layout that reads stale `fittingSize`.
+            place()
+            return
+        }
+        present(from: statusItemButton, editing: true)
+    }
+
+    private func present(from statusItemButton: NSStatusBarButton?, editing: Bool) {
+        anchor = statusItemButton?.window?.screen ?? NSScreen.main
+        arrangement.activate()
+        if editing { editor.startEditing() }
+        place()
+        window.orderFrontRegardless()
+        window.makeKey()
+        isVisible = true
+        dismissal.start()
     }
 
     public func toggle(from statusItemButton: NSStatusBarButton?) {

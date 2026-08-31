@@ -196,52 +196,48 @@ private struct ClipboardRow: View {
     @State private var copyTask: Task<Void, Never>?
 
     var body: some View {
-        HStack(alignment: .top, spacing: Space.one) {
-            Button { copy() } label: { rowContent }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(entry.isPinned ? "Pinned" : "") \(entry.preview)")
-                .accessibilityHint("Copies to clipboard")
-            Menu {
+        Button { copy() } label: { rowContent }
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+                [entry.isPinned ? "Pinned" : nil, entry.preview]
+                    .compactMap { $0 }.joined(separator: " ")
+            )
+            .accessibilityHint("Copies to clipboard. Right-click for more actions")
+            .padding(.horizontal, Space.one)
+            .padding(.vertical, Space.half)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                    .fill(entry.isPinned ? Color.pinnedFill : Color.controlFill)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                    .strokeBorder(entry.isPinned ? Color.pinnedStroke : Color.clear, lineWidth: Stroke.hairline)
+            )
+            .contentShape(Rectangle())
+            .contextMenu {
                 Button(entry.isPinned ? "Unpin" : "Pin") { adapter.togglePin(entry) }
                 Button("Copy") { copy() }
                 Divider()
                 Button("Delete", role: .destructive) { adapter.remove(entry) }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
-                    .frame(width: Layout.rowActionSize, height: Layout.rowActionSize)
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .accessibilityLabel("Clipboard entry actions for \(entry.preview)")
-        }
-        .padding(.horizontal, Space.one)
-        .padding(.vertical, Space.half)
-        .background(
-            RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
-                .fill(entry.isPinned ? Color.pinnedFill : Color.controlFill)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
-                .strokeBorder(entry.isPinned ? Color.pinnedStroke : Color.clear, lineWidth: Stroke.hairline)
-        )
-        .accessibilityElement(children: .contain)
-        .overlay(alignment: .topTrailing) {
-            if didCopy {
-                Text("Copied")
-                    .font(.caption2.weight(.semibold))
-                    .padding(.horizontal, Space.one - Space.quarter)
-                    .padding(.vertical, Space.quarter + 1)
-                    .background(Color.accentColor, in: Capsule())
-                    .foregroundStyle(.white)
-                    .offset(x: -Space.half, y: Space.half)
-                    .transition(.opacity.combined(with: .scale))
+            .accessibilityAction(named: entry.isPinned ? "Unpin" : "Pin") { adapter.togglePin(entry) }
+            .accessibilityAction(named: "Copy") { copy() }
+            .accessibilityAction(named: "Delete") { adapter.remove(entry) }
+            .accessibilityElement(children: .contain)
+            .overlay(alignment: .topTrailing) {
+                if didCopy {
+                    Text("Copied")
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, Space.one - Space.quarter)
+                        .padding(.vertical, Space.quarter + 1)
+                        .background(Color.accentColor, in: Capsule())
+                        .foregroundStyle(.white)
+                        .offset(x: -Space.half, y: Space.half)
+                        .transition(.opacity.combined(with: .scale))
+                }
             }
-        }
-        .animation(.easeOut(duration: 0.2), value: didCopy)
-        .onDisappear { copyTask?.cancel() }
+            .animation(.easeOut(duration: 0.2), value: didCopy)
+            .onDisappear { copyTask?.cancel() }
     }
 
     private var rowContent: some View {
