@@ -31,6 +31,10 @@ xcuserdata/
 # track both — they are the harness's always-loaded instructions — so those two
 # lines are deliberately absent above. Re-check after every upstream merge.
 
+# Graphify local graph (on-demand skill .claude/skills/graphify) — never committed.
+graphify-out/
+Sources/**/graphify-out/
+
 # Python bytecode from the harness scripts
 __pycache__/
 

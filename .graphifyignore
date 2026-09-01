@@ -1,0 +1,13 @@
+# Keep the graph focused on harness + CCP code, not vendored UI or artifacts.
+# Same syntax as .gitignore; evaluated after .gitignore, so it only ever excludes more.
+.build/
+graphify-out/
+Sources/**/graphify-out/
+Sources/Vorssaint/UI/
+Sources/Vorssaint/App/
+Sources/FanControlHelper/
+Tests/
+dist/
+build/
+.swiftpm/
+xcuserdata/
