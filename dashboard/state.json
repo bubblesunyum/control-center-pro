@@ -1,287 +1,174 @@
 {
-  "generated": "11:26:54",
+  "generated": "23:29:50",
   "project": "control-center-pro",
   "git": {
     "branch": "main",
     "upstream": "origin/main",
     "dirty": 2,
-    "commits_today": 2,
+    "commits_today": 39,
     "last": {
-      "sha": "0efe580",
-      "subject": "handoff: the permission observation stops when the panel does ccp-ec8 ccp-bn9",
-      "when": "13 seconds ago"
+      "sha": "ca34cec",
+      "subject": "handoff 2026-08-31 show hidden files toggles ccp-5fa",
+      "when": "19 minutes ago"
     },
     "unpushed": [
       {
-        "sha": "0efe580",
-        "subject": "handoff: the permission observation stops when the panel does ccp-ec8 ccp-bn9",
-        "at": 1788193599.0
+        "sha": "ca34cec",
+        "subject": "handoff 2026-08-31 show hidden files toggles ccp-5fa",
+        "at": 1788235837.0
       },
       {
-        "sha": "d5d4dec",
-        "subject": "a shut panel stops observing permissions ccp-ec8 ccp-bn9",
-        "at": 1788188683.0
+        "sha": "2e76639",
+        "subject": "toggles: add show hidden files icon-button to toggles pane",
+        "at": 1788234699.0
       },
       {
-        "sha": "3589c97",
-        "subject": "handoff: dashboard and bridge shipped ccp-9w3 ccp-8ld.1",
-        "at": 1788116938.0
+        "sha": "f30e401",
+        "subject": "laurel: awesome work ccp-r9m",
+        "at": 1788233907.0
       },
       {
-        "sha": "8027be8",
-        "subject": "dashboard shows ready sub-beads on its epic and the permission bridge lands ccp-9w3 ccp-8ld.1",
-        "at": 1788116777.0
+        "sha": "4411b03",
+        "subject": "handoff 2026-08-31 clipboard polish ccp-r9m",
+        "at": 1788233902.0
       },
       {
-        "sha": "4b4c75c",
-        "subject": "laurel from the shell epic ccp-lr7",
-        "at": 1788105057.0
+        "sha": "e73ebca",
+        "subject": "sync ledger: close ccp-r9m tooltip follow-up",
+        "at": 1788233893.0
       },
       {
-        "sha": "cf32148",
-        "subject": "handoff: the shell is done ccp-lr7",
-        "at": 1788105046.0
+        "sha": "76efc12",
+        "subject": "clipboard: remove full content from menu, show constrained tooltip on hover ccp-r9m",
+        "at": 1788233499.0
       },
       {
-        "sha": "9ed791f",
-        "subject": "the gallery names every permission a widget needs ccp-lr7.8",
-        "at": 1788104470.0
+        "sha": "1e89347",
+        "subject": "clipboard context menu max width and full text last ccp-r9m",
+        "at": 1788233205.0
       },
       {
-        "sha": "17ae630",
-        "subject": "a gallery to put widgets back ccp-lr7.8",
-        "at": 1788104187.0
+        "sha": "8bb26cf",
+        "subject": "sync ledger: close ccp-r9m",
+        "at": 1788230588.0
       },
       {
-        "sha": "fb0038c",
-        "subject": "edit mode: wiggle, remove, and drag between lanes ccp-lr7.7 ccp-mtk ccp-p6g",
-        "at": 1788103680.0
+        "sha": "4215f08",
+        "subject": "clipboard polish: taller, no icon/timestamp, image rhs, full content menu, scroll top on hide ccp-r9m",
+        "at": 1788230578.0
       },
       {
-        "sha": "3242849",
-        "subject": "widgets sample only while the panel is up ccp-lr7.9",
-        "at": 1788102727.0
+        "sha": "12604b4",
+        "subject": "sync ledger: close ccp-kb6 (retry export)",
+        "at": 1788228959.0
       },
       {
-        "sha": "7ee672b",
-        "subject": "the panel puts itself away ccp-lr7.4",
-        "at": 1788102380.0
+        "sha": "300b31c",
+        "subject": "sync ledger: close ccp-kb6, open ccp-540/egd/8bc polish",
+        "at": 1788228921.0
       },
       {
-        "sha": "c2db9b3",
-        "subject": "handoff: the panel draws what is on disk ccp-lr7.6",
-        "at": 1788101990.0
+        "sha": "525c322",
+        "subject": "handoff 2026-08-31 scratchpad ccp-kb6 shipped",
+        "at": 1788228914.0
       },
       {
-        "sha": "7959c69",
-        "subject": "the panel draws the arrangement it was left with ccp-lr7.6",
-        "at": 1788075324.0
-      },
-      {
-        "sha": "5a6574f",
-        "subject": "handoff: the layout keeps what it cannot draw ccp-lr7.2",
-        "at": 1788064270.0
-      },
-      {
-        "sha": "e0ff6bb",
-        "subject": "the layout, and the widget ids it refuses to forget ccp-lr7.2",
-        "at": 1788063865.0
+        "sha": "fd43835",
+        "subject": "add scratchpad widget to grid ccp-kb6",
+        "at": 1788228891.0
       }
     ],
     "unpushed_beads": [
-      "ccp-8ld.1",
-      "ccp-9w3",
-      "ccp-bn9",
-      "ccp-ec8",
-      "ccp-lr7",
-      "ccp-lr7.2",
-      "ccp-lr7.4",
-      "ccp-lr7.6",
-      "ccp-lr7.7",
-      "ccp-lr7.8",
-      "ccp-lr7.9",
-      "ccp-mtk",
-      "ccp-p6g",
-      "ccp-pr6"
+      "ccp-540",
+      "ccp-5fa",
+      "ccp-8ld.3",
+      "ccp-kb6",
+      "ccp-r9m"
     ],
     "bead_commits": {
-      "ccp-bn9": {
-        "commits": 2,
-        "at": 1788193599.0,
-        "list": [
-          {
-            "sha": "0efe580",
-            "subject": "handoff: the permission observation stops when the panel does ccp-ec8 ccp-bn9"
-          },
-          {
-            "sha": "d5d4dec",
-            "subject": "a shut panel stops observing permissions ccp-ec8 ccp-bn9"
-          }
-        ]
-      },
-      "ccp-ec8": {
-        "commits": 2,
-        "at": 1788193599.0,
-        "list": [
-          {
-            "sha": "0efe580",
-            "subject": "handoff: the permission observation stops when the panel does ccp-ec8 ccp-bn9"
-          },
-          {
-            "sha": "d5d4dec",
-            "subject": "a shut panel stops observing permissions ccp-ec8 ccp-bn9"
-          }
-        ]
-      },
-      "ccp-8ld.1": {
-        "commits": 2,
-        "at": 1788116938.0,
-        "list": [
-          {
-            "sha": "3589c97",
-            "subject": "handoff: dashboard and bridge shipped ccp-9w3 ccp-8ld.1"
-          },
-          {
-            "sha": "8027be8",
-            "subject": "dashboard shows ready sub-beads on its epic and the permission bridge lands ccp-9w3 ccp-8ld.1"
-          }
-        ]
-      },
-      "ccp-9w3": {
-        "commits": 2,
-        "at": 1788116938.0,
-        "list": [
-          {
-            "sha": "3589c97",
-            "subject": "handoff: dashboard and bridge shipped ccp-9w3 ccp-8ld.1"
-          },
-          {
-            "sha": "8027be8",
-            "subject": "dashboard shows ready sub-beads on its epic and the permission bridge lands ccp-9w3 ccp-8ld.1"
-          }
-        ]
-      },
-      "ccp-lr7": {
-        "commits": 2,
-        "at": 1788105057.0,
-        "list": [
-          {
-            "sha": "4b4c75c",
-            "subject": "laurel from the shell epic ccp-lr7"
-          },
-          {
-            "sha": "cf32148",
-            "subject": "handoff: the shell is done ccp-lr7"
-          }
-        ]
-      },
-      "ccp-lr7.8": {
-        "commits": 2,
-        "at": 1788104470.0,
-        "list": [
-          {
-            "sha": "9ed791f",
-            "subject": "the gallery names every permission a widget needs ccp-lr7.8"
-          },
-          {
-            "sha": "17ae630",
-            "subject": "a gallery to put widgets back ccp-lr7.8"
-          }
-        ]
-      },
-      "ccp-lr7.7": {
+      "ccp-5fa": {
         "commits": 1,
-        "at": 1788103680.0,
+        "at": 1788235837.0,
         "list": [
           {
-            "sha": "fb0038c",
-            "subject": "edit mode: wiggle, remove, and drag between lanes ccp-lr7.7 ccp-mtk ccp-p6g"
+            "sha": "ca34cec",
+            "subject": "handoff 2026-08-31 show hidden files toggles ccp-5fa"
           }
         ]
       },
-      "ccp-p6g": {
-        "commits": 2,
-        "at": 1788103680.0,
+      "ccp-8ld.3": {
+        "commits": 1,
+        "at": 1788234699.0,
         "list": [
           {
-            "sha": "fb0038c",
-            "subject": "edit mode: wiggle, remove, and drag between lanes ccp-lr7.7 ccp-mtk ccp-p6g"
+            "sha": "2e76639",
+            "subject": "toggles: add show hidden files icon-button to toggles pane"
+          }
+        ]
+      },
+      "ccp-r9m": {
+        "commits": 7,
+        "at": 1788233907.0,
+        "list": [
+          {
+            "sha": "f30e401",
+            "subject": "laurel: awesome work ccp-r9m"
           },
           {
-            "sha": "7959c69",
-            "subject": "the panel draws the arrangement it was left with ccp-lr7.6"
-          }
-        ]
-      },
-      "ccp-mtk": {
-        "commits": 1,
-        "at": 1788103680.0,
-        "list": [
-          {
-            "sha": "fb0038c",
-            "subject": "edit mode: wiggle, remove, and drag between lanes ccp-lr7.7 ccp-mtk ccp-p6g"
-          }
-        ]
-      },
-      "ccp-lr7.9": {
-        "commits": 1,
-        "at": 1788102727.0,
-        "list": [
-          {
-            "sha": "3242849",
-            "subject": "widgets sample only while the panel is up ccp-lr7.9"
-          }
-        ]
-      },
-      "ccp-lr7.4": {
-        "commits": 1,
-        "at": 1788102380.0,
-        "list": [
-          {
-            "sha": "7ee672b",
-            "subject": "the panel puts itself away ccp-lr7.4"
-          }
-        ]
-      },
-      "ccp-lr7.6": {
-        "commits": 3,
-        "at": 1788101990.0,
-        "list": [
-          {
-            "sha": "c2db9b3",
-            "subject": "handoff: the panel draws what is on disk ccp-lr7.6"
+            "sha": "4411b03",
+            "subject": "handoff 2026-08-31 clipboard polish ccp-r9m"
           },
           {
-            "sha": "7959c69",
-            "subject": "the panel draws the arrangement it was left with ccp-lr7.6"
+            "sha": "e73ebca",
+            "subject": "sync ledger: close ccp-r9m tooltip follow-up"
           },
           {
-            "sha": "e0ff6bb",
-            "subject": "the layout, and the widget ids it refuses to forget ccp-lr7.2"
+            "sha": "76efc12",
+            "subject": "clipboard: remove full content from menu, show constrained tooltip on hover ccp-r9m"
+          },
+          {
+            "sha": "1e89347",
+            "subject": "clipboard context menu max width and full text last ccp-r9m"
+          },
+          {
+            "sha": "8bb26cf",
+            "subject": "sync ledger: close ccp-r9m"
+          },
+          {
+            "sha": "4215f08",
+            "subject": "clipboard polish: taller, no icon/timestamp, image rhs, full content menu, scroll top on hide ccp-r9m"
           }
         ]
       },
-      "ccp-pr6": {
+      "ccp-kb6": {
+        "commits": 4,
+        "at": 1788228959.0,
+        "list": [
+          {
+            "sha": "12604b4",
+            "subject": "sync ledger: close ccp-kb6 (retry export)"
+          },
+          {
+            "sha": "300b31c",
+            "subject": "sync ledger: close ccp-kb6, open ccp-540/egd/8bc polish"
+          },
+          {
+            "sha": "525c322",
+            "subject": "handoff 2026-08-31 scratchpad ccp-kb6 shipped"
+          },
+          {
+            "sha": "fd43835",
+            "subject": "add scratchpad widget to grid ccp-kb6"
+          }
+        ]
+      },
+      "ccp-540": {
         "commits": 1,
-        "at": 1788075324.0,
+        "at": 1788228921.0,
         "list": [
           {
-            "sha": "7959c69",
-            "subject": "the panel draws the arrangement it was left with ccp-lr7.6"
-          }
-        ]
-      },
-      "ccp-lr7.2": {
-        "commits": 2,
-        "at": 1788064270.0,
-        "list": [
-          {
-            "sha": "5a6574f",
-            "subject": "handoff: the layout keeps what it cannot draw ccp-lr7.2"
-          },
-          {
-            "sha": "e0ff6bb",
-            "subject": "the layout, and the widget ids it refuses to forget ccp-lr7.2"
+            "sha": "300b31c",
+            "subject": "sync ledger: close ccp-kb6, open ccp-540/egd/8bc polish"
           }
         ]
       }
@@ -289,13 +176,216 @@
   },
   "ledger": {
     "counts": {
-      "open": 26,
-      "ready": 24,
+      "open": 34,
+      "ready": 33,
       "in_progress": 0,
-      "closed": 36,
+      "closed": 52,
       "blocked": 0
     },
     "issues": [
+      {
+        "id": "ccp-0es",
+        "title": "follow-up: surface Finder restart/sync failure in toggles UI as transient error state",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T03:51:53Z",
+        "created_at": "2026-09-01T03:51:32Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-5fa",
+        "title": "follow-up: wire QuickTogglesAdapter.cancel() through PanelArrangement on widget removal and add polite Finder quit before killall",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T03:51:52Z",
+        "created_at": "2026-09-01T03:51:31Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "ca34cec",
+            "subject": "handoff 2026-08-31 show hidden files toggles ccp-5fa"
+          }
+        ]
+      },
+      {
+        "id": "ccp-8bc",
+        "title": "scratchpad polish: extract ScratchpadMarkdownPreview to own file and surface modifier",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T02:07:23Z",
+        "created_at": "2026-09-01T02:07:23Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-egd",
+        "title": "scratchpad polish: split ScratchpadAdapter/Document/Support into focused files",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T02:07:22Z",
+        "created_at": "2026-09-01T02:07:22Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-540",
+        "title": "scratchpad polish: design tokens in widget (148 height, markdown fixed sizes, cardStroke opacity literals)",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T02:07:20Z",
+        "created_at": "2026-09-01T02:07:20Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "300b31c",
+            "subject": "sync ledger: close ccp-kb6, open ccp-540/egd/8bc polish"
+          }
+        ]
+      },
+      {
+        "id": "ccp-m53",
+        "title": "migrate drag reorder to reorderContainer when macOS 26 ships",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T00:27:49Z",
+        "created_at": "2026-09-01T00:27:49Z",
+        "deps": [],
+        "description": "WWDC26 introduced SwiftUI reorderable()/reorderContainer(for:in:move:) + ReorderDifference for first-party drag reorder (replaces custom DragGesture + DropZonePreference). Staying on 14.4 for now; migrate once macOS 26 is GA and deployment target can bump. Replace frozen-zones DragGesture with reorderable(collectionID: lane) and reorderContainer handling cross-lane moves, dragContainer/dropConfiguration for move semantics.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-3cq",
+        "title": "shelf follow-up: shelf panel missing captures (shipped unseen)",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-31T20:11:34Z",
+        "created_at": "2026-08-31T19:47:39Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "still shipped unseen \u2014 screencapture unavailable headless (could not create image from display). Well unification and duplicate collapse proven by code only; needs empty/1/6/>6/long-title/large-type/scroll captures on GUI session before landing.",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-uet",
+        "title": "shelf follow-up: design tokens drift (18/11/14 literals, palette fork)",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-31T20:11:33Z",
+        "created_at": "2026-08-31T19:47:36Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "partially fixed: 18->Radius.card, 14->Space.oneHalf, cardStroke/controlFill tokens, Radius.control for tiles, Space tokens for grid, fonts .caption/.caption2 where applicable. Remaining literals (e.g. 304/188 tile grid constants) are kept as intentional upstream match \u2014 noted in code.\nwell padding fixed (Space.one + controlFill well + clipShape) and duplicate Open collapsed (header owns open, footer now Clear/RemoveSelected gated). Remaining header .font(.caption) tokenization and badge 6/1 literals left as low nits \u2014 not blocking per principal review. ccp-ilk still open for AppKit split.",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-ilk",
+        "title": "shelf follow-up: AppKit in CCPKit layer violation",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-31T20:11:34Z",
+        "created_at": "2026-08-31T19:47:35Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "remaining: ShelfStore still imports AppKit for NSImage/NSItemProvider/NSPasteboard. True fix moves drop translation to CCPUI/Shelf adapter and keeps CCPKit as pure Data/URL. Tracked for next split.\nShelfStore still holds NSImage/NSItemProvider/NSPasteboard in CCPKit. Correct split moves drop translation to CCPUI/Shelf adapter, CCPKit keeps Data/URL only. Deferred for next adapter pass.",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
       {
         "id": "ccp-9wa",
         "title": "notifications and full disk access catch up slower than the re-read behind refresh",
@@ -596,7 +686,7 @@
         "id": "ccp-4kq.3",
         "title": "prove the upstream merge workflow",
         "status": "open",
-        "ready": false,
+        "ready": true,
         "in_review": false,
         "backlog": false,
         "labels": [],
@@ -664,30 +754,6 @@
         "children": []
       },
       {
-        "id": "ccp-8ld.5",
-        "title": "Clipboard History widget (Clipboard adapter)",
-        "status": "open",
-        "ready": true,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 2,
-        "type": "task",
-        "parent": "ccp-8ld",
-        "updated_at": "2026-08-29T17:36:06Z",
-        "created_at": "2026-08-29T17:08:15Z",
-        "deps": [
-          "ccp-8ld.1",
-          "ccp-lr7.6"
-        ],
-        "description": "History list with ignored-apps and auto-clear settings over the Clipboard engine. Note this is the one v1 widget that must sample with the panel closed to have any history to show \u2014 it is the first real test of the background-sampling opt-out in the lifecycle rules.",
-        "design": "",
-        "notes": "BLOCKED ON A UI LEAK: ClipboardHistoryService.swift and ClipboardAutoClearService.swift are excluded from VorssaintEngines because the former names ClipboardQuickPanelView (a UI/ type) at line 1097. Before this widget can be built, that call-site has to be routed around the way Core/Permissions.swift was \u2014 see PATCHES.md. One reference, so it should be a small patch plus an upstream PR.",
-        "close_reason": "",
-        "owner": "bubbles@cortico.ai",
-        "children": []
-      },
-      {
         "id": "ccp-8ld.4",
         "title": "Now Playing widget (Media adapter)",
         "status": "open",
@@ -733,31 +799,14 @@
         "notes": "",
         "close_reason": "",
         "owner": "bubbles@cortico.ai",
-        "children": []
-      },
-      {
-        "id": "ccp-8ld.2",
-        "title": "System Stats widget (Metrics/SystemMonitor adapter)",
-        "status": "open",
-        "ready": true,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 2,
-        "type": "task",
-        "parent": "ccp-8ld",
-        "updated_at": "2026-08-29T17:36:06Z",
-        "created_at": "2026-08-29T17:08:12Z",
-        "deps": [
-          "ccp-lr7.6",
-          "ccp-8ld.1"
-        ],
-        "description": "The flagship widget: CPU, memory, temperature, and network graphs over the Metrics and SystemMonitor samplers. Needs VMStatisticsCompat. Adapter exposes an @Observable model; the widget never touches an upstream type.",
-        "design": "",
-        "notes": "PARTIAL UI LEAK: SystemMonitor/ProcessUsageService.swift is excluded from VorssaintEngines \u2014 it names BreakdownKind, a UI/ type. The other 3 SystemMonitor files and all 16 Metrics files build fine, so the CPU/mem/temp/net graphs are unaffected; only per-process usage needs the leak dealt with. See PATCHES.md.",
-        "close_reason": "",
-        "owner": "bubbles@cortico.ai",
-        "children": []
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "2e76639",
+            "subject": "toggles: add show hidden files icon-button to toggles pane"
+          }
+        ]
       },
       {
         "id": "ccp-4kq",
@@ -813,6 +862,27 @@
           "ccp-8ld.2",
           "ccp-8ld.1"
         ]
+      },
+      {
+        "id": "ccp-els",
+        "title": "follow-up: design-system token polish for toggles (animation token, spacing collapse)",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 3,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T03:51:54Z",
+        "created_at": "2026-09-01T03:51:32Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
       },
       {
         "id": "ccp-lr7.10",
@@ -882,6 +952,398 @@
         "children": []
       },
       {
+        "id": "ccp-r9m",
+        "title": "clipboard widget: remove timestamp/icon, 50% taller, full content in context menu, image preview RHS, scroll reset on hide",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T02:43:04Z",
+        "created_at": "2026-09-01T02:42:46Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "removed timestamp and leading icon, bumped clipboardListHeight 220->330, context menu shows full text (truncated 4k) / image preview / file names, RHS thumbnail via BridgedClipboardImages, scroll resets on hide via hideGeneration + VStack anchor + id fallback",
+        "owner": "",
+        "children": [],
+        "commit_count": 7,
+        "commits": [
+          {
+            "sha": "f30e401",
+            "subject": "laurel: awesome work ccp-r9m"
+          },
+          {
+            "sha": "4411b03",
+            "subject": "handoff 2026-08-31 clipboard polish ccp-r9m"
+          },
+          {
+            "sha": "e73ebca",
+            "subject": "sync ledger: close ccp-r9m tooltip follow-up"
+          },
+          {
+            "sha": "76efc12",
+            "subject": "clipboard: remove full content from menu, show constrained tooltip on hover ccp-r9m"
+          },
+          {
+            "sha": "1e89347",
+            "subject": "clipboard context menu max width and full text last ccp-r9m"
+          },
+          {
+            "sha": "8bb26cf",
+            "subject": "sync ledger: close ccp-r9m"
+          },
+          {
+            "sha": "4215f08",
+            "subject": "clipboard polish: taller, no icon/timestamp, image rhs, full content menu, scroll top on hide ccp-r9m"
+          }
+        ]
+      },
+      {
+        "id": "ccp-kb6",
+        "title": "scratchpad widget in grid (UI pulled from ScratchpadView, tabbed editor + markdown preview + export)",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T02:14:55Z",
+        "created_at": "2026-09-01T02:14:39Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "shipped fd43835 \u2014 widget in grid, reviews fixed (observer leak, nested button, preview responder, modal dismissal)",
+        "owner": "",
+        "children": [],
+        "commit_count": 4,
+        "commits": [
+          {
+            "sha": "12604b4",
+            "subject": "sync ledger: close ccp-kb6 (retry export)"
+          },
+          {
+            "sha": "300b31c",
+            "subject": "sync ledger: close ccp-kb6, open ccp-540/egd/8bc polish"
+          },
+          {
+            "sha": "525c322",
+            "subject": "handoff 2026-08-31 scratchpad ccp-kb6 shipped"
+          },
+          {
+            "sha": "fd43835",
+            "subject": "add scratchpad widget to grid ccp-kb6"
+          }
+        ]
+      },
+      {
+        "id": "ccp-35z",
+        "title": "opencode harness fix: document opencode reviewer invocation in agentic-review skill",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T01:38:24Z",
+        "created_at": "2026-08-31T20:15:46Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "added opencode spawn note to agentic-review skill \u2014 same packet, spawn via .opencode/agent/ subagents in opencode vs Task in Claude Code",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-b3z",
+        "title": "opencode harness fix: make brief mandatory callout obvious in AGENTS.md for opencode sessions",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T01:38:23Z",
+        "created_at": "2026-08-31T20:15:45Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "added prominent opencode callout in AGENTS.md Start-with-brief section \u2014 first action every opencode session is bash scripts/brief.sh before anything else",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-cui",
+        "title": "opencode harness fix: resolve duplicate beads skill (.agents vs .claude) giving opencode conflicting first step",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T01:38:23Z",
+        "created_at": "2026-08-31T20:15:45Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "patched both .claude/skills/beads and .agents/skills/beads to note scripts/brief.sh (\u2248200 tokens) is preferred session start over bd prime (\u22481900 tokens), both locations edited since opencode discovers .agents and --pure discovers .claude",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-mhv",
+        "title": "opencode harness fix: consolidate opencode.json (single source of truth for instructions+plugin)",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T01:38:21Z",
+        "created_at": "2026-08-31T20:15:44Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "consolidated opencode.json to single root file with instructions+plugin, removed duplicate .opencode/opencode.json and cleaned .opencode/tui.json to {} \u2014 now single source aligns with template and opencode debug config shows plugin from root",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-ul1",
+        "title": "drag reorder hangs mid-drag and jitters layout",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "bug",
+        "parent": "",
+        "updated_at": "2026-09-01T00:37:14Z",
+        "created_at": "2026-09-01T00:27:45Z",
+        "deps": [],
+        "description": "Drag to rearrange in edit mode glitches: dragged element stops mid-drag hanging between lanes and stops responding to clicks; layout jitters erratically while moving. Root causes: live layout mutation each pixel on stale DropZonePreference zones, per-card DragGesture dies when view moves lanes (no GestureState/cancel), window place() resizes each frame. Fix on macOS 14.4: snapshot zones at lift, move drag to panel-level GestureState, defer layout mutation to drop, gate animations and window resize while dragging.",
+        "design": "",
+        "notes": "",
+        "close_reason": "frozen snapshot + panel gesture + deferred single commit + window gate; verified build and 147 tests",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-use",
+        "title": "shelf follow-up: accessibility icon-only controls missing labels",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-31T19:50:23Z",
+        "created_at": "2026-08-31T19:47:36Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "fixed: ShelfView clearButton now accessibilityLabel+hint, tile delete Button accessibilityLabel, ShelfTile now .accessibilityElement(.combine) + label/value/selected traits + action. Pin/close already had labels.",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-h1u",
+        "title": "shelf follow-up: persist on main thread + storeDirectory side effect",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-31T19:50:22Z",
+        "created_at": "2026-08-31T19:47:39Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "fixed: storeDirectory now pure getter + ensureStoreDirectory(), schedulePersist now snapshots + Disp global utility, flush synchronous. Verified.",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-4wn",
+        "title": "shelf follow-up: shelf.json atomic decode wipes all items on one bad kind",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-31T19:50:21Z",
+        "created_at": "2026-08-31T19:47:36Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "fixed: ShelfItem.Kind fallback to .file on unknown rawValue, ShelfStore.tolerantLoad via per-item Failable wrapper so one bad item no longer wipes 400. Verified via build.",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-o8n",
+        "title": "Shelf floating window + CCP dashboard widget (copy Vorssaint UI)",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-31T19:39:28Z",
+        "created_at": "2026-08-31T19:34:13Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "shelf floating panel (304pt, 18pt radius, glass + move handle) copied from Vorssaint ShelfView/ShelfTilesView into CCPUI/Shelf with pin/close/empty dashed/drop-target logic; ShelfStore in CCPKit (file/text/link/image, 400-item cap, ShelfFiles persistence, pasteboard writers for drag-out); ShelfWidget in lanes (compact preview + Open/Clear, onDrop forwards to store); standardLayout now 3 lanes with shelf, registry registers ShelfWidget; window toggles from widget and via --show-shelf; AppDelegate flushes on termination. Build + 147 tests pass. ccp-o8n",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-k0d",
+        "title": "clipboard right-click menu, remove hold-to-edit, status bar Edit/Quit menu",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-31T19:17:44Z",
+        "created_at": "2026-08-31T19:17:25Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "hold-to-edit removed from EditableCard, clipboard row now full-row Button with .contextMenu (Pin/Copy/Delete) + accessibilityActions, status item left-toggle / right-menu (Edit via showAndStartEditing, Quit) with correct popUp at 0, highPriorityGesture for drag, and present(editing:) dedupe. Verified + reviewed.",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-vn4",
+        "title": "clipboard history never starts because Defaults.register never called",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-31T18:22:02Z",
+        "created_at": "2026-08-31T18:21:36Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "register defaults on launch and make enable force, verified via relaunch",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-6qp",
+        "title": "clipboard enable button does not update isHistoryEnabled is not observed",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-08-31T18:17:06Z",
+        "created_at": "2026-08-31T18:16:21Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "made isHistoryEnabled stored and observable, button now flips",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-8ld.5",
+        "title": "Clipboard History widget (Clipboard adapter)",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "ccp-8ld",
+        "updated_at": "2026-08-31T18:08:31Z",
+        "created_at": "2026-08-29T17:08:15Z",
+        "deps": [
+          "ccp-8ld.1",
+          "ccp-lr7.6"
+        ],
+        "description": "History list with ignored-apps and auto-clear settings over the Clipboard engine. Note this is the one v1 widget that must sample with the panel closed to have any history to show \u2014 it is the first real test of the background-sampling opt-out in the lifecycle rules.",
+        "design": "",
+        "notes": "BLOCKED ON A UI LEAK: ClipboardHistoryService.swift and ClipboardAutoClearService.swift are excluded from VorssaintEngines because the former names ClipboardQuickPanelView (a UI/ type) at line 1097. Before this widget can be built, that call-site has to be routed around the way Core/Permissions.swift was \u2014 see PATCHES.md. One reference, so it should be a small patch plus an upstream PR.",
+        "close_reason": "clipboard history widget over bridgedClipboard service, with fakable ClipboardAdapter, background sampling kept while shut, tested and verified",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-8ld.2",
+        "title": "System Stats widget (Metrics/SystemMonitor adapter)",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "ccp-8ld",
+        "updated_at": "2026-08-31T17:31:08Z",
+        "created_at": "2026-08-29T17:08:12Z",
+        "deps": [
+          "ccp-lr7.6",
+          "ccp-8ld.1"
+        ],
+        "description": "The flagship widget: CPU, memory, temperature, and network graphs over the Metrics and SystemMonitor samplers. Needs VMStatisticsCompat. Adapter exposes an @Observable model; the widget never touches an upstream type.",
+        "design": "",
+        "notes": "PARTIAL UI LEAK: SystemMonitor/ProcessUsageService.swift is excluded from VorssaintEngines \u2014 it names BreakdownKind, a UI/ type. The other 3 SystemMonitor files and all 16 Metrics files build fine, so the CPU/mem/temp/net graphs are unaffected; only per-process usage needs the leak dealt with. See PATCHES.md.",
+        "close_reason": "review fixes: sampler actor-isolated, activate off main, async source, dynamic type + Space/Radius/Palette, ByteCountFormatter cached",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
         "id": "ccp-bn9",
         "title": "shim owns Combine->AsyncStream bridging that belongs in the adapter ccp-8ld.1 follow-up",
         "status": "closed",
@@ -900,18 +1362,7 @@
         "notes": "",
         "close_reason": "shim re-exports upstream's publisher as changes:; the Combine->async conversion and its lifecycle moved to the adapter",
         "owner": "",
-        "children": [],
-        "commit_count": 2,
-        "commits": [
-          {
-            "sha": "0efe580",
-            "subject": "handoff: the permission observation stops when the panel does ccp-ec8 ccp-bn9"
-          },
-          {
-            "sha": "d5d4dec",
-            "subject": "a shut panel stops observing permissions ccp-ec8 ccp-bn9"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-ec8",
@@ -932,18 +1383,7 @@
         "notes": "",
         "close_reason": "adapter owns the subscription and cancels it synchronously in deactivate(); a shut panel now observes nothing",
         "owner": "",
-        "children": [],
-        "commit_count": 2,
-        "commits": [
-          {
-            "sha": "0efe580",
-            "subject": "handoff: the permission observation stops when the panel does ccp-ec8 ccp-bn9"
-          },
-          {
-            "sha": "d5d4dec",
-            "subject": "a shut panel stops observing permissions ccp-ec8 ccp-bn9"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-8ld.1",
@@ -966,18 +1406,7 @@
         "notes": "",
         "close_reason": "VorssaintBridge compiled into VorssaintEngines as module mates, re-exporting Permissions as public PermissionSnapshot/PermissionKind/PermissionAuthorization and SystemPermissions. CCPKit's PermissionSource/PermissionsAdapter sits on the seam, mapping WidgetPermission to PermissionKind, exposing PermissionState and unmet set for inline grant, with activate/deactivate lifecycle that refreshes and watches via MainActor-isolated task. Deferred yield fixes stale objectWillChange read, nonisolated watch fixes deinit isolation, Equatable added, Package manifest silences 34 unhandled-file warnings by ",
         "owner": "bubbles@cortico.ai",
-        "children": [],
-        "commit_count": 2,
-        "commits": [
-          {
-            "sha": "3589c97",
-            "subject": "handoff: dashboard and bridge shipped ccp-9w3 ccp-8ld.1"
-          },
-          {
-            "sha": "8027be8",
-            "subject": "dashboard shows ready sub-beads on its epic and the permission bridge lands ccp-9w3 ccp-8ld.1"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-9w3",
@@ -998,18 +1427,7 @@
         "notes": "",
         "close_reason": "epic card now shows how many of its children are ready, so the header's 10 ready beads and the board's 4 ready cards reconcile without counting differently. chip uses the neutral accent rather than ok green, which is reserved for done. shipped in dashboard/index.html ccp-9w3",
         "owner": "",
-        "children": [],
-        "commit_count": 2,
-        "commits": [
-          {
-            "sha": "3589c97",
-            "subject": "handoff: dashboard and bridge shipped ccp-9w3 ccp-8ld.1"
-          },
-          {
-            "sha": "8027be8",
-            "subject": "dashboard shows ready sub-beads on its epic and the permission bridge lands ccp-9w3 ccp-8ld.1"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-lr7",
@@ -1040,17 +1458,6 @@
           "ccp-lr7.2",
           "ccp-lr7.1",
           "ccp-lr7.8"
-        ],
-        "commit_count": 2,
-        "commits": [
-          {
-            "sha": "4b4c75c",
-            "subject": "laurel from the shell epic ccp-lr7"
-          },
-          {
-            "sha": "cf32148",
-            "subject": "handoff: the shell is done ccp-lr7"
-          }
         ]
       },
       {
@@ -1074,18 +1481,7 @@
         "notes": "Correction to the close reason: the follow-up commit is 9ed791f, not 4a3f2c1 \u2014 I wrote the hash before making the commit.",
         "close_reason": "The + in the editing bar opens a popover built from the registry: every widget the build offers, checkmarks on the placed ones, and the permissions a widget will ask for (sorted \u2014 the set has no order). Adding drops it into the shortest lane. Verified in the app end to end: removed the audio mixer, watched it leave layout.json, added it back from the gallery, watched it return. Registering a widget remains the whole of adding it to the gallery. Whether a permission is *granted* is ccp-23w. Shipped in 17ae630 and 4a3f2c1.",
         "owner": "bubbles@cortico.ai",
-        "children": [],
-        "commit_count": 2,
-        "commits": [
-          {
-            "sha": "9ed791f",
-            "subject": "the gallery names every permission a widget needs ccp-lr7.8"
-          },
-          {
-            "sha": "17ae630",
-            "subject": "a gallery to put widgets back ccp-lr7.8"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-4w8",
@@ -1129,14 +1525,7 @@
         "notes": "lr7.2 owns PanelLayout.normalized() (prunes empty lanes, floors at one). Mutation verbs live here, and each must end in a normalized() call \u2014 that is what keeps the invariant without lr7.2 shipping the verbs. The trailing empty drop lane is a render-time affordance and must never be persisted. Reordering has to index around .unavailable slots, which are real positions in the lane.",
         "close_reason": "Long press starts edit mode; per-card random period and head start for the wiggle; remove badges; live drag between and within lanes with the layout mutating under the finger. The new lane opens on the LEFT \u2014 the panel is right-pinned, so a trailing column shoves every card sideways mid-drag (built it trailing first and watched it). Verified by driving a synthetic CGEvent drag at the real window. Shipped in fb0038c.",
         "owner": "bubbles@cortico.ai",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "fb0038c",
-            "subject": "edit mode: wiggle, remove, and drag between lanes ccp-lr7.7 ccp-mtk ccp-p6g"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-p6g",
@@ -1157,18 +1546,7 @@
         "notes": "ControlPanelController.sizeFitting clamps the panel to the visible frame minus the inset, so a layout with more lanes than the display can hold has its leftmost lanes cut by the window edge (the panel is anchored top-right). Same for a lane taller than the screen. Fine as a guardrail \u2014 five 240pt lanes need a 1300pt-wide display \u2014 but the real answer is either a horizontal scroll inside the panel, a cap on lanes with the overflow refused at drop time in edit mode, or a smaller lane width on small displays. Decide before edit mode lets anyone build a layout that wide.",
         "close_reason": "Decided: cap, not scroll. Layout.laneCapacity(inWidth:) says how many lanes a display can show; edit mode refuses the drop that would exceed it rather than letting the arrangement grow off-screen. The existing sizeFitting clamp stays as the guardrail for a layout carried over from a wider display. A horizontal scroll was rejected \u2014 macOS Control Center never scrolls sideways and the panel is a control surface, not a document. Shipped in fb0038c.",
         "owner": "",
-        "children": [],
-        "commit_count": 2,
-        "commits": [
-          {
-            "sha": "fb0038c",
-            "subject": "edit mode: wiggle, remove, and drag between lanes ccp-lr7.7 ccp-mtk ccp-p6g"
-          },
-          {
-            "sha": "7959c69",
-            "subject": "the panel draws the arrangement it was left with ccp-lr7.6"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-lr7.9",
@@ -1191,14 +1569,7 @@
         "notes": "",
         "close_reason": "PanelArrangement owns the live widgets and starts/stops them with the panel; activation is idempotent there and in the sampler. SystemStatsWidget actually samples (1Hz) so the claim is testable. Measured 0.00s of CPU over 60s with the panel closed. The background-sampling opt-in from the description is NOT built \u2014 nothing needs it until the first menu-bar stat; see ccp-lr7.11. Shipped in 3242849.",
         "owner": "bubbles@cortico.ai",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "3242849",
-            "subject": "widgets sample only while the panel is up ccp-lr7.9"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-mtk",
@@ -1219,14 +1590,7 @@
         "notes": "lr7.7 saves the layout after every drag mutation. JSONFileStore.save() is synchronous blocking I/O, so a naive save-per-mutation writes the file on the main thread mid-animation. Raised as an async-API finding by reviewer-taste on ccp-lr7.2 and declined there: the store is Sendable and actor-agnostic on purpose, so a caller can move it off-main, and making load() async would stop applicationDidFinishLaunching from having lanes ready when it builds the panel. The real decision is a save policy \u2014 debounce the writes and put them off-main \u2014 and it belongs with the mutation verbs, not the store.",
         "close_reason": "LayoutAutosave: debounced 500ms, the write itself off-main, last layout wins, flushed synchronously when the panel closes or the app quits. Launch no longer writes the layout back at all \u2014 with every edit saved, a rewrite nobody asked for is a silent edit of the user's file. Shipped in fb0038c.",
         "owner": "",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "fb0038c",
-            "subject": "edit mode: wiggle, remove, and drag between lanes ccp-lr7.7 ccp-mtk ccp-p6g"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-lr7.4",
@@ -1249,14 +1613,7 @@
         "notes": "",
         "close_reason": "Global mouse monitor for a click in another app, local key monitor for Esc; installed on show, removed on hide. Only the mouse watch is global so the status item's own click isn't seen twice. EventMonitors is a seam over NSEvent, so 'twenty opens and closes leave nothing installed' is a test. Shipped in 7ee672b.",
         "owner": "bubbles@cortico.ai",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "7ee672b",
-            "subject": "the panel puts itself away ccp-lr7.4"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-lr7.6",
@@ -1279,22 +1636,7 @@
         "notes": "Also from lr7.2's review: JSONFileStore.load() returns whatever is in the file, un-normalized \u2014 the wiring here must call .normalized() on it before rendering. And see ccp-pr6 (duplicate ids in a lane) before ForEach-ing [LaneSlot].",
         "close_reason": "Launch loads layout.json through JSONFileStore, normalizes, resolves against the registry and writes back; ControlPanel renders [[LaneSlot]] and draws UnavailableWidgetCard for an id this build lacks. Verified by hand-editing the file with a duplicate, an empty lane and an unknown id and relaunching: dedup and lane-closing applied, the unknown widget drew as a card and survived the round trip. Panel clamps to the visible frame \u2014 the clipping that clamp causes is ccp-p6g, and the capture proving it is owed (display was locked). Shipped in 7959c69.",
         "owner": "bubbles@cortico.ai",
-        "children": [],
-        "commit_count": 3,
-        "commits": [
-          {
-            "sha": "c2db9b3",
-            "subject": "handoff: the panel draws what is on disk ccp-lr7.6"
-          },
-          {
-            "sha": "7959c69",
-            "subject": "the panel draws the arrangement it was left with ccp-lr7.6"
-          },
-          {
-            "sha": "e0ff6bb",
-            "subject": "the layout, and the widget ids it refuses to forget ccp-lr7.2"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-pr6",
@@ -1315,14 +1657,7 @@
         "notes": "LaneSlot.id is the WidgetID, so a lane listing the same id twice yields two slots with equal ids and a SwiftUI ForEach over [LaneSlot] renders undefined. Raised by reviewer-correctness on ccp-lr7.2, which declined to file it on the grounds that no mutation logic exists yet \u2014 but the path does not need mutation: PanelLayout.load() will happily return {\"lanes\":[[\"stub\",\"stub\"]]} from a hand-edited or partially-mangled file, and lr7.6 will ForEach it. Recommendation: fold dedup (keep first occurrence) into PanelLayout.normalized(), which is already the invariant-maintainer that prunes empty lanes and floors at one lane \u2014 same place, same call sites, no new concept. NOT done in lr7.2 because normalized()'s contract was agreed with laurel as exactly those two invariants and widening it was not mine to decide unilaterally. Cheap; do it before lr7.6 renders anything.",
         "close_reason": "normalized() now places a widget at most once, first placement wins, across the whole layout \u2014 a lane emptied by the dedup closes up under the existing rule. Three tests in PanelLayoutTests. Shipped in 7959c69.",
         "owner": "",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "7959c69",
-            "subject": "the panel draws the arrangement it was left with ccp-lr7.6"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-lr7.2",
@@ -1345,18 +1680,7 @@
         "notes": "",
         "close_reason": "PanelLayout as plain lossless Codable data, normalized() for the empty-lane and one-lane-floor invariants, LaneSlot + WidgetRegistry.resolve preserving unknown ids as visible slots, and a generic JSONFileStore. 6 new tests; gate green",
         "owner": "bubbles@cortico.ai",
-        "children": [],
-        "commit_count": 2,
-        "commits": [
-          {
-            "sha": "5a6574f",
-            "subject": "handoff: the layout keeps what it cannot draw ccp-lr7.2"
-          },
-          {
-            "sha": "e0ff6bb",
-            "subject": "the layout, and the widget ids it refuses to forget ccp-lr7.2"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-ait",
@@ -1818,23 +2142,23 @@
   },
   "worktree": [
     {
-      "path": ".opencode/opencode.json",
+      "path": ".beads/interactions.jsonl",
       "staged": false,
-      "untracked": true,
-      "status": "?",
+      "untracked": false,
+      "status": "M",
       "old_path": null
     },
     {
-      "path": ".opencode/tui.json",
+      "path": ".beads/issues.jsonl",
       "staged": false,
-      "untracked": true,
-      "status": "?",
+      "untracked": false,
+      "status": "M",
       "old_path": null
     }
   ],
   "verify": {
     "status": "passed",
-    "when": "just now",
+    "when": "19m ago",
     "tests": "",
     "steps": [
       {
@@ -1848,12 +2172,12 @@
     ],
     "unverified": [
       {
-        "sha": "0efe580",
-        "subject": "handoff: the permission observation stops when the panel does ccp-ec8 ccp-bn9"
+        "sha": "ca34cec",
+        "subject": "handoff 2026-08-31 show hidden files toggles ccp-5fa"
       }
     ],
-    "took": "8s",
-    "at": 1788193598.767451
+    "took": "11s",
+    "at": 1788235824.039103
   },
   "runs": {
     "verify": {
@@ -1880,13 +2204,13 @@
       "name": "agentic-review",
       "description": "Review a control-center-pro change with agents that didn't write it \u2014 taste against the project's standards, correctness hunting real defects, and design reading screenshots of what actually rendered. Use before committing a non-trivial change, when asked to review work or a branch, or after finishing a feature.",
       "idle": 78,
-      "loaded": 1476
+      "loaded": 1544
     },
     {
       "name": "beads",
       "description": "Use when working in a repository that uses bd or Beads for durable project task tracking, issue dependencies, blocker management, multi-session handoff, or shared work memory. Trigger when the user asks to find ready work, claim or close tasks, create follow-up work, inspect blockers, recover project context, or choose between local planning and persistent project tracking.",
       "idle": 94,
-      "loaded": 434
+      "loaded": 491
     },
     {
       "name": "handoff",
@@ -1917,8 +2241,8 @@
     {
       "name": "reviewer-design",
       "model": "sonnet",
-      "description": "Reviews screenshots of a control-center-pro change \u2014 what the app actually renders, not what the diff says it should. Hunts clipping, truncation, overflow, misalignment, and drift from the app's established look. Reads a review packet listing captures to look at. Use whenever a change touches anything on screen.",
-      "loaded": 2081
+      "description": "Reviews screenshots as a principal design engineer \u2014 what the app actually renders, not what the diff says it should. Hunts clipping, truncation, overflow, misalignment, and drift from the app's established look. Reads a review packet listing captures to look at. Use whenever a change touches anything on screen.",
+      "loaded": 2150
     },
     {
       "name": "reviewer-taste",
@@ -1962,15 +2286,15 @@
           "path": "harness/laurels.jsonl",
           "origin": "harness",
           "role": "praise, replayed one at a time",
-          "tokens": 84
+          "tokens": 239
         },
         {
-          "id": "harness/handoffs/20260831-112618.md",
-          "name": "20260831-112618.md",
-          "path": "harness/handoffs/20260831-112618.md",
+          "id": "harness/handoffs/20260831-231030.md",
+          "name": "20260831-231030.md",
+          "path": "harness/handoffs/20260831-231030.md",
           "origin": "harness",
           "role": "the last session's closing note",
-          "tokens": 519
+          "tokens": 168
         },
         {
           "id": "CLAUDE.md",
@@ -2014,7 +2338,7 @@
           "path": ".beads/issues.jsonl",
           "origin": "harness",
           "role": "the issue graph, exported for git",
-          "tokens": 20278
+          "tokens": 23907
         },
         {
           "id": ".claude/skills/beads/SKILL.md",
@@ -2022,7 +2346,7 @@
           "path": ".claude/skills/beads/SKILL.md",
           "origin": "harness",
           "role": "Use when working in a repository that uses bd or Beads for durable project task tracking, issue dependencies, blocker management, multi-session handoff, or shared work memory. Trigger when the user asks to find ready work, claim or close tasks, create follow-up work, inspect blockers, recover project context, or choose between local planning and persistent project tracking.",
-          "tokens": 434
+          "tokens": 491
         },
         {
           "id": ".claude/skills/workflow/SKILL.md",
@@ -2044,7 +2368,7 @@
           "path": ".claude/skills/agentic-review/SKILL.md",
           "origin": "claude",
           "role": "Review a control-center-pro change with agents that didn't write it \u2014 taste against the project's standards, correctness hunting real defects, and design reading screenshots of what actually rendered. Use before committing a non-trivial change, when asked to review work or a branch, or after finishing a feature.",
-          "tokens": 1476
+          "tokens": 1544
         },
         {
           "id": ".claude/skills/handoff/SKILL.md",
@@ -2103,8 +2427,8 @@
           "name": "reviewer-design",
           "path": ".claude/agents/reviewer-design.md",
           "origin": "claude",
-          "role": "Reviews screenshots of a control-center-pro change \u2014 what the app actually renders, not what the diff says it should. Hunts clipping, truncation, overflow, misalignment, and drift from the app's established look. Reads a review packet listing captures to look at. Use whenever a change touches anything on screen.",
-          "tokens": 2081
+          "role": "Reviews screenshots as a principal design engineer \u2014 what the app actually renders, not what the diff says it should. Hunts clipping, truncation, overflow, misalignment, and drift from the app's established look. Reads a review packet listing captures to look at. Use whenever a change touches anything on screen.",
+          "tokens": 2150
         },
         {
           "id": ".claude/agents/reviewer-taste.md",
@@ -2147,14 +2471,14 @@
       },
       {
         "name": "session brief",
-        "tokens": 376
+        "tokens": 426
       },
       {
         "name": "skill descriptions",
         "tokens": 334
       }
     ],
-    "always_total": 2888,
+    "always_total": 2938,
     "on_demand": [
       {
         "name": "workflow",
@@ -2162,11 +2486,11 @@
       },
       {
         "name": "reviewer-design",
-        "tokens": 2081
+        "tokens": 2150
       },
       {
         "name": "agentic-review",
-        "tokens": 1476
+        "tokens": 1544
       },
       {
         "name": "reviewer-correctness",
@@ -2186,10 +2510,10 @@
       },
       {
         "name": "beads",
-        "tokens": 434
+        "tokens": 491
       }
     ],
-    "brief_tokens": 376,
+    "brief_tokens": 426,
     "prime_tokens": 1569
   }
 }
