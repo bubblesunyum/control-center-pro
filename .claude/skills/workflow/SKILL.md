@@ -163,10 +163,19 @@ The whole harness is shaped by having one account. `scripts/context.py spend`
 prints what recent sessions actually cost, and the shape it shows is the reason
 for every rule below: a session opens at ~54k tokens before it has done
 anything, and that opening context is re-sent on every single turn. In a
-60-turn session it *is* 80% of the bill. Only ~4k of it is this repo — the rest
-is Claude Code's own system prompt, tool schemas and whatever MCP connectors the
-app has enabled, which is why trimming CLAUDE.md is the smallest available win
-and turning off a connector you never use is one of the largest.
+60-turn session it *is* 80% of the bill.
+
+Only ~4k of that floor is this repo, and almost none of the rest is worth
+hunting. Deferred tool schemas already work: Figma's 42 tools and Notion's 38
+cost ~230 tokens each as bare names, not the thousands a loaded schema would.
+What is left that anyone controls is about 5k — the skill listing (~3.4k, of
+which this project's five skills are 378; the rest are global and plugin skills
+that a session here never invokes), the agent listing (~1k), and MCP
+instruction blocks (~0.8k). The other ~44k is Claude Code's own system prompt
+and built-in tool schemas, and no amount of editing this repo touches it.
+
+So the floor is worth *measuring* and mostly not worth fighting. The lever that
+actually moves is the second half of the bill.
 
 Past a hundred turns the floor stops dominating and accumulated conversation
 takes over: the worst measured session reached 300k and paid roughly four times
