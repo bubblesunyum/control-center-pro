@@ -21,16 +21,6 @@ final class NowPlayingWidget: PlaceholderWidget {
 }
 
 @MainActor
-final class QuickTogglesWidget: PlaceholderWidget {
-    static let descriptor = WidgetDescriptor(
-        id: "quick-toggles",
-        title: "Toggles",
-        symbolName: "switch.2",
-        size: .compact
-    )
-}
-
-@MainActor
 final class AudioMixerWidget: PlaceholderWidget {
     static let descriptor = WidgetDescriptor(
         id: "audio-mixer",

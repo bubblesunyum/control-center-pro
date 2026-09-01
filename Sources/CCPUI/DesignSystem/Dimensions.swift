@@ -90,4 +90,7 @@ public extension WidgetSize {
 public extension Layout {
     /// Height of the miniature graphs in the System Stats card.
     static let sparklineHeight: CGFloat = Space.three + Space.half // 28
+    /// Size of a toggle icon button tile and its cell, in the Toggles widget.
+    static let toggleIconSize: CGFloat = 44
+    static let toggleCellWidth: CGFloat = 64
 }

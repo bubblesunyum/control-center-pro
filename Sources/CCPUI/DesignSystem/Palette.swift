@@ -13,6 +13,7 @@ private enum Ink {
     static let white08 = Color.white.opacity(0.08)
     static let white12 = Color.white.opacity(0.12)
     static let white14 = Color.white.opacity(0.14)
+    static let white18 = Color.white.opacity(0.18)
     static let white24 = Color.white.opacity(0.24)
     static let black24 = Color.black.opacity(0.24)
 }
@@ -29,6 +30,8 @@ public extension Color {
     static let cardStroke = Ink.white14
     /// The same hairline where a card is raised — a drag in progress.
     static let cardStrokeStrong = Ink.white24
+    /// Hairline for an active toggle tile — subtle white to lift the accent fill.
+    static let controlStrokeActive = Ink.white18
     /// Fill for a pressable surface inside a card, at rest.
     static let controlFill = Ink.white08
     static let cardShadow = Ink.black24
