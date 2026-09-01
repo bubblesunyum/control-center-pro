@@ -102,7 +102,7 @@ final class PanelEditor {
         guard let zone = zones.first(where: { $0.id == id }) else { return }
         fingerAt = location
         snapshotZones = zones
-        lifted = Lifted(
+        let newLifted = Lifted(
             id: id,
             size: zone.frame.size,
             grab: CGSize(
@@ -110,7 +110,34 @@ final class PanelEditor {
                 height: location.y - zone.frame.minY
             )
         )
-        previewLanding = nil
+        lifted = newLifted
+        // Keep the grid visually stable at lift: the gap starts where the
+        // card was, so nothing collapses until the finger actually moves it.
+        // Without this, `visibleSlots` filters the lifted card and the lane
+        // shrinks by one card height the moment you pick it up.
+        // Use the ghost's visual center, like `landing(using:)` does, so the
+        // first drag tick doesn't thrash the gap one slot.
+        let lane = zone.lane
+        let settled = snapshotZones
+            .filter { $0.lane == lane && $0.id != id }
+            .sorted { $0.frame.minY < $1.frame.minY }
+        let visualCenter = newLifted.visualCenter(at: location)
+        let index = settled.filter { $0.frame.midY < visualCenter.y }.count
+        previewLanding = .into(lane: lane, index: index)
+    }
+
+    /// Window grew/shrank while dragging (new-lane target appeared). The
+    /// frozen snapshot is in the old panel coordinate space, but the finger
+    /// and the live zones are now in the new one — shift the snapshot so
+    /// hit-testing stays aligned with what the eye sees.
+    func shiftSnapshot(dx: CGFloat) {
+        guard !snapshotZones.isEmpty else { return }
+        snapshotZones = snapshotZones.map {
+            PanelEditor.DropZone(id: $0.id, lane: $0.lane, frame: $0.frame.offsetBy(dx: dx, dy: 0))
+        }
+        // Keep the gap's lane index stable — the preview was computed from
+        // the old snapshot, but the gap is drawn from `previewLanding` alone,
+        // which is lane/index based and doesn't need shifting.
     }
 
     func drag(to location: CGPoint) {
@@ -129,11 +156,14 @@ final class PanelEditor {
     /// hangs in the air and the panel stops responding to clicks.
     func cancel() { resetDragState() }
 
-    /// Whether the panel is holding a column open for the card in the air. It
-    /// is offered for the whole drag rather than only when the finger is over
-    /// it, because an offer nobody can see is not one.
+    /// Whether the panel is holding a column open for the card in the air.
+    /// Offered only while the ghost hovers the leading edge, not for the
+    /// whole drag — inserting a full lane at lift shifts the entire grid
+    /// right inside the panel and, even with the window growing left to
+    /// compensate, the two animations desync and the grid visibly jumps the
+    /// moment you pick a card up.
     func isOfferingNewLane(laneCount: Int) -> Bool {
-        lifted != nil && canAddLane(to: laneCount)
+        previewLanding == .newLane(at: 0) && canAddLane(to: laneCount)
     }
 
     /// Where the card in the air would land: the lane under the finger and the
@@ -169,7 +199,7 @@ final class PanelEditor {
 
         // Left of every card is the column the panel would grow into.
         guard let leftmost = source.map(\.frame.minX).min(), center.x < leftmost else { return nil }
-        return isOfferingNewLane(laneCount: laneCount) ? .newLane(at: 0) : nil
+        return canAddLane(to: laneCount) ? .newLane(at: 0) : nil
     }
 
     func canAddLane(to laneCount: Int) -> Bool {

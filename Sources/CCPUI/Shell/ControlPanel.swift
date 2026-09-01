@@ -38,6 +38,7 @@ public struct ControlPanel: View {
         .overlay(alignment: .topLeading) { cardInTheAir }
         .animation(editor.isDragging ? nil : .snappy(duration: 0.28), value: arrangement.layout)
         .animation(.snappy(duration: 0.28), value: editor.isEditing)
+        .animation(.snappy(duration: 0.2), value: editor.previewLanding)
         .onChange(of: isGestureActive) { _, isActive in
             // DragGesture .onEnded is not called when the system cancels the
             // gesture (second finger, notification center). GestureState

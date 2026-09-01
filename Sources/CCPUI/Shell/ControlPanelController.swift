@@ -22,6 +22,7 @@ public final class ControlPanelController {
     /// The screen the panel is currently anchored to, kept so that growing by
     /// a lane mid-edit re-anchors against the same one it opened on.
     private var anchor: NSScreen?
+    private var wasOfferingNewLane = false
 
     public private(set) var isVisible = false
 
@@ -64,6 +65,7 @@ public final class ControlPanelController {
     public func hide() {
         dismissal.stop()
         editor.stopEditing()
+        wasOfferingNewLane = false
         window.orderOut(nil)
         isVisible = false
         // After the window is down, not before: a widget stopped first would
@@ -103,6 +105,7 @@ public final class ControlPanelController {
 
     private func present(from statusItemButton: NSStatusBarButton?, editing: Bool) {
         anchor = statusItemButton?.window?.screen ?? NSScreen.main
+        wasOfferingNewLane = false
         arrangement.activate()
         if editing { editor.startEditing() }
         place()
@@ -182,6 +185,7 @@ public final class ControlPanelController {
     private func trackContentChanges() {
         trackLayoutChanges()
         trackLiftChanges()
+        trackNewLaneChanges()
     }
 
     private func trackLayoutChanges() {
@@ -210,16 +214,63 @@ public final class ControlPanelController {
                 guard let self else { return }
                 self.trackLiftChanges()
                 guard self.isVisible else { return }
-                // Don't move the window while the finger is down: the lift
-                // inserts the new-lane target and removes the card from its
-                // lane, both of which change fittingSize. Resizing there shifts
-                // the .panel coordinate space under the finger (up to 252pt for
-                // a new lane) so the ghost and its gap jump away from the
-                // fingertip. Defer until drop — trackLayoutChanges already
-                // gates layout mutations the same way.
-                guard !self.editor.isDragging else { return }
+                // Lift now keeps the gap at the original spot, so the grid
+                // doesn't collapse and the window height stays stable. No
+                // window move at lift — new-lane growth is deferred until the
+                // finger actually hovers the leading edge (see
+                // trackNewLaneChanges), which is the only stable moment to
+                // grow.
                 self.place()
+                if !self.editor.isDragging {
+                    self.wasOfferingNewLane = false
+                }
             }
+        }
+    }
+
+    private func trackNewLaneChanges() {
+        withObservationTracking {
+            _ = editor.previewLanding
+            _ = arrangement.lanes.count
+            _ = editor.laneCapacity
+        } onChange: {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.trackNewLaneChanges()
+                guard self.isVisible, self.editor.isDragging else { return }
+                let isNowOffering = self.editor.isOfferingNewLane(laneCount: self.arrangement.lanes.count)
+                guard isNowOffering != self.wasOfferingNewLane else { return }
+                self.wasOfferingNewLane = isNowOffering
+                // Growing leftward shifts every existing lane right inside the
+                // panel by one lane width and shifts the finger's panel-local x
+                // the same amount. Nudge the frozen snapshot so the gap stays
+                // under the ghost instead of jumping 252pt. Animate the window
+                // with the same 0.2s as the gap so the ghost doesn't drift.
+                let dx = Layout.laneWidth + Space.oneHalf
+                self.place(animated: true)
+                self.editor.shiftSnapshot(dx: isNowOffering ? dx : -dx)
+            }
+        }
+    }
+
+    private func place(animated: Bool) {
+        guard let visible = anchor?.visibleFrame else { return }
+        editor.laneCapacity = Layout.laneCapacity(inWidth: visible.width)
+        let size = sizeFitting(visible)
+        let frame = NSRect(
+            x: visible.maxX - size.width - Layout.panelInset,
+            y: visible.maxY - size.height - Layout.panelInset,
+            width: size.width,
+            height: size.height
+        )
+        if animated {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.2
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                window.animator().setFrame(frame, display: true)
+            }
+        } else {
+            window.setFrame(frame, display: true)
         }
     }
 }

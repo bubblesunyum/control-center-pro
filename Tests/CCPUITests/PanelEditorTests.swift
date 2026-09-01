@@ -43,7 +43,8 @@ final class PanelEditorTests: XCTestCase {
         } else {
             editor.lift(id, at: CGPoint(x: 20, y: 20))
         }
-        editor.drag(to: point)
+        // twoLanes has 2 lanes; landing needs that count, not the capacity.
+        editor.drag(to: point, laneCount: 2)
         return editor
     }
 
@@ -93,10 +94,15 @@ final class PanelEditorTests: XCTestCase {
         XCTAssertFalse(editor.isOfferingNewLane(laneCount: 2))
     }
 
-    func testTheNewLaneIsOfferedForTheWholeDragNotJustOverIt() {
-        let editor = dragging(a, to: CGPoint(x: 300, y: 20), laneCapacity: 4)
+    func testTheNewLaneIsOfferedOnlyWhenHoveringLeadingEdge() {
+        // New lane no longer offered for whole drag — that shifted the grid
+        // at lift even before the finger went left. Now it appears only when
+        // the ghost hovers the leading edge.
+        let notHovering = dragging(a, to: CGPoint(x: 300, y: 20), laneCapacity: 4)
+        XCTAssertFalse(notHovering.isOfferingNewLane(laneCount: 2))
 
-        XCTAssertTrue(editor.isOfferingNewLane(laneCount: 2))
+        let hovering = dragging(a, to: CGPoint(x: -110, y: 20), laneCapacity: 4)
+        XCTAssertTrue(hovering.isOfferingNewLane(laneCount: 2))
     }
 
     func testNothingIsOfferedWhenNothingIsInTheAir() {
