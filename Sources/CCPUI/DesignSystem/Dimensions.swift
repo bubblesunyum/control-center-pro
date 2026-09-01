@@ -55,6 +55,8 @@ public enum Layout {
     /// Larger preview used in the context menu for an image entry.
     static let clipboardPreviewWidth: CGFloat = 220
     static let clipboardPreviewHeight: CGFloat = 160
+    /// Max width of the full-text preview at the bottom of the clipboard context menu.
+    static let clipboardMenuMaxWidth: CGFloat = 320
     public static let laneWidth: CGFloat = 240
     /// How far the panel sits from the screen's top-right corner.
     public static let panelInset: CGFloat = Space.one

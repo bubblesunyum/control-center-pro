@@ -225,8 +225,16 @@ private struct ClipboardRow: View {
             )
             .contentShape(Rectangle())
             .contextMenu {
+                Button(entry.isPinned ? "Unpin" : "Pin") { adapter.togglePin(entry) }
+                Button("Copy") { copy() }
+                Divider()
+                Button("Delete", role: .destructive) { adapter.remove(entry) }
+                Divider()
                 if entry.kind == .text, !entry.text.isEmpty {
                     Text(menuFullText)
+                        .frame(maxWidth: Layout.clipboardMenuMaxWidth, alignment: .leading)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else if entry.kind == .image {
                     if let thumb = adapter.thumbnail(for: entry) {
                         Image(nsImage: thumb)
@@ -235,20 +243,21 @@ private struct ClipboardRow: View {
                             .frame(maxWidth: Layout.clipboardPreviewWidth, maxHeight: Layout.clipboardPreviewHeight)
                     }
                     Text(entry.preview)
+                        .frame(maxWidth: Layout.clipboardMenuMaxWidth, alignment: .leading)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else if entry.kind == .files, !entry.filePaths.isEmpty {
                     let visible = Array(entry.filePaths.prefix(20))
                     ForEach(Array(visible.enumerated()), id: \.offset) { _, path in
                         Text((path as NSString).lastPathComponent)
+                            .frame(maxWidth: Layout.clipboardMenuMaxWidth, alignment: .leading)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     if entry.filePaths.count > 20 {
                         Text("… and \(entry.filePaths.count - 20) more")
                     }
                 }
-                Divider()
-                Button(entry.isPinned ? "Unpin" : "Pin") { adapter.togglePin(entry) }
-                Button("Copy") { copy() }
-                Divider()
-                Button("Delete", role: .destructive) { adapter.remove(entry) }
             }
             .accessibilityAction(named: entry.isPinned ? "Unpin" : "Pin") { adapter.togglePin(entry) }
             .accessibilityAction(named: "Copy") { copy() }
