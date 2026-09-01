@@ -102,27 +102,37 @@ private struct ClipboardContent: View {
                 .padding(.vertical, Space.one)
                 .accessibilityLabel("No clipboard results for search")
         } else {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: Space.half) {
-                    if !pinned.isEmpty {
-                        sectionLabel("Pinned")
-                        ForEach(pinned) { entry in
-                            ClipboardRow(entry: entry, adapter: adapter)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        Color.clear.frame(height: 0).id("ccp.clipboard.top")
+                        LazyVStack(alignment: .leading, spacing: Space.half) {
+                            if !pinned.isEmpty {
+                                sectionLabel("Pinned")
+                                ForEach(pinned) { entry in
+                                    ClipboardRow(entry: entry, adapter: adapter)
+                                }
+                                if !recent.isEmpty {
+                                    Divider().padding(.vertical, Space.half)
+                                }
+                            }
+                            if !recent.isEmpty {
+                                if !pinned.isEmpty { sectionLabel("Recent") }
+                                ForEach(recent) { entry in
+                                    ClipboardRow(entry: entry, adapter: adapter)
+                                }
+                            }
                         }
-                        if !recent.isEmpty {
-                            Divider().padding(.vertical, Space.half)
-                        }
-                    }
-                    if !recent.isEmpty {
-                        if !pinned.isEmpty { sectionLabel("Recent") }
-                        ForEach(recent) { entry in
-                            ClipboardRow(entry: entry, adapter: adapter)
-                        }
+                        .padding(.top, Space.quarter)
                     }
                 }
+                .frame(maxHeight: Layout.clipboardListHeight)
+                .clipShape(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+                .id("clipboard-\(adapter.hideGeneration)")
+                .onChange(of: adapter.hideGeneration) { _, _ in
+                    proxy.scrollTo("ccp.clipboard.top", anchor: .top)
+                }
             }
-            .frame(maxHeight: Layout.clipboardListHeight)
-            .clipShape(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
         }
     }
 
@@ -215,6 +225,26 @@ private struct ClipboardRow: View {
             )
             .contentShape(Rectangle())
             .contextMenu {
+                if entry.kind == .text, !entry.text.isEmpty {
+                    Text(menuFullText)
+                } else if entry.kind == .image {
+                    if let thumb = adapter.thumbnail(for: entry) {
+                        Image(nsImage: thumb)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxWidth: Layout.clipboardPreviewWidth, maxHeight: Layout.clipboardPreviewHeight)
+                    }
+                    Text(entry.preview)
+                } else if entry.kind == .files, !entry.filePaths.isEmpty {
+                    let visible = Array(entry.filePaths.prefix(20))
+                    ForEach(Array(visible.enumerated()), id: \.offset) { _, path in
+                        Text((path as NSString).lastPathComponent)
+                    }
+                    if entry.filePaths.count > 20 {
+                        Text("… and \(entry.filePaths.count - 20) more")
+                    }
+                }
+                Divider()
                 Button(entry.isPinned ? "Unpin" : "Pin") { adapter.togglePin(entry) }
                 Button("Copy") { copy() }
                 Divider()
@@ -241,8 +271,7 @@ private struct ClipboardRow: View {
     }
 
     private var rowContent: some View {
-        HStack(alignment: .top, spacing: Space.one) {
-            symbol
+        HStack(alignment: .center, spacing: Space.one) {
             VStack(alignment: .leading, spacing: Space.quarter) {
                 Text(entry.preview)
                     .font(.caption)
@@ -251,38 +280,28 @@ private struct ClipboardRow: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .multilineTextAlignment(.leading)
                 if entry.kind == .files, !entry.filePaths.isEmpty {
-                    Text(entry.filePaths.count == 1 ? entry.filePaths.first! : "\(entry.filePaths.count) files")
+                    Text(entry.filePaths.count == 1 ? ((entry.filePaths.first.map { ($0 as NSString).lastPathComponent } ) ?? entry.preview) : "\(entry.filePaths.count) files")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
-                Text(entry.copiedAt, style: .relative)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+            }
+            if let thumb = adapter.thumbnail(for: entry) {
+                Image(nsImage: thumb)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: Layout.clipboardThumbnailWidth, maxHeight: Layout.clipboardThumbnailHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.thumbnail, style: .continuous))
+                    .accessibilityHidden(true)
             }
         }
         .contentShape(Rectangle())
     }
 
-    @ViewBuilder
-    private var symbol: some View {
-        Group {
-            if entry.isPinned {
-                Image(systemName: "pin.fill")
-                    .foregroundStyle(Color.accentColor)
-            } else {
-                switch entry.kind {
-                case .text: Image(systemName: "doc.text")
-                case .image: Image(systemName: "photo")
-                case .files: Image(systemName: entry.filePaths.count == 1 ? "doc" : "folder")
-                }
-            }
-        }
-        .font(.caption.weight(.semibold))
-        .foregroundStyle(entry.isPinned ? Color.accentColor : Color.secondary)
-        .frame(width: Layout.rowActionSize, height: Layout.rowActionSize)
-        .background(Color.controlFill, in: Circle())
+    private var menuFullText: String {
+        guard entry.text.count > 4_000 else { return entry.text }
+        return String(entry.text.prefix(4_000)) + "… (\(entry.text.count) chars)"
     }
 
     private func copy() {

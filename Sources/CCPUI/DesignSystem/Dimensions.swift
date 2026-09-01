@@ -35,6 +35,8 @@ public enum Radius {
     public static let control: CGFloat = 10
     /// Small readouts inside a card, e.g. the sparkline container.
     public static let sparkline: CGFloat = 6
+    /// Small image thumbnail in clipboard rows.
+    static let thumbnail: CGFloat = 4
 }
 
 /// How big the shell's boxes are.
@@ -43,10 +45,16 @@ public enum Radius {
 /// is one more column, not a reflow — and a widget's height comes from the size
 /// it declares. `WidgetSize` names the intent; the points belong here.
 public enum Layout {
-    /// Height of the scrollable clipboard list.
-    static let clipboardListHeight: CGFloat = 220
+    /// Height of the scrollable clipboard list — 50% taller than the original 220 to show ~7 rows.
+    static let clipboardListHeight: CGFloat = 330
     /// Size of a row's leading icon and trailing menu button.
     static let rowActionSize: CGFloat = 22
+    /// Thumbnail shown on the trailing edge of an image clipboard row.
+    static let clipboardThumbnailWidth: CGFloat = 44
+    static let clipboardThumbnailHeight: CGFloat = 32
+    /// Larger preview used in the context menu for an image entry.
+    static let clipboardPreviewWidth: CGFloat = 220
+    static let clipboardPreviewHeight: CGFloat = 160
     public static let laneWidth: CGFloat = 240
     /// How far the panel sits from the screen's top-right corner.
     public static let panelInset: CGFloat = Space.one

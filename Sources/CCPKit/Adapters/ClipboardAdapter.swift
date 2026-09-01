@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Control Center Pro contributors
 
+import AppKit
 import Combine
 import Foundation
 import Observation
@@ -144,6 +145,8 @@ public final class LiveClipboardSource: ClipboardSource {
 public final class ClipboardAdapter {
     public private(set) var entries: [ClipboardEntry]
     public private(set) var isHistoryEnabled: Bool
+    /// Bumps whenever the panel hides so the list can scroll back to top.
+    public private(set) var hideGeneration = 0
 
     @ObservationIgnored private let source: ClipboardSource
     @ObservationIgnored private var observation: AnyCancellable?
@@ -185,6 +188,7 @@ public final class ClipboardAdapter {
     public func deactivate() {
         guard isActive else { return }
         isActive = false
+        hideGeneration &+= 1
         // Intentionally does not cancel `observation`: background sampling is the
         // feature. The panel being shut must not stop the timer.
     }
@@ -232,6 +236,20 @@ public final class ClipboardAdapter {
     public func clearAll() {
         source.clearAll()
         entries = source.snapshot
+    }
+
+    /// Thumbnail for an image entry or a single image-file entry, otherwise nil.
+    public func thumbnail(for entry: ClipboardEntry) -> NSImage? {
+        switch entry.kind {
+        case .image:
+            guard let name = entry.imageFile else { return nil }
+            return BridgedClipboardImages.thumbnail(named: name)
+        case .files:
+            guard entry.filePaths.count == 1, let path = entry.filePaths.first else { return nil }
+            return BridgedClipboardImages.fileThumbnail(atPath: path)
+        case .text:
+            return nil
+        }
     }
 
     private func observe() {

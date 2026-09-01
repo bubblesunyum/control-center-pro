@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Control Center Pro contributors
 
+import AppKit
 import Combine
 import Foundation
 
@@ -127,6 +128,18 @@ public enum BridgedClipboardHistory {
 
     public static func flushBeforeTermination() {
         service.flushBeforeTermination()
+    }
+}
+
+// MARK: - Image helpers
+
+public enum BridgedClipboardImages {
+    public static func thumbnail(named name: String) -> NSImage? {
+        ClipboardImageStore.thumbnail(named: name)
+    }
+
+    public static func fileThumbnail(atPath path: String) -> NSImage? {
+        ClipboardImageStore.fileThumbnail(atPath: path)
     }
 }
 
