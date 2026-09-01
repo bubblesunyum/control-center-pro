@@ -25,6 +25,11 @@ through `opencode.json`, but the brief is *state* rather than a static file, so
 if your tool didn't hand it to you, run it yourself. Starting cold is how a
 session spends its first ten minutes rediscovering what the ledger already knew.
 
+> **opencode:** your first action every session is `bash scripts/brief.sh` — the
+> ready list and traps are not in this file. Claude Code gets this auto via its
+> SessionStart hook; opencode has no equivalent hook, so you must run it
+> yourself before anything else.
+
 ## The ledger is beads, and it is the record
 
 Work and discoveries live in `bd` (prefix `ccp-`), not in TodoWrite, not

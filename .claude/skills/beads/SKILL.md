@@ -9,7 +9,7 @@ Use Beads as the shared project task system. Local plans, scratch files, and per
 
 ## First Step
 
-Run:
+In this harness `scripts/brief.sh` is the session start (≈200 tokens) — it prints seat, last handoff, ready list and trap keys. Prefer it over `bd prime` (≈1900 tokens) which is the generic fallback. If the brief is unavailable, run:
 
 ```bash
 bd prime

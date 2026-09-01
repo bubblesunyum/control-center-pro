@@ -24,6 +24,11 @@ the packet path:
 - `reviewer-correctness` — real defects, on Sonnet
 - `reviewer-design` — what it actually renders, on Sonnet
 
+In Claude Code spawn via `Task` subagents; in opencode spawn the same three
+agents (`reviewer-taste`, `reviewer-correctness`, `reviewer-design` from
+`.opencode/agent/`) in parallel. Both discover `.claude/skills/` and the packet
+is the same — only the spawn tool differs.
+
 The packet's scope excludes the vendored fork — `Sources/Vorssaint/`,
 `Sources/FanControlHelper/`, `Sources/VMStatisticsCompat/`, `Tools/`, `Tests/`,
 `docs/`. That is upstream's code, not ours, and without the exclusion a
