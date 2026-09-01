@@ -1,17 +1,42 @@
 {
-  "generated": "23:29:50",
+  "generated": "10:32:13",
   "project": "control-center-pro",
   "git": {
     "branch": "main",
     "upstream": "origin/main",
-    "dirty": 2,
-    "commits_today": 39,
+    "dirty": 1,
+    "commits_today": 0,
     "last": {
-      "sha": "ca34cec",
-      "subject": "handoff 2026-08-31 show hidden files toggles ccp-5fa",
-      "when": "19 minutes ago"
+      "sha": "e931a47",
+      "subject": "sync ledger: close ccp-83i new-lane clip",
+      "when": "11 hours ago"
     },
     "unpushed": [
+      {
+        "sha": "e931a47",
+        "subject": "sync ledger: close ccp-83i new-lane clip",
+        "at": 1788238654.0
+      },
+      {
+        "sha": "181e359",
+        "subject": "sync ledger: close ccp-8kj grid stability",
+        "at": 1788238649.0
+      },
+      {
+        "sha": "09d052c",
+        "subject": "make drag stable \u2014 gap at original, visual center, deferred new-lane ccp-8kj",
+        "at": 1788238644.0
+      },
+      {
+        "sha": "aff5de3",
+        "subject": "sync ledger: close ccp-drp, open ccp-83i window clip follow-up",
+        "at": 1788237646.0
+      },
+      {
+        "sha": "cd48f4d",
+        "subject": "fix drag landing offset \u2014 finger vs ghost center and window shift ccp-drp",
+        "at": 1788237635.0
+      },
       {
         "sha": "ca34cec",
         "subject": "handoff 2026-08-31 show hidden files toggles ccp-5fa",
@@ -81,11 +106,56 @@
     "unpushed_beads": [
       "ccp-540",
       "ccp-5fa",
+      "ccp-83i",
+      "ccp-8kj",
       "ccp-8ld.3",
+      "ccp-drp",
       "ccp-kb6",
       "ccp-r9m"
     ],
     "bead_commits": {
+      "ccp-83i": {
+        "commits": 2,
+        "at": 1788238654.0,
+        "list": [
+          {
+            "sha": "e931a47",
+            "subject": "sync ledger: close ccp-83i new-lane clip"
+          },
+          {
+            "sha": "aff5de3",
+            "subject": "sync ledger: close ccp-drp, open ccp-83i window clip follow-up"
+          }
+        ]
+      },
+      "ccp-8kj": {
+        "commits": 2,
+        "at": 1788238649.0,
+        "list": [
+          {
+            "sha": "181e359",
+            "subject": "sync ledger: close ccp-8kj grid stability"
+          },
+          {
+            "sha": "09d052c",
+            "subject": "make drag stable \u2014 gap at original, visual center, deferred new-lane ccp-8kj"
+          }
+        ]
+      },
+      "ccp-drp": {
+        "commits": 2,
+        "at": 1788237646.0,
+        "list": [
+          {
+            "sha": "aff5de3",
+            "subject": "sync ledger: close ccp-drp, open ccp-83i window clip follow-up"
+          },
+          {
+            "sha": "cd48f4d",
+            "subject": "fix drag landing offset \u2014 finger vs ghost center and window shift ccp-drp"
+          }
+        ]
+      },
       "ccp-5fa": {
         "commits": 1,
         "at": 1788235837.0,
@@ -179,7 +249,7 @@
       "open": 34,
       "ready": 33,
       "in_progress": 0,
-      "closed": 52,
+      "closed": 55,
       "blocked": 0
     },
     "issues": [
@@ -950,6 +1020,102 @@
         "close_reason": "",
         "owner": "bubbles@cortico.ai",
         "children": []
+      },
+      {
+        "id": "ccp-83i",
+        "title": "follow-up: new-lane target clipped while dragging because window resize gated \u2014 window shift compensates ghost offset but hides affordance",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T04:57:34Z",
+        "created_at": "2026-09-01T04:39:50Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "fixed by deferring new-lane until hover and animating window with snapshot shift; no longer clipped whole drag",
+        "owner": "",
+        "children": [],
+        "commit_count": 2,
+        "commits": [
+          {
+            "sha": "e931a47",
+            "subject": "sync ledger: close ccp-83i new-lane clip"
+          },
+          {
+            "sha": "aff5de3",
+            "subject": "sync ledger: close ccp-drp, open ccp-83i window clip follow-up"
+          }
+        ]
+      },
+      {
+        "id": "ccp-8kj",
+        "title": "drag grid jumps at lift \u2014 gap not at original, window/new-lane desync",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "bug",
+        "parent": "",
+        "updated_at": "2026-09-01T04:57:28Z",
+        "created_at": "2026-09-01T04:57:18Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "gap now at original at lift, visual center with 1.04 scale, new-lane only when hovering with window animated and snapshot shift; grid no longer collapses at pick-up",
+        "owner": "",
+        "children": [],
+        "commit_count": 2,
+        "commits": [
+          {
+            "sha": "181e359",
+            "subject": "sync ledger: close ccp-8kj grid stability"
+          },
+          {
+            "sha": "09d052c",
+            "subject": "make drag stable \u2014 gap at original, visual center, deferred new-lane ccp-8kj"
+          }
+        ]
+      },
+      {
+        "id": "ccp-drp",
+        "title": "drag landing offset \u2014 finger vs ghost center and window shift under drag",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "bug",
+        "parent": "",
+        "updated_at": "2026-09-01T04:40:41Z",
+        "created_at": "2026-09-01T04:31:03Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "landing now follows scaled ghost center not fingertip (+window resize gated until drop); offset and 1.04 scale compensation fixed, tests updated; new-lane clipped follow-up filed as ccp-83i",
+        "owner": "",
+        "children": [],
+        "commit_count": 2,
+        "commits": [
+          {
+            "sha": "aff5de3",
+            "subject": "sync ledger: close ccp-drp, open ccp-83i window clip follow-up"
+          },
+          {
+            "sha": "cd48f4d",
+            "subject": "fix drag landing offset \u2014 finger vs ghost center and window shift ccp-drp"
+          }
+        ]
       },
       {
         "id": "ccp-r9m",
@@ -2142,13 +2308,6 @@
   },
   "worktree": [
     {
-      "path": ".beads/interactions.jsonl",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
       "path": ".beads/issues.jsonl",
       "staged": false,
       "untracked": false,
@@ -2158,7 +2317,7 @@
   ],
   "verify": {
     "status": "passed",
-    "when": "19m ago",
+    "when": "10h ago",
     "tests": "",
     "steps": [
       {
@@ -2170,14 +2329,9 @@
         "ok": true
       }
     ],
-    "unverified": [
-      {
-        "sha": "ca34cec",
-        "subject": "handoff 2026-08-31 show hidden files toggles ccp-5fa"
-      }
-    ],
-    "took": "11s",
-    "at": 1788235824.039103
+    "unverified": [],
+    "took": "9s",
+    "at": 1788238666.5324466
   },
   "runs": {
     "verify": {
@@ -2338,7 +2492,7 @@
           "path": ".beads/issues.jsonl",
           "origin": "harness",
           "role": "the issue graph, exported for git",
-          "tokens": 23907
+          "tokens": 24336
         },
         {
           "id": ".claude/skills/beads/SKILL.md",
@@ -2471,14 +2625,14 @@
       },
       {
         "name": "session brief",
-        "tokens": 426
+        "tokens": 424
       },
       {
         "name": "skill descriptions",
         "tokens": 334
       }
     ],
-    "always_total": 2938,
+    "always_total": 2936,
     "on_demand": [
       {
         "name": "workflow",
@@ -2513,7 +2667,7 @@
         "tokens": 491
       }
     ],
-    "brief_tokens": 426,
+    "brief_tokens": 424,
     "prime_tokens": 1569
   }
 }
