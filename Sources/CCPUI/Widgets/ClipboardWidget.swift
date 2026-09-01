@@ -224,40 +224,12 @@ private struct ClipboardRow: View {
                     .strokeBorder(entry.isPinned ? Color.pinnedStroke : Color.clear, lineWidth: Stroke.hairline)
             )
             .contentShape(Rectangle())
+            .help(tooltipText)
             .contextMenu {
                 Button(entry.isPinned ? "Unpin" : "Pin") { adapter.togglePin(entry) }
                 Button("Copy") { copy() }
                 Divider()
                 Button("Delete", role: .destructive) { adapter.remove(entry) }
-                Divider()
-                if entry.kind == .text, !entry.text.isEmpty {
-                    Text(menuFullText)
-                        .frame(maxWidth: Layout.clipboardMenuMaxWidth, alignment: .leading)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else if entry.kind == .image {
-                    if let thumb = adapter.thumbnail(for: entry) {
-                        Image(nsImage: thumb)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: Layout.clipboardPreviewWidth, maxHeight: Layout.clipboardPreviewHeight)
-                    }
-                    Text(entry.preview)
-                        .frame(maxWidth: Layout.clipboardMenuMaxWidth, alignment: .leading)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else if entry.kind == .files, !entry.filePaths.isEmpty {
-                    let visible = Array(entry.filePaths.prefix(20))
-                    ForEach(Array(visible.enumerated()), id: \.offset) { _, path in
-                        Text((path as NSString).lastPathComponent)
-                            .frame(maxWidth: Layout.clipboardMenuMaxWidth, alignment: .leading)
-                            .multilineTextAlignment(.leading)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    if entry.filePaths.count > 20 {
-                        Text("… and \(entry.filePaths.count - 20) more")
-                    }
-                }
             }
             .accessibilityAction(named: entry.isPinned ? "Unpin" : "Pin") { adapter.togglePin(entry) }
             .accessibilityAction(named: "Copy") { copy() }
@@ -311,6 +283,21 @@ private struct ClipboardRow: View {
     private var menuFullText: String {
         guard entry.text.count > 4_000 else { return entry.text }
         return String(entry.text.prefix(4_000)) + "… (\(entry.text.count) chars)"
+    }
+
+    private var tooltipText: String {
+        switch entry.kind {
+        case .text:
+            return menuFullText
+        case .image:
+            return entry.preview
+        case .files:
+            guard !entry.filePaths.isEmpty else { return entry.preview }
+            let names = entry.filePaths.map { ($0 as NSString).lastPathComponent }
+            let joined = names.joined(separator: "\n")
+            guard joined.count > 4_000 else { return joined }
+            return String(joined.prefix(4_000)) + "…"
+        }
     }
 
     private func copy() {
