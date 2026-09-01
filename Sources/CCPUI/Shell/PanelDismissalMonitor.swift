@@ -41,15 +41,22 @@ final class PanelDismissalMonitor {
         // panel — the panel would close here and reopen there, and the item
         // would look like it had stopped working.
         let outsideClick = monitors.addGlobal([.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
+            // A modal save panel (e.g. scratchpad Export) is an NSPanel at
+            // .modalPanel level; global monitors still see its clicks and
+            // would dismiss the control panel behind it. Ignore while modal.
+            if NSApp?.modalWindow != nil { return }
             self?.dismiss(.clickElsewhere)
         }
 
         // Esc arrives locally because the panel is key, which is what keeps
         // this off the accessibility permission a global keyboard monitor
         // would demand. Swallowed rather than passed on: the panel it was
-        // meant for is gone by then.
+        // meant for is gone by then. Ignore while a modal sheet (e.g.
+        // scratchpad Export) has the key — otherwise Esc would dismiss the
+        // control panel behind the save dialog.
         let escape = monitors.addLocal(.keyDown) { [weak self] event in
             guard event.isEscape else { return event }
+            if NSApp?.modalWindow != nil { return event }
             self?.dismiss(.escapeKey)
             return nil
         }
