@@ -1,6 +1,6 @@
 ---
 name: graphify
-description: Query a local code graph (CCPKit/CCPUI) instead of grepping — explain/path/query with ~5x fewer tokens when built; use before reading 2+ files to trace widgets.
+description: Query a local code graph of Sources/ instead of grepping — explain/path answer in 1.4KB what costs 58KB to read (41x, measured); use before opening 2+ files to trace a symbol.
 ---
 
 # Graphify — on-demand code map
@@ -18,15 +18,22 @@ Skip it for harness work (`bd ready`/`bd show`, `scripts/verify.sh`) — the led
 ## Build (only when you need it, code only)
 
 ```bash
-# scoped to harness code — not vendored UI, not tests, not .build
-uvx --from graphifyy graphify extract Sources/CCPKit Sources/CCPUI Sources/ControlCenterPro --code-only --no-viz
-# whole-repo variant (larger, ~24M JSON, noisier hubs):
-uvx --from graphifyy graphify extract . --code-only --no-viz
-# refresh after edits (no LLM):
-uvx --from graphifyy graphify update .   # or re-run the extract line above
+uvx --from graphifyy graphify extract Sources --code-only --no-viz --out .
 ```
 
-Respects `.graphifyignore` + `.gitignore`. Output is `graphify-out/graph.json` (gitignored). Spike on 2026-09-01: full repo 14,770 nodes / 40,672 edges, ~5x token reduction on avg query (2.3–17.8x per question, `graphify benchmark`); CCPKit-only 400 nodes / 875 edges — prefer the scoped build.
+One path, not three. `extract` given several directories silently graphs only
+the first — the three-argument form this skill used to document produced a
+CCPKit-only graph (449 nodes) that answered every CCPUI question with "not
+found". `Sources` plus `.graphifyignore` is what drops Vorssaint, and `--out .`
+is what puts the result where every query line below expects it.
+
+Refresh after edits with the same line; `graphify update .` also works and skips
+the LLM either way.
+
+Respects `.graphifyignore` + `.gitignore`. Output is `graphify-out/graph.json`
+(gitignored), 1,031 nodes / 2,220 edges, ~490KB, ~30s to build. Measured
+2026-09-01: `explain "CCPWidget"` is 1.4KB against 58KB to read the nine files
+that mention it — **41x** on the question an agent actually asks.
 
 No hooks are installed. The graph is never committed.
 
@@ -40,6 +47,11 @@ uvx --from graphifyy graphify query "how does GlassCard connect to WidgetCard" -
 uvx --from graphifyy graphify query "which adapters exist" --graph graphify-out/graph.json --budget 8000
 uvx --from graphifyy graphify query "..." --graph graphify-out/graph.json --context_filter call
 ```
+
+`explain` and `path` are where the savings are — both answer in a screenful and
+name the file and line for anything you then need to open. `query` is a BFS dump
+that truncates at 113 nodes on an ordinary two-symbol question and costs 6KB to
+say less; reach for it only when you don't know the symbol's name yet.
 
 Each edge is tagged `EXTRACTED` (in source) or `INFERRED` (resolved). Check the `Source: … L…` line before trusting a path.
 

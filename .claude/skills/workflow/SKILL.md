@@ -159,7 +159,22 @@ is invisible to `bd ready` and will still be there in a year.
 
 ## Token discipline
 
-The whole harness is shaped by having one account. The rules that follow from that:
+The whole harness is shaped by having one account. `scripts/context.py spend`
+prints what recent sessions actually cost, and the shape it shows is the reason
+for every rule below: a session opens at ~54k tokens before it has done
+anything, and that opening context is re-sent on every single turn. In a
+60-turn session it *is* 80% of the bill. Only ~4k of it is this repo — the rest
+is Claude Code's own system prompt, tool schemas and whatever MCP connectors the
+app has enabled, which is why trimming CLAUDE.md is the smallest available win
+and turning off a connector you never use is one of the largest.
+
+Past a hundred turns the floor stops dominating and accumulated conversation
+takes over: the worst measured session reached 300k and paid roughly four times
+per turn what it paid at the start. Everything read into the main window is paid
+for again on every turn that follows it, so *where* a read lands matters more
+than how big it is.
+
+The rules that follow from that:
 
 - **The session brief is capped.** `scripts/brief.sh` prints ~90 tokens: the
   ready list and the memory keys. It replaced `bd prime`, which prints ~1750
@@ -177,6 +192,19 @@ The whole harness is shaped by having one account. The rules that follow from th
   cold and re-derives context you already have. Use one when the work is a wide
   read you don't want in your own window (a review pass, a search), not to hand
   off something you could do in two calls.
+
+  The asymmetry is the whole argument. A search that opens eight files costs the
+  main window ~30k tokens *for the rest of the session*; the same search in an
+  `Explore` subagent costs its summary, once. The review pass is the proof that
+  this is affordable — every reviewer ever run, across every session, returned
+  about 15k tokens in total, roughly one percent of what a single working
+  session spends. Reviewers are the cheapest thing in the harness; the expensive
+  habit is reading the repo into your own window.
+
+- **Ask the graph before you open the files.** `graphify explain <symbol>`
+  answers "what touches this" in 1.4KB where reading the matching files costs
+  58KB — 41x, measured. The `graphify` skill has the build line; build it once
+  per session that needs it.
 
 ## Waking up and handing off
 
