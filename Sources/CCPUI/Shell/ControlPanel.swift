@@ -112,13 +112,11 @@ public struct ControlPanel: View {
     /// close over as the layout reorders beneath it.
     @ViewBuilder private var cardInTheAir: some View {
         if let lifted = editor.lifted, let slot = arrangement.slot(for: lifted.id) {
+            let offset = lifted.offset(at: editor.fingerAt)
             LaneSlotCard(slot: slot, isRaised: true)
                 .frame(width: lifted.size.width, height: lifted.size.height)
-                .scaleEffect(1.04)
-                .offset(
-                    x: editor.fingerAt.x - lifted.grab.width,
-                    y: editor.fingerAt.y - lifted.grab.height
-                )
+                .scaleEffect(PanelEditor.Lifted.scale)
+                .offset(x: offset.width, y: offset.height)
                 .allowsHitTesting(false)
         }
     }

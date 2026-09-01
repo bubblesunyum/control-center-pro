@@ -210,6 +210,14 @@ public final class ControlPanelController {
                 guard let self else { return }
                 self.trackLiftChanges()
                 guard self.isVisible else { return }
+                // Don't move the window while the finger is down: the lift
+                // inserts the new-lane target and removes the card from its
+                // lane, both of which change fittingSize. Resizing there shifts
+                // the .panel coordinate space under the finger (up to 252pt for
+                // a new lane) so the ghost and its gap jump away from the
+                // fingertip. Defer until drop — trackLayoutChanges already
+                // gates layout mutations the same way.
+                guard !self.editor.isDragging else { return }
                 self.place()
             }
         }

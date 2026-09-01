@@ -49,6 +49,25 @@ final class PanelEditor {
         let id: WidgetID
         let size: CGSize
         let grab: CGSize
+
+        static let scale: CGFloat = 1.04
+
+        /// Visual center of the scaled card when the finger is at `point`.
+        func visualCenter(at point: CGPoint) -> CGPoint {
+            CGPoint(
+                x: point.x - grab.width * Self.scale + size.width * Self.scale / 2,
+                y: point.y - grab.height * Self.scale + size.height * Self.scale / 2
+            )
+        }
+
+        /// Offset for the overlay that draws the scaled card at the finger.
+        func offset(at point: CGPoint) -> CGSize {
+            let delta = CGSize(width: size.width * (Self.scale - 1) / 2, height: size.height * (Self.scale - 1) / 2)
+            return CGSize(
+                width: point.x - grab.width * Self.scale + delta.width,
+                height: point.y - grab.height * Self.scale + delta.height
+            )
+        }
     }
 
     /// One slot's claim on a piece of the panel.
@@ -137,13 +156,19 @@ final class PanelEditor {
     private func landing(using source: [DropZone], laneCount: Int) -> Landing? {
         guard let lifted else { return nil }
 
-        if let lane = source.first(where: { $0.frame.minX <= fingerAt.x && fingerAt.x <= $0.frame.maxX })?.lane {
+        // Where the card *looks* like it is, not where the fingertip is. The
+        // finger holds the card at `grab` inside it, so a tip near the bottom
+        // of a tall card is ~60pt below its center — using `fingerAt` directly
+        // puts the gap one slot low.
+        let center = lifted.visualCenter(at: fingerAt)
+
+        if let lane = source.first(where: { $0.frame.minX <= center.x && center.x <= $0.frame.maxX })?.lane {
             let settled = source.filter { $0.lane == lane && $0.id != lifted.id }
-            return .into(lane: lane, index: settled.filter { $0.frame.midY < fingerAt.y }.count)
+            return .into(lane: lane, index: settled.filter { $0.frame.midY < center.y }.count)
         }
 
         // Left of every card is the column the panel would grow into.
-        guard let leftmost = source.map(\.frame.minX).min(), fingerAt.x < leftmost else { return nil }
+        guard let leftmost = source.map(\.frame.minX).min(), center.x < leftmost else { return nil }
         return isOfferingNewLane(laneCount: laneCount) ? .newLane(at: 0) : nil
     }
 
