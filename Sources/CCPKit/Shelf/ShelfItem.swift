@@ -22,6 +22,9 @@ public struct ShelfItem: Identifiable, Codable, Equatable, Sendable, Hashable {
     /// absolute so the store survives a home-directory move.
     public let imageFileName: String?
     public let createdAt: Date
+    /// Pinned items sort to the front and survive Clear. Absent from shelves
+    /// written before pinning existed, which is why the decoder is lenient.
+    public var isPinned: Bool
 
     public enum Kind: String, Codable, Sendable, CaseIterable {
         case file
@@ -44,7 +47,8 @@ public struct ShelfItem: Identifiable, Codable, Equatable, Sendable, Hashable {
         text: String? = nil,
         urlString: String? = nil,
         imageFileName: String? = nil,
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        isPinned: Bool = false
     ) {
         self.id = id
         self.kind = kind
@@ -54,7 +58,19 @@ public struct ShelfItem: Identifiable, Codable, Equatable, Sendable, Hashable {
         self.urlString = urlString
         self.imageFileName = imageFileName
         self.createdAt = createdAt
+        self.isPinned = isPinned
     }
 
-
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        kind = try c.decode(Kind.self, forKey: .kind)
+        title = try c.decode(String.self, forKey: .title)
+        filePath = try c.decodeIfPresent(String.self, forKey: .filePath)
+        text = try c.decodeIfPresent(String.self, forKey: .text)
+        urlString = try c.decodeIfPresent(String.self, forKey: .urlString)
+        imageFileName = try c.decodeIfPresent(String.self, forKey: .imageFileName)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        isPinned = try c.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+    }
 }

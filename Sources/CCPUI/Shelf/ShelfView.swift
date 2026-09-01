@@ -20,7 +20,7 @@ struct ShelfView: View {
     @Environment(ShelfStore.self) private var shelf
     @State private var isDropTargeted = false
     @State private var closeHovered = false
-    @State private var pinHovered = false
+    @State private var keepOpenHovered = false
     @State private var clearHovered = false
 
     private static let dropTypes: [UTType] = [.fileURL, .image, .url, .plainText, .text]
@@ -84,23 +84,25 @@ struct ShelfView: View {
             .contentShape(Rectangle())
             .overlay(ShelfPanelMoveViewRepresentable())
 
-            pinButton
+            keepOpenButton
             closeButton
         }
     }
 
-    private var pinButton: some View {
-        Button { shelf.togglePin() } label: {
-            Image(systemName: shelf.isPinned ? "pin.fill" : "pin")
+    /// Keeps the window up when focus leaves it — not to be confused with
+    /// pinning an item, which is on the tile itself.
+    private var keepOpenButton: some View {
+        Button { shelf.toggleKeepsWindowOpen() } label: {
+            Image(systemName: shelf.keepsWindowOpen ? "macwindow.on.rectangle" : "macwindow")
                 .font(.caption.weight(.semibold))
                 .frame(width: 30, height: 30)
                 .background(
-                    Circle().fill(shelf.isPinned
-                                  ? Color.accentColor.opacity(pinHovered ? 0.30 : 0.20)
+                    Circle().fill(shelf.keepsWindowOpen
+                                  ? Color.accentColor.opacity(keepOpenHovered ? 0.30 : 0.20)
                                   : Color.controlFill)
                 )
                 .overlay(
-                    Circle().strokeBorder(shelf.isPinned
+                    Circle().strokeBorder(shelf.keepsWindowOpen
                                           ? Color.accentColor.opacity(0.65)
                                           : Color.cardStroke,
                                           lineWidth: Stroke.hairline)
@@ -108,10 +110,10 @@ struct ShelfView: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(shelf.isPinned ? Color.accentColor : Color.secondary)
-        .onHover { pinHovered = $0 }
-        .help(shelf.isPinned ? "Unpin" : "Pin")
-        .accessibilityLabel(shelf.isPinned ? "Unpin shelf" : "Pin shelf")
+        .foregroundStyle(shelf.keepsWindowOpen ? Color.accentColor : Color.secondary)
+        .onHover { keepOpenHovered = $0 }
+        .help(shelf.keepsWindowOpen ? "Let the shelf close on its own" : "Keep the shelf open")
+        .accessibilityLabel(shelf.keepsWindowOpen ? "Stop keeping shelf open" : "Keep shelf open")
     }
 
     private var closeButton: some View {
@@ -168,9 +170,10 @@ struct ShelfView: View {
         .buttonStyle(.plain)
         .foregroundStyle(clearHovered ? Color.red.opacity(0.82) : Color.secondary)
         .onHover { clearHovered = $0 }
-        .help(shelf.selection.isEmpty ? "Clear all" : "Remove selected")
-        .accessibilityLabel(shelf.selection.isEmpty ? "Clear all" : "Remove selected")
-        .accessibilityHint(shelf.selection.isEmpty ? "Removes all items from the shelf" : "Removes selected items")
+        .disabled(shelf.selection.isEmpty && !shelf.hasUnpinnedItems)
+        .help(shelf.selection.isEmpty ? "Clear unpinned" : "Remove selected")
+        .accessibilityLabel(shelf.selection.isEmpty ? "Clear unpinned" : "Remove selected")
+        .accessibilityHint(shelf.selection.isEmpty ? "Removes every unpinned item from the shelf" : "Removes selected items")
     }
 
     private var title: String {
@@ -265,10 +268,11 @@ private struct ShelfTile: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
-                .fill(isSelected ? Color.accentColor.opacity(0.16) : Color.clear)
+                .fill(isSelected ? Color.accentColor.opacity(0.16) : (item.isPinned ? Color.pinnedFill : Color.clear))
                 .overlay(
                     RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
-                        .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: isSelected ? 2 : Stroke.hairline)
+                        .strokeBorder(isSelected ? Color.accentColor : (item.isPinned ? Color.pinnedStroke : Color.clear),
+                                      lineWidth: isSelected ? 2 : Stroke.hairline)
                 )
 
             VStack(spacing: 0) {
@@ -288,6 +292,12 @@ private struct ShelfTile: View {
             if isSelected {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.caption)
+                    .foregroundStyle(Color.accentColor)
+                    .padding(Space.half)
+                    .accessibilityHidden(true)
+            } else if item.isPinned {
+                Image(systemName: "pin.fill")
+                    .font(.caption2)
                     .foregroundStyle(Color.accentColor)
                     .padding(Space.half)
                     .accessibilityHidden(true)
@@ -313,9 +323,10 @@ private struct ShelfTile: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(item.title)
-        .accessibilityValue(isSelected ? "Selected" : "")
+        .accessibilityValue(tileValue)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityAction { shelf.toggleSelection(item.id) }
+        .accessibilityAction(named: item.isPinned ? "Unpin" : "Pin") { shelf.togglePin(item.id) }
         .onDrag {
             let writer = shelf.pasteboardWriter(for: item)
             let provider = NSItemProvider()
@@ -346,6 +357,7 @@ private struct ShelfTile: View {
                 Button("Copy") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(t, forType: .string) }
                 Divider()
             }
+            Button(item.isPinned ? "Unpin" : "Pin") { shelf.togglePin(item.id) }
             Button("Remove", role: .destructive) { shelf.remove(item.id) }
         }
         .help(item.title)
@@ -371,6 +383,12 @@ private struct ShelfTile: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var tileValue: String {
+        [isSelected ? "Selected" : nil, item.isPinned ? "Pinned" : nil]
+            .compactMap { $0 }
+            .joined(separator: ", ")
     }
 
     private var symbolName: String {

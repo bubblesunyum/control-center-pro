@@ -57,7 +57,7 @@ public enum Layout {
     static let clipboardPreviewHeight: CGFloat = 160
     /// Max width of the full-text preview at the bottom of the clipboard context menu.
     static let clipboardMenuMaxWidth: CGFloat = 320
-    public static let laneWidth: CGFloat = 240
+    public static let laneWidth: CGFloat = 300
     /// How far the panel sits from the screen's top-right corner.
     public static let panelInset: CGFloat = Space.one
 
@@ -96,6 +96,14 @@ public extension Layout {
     /// The shortcut field in Settings. Fixed so the row doesn't reflow as the
     /// combination inside it grows from "⌘K" to "Type a shortcut".
     static let shortcutFieldWidth: CGFloat = 160
+    /// A chip in the Shelf card's preview row. Wide enough that a name like
+    /// "Package.swift" reads as one — at 44pt it truncated to "Pa…ift".
+    static let shelfChipWidth: CGFloat = 64
+    static let shelfChipIconWidth: CGFloat = 52
+    static let shelfChipIconHeight: CGFloat = 32
+    /// The round icon buttons that sit on a widget header's trailing edge.
+    /// One size so two headers never disagree about how tall their line is.
+    static let headerAccessorySize: CGFloat = 28
     /// The Settings window's content width — wide enough that a label and its
     /// shortcut field sit on one line without crowding.
     static let settingsWidth: CGFloat = 420

@@ -12,13 +12,18 @@ import UniformTypeIdentifiers
 /// dragged into and out of any app. This card is the panel's affordance inside
 /// CCP: it shows the count, offers to open the shelf at the mouse, and
 /// surfaces the same Clear action the floating window's own bottom bar does.
+/// With nothing on the shelf it is just its header — an empty box explaining
+/// where to drop things is the floating shelf's job, not a second one here.
 @MainActor
 public final class ShelfWidget: CCPWidget {
     public static let descriptor = WidgetDescriptor(
         id: "shelf",
         title: "Shelf",
         symbolName: "tray.full",
-        size: .regular
+        // An empty shelf is a header and nothing else. The card grows to fit
+        // its chips the moment something lands on it, so the declared size is
+        // the floor for the empty case rather than a shape to fill.
+        size: .compact
     )
 
     public init() {}
@@ -34,71 +39,29 @@ private struct ShelfWidgetContent: View {
     @State private var window = ShelfWindowController.shared
 
     var body: some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: Space.one) {
-                header
-                if store.items.isEmpty {
-                    emptyState
-                } else {
+        WidgetCard(ShelfWidget.descriptor, count: store.items.isEmpty ? nil : store.items.count) {
+            HeaderIconButton(
+                systemImage: window.isVisible ? "xmark" : "arrow.up.forward.app",
+                label: window.isVisible ? "Hide shelf" : "Open shelf"
+            ) {
+                window.toggle()
+            }
+        } content: {
+            // Nothing below the header until something is on the shelf: an
+            // empty box explaining where to drop is a second, larger empty
+            // state next to the one the floating shelf already draws.
+            if !store.items.isEmpty {
+                VStack(alignment: .leading, spacing: Space.one) {
                     preview
                     actions
                 }
+                .transition(.blurReplace)
             }
-            .padding(Space.oneHalf)
         }
+        .animation(.smooth(duration: 0.2), value: store.items.isEmpty)
         .onDrop(of: [.fileURL, .image, .url, .plainText], isTargeted: nil) { providers in
             store.accept(providers: providers)
         }
-    }
-
-    private var header: some View {
-        HStack(spacing: Space.half) {
-            Image(systemName: "tray.full")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Text("Shelf")
-                .font(.caption.weight(.semibold))
-                .lineLimit(1)
-            if !store.items.isEmpty {
-                Text("\(store.items.count)")
-                    .font(.caption2.weight(.bold))
-                    .padding(.horizontal, Space.half + Space.quarter).padding(.vertical, Space.quarter / 2)
-                    .background(Capsule().fill(Color.secondary.opacity(0.18)))
-                    .accessibilityLabel("\(store.items.count) items on shelf")
-            }
-            Spacer(minLength: 0)
-            Button {
-                window.toggle()
-            } label: {
-                Image(systemName: window.isVisible ? "xmark" : "arrow.up.forward.app")
-                    .font(.caption.weight(.semibold))
-                    .frame(width: 28, height: 28)
-                    .background(Circle().fill(Color.controlFill))
-                    .overlay(Circle().strokeBorder(Color.cardStroke, lineWidth: Stroke.hairline))
-            }
-            .buttonStyle(.plain)
-            .help(window.isVisible ? "Hide shelf" : "Open shelf")
-            .accessibilityLabel(window.isVisible ? "Hide shelf" : "Open shelf")
-        }
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: Space.half) {
-            Image(systemName: "tray")
-                .font(.title3)
-                .foregroundStyle(.tertiary)
-            Text("Shelf is empty")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-            Text("Drop files here or open the floating shelf to collect items.")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(Space.one)
-        .background(Color.controlFill, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
-        .accessibilityElement(children: .combine)
     }
 
     private var preview: some View {
@@ -106,6 +69,10 @@ private struct ShelfWidgetContent: View {
             HStack(spacing: Space.half) {
                 ForEach(store.items.prefix(6)) { item in
                     ShelfWidgetChip(item: item)
+                        .contextMenu {
+                            Button(item.isPinned ? "Unpin" : "Pin") { store.togglePin(item.id) }
+                            Button("Remove", role: .destructive) { store.remove(item.id) }
+                        }
                 }
                 if store.items.count > 6 {
                     Text("+\(store.items.count - 6)")
@@ -115,10 +82,10 @@ private struct ShelfWidgetContent: View {
                 }
             }
         }
-        .contentMargins(.horizontal, Space.one, for: .scrollContent)
-        .contentMargins(.vertical, Space.one, for: .scrollContent)
-        .background(Color.controlFill, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
-        .clipShape(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+        // No well behind the row: it would stretch to the lane's full width and
+        // read as a half-empty trough on the way to six chips. Each chip
+        // already carries its own tile.
+        .contentMargins(.vertical, Space.half, for: .scrollContent)
     }
 
     private var actions: some View {
@@ -133,7 +100,8 @@ private struct ShelfWidgetContent: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .accessibilityLabel(store.selection.isEmpty ? "Clear shelf" : "Remove selected from shelf")
+            .disabled(store.selection.isEmpty && !store.hasUnpinnedItems)
+            .accessibilityLabel(store.selection.isEmpty ? "Clear unpinned items" : "Remove selected from shelf")
         }
     }
 }
@@ -145,18 +113,24 @@ private struct ShelfWidgetChip: View {
         VStack(spacing: Space.quarter) {
             Image(systemName: symbol)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 36, height: 28)
-                .background(Color.cardFill, in: RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
+                .foregroundStyle(item.isPinned ? Color.accentColor : .secondary)
+                .frame(width: Layout.shelfChipIconWidth, height: Layout.shelfChipIconHeight)
+                .background(item.isPinned ? Color.pinnedFill : Color.cardFill,
+                            in: RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
+                        .strokeBorder(item.isPinned ? Color.pinnedStroke : Color.clear, lineWidth: Stroke.hairline)
+                )
             Text(item.title)
                 .font(.caption2)
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .frame(width: 44)
+                .frame(width: Layout.shelfChipWidth)
         }
         .padding(.horizontal, Space.quarter)
         .help(item.title)
         .accessibilityLabel(item.title)
+        .accessibilityValue(item.isPinned ? "Pinned" : "")
     }
 
     private var symbol: String {

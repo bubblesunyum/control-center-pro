@@ -22,12 +22,11 @@ public final class ShelfStore {
         didSet { schedulePersist() }
     }
     public private(set) var selection: Set<UUID> = []
-    public private(set) var isPinned = false
+    /// Whether the floating window stays up when focus leaves it. Distinct
+    /// from a pinned *item*, which is `ShelfItem.isPinned`.
+    public private(set) var keepsWindowOpen = false
 
-    @ObservationIgnored private let fileStore = JSONFileStore<[ShelfItem]>(
-        filename: "shelf.json",
-        default: []
-    )
+    @ObservationIgnored private let fileStore: JSONFileStore<[ShelfItem]>
     @ObservationIgnored private var persistWork: DispatchWorkItem?
 
     /// Files for pasted images / GIF data, alongside the clipboard images.
@@ -41,8 +40,15 @@ public final class ShelfStore {
 
     public var itemCount: Int { items.count }
 
-    init() {
-        items = Self.tolerantLoad(from: fileStore)
+    private convenience init() {
+        self.init(directory: .applicationSupport)
+    }
+
+    /// Test seam: a shelf backed by a temporary directory rather than the
+    /// user's own.
+    init(directory: URL) {
+        fileStore = JSONFileStore(filename: "shelf.json", default: [], in: directory)
+        items = Self.pinnedFirst(Self.tolerantLoad(from: fileStore))
     }
 
     private static func tolerantLoad(from store: JSONFileStore<[ShelfItem]>) -> [ShelfItem] {
@@ -62,7 +68,23 @@ public final class ShelfStore {
 
     // MARK: - Pin
 
-    public func togglePin() { isPinned.toggle() }
+    public func toggleKeepsWindowOpen() { keepsWindowOpen.toggle() }
+
+    /// Pins an item, or unpins it. Pinned items sort ahead of the rest and
+    /// Clear leaves them behind — the shelf is a staging area, and a pin is how
+    /// something says it is staying.
+    public func togglePin(_ id: UUID) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].isPinned.toggle()
+        items = Self.pinnedFirst(items)
+    }
+
+    public var hasUnpinnedItems: Bool { items.contains { !$0.isPinned } }
+
+    /// Pinned ahead of unpinned, each group keeping the order it already had.
+    private static func pinnedFirst(_ items: [ShelfItem]) -> [ShelfItem] {
+        items.filter(\.isPinned) + items.filter { !$0.isPinned }
+    }
 
     // MARK: - Selection
 
@@ -93,24 +115,19 @@ public final class ShelfStore {
             title: url.lastPathComponent,
             filePath: url.path
         )
-        items.insert(item, at: 0)
-        selection = [item.id]
+        insert(item)
         return item
     }
 
     public func addText(_ string: String) {
         let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, canAdd(additional: 1) else { return }
-        let item = ShelfItem(kind: .text, title: preview(for: trimmed), text: trimmed)
-        items.insert(item, at: 0)
-        selection = [item.id]
+        insert(ShelfItem(kind: .text, title: preview(for: trimmed), text: trimmed))
     }
 
     public func addLink(_ url: URL) {
         guard canAdd(additional: 1) else { return }
-        let item = ShelfItem(kind: .link, title: url.absoluteString, urlString: url.absoluteString)
-        items.insert(item, at: 0)
-        selection = [item.id]
+        insert(ShelfItem(kind: .link, title: url.absoluteString, urlString: url.absoluteString))
     }
 
     public func addImage(_ image: NSImage) {
@@ -127,9 +144,7 @@ public final class ShelfStore {
         } catch {
             return
         }
-        let item = ShelfItem(kind: .image, title: filename, imageFileName: filename)
-        items.insert(item, at: 0)
-        selection = [item.id]
+        insert(ShelfItem(kind: .image, title: filename, imageFileName: filename))
     }
 
     public func addImageData(_ data: Data, ext: String = "png") {
@@ -142,8 +157,12 @@ public final class ShelfStore {
         } catch {
             return
         }
-        let item = ShelfItem(kind: .image, title: filename, imageFileName: filename)
-        items.insert(item, at: 0)
+        insert(ShelfItem(kind: .image, title: filename, imageFileName: filename))
+    }
+
+    /// Newest first, but never ahead of a pin.
+    private func insert(_ item: ShelfItem) {
+        items.insert(item, at: items.prefix { $0.isPinned }.count)
         selection = [item.id]
     }
 
@@ -210,7 +229,7 @@ public final class ShelfStore {
                 let toInsert = Array(ordered.prefix(remaining))
                 guard !toInsert.isEmpty else { return }
                 for item in toInsert.reversed() {
-                    self.items.insert(item, at: 0)
+                    self.insert(item)
                 }
                 if let first = toInsert.first {
                     self.selection = [first.id]
@@ -343,9 +362,11 @@ public final class ShelfStore {
         for item in removed { retire(item) }
     }
 
+    /// Clears everything the user hasn't pinned. A pin is the one thing that
+    /// says "not this one", so honouring it here is the whole point of having it.
     public func clear() {
-        let removed = items
-        items.removeAll()
+        let removed = items.filter { !$0.isPinned }
+        items.removeAll { !$0.isPinned }
         selection.removeAll()
         for item in removed { retire(item) }
     }
@@ -453,6 +474,6 @@ public final class ShelfStore {
 
     // For previews / tests
     public func setItemsForTesting(_ new: [ShelfItem]) {
-        items = new
+        items = Self.pinnedFirst(new)
     }
 }

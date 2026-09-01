@@ -5,6 +5,7 @@
 #   scripts/capture.sh [out.png]                # default: /tmp/ccp-panel.png
 #   scripts/capture.sh --edit-mode [out.png]    # ... with edit mode already on
 #   scripts/capture.sh --settings [out.png]     # the Settings window instead
+#   scripts/capture.sh --shelf [out.png]        # the floating shelf window
 #
 # Builds and launches the app with --show-panel, grabs the screen, crops to the
 # panel's corner, and leaves the app running. Needs a GUI session with the
@@ -24,6 +25,9 @@ case "${1:-}" in
   # The Settings window opens centred rather than in the panel's corner, so it
   # is captured from the middle of the screen.
   --settings)  SHOW=--show-settings; DEFAULT_OUT=/tmp/ccp-settings.png; shift ;;
+  # The shelf is its own NSPanel and opens wherever the pointer is, so it is
+  # framed the same way as Settings: the whole display, scaled down.
+  --shelf)     SHOW=--show-shelf; DEFAULT_OUT=/tmp/ccp-shelf.png; shift ;;
 esac
 OUT="${1:-$DEFAULT_OUT}"
 mkdir -p "$(dirname "$OUT")"
@@ -54,8 +58,8 @@ screencapture -x "$FULL"
 WIDTH=$(sips -g pixelWidth "$FULL" | awk '/pixelWidth/{print $2}')
 CROP_W=1400
 CROP_H=1400
-if [ "$SHOW" = --show-settings ]; then
-  # A centred window is not in a corner, and guessing where it landed is how
+if [ "$SHOW" = --show-settings ] || [ "$SHOW" = --show-shelf ]; then
+  # A window that is not in a corner, and guessing where it landed is how
   # a review packet ends up with a screenshot of the wallpaper beside it. The
   # whole display, scaled down, always has the window in it.
   sips -Z 1600 "$FULL" --out "$OUT" > /dev/null

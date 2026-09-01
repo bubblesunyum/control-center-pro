@@ -7,6 +7,7 @@
 #   scripts/app.sh --launch --show-panel  # ... with the panel already open
 #   scripts/app.sh --edit-mode            # ... open, and in edit mode
 #   scripts/app.sh --show-settings        # ... with the Settings window open
+#   scripts/app.sh --show-shelf           # ... with the floating shelf open
 #   scripts/app.sh --release              # optimized build
 #
 # build.sh at the repo root is upstream's and stays upstream's: it hand-rolls a
@@ -29,6 +30,7 @@ for arg in "$@"; do
     --show-panel) LAUNCH=1; APP_ARGS+=(--show-panel) ;;
     --edit-mode)  LAUNCH=1; APP_ARGS+=(--show-panel --edit-mode) ;;
     --show-settings) LAUNCH=1; APP_ARGS+=(--show-settings) ;;
+    --show-shelf) LAUNCH=1; APP_ARGS+=(--show-shelf) ;;
     *) echo "unknown flag: $arg" >&2; exit 2 ;;
   esac
 done

@@ -4,36 +4,49 @@
 import CCPKit
 import SwiftUI
 
-/// A widget's card: a titled header over its content, inset from the glass.
+/// A widget's card: a ``WidgetHeader`` over its content, inset from the glass.
 ///
 /// This is what a widget writes when its content isn't a list of full-width
 /// rows. It exists so a dozen unrelated widgets agree on where their title sits
-/// without any of them saying so.
-public struct WidgetCard<Content: View>: View {
+/// without any of them saying so — a widget that needs a count or a button up
+/// there passes them here rather than hand-rolling a header beside everyone
+/// else's.
+public struct WidgetCard<Content: View, Accessory: View>: View {
     private let descriptor: WidgetDescriptor
+    private let count: Int?
+    private let accessory: Accessory
     private let content: Content
 
-    public init(_ descriptor: WidgetDescriptor, @ViewBuilder content: () -> Content) {
+    public init(
+        _ descriptor: WidgetDescriptor,
+        count: Int? = nil,
+        @ViewBuilder accessory: () -> Accessory,
+        @ViewBuilder content: () -> Content
+    ) {
         self.descriptor = descriptor
+        self.count = count
+        self.accessory = accessory()
         self.content = content()
     }
 
     public var body: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: Space.one) {
-                header
+                WidgetHeader(descriptor, count: count) { accessory }
                 content
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(Space.oneHalf)
         }
     }
+}
 
-    private var header: some View {
-        Label(descriptor.title, systemImage: descriptor.symbolName)
-            .font(.headline)
-            .labelStyle(.titleAndIcon)
-            .foregroundStyle(.primary)
-            .lineLimit(1)
+public extension WidgetCard where Accessory == EmptyView {
+    init(
+        _ descriptor: WidgetDescriptor,
+        count: Int? = nil,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.init(descriptor, count: count, accessory: { EmptyView() }, content: content)
     }
 }

@@ -196,8 +196,8 @@ final class PanelEditorTests: XCTestCase {
 @MainActor
 final class LaneCapacityTests: XCTestCase {
     func testALaneAndItsGutterHaveToFit() {
-        XCTAssertEqual(Layout.laneCapacity(inWidth: 1440), 5)
-        XCTAssertEqual(Layout.laneCapacity(inWidth: 800), 3)
+        XCTAssertEqual(Layout.laneCapacity(inWidth: 1440), 4)
+        XCTAssertEqual(Layout.laneCapacity(inWidth: 800), 2)
     }
 
     /// A display too narrow for one lane still gets one: a panel with no lanes
