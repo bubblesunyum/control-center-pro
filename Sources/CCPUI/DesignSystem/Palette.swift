@@ -46,4 +46,11 @@ public extension Color {
     /// Pinned clipboard row — faint accent so a pinned entry reads as kept.
     static let pinnedFill = Color.accentColor.opacity(0.09)
     static let pinnedStroke = Color.accentColor.opacity(0.22)
+
+    /// Dashed placeholder shown where a dragged card would land.
+    static let dropGapStroke = Color.accentColor.opacity(0.55)
+    static let dropGapFill = Color.accentColor.opacity(0.08)
+    /// Dashed new-lane column, highlighted when the finger is over it.
+    static let newLaneStrokeTargeted = Color.accentColor.opacity(0.65)
+    static let newLaneFillTargeted = Color.accentColor.opacity(0.10)
 }

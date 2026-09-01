@@ -23,6 +23,7 @@ final class PanelEditor {
     private(set) var isEditing = false
     private(set) var lifted: Lifted?
     private(set) var fingerAt: CGPoint = .zero
+    private(set) var previewLanding: Landing?
 
     /// How many lanes this display can show. Set by the controller, which is
     /// the only thing that knows what screen the panel is on.
@@ -32,6 +33,15 @@ final class PanelEditor {
     /// lanes themselves as they lay out, because their real frames are the only
     /// honest answer to what is under the finger.
     @ObservationIgnored var zones: [DropZone] = []
+
+    /// The zones as they were when the lift started. While the finger is down
+    /// the lanes animate under it; hit-testing against the live, moving frames
+    /// each pixel makes the drop target thrash and kills the gesture when its
+    /// view moves between lanes. Freezing the map at lift and only recomputing
+    /// the pending landing is what keeps the drag coherent.
+    @ObservationIgnored private var snapshotZones: [DropZone] = []
+
+    var isDragging: Bool { lifted != nil }
 
     /// A card in the air: which one, how big, and whereabouts on it the user
     /// took hold.
@@ -60,12 +70,19 @@ final class PanelEditor {
 
     func stopEditing() {
         isEditing = false
+        resetDragState()
+    }
+
+    private func resetDragState() {
         lifted = nil
+        previewLanding = nil
+        snapshotZones = []
     }
 
     func lift(_ id: WidgetID, at location: CGPoint) {
         guard let zone = zones.first(where: { $0.id == id }) else { return }
         fingerAt = location
+        snapshotZones = zones
         lifted = Lifted(
             id: id,
             size: zone.frame.size,
@@ -74,15 +91,24 @@ final class PanelEditor {
                 height: location.y - zone.frame.minY
             )
         )
+        previewLanding = nil
     }
 
     func drag(to location: CGPoint) {
         fingerAt = location
     }
 
-    func drop() {
-        lifted = nil
+    func drag(to location: CGPoint, laneCount: Int) {
+        fingerAt = location
+        previewLanding = landing(using: snapshotZones, laneCount: laneCount)
     }
+
+    func drop() { resetDragState() }
+
+    /// A gesture that was cancelled (system interruption, second finger,
+    /// view identity change) never calls `onEnded` — without this the card
+    /// hangs in the air and the panel stops responding to clicks.
+    func cancel() { resetDragState() }
 
     /// Whether the panel is holding a column open for the card in the air. It
     /// is offered for the whole drag rather than only when the finger is over
@@ -99,15 +125,25 @@ final class PanelEditor {
     /// `PanelLayout.moving(_:toLane:at:)` takes, and is why dragging a card
     /// down its own lane doesn't land it one short.
     func landing(laneCount: Int) -> Landing? {
+        guard lifted != nil else { return nil }
+        // While dragging, the live frames are animating under the finger;
+        // hit-test against the frozen snapshot so the target doesn't thrash
+        // each pixel. Before a lift there is no snapshot, so fall back to
+        // live zones.
+        let source = isDragging && !snapshotZones.isEmpty ? snapshotZones : zones
+        return landing(using: source, laneCount: laneCount)
+    }
+
+    private func landing(using source: [DropZone], laneCount: Int) -> Landing? {
         guard let lifted else { return nil }
 
-        if let lane = zones.first(where: { $0.frame.minX <= fingerAt.x && fingerAt.x <= $0.frame.maxX })?.lane {
-            let settled = zones.filter { $0.lane == lane && $0.id != lifted.id }
+        if let lane = source.first(where: { $0.frame.minX <= fingerAt.x && fingerAt.x <= $0.frame.maxX })?.lane {
+            let settled = source.filter { $0.lane == lane && $0.id != lifted.id }
             return .into(lane: lane, index: settled.filter { $0.frame.midY < fingerAt.y }.count)
         }
 
         // Left of every card is the column the panel would grow into.
-        guard let leftmost = zones.map(\.frame.minX).min(), fingerAt.x < leftmost else { return nil }
+        guard let leftmost = source.map(\.frame.minX).min(), fingerAt.x < leftmost else { return nil }
         return isOfferingNewLane(laneCount: laneCount) ? .newLane(at: 0) : nil
     }
 

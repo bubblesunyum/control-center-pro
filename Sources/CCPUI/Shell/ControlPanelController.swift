@@ -180,18 +180,37 @@ public final class ControlPanelController {
     /// again — both halves are required, and dropping either gives a panel
     /// that resizes exactly once.
     private func trackContentChanges() {
+        trackLayoutChanges()
+        trackLiftChanges()
+    }
+
+    private func trackLayoutChanges() {
         withObservationTracking {
             _ = arrangement.layout
             _ = editor.isEditing
-            // What was picked up, not where it is: this is a window resize,
-            // and it belongs at the two ends of a drag rather than in every
-            // frame of one.
+        } onChange: {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.trackLayoutChanges()
+                // Layout is frozen while dragging (one mutation on drop, gap
+                // is visual only). Resizing the window mid-drag as the source
+                // lane collapses shifts the .panel coordinate space under the
+                // finger and clips the placeholder.
+                guard self.isVisible, !self.editor.isDragging else { return }
+                self.place()
+            }
+        }
+    }
+
+    private func trackLiftChanges() {
+        withObservationTracking {
             _ = editor.lifted
         } onChange: {
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                trackContentChanges()
-                if isVisible { place() }
+                self.trackLiftChanges()
+                guard self.isVisible else { return }
+                self.place()
             }
         }
     }

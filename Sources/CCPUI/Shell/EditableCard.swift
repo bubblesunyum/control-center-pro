@@ -27,10 +27,13 @@ struct EditableCard: View {
             .overlay(alignment: .topLeading) { removeBadge }
             // The whole card, badge included: what a lifted card leaves in its
             // lane is a gap, and a gap with a remove button floating in it is
-            // a control belonging to nothing.
+            // a control belonging to nothing. Hit-testing is handled by the
+            // panel-level gesture (frozen zones), not per-card — a per-card
+            // gesture dies when its view moves between lanes and hangs the
+            // drag in the air.
             .opacity(isInTheAir ? 0 : 1)
             .background { frameReporter }
-            .highPriorityGesture(dragToRearrange)
+            .contentShape(Rectangle())
     }
 
     @ViewBuilder private var removeBadge: some View {
@@ -63,38 +66,5 @@ struct EditableCard: View {
         }
     }
 
-    /// Rearranges as it goes rather than at the end: the lanes reflow under the
-    /// card in the air, so what the panel looks like mid-drag is what letting
-    /// go would leave behind.
-    private var dragToRearrange: some Gesture {
-        DragGesture(minimumDistance: 4, coordinateSpace: .panel)
-            .onChanged { value in
-                guard editor.isEditing else { return }
-                if editor.lifted == nil {
-                    editor.lift(slot.id, at: value.startLocation)
-                }
-                editor.drag(to: value.location)
-                moveToLanding()
-            }
-            .onEnded { _ in
-                guard editor.lifted != nil else { return }
-                withAnimation(.snappy) { editor.drop() }
-            }
-    }
 
-    private func moveToLanding() {
-        guard
-            let lifted = editor.lifted,
-            let landing = editor.landing(laneCount: arrangement.lanes.count)
-        else { return }
-
-        withAnimation(.snappy(duration: 0.28)) {
-            switch landing {
-            case .into(let lane, let index):
-                arrangement.move(lifted.id, toLane: lane, at: index)
-            case .newLane(let lane):
-                arrangement.move(lifted.id, toNewLaneAt: lane)
-            }
-        }
-    }
 }
