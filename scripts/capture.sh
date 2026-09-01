@@ -4,6 +4,7 @@
 #
 #   scripts/capture.sh [out.png]                # default: /tmp/ccp-panel.png
 #   scripts/capture.sh --edit-mode [out.png]    # ... with edit mode already on
+#   scripts/capture.sh --settings [out.png]     # the Settings window instead
 #
 # Builds and launches the app with --show-panel, grabs the screen, crops to the
 # panel's corner, and leaves the app running. Needs a GUI session with the
@@ -17,11 +18,14 @@ cd "$ROOT"
 # the shots it hands the design reviewer, and it doesn't descend into
 # subdirectories.
 SHOW=--show-panel
-if [ "${1:-}" = "--edit-mode" ]; then
-  SHOW=--edit-mode
-  shift
-fi
-OUT="${1:-/tmp/ccp-panel.png}"
+DEFAULT_OUT=/tmp/ccp-panel.png
+case "${1:-}" in
+  --edit-mode) SHOW=--edit-mode; shift ;;
+  # The Settings window opens centred rather than in the panel's corner, so it
+  # is captured from the middle of the screen.
+  --settings)  SHOW=--show-settings; DEFAULT_OUT=/tmp/ccp-settings.png; shift ;;
+esac
+OUT="${1:-$DEFAULT_OUT}"
 mkdir -p "$(dirname "$OUT")"
 
 scripts/app.sh "$SHOW" > /dev/null
@@ -50,7 +54,14 @@ screencapture -x "$FULL"
 WIDTH=$(sips -g pixelWidth "$FULL" | awk '/pixelWidth/{print $2}')
 CROP_W=1400
 CROP_H=1400
-sips --cropOffset 0 $((WIDTH - CROP_W)) --cropToHeightWidth $CROP_H $CROP_W "$FULL" --out "$OUT" > /dev/null
+if [ "$SHOW" = --show-settings ]; then
+  # A centred window is not in a corner, and guessing where it landed is how
+  # a review packet ends up with a screenshot of the wallpaper beside it. The
+  # whole display, scaled down, always has the window in it.
+  sips -Z 1600 "$FULL" --out "$OUT" > /dev/null
+else
+  sips --cropOffset 0 $((WIDTH - CROP_W)) --cropToHeightWidth $CROP_H $CROP_W "$FULL" --out "$OUT" > /dev/null
+fi
 rm -f "$FULL"
 
 echo "$OUT"

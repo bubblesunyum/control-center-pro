@@ -5,20 +5,29 @@ import AppKit
 import CCPUI
 
 /// The menu bar item: left click toggles the panel, right click shows
-/// the menu (Edit / Quit).
+/// the menu (Edit / Settings / Quit).
 @MainActor
 final class StatusItemController {
     private let item: NSStatusItem
     private let panel: ControlPanelController
+    private let settingsWindow: SettingsWindowController
     private let menu: NSMenu
 
-    init(panel: ControlPanelController) {
+    /// What the panel anchors itself to. Read by the global shortcut, which
+    /// has no click of its own to say which screen the user is on.
+    var button: NSStatusBarButton? { item.button }
+
+    init(panel: ControlPanelController, settingsWindow: SettingsWindowController) {
         self.panel = panel
+        self.settingsWindow = settingsWindow
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         menu = NSMenu()
         let editItem = NSMenuItem(title: "Edit", action: #selector(editWidgets), keyEquivalent: "")
         editItem.target = self
         menu.addItem(editItem)
+        let settingsItem = NSMenuItem(title: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
         menu.addItem(.separator())
         let quitItem = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
@@ -53,6 +62,10 @@ final class StatusItemController {
 
     @objc private func editWidgets() {
         panel.showAndStartEditing(from: item.button)
+    }
+
+    @objc private func showSettings() {
+        settingsWindow.show()
     }
 
     @objc private func quitApp() {

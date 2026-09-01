@@ -93,4 +93,10 @@ public extension Layout {
     /// Size of a toggle icon button tile and its cell, in the Toggles widget.
     static let toggleIconSize: CGFloat = 44
     static let toggleCellWidth: CGFloat = 64
+    /// The shortcut field in Settings. Fixed so the row doesn't reflow as the
+    /// combination inside it grows from "⌘K" to "Type a shortcut".
+    static let shortcutFieldWidth: CGFloat = 160
+    /// The Settings window's content width — wide enough that a label and its
+    /// shortcut field sit on one line without crowding.
+    static let settingsWidth: CGFloat = 420
 }
