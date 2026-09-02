@@ -97,7 +97,7 @@ public extension WidgetSize {
         case .compact: 64
         case .regular: 132
         case .tall: 232
-        case .screen: 600
+        case .screen: 900
         }
     }
 

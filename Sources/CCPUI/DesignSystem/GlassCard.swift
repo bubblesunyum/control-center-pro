@@ -15,6 +15,8 @@ import SwiftUI
 /// container instead and every highlight stops short of the edge. Widgets whose
 /// content is not a list reach for ``WidgetCard``, which adds the inset back.
 public struct GlassCard<Content: View>: View {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
     private let isRaised: Bool
     private let content: Content
 
@@ -25,14 +27,30 @@ public struct GlassCard<Content: View>: View {
 
     public var body: some View {
         content
-            .background {
-                VisualEffectViewRepresentable()
-                    .overlay(Color.cardFill)
-                    .clipShape(shape)
-            }
+            .background { glassBackground }
             .clipShape(shape)
             .overlay(shape.strokeBorder(isRaised ? Color.cardStrokeStrong : Color.cardStroke, lineWidth: Stroke.hairline))
             .shadow(color: .cardShadow, radius: isRaised ? 16 : 8, y: isRaised ? 8 : 2)
+    }
+
+    @ViewBuilder
+    private var glassBackground: some View {
+#if compiler(>=6.2)
+        if #available(macOS 26.0, *), !reduceTransparency {
+            shape
+                .fill(Color.clear)
+                .glassEffect(.regular, in: shape)
+                .overlay(shape.fill(Color.cardFill))
+        } else {
+            VisualEffectViewRepresentable(cornerRadius: Radius.card)
+                .overlay(Color.cardFill)
+                .clipShape(shape)
+        }
+#else
+        VisualEffectViewRepresentable(cornerRadius: Radius.card)
+            .overlay(Color.cardFill)
+            .clipShape(shape)
+#endif
     }
 
     private var shape: RoundedRectangle {

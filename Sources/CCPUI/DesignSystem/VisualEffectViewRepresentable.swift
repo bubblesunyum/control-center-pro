@@ -10,17 +10,33 @@ import SwiftUI
 /// else, so over a transparent panel one renders as a faint tint you can read
 /// straight through. This is the only thing that samples the desktop.
 struct VisualEffectViewRepresentable: NSViewRepresentable {
-    var material: NSVisualEffectView.Material = .popover
+    // .hudWindow reads as Control Center frost vs .popover's sheet tint
+    // (see Vorssaint's HUDBackdropMaterial — always .hudWindow for behind-window).
+    var material: NSVisualEffectView.Material = .hudWindow
+    var cornerRadius: CGFloat = 0
 
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
         view.blendingMode = .behindWindow
         view.state = .active
         view.material = material
+        apply(to: view)
         return view
     }
 
     func updateNSView(_ view: NSVisualEffectView, context: Context) {
         view.material = material
+        apply(to: view)
+    }
+
+    private func apply(to view: NSVisualEffectView) {
+        // SwiftUI's .clipShape rounds the drawn content but does not clip an
+        // NSVisualEffectView's behind-window blur — the blur and the window's
+        // shadow keep the full rectangular bounds and read as a faint outline
+        // just outside the rounded card (see Vorssaint's HUDBackdropMaterial).
+        view.wantsLayer = true
+        view.layer?.cornerRadius = cornerRadius
+        view.layer?.cornerCurve = .continuous
+        view.layer?.masksToBounds = cornerRadius > 0
     }
 }

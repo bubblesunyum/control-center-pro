@@ -28,6 +28,30 @@ struct ShelfView: View {
     static let panelWidth: CGFloat = 304
     static let tileAreaHeight: CGFloat = 188
 
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    private let shelfShape = RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+
+    @ViewBuilder
+    private var shelfBackground: some View {
+#if compiler(>=6.2)
+        if #available(macOS 26.0, *), !reduceTransparency {
+            shelfShape
+                .fill(Color.clear)
+                .glassEffect(.regular, in: shelfShape)
+                .overlay(shelfShape.fill(Color.cardFill))
+        } else {
+            VisualEffectViewRepresentable(cornerRadius: Radius.card)
+                .overlay(Color.cardFill)
+                .clipShape(shelfShape)
+        }
+#else
+        VisualEffectViewRepresentable(cornerRadius: Radius.card)
+            .overlay(Color.cardFill)
+            .clipShape(shelfShape)
+#endif
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Space.oneHalf) {
             header
@@ -38,17 +62,10 @@ struct ShelfView: View {
         }
         .padding(Space.oneHalf)
         .frame(width: Self.panelWidth)
-        .background(
-            ZStack {
-                VisualEffectViewRepresentable(material: .popover)
-                    .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-                Color.cardFill
-                    .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-            }
-        )
-        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .background(shelfBackground)
+        .clipShape(shelfShape)
         .overlay(
-            RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+            shelfShape
                 .strokeBorder(isDropTargeted ? Color.accentColor : Color.cardStroke,
                               lineWidth: isDropTargeted ? 2 : Stroke.hairline)
         )
