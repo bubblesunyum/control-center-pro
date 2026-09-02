@@ -97,7 +97,9 @@ bead; the commit-msg hook enforces it.
 ## Skills load on demand
 
 `.claude/skills/` holds `workflow` (how work moves through all of this),
-`agentic-review`, `beads`, and `handoff`. Claude Code and opencode both discover
+`agentic-review`, `beads`, `handoff`, and `graphify` (local code graph — prefer
+`graphify explain`/`path`/`query` over grepping `Sources/CCPKit`/`CCPUI` when
+`graphify-out/graph.json` exists). Claude Code and opencode both discover
 them there. Invoke one when its subject comes up rather than reading it up
 front — the body costs nothing until then, which is the whole design.
 

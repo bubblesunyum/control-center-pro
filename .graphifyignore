@@ -1,13 +1,17 @@
-# Keep the graph focused on harness + CCP code, not vendored UI or artifacts.
+# Keep the scoped graph focused on harness + CCP code, not vendored upstream or build artifacts.
 # Same syntax as .gitignore; evaluated after .gitignore, so it only ever excludes more.
+# The "scoped" build (Sources → ./graphify-out via --out .) relies on this to drop Vorssaint.
 .build/
 graphify-out/
 Sources/**/graphify-out/
-Sources/Vorssaint/UI/
-Sources/Vorssaint/App/
+Sources/Vorssaint/
 Sources/FanControlHelper/
+Sources/VMStatisticsCompat/
 Tests/
 dist/
 build/
 .swiftpm/
 xcuserdata/
+.cursor/
+.gemini/
+E2E/
