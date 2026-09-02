@@ -111,7 +111,17 @@ private struct ShelfWidgetContent: View {
 
 private struct WidgetFileRow: View {
     let item: ShelfItem
-    @State private var hover = false
+    @Environment(ShelfStore.self) private var store
+    @Environment(\.isPanelEditing) private var isPanelEditing
+    @State private var isHovered = false
+
+    private var isSelected: Bool { store.selection.contains(item.id) }
+
+    private var rowValue: String {
+        [isSelected ? "Selected" : nil, item.isPinned ? "Pinned" : nil]
+            .compactMap { $0 }
+            .joined(separator: ", ")
+    }
 
     var body: some View {
         HStack(spacing: Space.one) {
@@ -125,14 +135,19 @@ private struct WidgetFileRow: View {
                     .multilineTextAlignment(.leading)
             }
             Spacer(minLength: Space.half)
-            if item.isPinned {
+            if isSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+            } else if item.isPinned {
                 Image(systemName: "pin.fill")
                     .font(.caption2)
                     .foregroundStyle(Color.accentColor)
                     .accessibilityHidden(true)
             }
-            if hover {
-                Button { ShelfStore.shared.remove(item.id) } label: {
+            if isHovered {
+                Button { store.remove(item.id) } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -143,9 +158,30 @@ private struct WidgetFileRow: View {
             }
         }
         .padding(.vertical, Space.quarter)
+        .padding(.horizontal, Space.quarter)
         .contentShape(Rectangle())
-        .onHover { hover = $0 }
+        .background(
+            RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
+                .fill(isSelected ? Color.pinnedFill : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
+                .strokeBorder(isSelected ? Color.pinnedStroke : Color.clear, lineWidth: isSelected ? 1 : 0)
+        )
+        .onHover { isHovered = $0 }
+        .onTapGesture {
+            if !isPanelEditing {
+                store.toggleSelection(item.id)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(item.title)
+        .accessibilityValue(rowValue)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityAction { store.toggleSelection(item.id) }
+        .accessibilityAction(named: item.isPinned ? "Unpin" : "Pin") { store.togglePin(item.id) }
         .help(item.title)
+        .modifier(WidgetFileRowDragModifier(item: item))
     }
 
     @ViewBuilder
@@ -247,6 +283,59 @@ private struct WidgetFileRow: View {
     private var fileTypeIcon: NSImage? {
         guard item.kind == .file, let path = item.filePath else { return nil }
         return NSWorkspace.shared.icon(forFile: path)
+    }
+}
+
+private struct WidgetFileRowDragModifier: ViewModifier {
+    let item: ShelfItem
+    @Environment(ShelfStore.self) private var store
+    @Environment(\.isPanelEditing) private var isPanelEditing
+
+    func body(content: Content) -> some View {
+        if isPanelEditing {
+            content
+        } else {
+            content
+                .onDrag {
+                    let provider = NSItemProvider()
+                    // Prefer fileURLs so Finder receives a concrete file even for text/link
+                    let urls = store.fileURLs(for: [item.id])
+                    if let url = urls.first, FileManager.default.fileExists(atPath: url.path) {
+                        provider.registerObject(url as NSURL, visibility: .all)
+                        // Also vend a string/URL representation so drops into text fields work
+                        if let text = item.text {
+                            provider.registerObject(text as NSString, visibility: .all)
+                        } else if let link = item.urlString {
+                            provider.registerObject(link as NSString, visibility: .all)
+                            if let u = URL(string: link) {
+                                provider.registerObject(u as NSURL, visibility: .all)
+                            }
+                        }
+                        provider.suggestedName = url.lastPathComponent
+                        return provider
+                    }
+                    // Ghost or failed write: vend only non-file representations to avoid
+                    // handing Finder a dead file URL.
+                    let writer = store.pasteboardWriter(for: item)
+                    if let url = writer as? NSURL {
+                        if url.isFileURL {
+                            guard let path = url.path, FileManager.default.fileExists(atPath: path) else {
+                                let fallback = item.text ?? item.urlString ?? item.title
+                                provider.registerObject(fallback as NSString, visibility: .all)
+                                provider.suggestedName = item.title
+                                return provider
+                            }
+                        }
+                        provider.registerObject(url, visibility: .all)
+                    } else if let str = writer as? NSString {
+                        provider.registerObject(str, visibility: .all)
+                    } else if let fallback = item.text ?? item.urlString {
+                        provider.registerObject(fallback as NSString, visibility: .all)
+                    }
+                    provider.suggestedName = item.title
+                    return provider
+                }
+        }
     }
 }
 

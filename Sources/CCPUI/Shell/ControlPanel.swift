@@ -4,6 +4,17 @@
 import CCPKit
 import SwiftUI
 
+private struct IsPanelEditingKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var isPanelEditing: Bool {
+        get { self[IsPanelEditingKey.self] }
+        set { self[IsPanelEditingKey.self] = newValue }
+    }
+}
+
 /// Everything inside the glass: vertical lanes of widget cards, and the edit
 /// mode that rearranges them.
 ///
@@ -24,14 +35,14 @@ public struct ControlPanel: View {
     }
 
     public var body: some View {
-        VStack(alignment: .trailing, spacing: Space.oneHalf) {
+        let base = VStack(alignment: .trailing, spacing: Space.oneHalf) {
             if editor.isEditing { EditingBar(arrangement: arrangement, editor: editor) }
             lanes
         }
         .padding(Space.oneHalf)
         .coordinateSpace(.panel)
         .contentShape(Rectangle())
-        .gesture(panelDrag)
+        .environment(\.isPanelEditing, editor.isEditing)
         .onPreferenceChange(DropZonePreference.self) { zones in
             editor.zones = zones
         }
@@ -47,6 +58,12 @@ public struct ControlPanel: View {
             if !isActive, editor.isDragging {
                 editor.cancel()
             }
+        }
+
+        if editor.isEditing {
+            base.gesture(panelDrag)
+        } else {
+            base
         }
     }
 
