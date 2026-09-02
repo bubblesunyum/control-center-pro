@@ -13,6 +13,11 @@ dist/
 *.mobileprovision
 *.keychain-db
 
+# OAuth client credentials for the mail widget. AppBundle/Info.plist is
+# tracked, so the credential lives beside it and is merged into the bundle
+# at assembly time instead. See AppBundle/Secrets.example.plist.
+AppBundle/Secrets.plist
+
 # Local-only working notes
 E2E/
 

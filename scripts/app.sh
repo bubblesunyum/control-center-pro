@@ -68,6 +68,17 @@ rm -rf "$BUNDLE"
 mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources"
 cp "$BINARY" "$BUNDLE/Contents/MacOS/$EXECUTABLE"
 cp AppBundle/Info.plist "$BUNDLE/Contents/Info.plist"
+
+# The mail widget's OAuth client credentials, if this checkout has them. They are
+# merged in here rather than living in AppBundle/Info.plist because that file is
+# tracked and these are a credential. Absent, the app still builds and runs — the
+# widget just has nothing to sign in with. See AppBundle/Secrets.example.plist.
+if [ -f AppBundle/Secrets.plist ]; then
+  while IFS= read -r key; do
+    value="$(/usr/libexec/PlistBuddy -c "Print :$key" AppBundle/Secrets.plist)"
+    /usr/libexec/PlistBuddy -c "Add :$key string $value" "$BUNDLE/Contents/Info.plist" > /dev/null
+  done < <(/usr/libexec/PlistBuddy -c "Print" AppBundle/Secrets.plist | sed -n 's/^    \([A-Za-z]*\) = .*/\1/p')
+fi
 printf 'APPL????' > "$BUNDLE/Contents/PkgInfo"
 
 # Ad-hoc for now. The moment a widget needs a permission macOS ties to a binary
