@@ -196,7 +196,12 @@ public final class SystemStatsAdapter {
             let interval = await self.interval
             while !Task.isCancelled {
                 do {
-                    try await Task.sleep(for: interval)
+                    // Explicit zero tolerance: left to its default the runtime is
+                    // free to coalesce these ticks with other timers, and a graph
+                    // sampled on a coalesced 1s interval visibly stutters. The
+                    // panel is only open for seconds at a time, so the wakeups
+                    // this costs are bounded by `deactivate()`.
+                    try await Task.sleep(for: interval, tolerance: .zero)
                 } catch {
                     return
                 }

@@ -12,7 +12,9 @@ what is true only of control-center-pro. Neither repeats the other.
 
 The gate is `scripts/verify.sh`, and AGENTS.md says how to run it. Underneath it
 is SwiftPM — `swift build` / `swift test` — with a macOS deployment target of
-**14.4**, the floor for the CoreAudio process-tap API the audio mixer needs.
+**26.0**, which buys the macOS 26 SwiftUI surface (native `reorderable()`, Liquid
+Glass). The CoreAudio process-tap API the audio mixer needs floors at 14.4, well
+under it.
 `--full` adds the app smoke launch.
 
 ## Architecture Overview

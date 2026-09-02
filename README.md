@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="#what-you-need"><img src="https://img.shields.io/badge/macOS-14.4%2B%20Apple%20Silicon-black" alt="macOS 14.4 and newer, Apple Silicon"></a>
+  <a href="#what-you-need"><img src="https://img.shields.io/badge/macOS-26%2B%20Apple%20Silicon-black" alt="macOS 26 and newer, Apple Silicon"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue" alt="License GPL 3.0 or later"></a>
 </p>
 
@@ -65,7 +65,7 @@ intact under `Sources/Vorssaint/`.
 ## What you need
 
 - A Mac with Apple Silicon
-- macOS 14.4 or newer
+- macOS 26 or newer
 
 ### Build it yourself
 

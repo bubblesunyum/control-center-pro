@@ -14,14 +14,21 @@ delete it.
 
 ## `Package.swift` — the whole CCP block
 
-**What.** Deployment target raised 14.0 → 14.4; upstream's `Vorssaint`
+**What.** Deployment target raised 14.0 → 26.0; upstream's `Vorssaint`
 executableTarget replaced by a `VorssaintEngines` library target over the same
 path; `CCPKit`, `CCPUI`, `ControlCenterPro`, and `CCPKitTests` added.
 
 **Why.** SwiftPM won't let two targets share source files, and an executable
 target can't be imported — so upstream's engines are unreachable from our code
-until they are declared as a library. 14.4 is the floor for `CATapDescription`,
-which the per-app audio mixer is built on.
+until they are declared as a library. The target was 14.4 for a while — the
+floor for `CATapDescription`, which the per-app audio mixer is built on — and
+went to 26.0 so the app can use the macOS 26 SwiftUI surface.
+
+The raise costs 7 deprecation warnings, all inside vendored upstream we never
+edit: `Services/Recorder/RecorderComposer.swift` (`AVMutableVideoComposition`
+and friends, deprecated in 26.0) and `Services/Homebrew/HomebrewManager.swift`
+(`init(contentsOfFile:)`, deprecated in 15). No errors. They are expected noise;
+if upstream ever modernizes those call sites the warnings go on their own.
 
 **Deleting it.** Step 6 of the BRIEF: propose upstream split `Services/` into a
 `VorssaintKit` library product. If they take it, CCP moves from a fork to an

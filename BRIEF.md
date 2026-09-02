@@ -49,7 +49,7 @@ Also worth porting as shared infra: `HotkeyManager.swift`, `Permissions.swift`, 
 5. If an upstream change is genuinely needed (e.g. exposing something `internal`), prefer submitting it as a PR upstream; patch locally only as a last resort, and track such patches in `PATCHES.md` so merge conflicts there are expected.
 6. Longer-term: propose upstream a refactor splitting `Services/` into a `VorssaintKit` library product. If accepted, CCP can move from fork to a normal SwiftPM dependency.
 
-### Package structure (SwiftPM, macOS 14.4+ target)
+### Package structure (SwiftPM, macOS 26+ target)
 
 Extend the existing `Package.swift` (merge-conflict hotspot — keep our additions in a clearly-delimited block):
 
@@ -121,7 +121,8 @@ Attribution: keep upstream's SPDX GPL headers intact; README states CCP is a for
 ## Build & tooling
 
 - SwiftPM like the source, but add an Xcode project or XcodeGen if entitlements/signing demand it (audio process taps require proper signing + `com.apple.security.device.audio-input`-adjacent entitlements; check `vorssaint-src/build.sh` for how they sign/bundle).
-- macOS deployment target **14.4** (process-tap API floor).
+- macOS deployment target **26.0** (the macOS 26 SwiftUI surface; the
+  process-tap API floors far below it at 14.4).
 - Tests: engines get unit tests (samplers with fake data sources); UI is verified manually.
 
 ## Definition of done for v1

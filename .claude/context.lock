@@ -3,7 +3,7 @@
     ".claude/agents/librarian.md": "4b8c643b0a364fd5",
     ".claude/agents/reviewer-correctness.md": "dfa12aa581b45c70",
     ".claude/agents/reviewer-design.md": "e33457cee19285cc",
-    ".claude/agents/reviewer-taste.md": "cfed7953d377c3bc",
+    ".claude/agents/reviewer-taste.md": "bbd3d37bc5429b0a",
     ".claude/skills/workflow/SKILL.md": "9ccee0cf7ad97c31",
     "doc": "cda0191d4b72a232",
     "scripts/brief.sh": "58d710492c34dda3",
@@ -14,7 +14,7 @@
   },
   ".claude/skills/agentic-review/SKILL.md": {
     ".claude/agents/reviewer-correctness.md": "dfa12aa581b45c70",
-    ".claude/agents/reviewer-taste.md": "cfed7953d377c3bc",
+    ".claude/agents/reviewer-taste.md": "bbd3d37bc5429b0a",
     "doc": "fedbbebd7a396a8e",
     "scripts/review.sh": "ea8cc2b58b043be0"
   },
@@ -33,7 +33,7 @@
     "scripts/verify.sh": "0f8dfc7567660e4e"
   },
   "CLAUDE.md": {
-    "Package.swift": "f6dc26098d25ca1e",
-    "doc": "286b049fa6af4f6d"
+    "Package.swift": "36c4600d433d33b7",
+    "doc": "c72672597638fa7e"
   }
 }

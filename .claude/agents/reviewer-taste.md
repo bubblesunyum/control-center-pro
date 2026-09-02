@@ -41,7 +41,7 @@ Check for, in rough order of how often it actually goes wrong:
 - **Accessibility.** Icon-only controls need a label. Semantic type styles over
   fixed sizes, so text honors the reader's settings.
 
-This project is Swift 5.9+ / SwiftUI / AppKit on macOS 14.4+. Its specific rules:
+This project is Swift 5.9+ / SwiftUI / AppKit on macOS 26+. Its specific rules:
 
 - **Adapters, not edits.** Upstream (`Sources/Vorssaint/**`) is read-only. A
   diff that edits it, or CCP UI that imports an upstream type instead of a

@@ -30,7 +30,9 @@ final class PlaceholderSampler {
         guard sampling == nil else { return }
         sampling = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: Self.interval)
+                // Zero tolerance for the same reason as SystemStatsAdapter: a
+                // coalesced tick makes the placeholder graph stutter.
+                try? await Task.sleep(for: Self.interval, tolerance: .zero)
                 guard !Task.isCancelled else { return }
                 self?.tick += 1
             }

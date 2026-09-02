@@ -14,12 +14,19 @@ import PackageDescription
 let package = Package(
     name: "ControlCenterPro",
 
-    // ── CCP PATCH: deployment target 14.0 → 14.4 ───────────────────────────
-    // The CoreAudio process-tap API the per-app audio mixer is built on
-    // (CATapDescription) does not exist before 14.4. Upstream targets 14.0 and
-    // gates the feature at runtime instead; we would rather the compiler know.
-    // On merge: keep 14.4 unless upstream raises past it.
-    platforms: [.macOS("14.4")],
+    // ── CCP PATCH: deployment target 14.0 → 26.0 ──────────────────────────
+    // Was 14.4, the floor for the CoreAudio process-tap API (CATapDescription)
+    // the audio mixer needs. Raised to 26.0 so the app can use the macOS 26
+    // SwiftUI surface — native `reorderable()` for lane drag reorder (ccp-m53),
+    // and the Liquid Glass materials the panel is drawn with.
+    //
+    // Verified: the raise adds no errors. It does surface 7 deprecation sites,
+    // all inside vendored upstream we never edit (RecorderComposer's
+    // AVMutableVideoComposition, HomebrewManager's init(contentsOfFile:)), so
+    // they are expected noise rather than something to fix here.
+    //
+    // On merge: keep 26.0 unless upstream raises past it.
+    platforms: [.macOS("26.0")],
     // ── END CCP PATCH ──────────────────────────────────────────────────────
 
     targets: [

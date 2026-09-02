@@ -38,7 +38,11 @@ private struct Wiggle: ViewModifier {
                 // The head start is what desynchronises them: the animation
                 // itself can't be given a phase, so the card is simply late to
                 // start rocking.
-                try? await Task.sleep(for: .seconds(headStart))
+                // Zero tolerance because the head start *is* the effect: let the
+                // runtime coalesce these wakeups and several cards round to the
+                // same one, which is the lockstep wiggle the offset exists to
+                // avoid.
+                try? await Task.sleep(for: .seconds(headStart), tolerance: .zero)
                 isRocked = true
             }
     }
