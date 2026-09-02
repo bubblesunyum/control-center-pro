@@ -76,8 +76,12 @@ cp AppBundle/Info.plist "$BUNDLE/Contents/Info.plist"
 if [ -f AppBundle/Secrets.plist ]; then
   while IFS= read -r key; do
     value="$(/usr/libexec/PlistBuddy -c "Print :$key" AppBundle/Secrets.plist)"
-    /usr/libexec/PlistBuddy -c "Add :$key string $value" "$BUNDLE/Contents/Info.plist" > /dev/null
-  done < <(/usr/libexec/PlistBuddy -c "Print" AppBundle/Secrets.plist | sed -n 's/^    \([A-Za-z]*\) = .*/\1/p')
+    # Set first, Add only if the key is new. A bare Add exits 1 on a key the
+    # tracked Info.plist already carries, and under `set -e` that aborts the
+    # assembly here — no PkgInfo, no signing — over a name collision.
+    /usr/libexec/PlistBuddy -c "Set :$key $value" "$BUNDLE/Contents/Info.plist" 2>/dev/null \
+      || /usr/libexec/PlistBuddy -c "Add :$key string $value" "$BUNDLE/Contents/Info.plist" > /dev/null
+  done < <(/usr/libexec/PlistBuddy -c "Print" AppBundle/Secrets.plist | sed -n 's/^    \([^ ]*\) = .*/\1/p')
 fi
 printf 'APPL????' > "$BUNDLE/Contents/PkgInfo"
 
