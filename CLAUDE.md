@@ -17,6 +17,11 @@ Glass). The CoreAudio process-tap API the audio mixer needs floors at 14.4, well
 under it.
 `--full` adds the app smoke launch.
 
+The one dependency is **PsymailKit**, the library lane of `../psymail-mini`,
+carried by a *path* dependency — the two repos are developed as a pair in
+sibling checkouts. A checkout of control-center-pro alone will not resolve; see
+[PATCHES.md](./PATCHES.md).
+
 ## Architecture Overview
 
 Control Center Pro is a macOS menu-bar app: an `NSStatusItem` toggles a
@@ -31,6 +36,11 @@ Sources/CCPKit/            widget protocol, layout model, settings store, adapte
 Sources/CCPUI/             glass shell, lanes, edit mode, design system
 Sources/ControlCenterPro/  executable: app lifecycle, status item, wiring
 ```
+
+The mail widget adds a second vendor alongside upstream: `../psymail-mini`
+exports `PsymailInbox`, a narrow public façade over its stores, and `MailAdapter`
+is the one file in CCP that names it. Same rule as the engines — the UI layer
+sees `MailAdapter` and never PsymailKit.
 
 `BRIEF.md` is the full design and the build order. Read it before planning
 anything structural.

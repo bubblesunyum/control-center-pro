@@ -104,6 +104,13 @@ public extension Layout {
     /// The round icon buttons that sit on a widget header's trailing edge.
     /// One size so two headers never disagree about how tall their line is.
     static let headerAccessorySize: CGFloat = 28
+    /// Height of the scrollable message list in the Mail card. Shorter than the
+    /// clipboard's — a mail row is two lines to a clip's one, so the same height
+    /// would make Mail the tallest thing on the panel by a long way.
+    static let mailListHeight: CGFloat = 260
+    /// The dot marking an unread message. Small enough to read as punctuation
+    /// beside the sender rather than as a control.
+    static let unreadDotSize: CGFloat = 6
     /// The Settings window's content width — wide enough that a label and its
     /// shortcut field sit on one line without crowding.
     static let settingsWidth: CGFloat = 420

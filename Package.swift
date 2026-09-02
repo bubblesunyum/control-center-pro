@@ -29,6 +29,22 @@ let package = Package(
     platforms: [.macOS("26.0")],
     // ── END CCP PATCH ──────────────────────────────────────────────────────
 
+    // ── CCP PATCH: one dependency upstream does not have ───────────────────
+    // psymail-mini ships the same sources twice: as its own menu-bar app, and
+    // through a SwiftPM manifest as PsymailKit, a library a host can embed. The
+    // mail widget is that host — CCP carries the inbox rather than launching a
+    // second menu-bar app beside its own.
+    //
+    // A path dependency, not a URL: the two repositories are developed as a
+    // pair in sibling checkouts, and a revision pin would mean a push and a
+    // bump for every change made while building a widget against it. The cost
+    // is that a checkout of CCP alone does not build — see PATCHES.md.
+    //
+    // On merge: upstream has no dependencies, so this block is ours entirely.
+    dependencies: [
+        .package(path: "../psymail-mini"),
+    ],
+
     targets: [
         .systemLibrary(
             name: "VMStatisticsCompat",
@@ -151,7 +167,10 @@ let package = Package(
         // VorssaintEngines — everything above the fork boundary stops here.
         .target(
             name: "CCPKit",
-            dependencies: ["VorssaintEngines"],
+            dependencies: [
+                "VorssaintEngines",
+                .product(name: "PsymailKit", package: "psymail-mini"),
+            ],
             path: "Sources/CCPKit"
         ),
 

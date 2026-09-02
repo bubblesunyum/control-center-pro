@@ -37,6 +37,7 @@ final class AudioMixerWidget: PlaceholderWidget {
 /// first launch reads it — once the arrangement is on disk, that file wins.
 public let standardLayout = PanelLayout([
     ["system-stats", "clipboard"],
+    ["mail"],
     ["quick-toggles", "now-playing", "audio-mixer"],
     ["shelf", "scratchpad"],
 ])
@@ -50,6 +51,7 @@ public func makeStandardRegistry() -> WidgetRegistry {
     registry.register(NowPlayingWidget.self)
     registry.register(AudioMixerWidget.self)
     registry.register(ClipboardWidget.self)
+    registry.register(MailWidget.self)
     registry.register(ShelfWidget.self)
     registry.register(ScratchpadWidget.self)
     return registry

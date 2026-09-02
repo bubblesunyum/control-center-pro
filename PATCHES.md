@@ -158,3 +158,26 @@ Display 5/5, Bluetooth 2/2, KeepAwake, Clipboard 5/5, and 3 of 4 SystemMonitor f
 **The list should shrink.** It is the honest measure of the fork boundary, and
 each file that leaves it is either an upstream PR that landed or a leak we
 learned to route around.
+
+## The psymail path dependency (ccp-8lh)
+
+`Package.swift` gains a dependency upstream does not have:
+
+```swift
+.package(path: "../psymail-mini")
+```
+
+psymail-mini ships its sources twice — as its own menu-bar app, and as the
+`PsymailKit` library. The mail widget embeds the library, so Control Center Pro
+carries the inbox rather than launching a second menu-bar app beside its own.
+
+**It is a path, not a URL, and that is a real cost:** a checkout of this repo
+alone does not resolve, and CI would need both. The trade was made because the
+two repositories move together — every change made to psymail while building a
+widget against it would otherwise cost a push, a tag and a bump. When psymail's
+embed surface settles, this should become a pinned URL dependency.
+
+The surface itself is one type, `PsymailInbox`, added on the psymail side in
+`psy-31y`. Every other psymail type is internal, which is what keeps the seam
+one file wide: `Sources/CCPKit/Adapters/MailAdapter.swift` is the only place in
+CCP that names PsymailKit at all.
