@@ -30,10 +30,12 @@ public struct WidgetDescriptor: Identifiable, Hashable, Sendable {
     }
 }
 
-/// How much vertical room a widget asks for in its lane.
+/// How much room a widget asks for.
 ///
 /// Named rather than measured: the widget knows it needs a graph's worth of
-/// height, and what that is in points is the design system's call.
+/// height, and what that is in points is the design system's call. Every size
+/// but `.screen` takes the lane's own width — a lane is as wide as the widest
+/// thing in it.
 public enum WidgetSize: String, Codable, Sendable, CaseIterable {
     /// A single row — a toggle, a readout.
     case compact
@@ -41,6 +43,10 @@ public enum WidgetSize: String, Codable, Sendable, CaseIterable {
     case regular
     /// A graph or a scrolling list.
     case tall
+    /// A whole app screen carried in the panel, with its own navigation and
+    /// chrome — wider than a lane of cards, and tall enough to work in rather
+    /// than glance at.
+    case screen
 }
 
 /// A system permission a widget cannot work without.

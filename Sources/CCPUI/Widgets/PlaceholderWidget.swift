@@ -40,7 +40,7 @@ struct ContentSkeleton: View {
         switch size {
         case .compact: Array(Self.widths.prefix(1))
         case .regular: Array(Self.widths.prefix(3))
-        case .tall: Self.widths
+        case .tall, .screen: Self.widths
         }
     }
 

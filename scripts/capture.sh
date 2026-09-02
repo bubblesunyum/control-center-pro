@@ -56,8 +56,15 @@ screencapture -x "$FULL"
 # The panel anchors to the top-right, so crop that corner rather than shipping a
 # reviewer a whole desktop to hunt through.
 WIDTH=$(sips -g pixelWidth "$FULL" | awk '/pixelWidth/{print $2}')
-CROP_W=1400
-CROP_H=1400
+HEIGHT=$(sips -g pixelHeight "$FULL" | awk '/pixelHeight/{print $2}')
+# Retina pixels, so roughly half this in points. Wide enough for a panel
+# carrying a `.screen` widget — a 432pt mail lane beside two of cards runs past
+# the 700pt the crop used to allow, and a lane cropped off the left edge reads
+# exactly like a lane that failed to draw.
+CROP_W=2400
+CROP_H=2000
+[ "$CROP_W" -gt "$WIDTH" ] && CROP_W=$WIDTH
+[ "$CROP_H" -gt "$HEIGHT" ] && CROP_H=$HEIGHT
 if [ "$SHOW" = --show-settings ] || [ "$SHOW" = --show-shelf ]; then
   # A window that is not in a corner, and guessing where it landed is how
   # a review packet ends up with a screenshot of the wallpaper beside it. The

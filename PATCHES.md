@@ -177,7 +177,8 @@ two repositories move together — every change made to psymail while building a
 widget against it would otherwise cost a push, a tag and a bump. When psymail's
 embed surface settles, this should become a pinned URL dependency.
 
-The surface itself is one type, `PsymailInbox`, added on the psymail side in
-`psy-31y`. Every other psymail type is internal, which is what keeps the seam
-one file wide: `Sources/CCPKit/Adapters/MailAdapter.swift` is the only place in
-CCP that names PsymailKit at all.
+The surface is `Psymail` and `PsymailScreen` (psy-0ke), plus the older
+`PsymailInbox` data façade (`psy-31y`) that CCP no longer uses. Every other
+psymail type is internal, which is what keeps the seam one file wide:
+`Sources/CCPKit/Adapters/MailAdapter.swift` is the only place in CCP that names
+PsymailKit at all.

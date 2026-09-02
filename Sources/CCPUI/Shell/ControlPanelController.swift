@@ -142,7 +142,7 @@ public final class ControlPanelController {
         // What the display can show is edit mode's limit too, so it is told
         // here rather than working it out from a screen it has no business
         // knowing about.
-        editor.laneCapacity = Layout.laneCapacity(inWidth: visible.width)
+        editor.displayWidth = visible.width
 
         let size = sizeFitting(visible)
         window.setFrame(
@@ -166,7 +166,7 @@ public final class ControlPanelController {
 
     /// The panel never grows past the space it is shown in: a panel wider than
     /// the display has a lane hanging off the far edge with nothing to say it
-    /// is there. Edit mode won't build one (`Layout.laneCapacity`); this is
+    /// is there. Edit mode won't build one (`Layout.fitsAnotherLane`); this is
     /// what catches an arrangement carried over from a wider display.
     private func sizeFitting(_ visible: NSRect) -> NSSize {
         let wanted = measuredContentSize
@@ -231,14 +231,14 @@ public final class ControlPanelController {
     private func trackNewLaneChanges() {
         withObservationTracking {
             _ = editor.previewLanding
-            _ = arrangement.lanes.count
-            _ = editor.laneCapacity
+            _ = arrangement.laneWidths
+            _ = editor.displayWidth
         } onChange: {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.trackNewLaneChanges()
                 guard self.isVisible, self.editor.isDragging else { return }
-                let isNowOffering = self.editor.isOfferingNewLane(laneCount: self.arrangement.lanes.count)
+                let isNowOffering = self.editor.isOfferingNewLane(beside: self.arrangement.laneWidths)
                 guard isNowOffering != self.wasOfferingNewLane else { return }
                 self.wasOfferingNewLane = isNowOffering
                 // Growing leftward shifts every existing lane right inside the
@@ -255,7 +255,7 @@ public final class ControlPanelController {
 
     private func place(animated: Bool) {
         guard let visible = anchor?.visibleFrame else { return }
-        editor.laneCapacity = Layout.laneCapacity(inWidth: visible.width)
+        editor.displayWidth = visible.width
         let size = sizeFitting(visible)
         let frame = NSRect(
             x: visible.maxX - size.width - Layout.panelInset,

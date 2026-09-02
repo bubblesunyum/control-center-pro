@@ -37,10 +37,17 @@ Sources/CCPUI/             glass shell, lanes, edit mode, design system
 Sources/ControlCenterPro/  executable: app lifecycle, status item, wiring
 ```
 
-The mail widget adds a second vendor alongside upstream: `../psymail-mini`
-exports `PsymailInbox`, a narrow public façade over its stores, and `MailAdapter`
-is the one file in CCP that names it. Same rule as the engines — the UI layer
-sees `MailAdapter` and never PsymailKit.
+The mail widget adds a second vendor alongside upstream, and it is a different
+kind of vendoring: CCP does not read psymail's data and draw its own mail, it
+**carries psymail's whole screen** — the tab bar and its bundles, the message
+detail, search and compose are psymail's own views, running in a lane. That is
+what `.screen` sizing exists for; a lane is as wide as the widest thing in it.
+
+`../psymail-mini` exports `Psymail` (the mail graph, held across the panel
+closing so a half-written reply survives it) and `PsymailScreen` (the view), and
+`MailAdapter` is the one file in CCP that names them. Same rule as the engines —
+the UI layer sees `MailAdapter` and never PsymailKit. The narrower
+`PsymailInbox` data façade is still exported but no longer used here.
 
 `BRIEF.md` is the full design and the build order. Read it before planning
 anything structural.

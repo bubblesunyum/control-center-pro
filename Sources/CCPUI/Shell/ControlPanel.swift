@@ -66,7 +66,7 @@ public struct ControlPanel: View {
                     guard let hit else { return }
                     editor.lift(hit.id, at: value.startLocation)
                 }
-                editor.drag(to: value.location, laneCount: arrangement.lanes.count)
+                editor.drag(to: value.location, laneWidths: arrangement.laneWidths)
             }
             .onEnded { _ in
                 guard let lifted = editor.lifted else { return }
@@ -97,7 +97,7 @@ public struct ControlPanel: View {
             // would shove every card sideways under the finger holding one.
             // It is never in the layout — an empty lane is exactly what
             // `normalized()` closes up.
-            if editor.isOfferingNewLane(laneCount: arrangement.lanes.count) {
+            if editor.isOfferingNewLane(beside: arrangement.laneWidths) {
                 NewLaneTarget(isTargeted: editor.previewLanding == .newLane(at: 0))
                     .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .trailing)))
             }
@@ -160,6 +160,8 @@ private struct WidgetLane: View {
     let arrangement: PanelArrangement
     let editor: PanelEditor
 
+    private var width: CGFloat { slots.width }
+
     private var visibleSlots: [LaneSlot] {
         guard let lifted = editor.lifted else { return slots }
         return slots.filter { $0.id != lifted.id }
@@ -182,7 +184,7 @@ private struct WidgetLane: View {
             ForEach(Array(visibleSlots.enumerated()), id: \.element.id) { offset, slot in
                 if gapIndex == offset { dropGap }
                 EditableCard(slot: slot, lane: lane, arrangement: arrangement, editor: editor)
-                    .frame(width: Layout.laneWidth)
+                    .frame(width: width)
                     .frame(minHeight: slot.height)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -210,7 +212,7 @@ private struct WidgetLane: View {
                 RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
                     .fill(Color.dropGapFill)
             )
-            .frame(width: Layout.laneWidth, height: editor.lifted?.size.height ?? WidgetSize.compact.height)
+            .frame(width: width, height: editor.lifted?.size.height ?? WidgetSize.compact.height)
             .transition(.opacity.combined(with: .scale(scale: 0.98)))
     }
 }
@@ -249,6 +251,22 @@ struct LaneSlotCard: View {
     }
 }
 
+extension [LaneSlot] {
+    /// How wide a lane holding these has to be: as wide as the widest thing in
+    /// it. A lane of cards is the default width; one holding an app screen
+    /// widens to fit it rather than cropping it, and the panel grows by that
+    /// much. An empty lane is a lane of cards until something says otherwise.
+    var width: CGFloat {
+        map(\.width).max() ?? Layout.laneWidth
+    }
+}
+
+extension PanelArrangement {
+    /// Every lane's width, in order — what edit mode measures the room for one
+    /// more column against.
+    var laneWidths: [CGFloat] { lanes.map(\.width) }
+}
+
 extension LaneSlot {
     /// A slot standing in for a widget this build doesn't have has no
     /// descriptor to ask, and the smallest card is the least the lane's shape
@@ -257,6 +275,16 @@ extension LaneSlot {
         switch self {
         case .widget(let widget): widget.descriptor.size.height
         case .unavailable: WidgetSize.compact.height
+        }
+    }
+
+    /// How wide a lane this slot needs. A slot standing in for a widget this
+    /// build doesn't have takes the default width — the id is all it has, and
+    /// nothing in it says the absent widget was ever wider.
+    var width: CGFloat {
+        switch self {
+        case .widget(let widget): widget.descriptor.size.width
+        case .unavailable: Layout.laneWidth
         }
     }
 

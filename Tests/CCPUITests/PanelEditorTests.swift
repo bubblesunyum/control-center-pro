@@ -34,30 +34,51 @@ final class PanelEditorTests: XCTestCase {
     /// Lift where the card actually is so `grab` is realistic (≈10pt inside);
     /// otherwise a fixed `20,20` for `c` at `264,12` yields a -244pt grab and
     /// the ghost's center is lanes away from the fingertip.
-    private func dragging(_ id: WidgetID, to point: CGPoint, laneCapacity: Int = .max) -> PanelEditor {
+    private func dragging(_ id: WidgetID, to point: CGPoint, roomForLanes: Int = .max) -> PanelEditor {
         let editor = editor(zones: twoLanes)
-        editor.laneCapacity = laneCapacity
+        editor.displayWidth = Self.displayWidth(fitting: roomForLanes)
         editor.startEditing()
         if let zone = twoLanes.first(where: { $0.id == id }) {
             editor.lift(id, at: CGPoint(x: zone.frame.minX + 8, y: zone.frame.minY + 8))
         } else {
             editor.lift(id, at: CGPoint(x: 20, y: 20))
         }
-        // twoLanes has 2 lanes; landing needs that count, not the capacity.
-        editor.drag(to: point, laneCount: 2)
+        // twoLanes has 2 default-width lanes; landing needs those, not the room.
+        editor.drag(to: point, laneWidths: Self.twoDefaultLanes)
         return editor
+    }
+
+    /// The widths of the lanes `twoLanes` describes.
+    private static let twoDefaultLanes = [Layout.laneWidth, Layout.laneWidth]
+
+    /// A display exactly wide enough for `count` lanes of cards, so a test can
+    /// say how much room there is in the unit the panel is actually built from.
+    private static func displayWidth(fitting count: Int) -> CGFloat {
+        guard count != .max else { return .greatestFiniteMagnitude }
+        let lanes = CGFloat(count)
+        return lanes * Layout.laneWidth + (lanes - 1) * Space.oneHalf
+            + Layout.panelInset * 2 + Space.oneHalf * 2
+    }
+
+    func testALaneHoldingAnAppScreenEatsTheRoomOfMoreThanOne() {
+        // Two 300pt lanes fit where two 300pt lanes fit — but swap one for a
+        // 432pt screen lane and the third column no longer has anywhere to go.
+        let editor = dragging(a, to: CGPoint(x: -110, y: 20), roomForLanes: 3)
+
+        XCTAssertTrue(editor.canAddLane(beside: Self.twoDefaultLanes))
+        XCTAssertFalse(editor.canAddLane(beside: [WidgetSize.screen.width, Layout.laneWidth]))
     }
 
     func testAboveEverythingInALaneLandsFirst() {
         // Ghost center, not fingertip, decides the index — fingertip must be
         // ~half a card above the first mid to have the ghost above it.
-        let landing = dragging(c, to: CGPoint(x: 100, y: -40)).landing(laneCount: 2)
+        let landing = dragging(c, to: CGPoint(x: 100, y: -40)).landing(laneWidths: Self.twoDefaultLanes)
 
         XCTAssertEqual(landing, .into(lane: 0, index: 0))
     }
 
     func testBelowEverythingInALaneLandsLast() {
-        let landing = dragging(c, to: CGPoint(x: 100, y: 400)).landing(laneCount: 2)
+        let landing = dragging(c, to: CGPoint(x: 100, y: 400)).landing(laneWidths: Self.twoDefaultLanes)
 
         XCTAssertEqual(landing, .into(lane: 0, index: 2))
     }
@@ -65,13 +86,13 @@ final class PanelEditorTests: XCTestCase {
     /// The card in the air doesn't count itself, which is what makes dragging
     /// one down its own lane land it where the finger is rather than one short.
     func testACardDoesNotCountItsOwnPlace() {
-        let landing = dragging(a, to: CGPoint(x: 100, y: 400)).landing(laneCount: 2)
+        let landing = dragging(a, to: CGPoint(x: 100, y: 400)).landing(laneWidths: Self.twoDefaultLanes)
 
         XCTAssertEqual(landing, .into(lane: 0, index: 1), "b is the only card it would sit below")
     }
 
     func testTheLaneUnderTheFingerIsTheOneItLandsIn() {
-        let landing = dragging(a, to: CGPoint(x: 300, y: 20)).landing(laneCount: 2)
+        let landing = dragging(a, to: CGPoint(x: 300, y: 20)).landing(laneWidths: Self.twoDefaultLanes)
 
         XCTAssertEqual(landing, .into(lane: 1, index: 0))
     }
@@ -80,7 +101,7 @@ final class PanelEditorTests: XCTestCase {
     /// the column a drag opens is the new leftmost one.
     func testLeftOfEverythingOpensANewLeadingLane() {
         // New lane triggers when ghost center is left of every card.
-        let landing = dragging(a, to: CGPoint(x: -110, y: 20), laneCapacity: 4).landing(laneCount: 2)
+        let landing = dragging(a, to: CGPoint(x: -110, y: 20), roomForLanes: 4).landing(laneWidths: Self.twoDefaultLanes)
 
         XCTAssertEqual(landing, .newLane(at: 0))
     }
@@ -88,29 +109,29 @@ final class PanelEditorTests: XCTestCase {
     /// ccp-p6g: the panel is anchored top-right and doesn't scroll, so a lane
     /// the display can't show is one the user would lose things in.
     func testNoNewLaneWhenTheDisplayIsFull() {
-        let editor = dragging(a, to: CGPoint(x: -110, y: 20), laneCapacity: 2)
+        let editor = dragging(a, to: CGPoint(x: -110, y: 20), roomForLanes: 2)
 
-        XCTAssertNil(editor.landing(laneCount: 2))
-        XCTAssertFalse(editor.isOfferingNewLane(laneCount: 2))
+        XCTAssertNil(editor.landing(laneWidths: Self.twoDefaultLanes))
+        XCTAssertFalse(editor.isOfferingNewLane(beside: Self.twoDefaultLanes))
     }
 
     func testTheNewLaneIsOfferedOnlyWhenHoveringLeadingEdge() {
         // New lane no longer offered for whole drag — that shifted the grid
         // at lift even before the finger went left. Now it appears only when
         // the ghost hovers the leading edge.
-        let notHovering = dragging(a, to: CGPoint(x: 300, y: 20), laneCapacity: 4)
-        XCTAssertFalse(notHovering.isOfferingNewLane(laneCount: 2))
+        let notHovering = dragging(a, to: CGPoint(x: 300, y: 20), roomForLanes: 4)
+        XCTAssertFalse(notHovering.isOfferingNewLane(beside: Self.twoDefaultLanes))
 
-        let hovering = dragging(a, to: CGPoint(x: -110, y: 20), laneCapacity: 4)
-        XCTAssertTrue(hovering.isOfferingNewLane(laneCount: 2))
+        let hovering = dragging(a, to: CGPoint(x: -110, y: 20), roomForLanes: 4)
+        XCTAssertTrue(hovering.isOfferingNewLane(beside: Self.twoDefaultLanes))
     }
 
     func testNothingIsOfferedWhenNothingIsInTheAir() {
-        XCTAssertFalse(editor(zones: twoLanes).isOfferingNewLane(laneCount: 2))
+        XCTAssertFalse(editor(zones: twoLanes).isOfferingNewLane(beside: Self.twoDefaultLanes))
     }
 
     func testALandingNeedsSomethingInTheAir() {
-        XCTAssertNil(editor(zones: twoLanes).landing(laneCount: 2))
+        XCTAssertNil(editor(zones: twoLanes).landing(laneWidths: Self.twoDefaultLanes))
     }
 
     func testEndingEditModePutsDownWhateverWasInTheAir() {
@@ -148,14 +169,14 @@ final class PanelEditorTests: XCTestCase {
         topEditor.startEditing()
         topEditor.lift(a, at: CGPoint(x: 14, y: 14)) // grab 2,2
         topEditor.drag(to: finger)
-        let topLanding = topEditor.landing(laneCount: 2)
+        let topLanding = topEditor.landing(laneWidths: Self.twoDefaultLanes)
 
         // Grab near bottom-right of `a`
         let bottomEditor = editor(zones: twoLanes)
         bottomEditor.startEditing()
         bottomEditor.lift(a, at: CGPoint(x: 250, y: 140)) // grab 238,128
         bottomEditor.drag(to: finger)
-        let bottomLanding = bottomEditor.landing(laneCount: 2)
+        let bottomLanding = bottomEditor.landing(laneWidths: Self.twoDefaultLanes)
 
         // Fingertip is identical, ghost centers are ~236pt apart — landings
         // must diverge if the center is used.
@@ -189,20 +210,35 @@ final class PanelEditorTests: XCTestCase {
         bottomEditor.lift(a, at: CGPoint(x: aZone.frame.minX + bottomGrab.width, y: aZone.frame.minY + bottomGrab.height))
         bottomEditor.drag(to: bottomFinger)
 
-        XCTAssertEqual(topEditor.landing(laneCount: 2), bottomEditor.landing(laneCount: 2))
+        XCTAssertEqual(topEditor.landing(laneWidths: Self.twoDefaultLanes), bottomEditor.landing(laneWidths: Self.twoDefaultLanes))
     }
 }
 
 @MainActor
 final class LaneCapacityTests: XCTestCase {
+    private let lane = Layout.laneWidth
+
     func testALaneAndItsGutterHaveToFit() {
-        XCTAssertEqual(Layout.laneCapacity(inWidth: 1440), 4)
-        XCTAssertEqual(Layout.laneCapacity(inWidth: 800), 2)
+        XCTAssertTrue(Layout.fitsAnotherLane(beside: [lane, lane, lane], inWidth: 1440))
+        XCTAssertFalse(Layout.fitsAnotherLane(beside: [lane, lane, lane, lane], inWidth: 1440))
+
+        XCTAssertTrue(Layout.fitsAnotherLane(beside: [lane], inWidth: 800))
+        XCTAssertFalse(Layout.fitsAnotherLane(beside: [lane, lane], inWidth: 800))
+    }
+
+    /// A lane is only as wide as the widest thing in it, so a screen widget
+    /// costs the panel more room than a card does — and the count of lanes
+    /// says nothing about whether another fits.
+    func testAScreenLaneCostsMoreRoomThanALaneOfCards() {
+        let screen = WidgetSize.screen.width
+        XCTAssertTrue(Layout.fitsAnotherLane(beside: [lane, lane, lane], inWidth: 1380))
+        XCTAssertFalse(Layout.fitsAnotherLane(beside: [screen, lane, lane], inWidth: 1380))
     }
 
     /// A display too narrow for one lane still gets one: a panel with no lanes
     /// is not an improvement on a panel that is slightly too wide.
     func testEvenAnImpossiblyNarrowDisplayGetsOneLane() {
-        XCTAssertEqual(Layout.laneCapacity(inWidth: 100), 1)
+        XCTAssertTrue(Layout.fitsAnotherLane(beside: [], inWidth: 100))
+        XCTAssertFalse(Layout.fitsAnotherLane(beside: [lane], inWidth: 100))
     }
 }

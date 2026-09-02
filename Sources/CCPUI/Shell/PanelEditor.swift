@@ -25,9 +25,11 @@ final class PanelEditor {
     private(set) var fingerAt: CGPoint = .zero
     private(set) var previewLanding: Landing?
 
-    /// How many lanes this display can show. Set by the controller, which is
-    /// the only thing that knows what screen the panel is on.
-    var laneCapacity = Int.max
+    /// How wide the display showing the panel is. Set by the controller, which
+    /// is the only thing that knows what screen the panel is on. Whether one
+    /// more lane fits depends on the lanes already placed as well as this, so
+    /// it is the width that is stored rather than a count.
+    var displayWidth = CGFloat.greatestFiniteMagnitude
 
     /// Where every slot currently sits, in panel coordinates. Reported by the
     /// lanes themselves as they lay out, because their real frames are the only
@@ -144,9 +146,9 @@ final class PanelEditor {
         fingerAt = location
     }
 
-    func drag(to location: CGPoint, laneCount: Int) {
+    func drag(to location: CGPoint, laneWidths: [CGFloat]) {
         fingerAt = location
-        previewLanding = landing(using: snapshotZones, laneCount: laneCount)
+        previewLanding = landing(using: snapshotZones, laneWidths: laneWidths)
     }
 
     func drop() { resetDragState() }
@@ -162,8 +164,8 @@ final class PanelEditor {
     /// right inside the panel and, even with the window growing left to
     /// compensate, the two animations desync and the grid visibly jumps the
     /// moment you pick a card up.
-    func isOfferingNewLane(laneCount: Int) -> Bool {
-        previewLanding == .newLane(at: 0) && canAddLane(to: laneCount)
+    func isOfferingNewLane(beside laneWidths: [CGFloat]) -> Bool {
+        previewLanding == .newLane(at: 0) && canAddLane(beside: laneWidths)
     }
 
     /// Where the card in the air would land: the lane under the finger and the
@@ -173,17 +175,17 @@ final class PanelEditor {
     /// the dragged card already lifted out — which is the index
     /// `PanelLayout.moving(_:toLane:at:)` takes, and is why dragging a card
     /// down its own lane doesn't land it one short.
-    func landing(laneCount: Int) -> Landing? {
+    func landing(laneWidths: [CGFloat]) -> Landing? {
         guard lifted != nil else { return nil }
         // While dragging, the live frames are animating under the finger;
         // hit-test against the frozen snapshot so the target doesn't thrash
         // each pixel. Before a lift there is no snapshot, so fall back to
         // live zones.
         let source = isDragging && !snapshotZones.isEmpty ? snapshotZones : zones
-        return landing(using: source, laneCount: laneCount)
+        return landing(using: source, laneWidths: laneWidths)
     }
 
-    private func landing(using source: [DropZone], laneCount: Int) -> Landing? {
+    private func landing(using source: [DropZone], laneWidths: [CGFloat]) -> Landing? {
         guard let lifted else { return nil }
 
         // Where the card *looks* like it is, not where the fingertip is. The
@@ -199,11 +201,11 @@ final class PanelEditor {
 
         // Left of every card is the column the panel would grow into.
         guard let leftmost = source.map(\.frame.minX).min(), center.x < leftmost else { return nil }
-        return canAddLane(to: laneCount) ? .newLane(at: 0) : nil
+        return canAddLane(beside: laneWidths) ? .newLane(at: 0) : nil
     }
 
-    func canAddLane(to laneCount: Int) -> Bool {
-        laneCount < laneCapacity
+    func canAddLane(beside laneWidths: [CGFloat]) -> Bool {
+        Layout.fitsAnotherLane(beside: laneWidths, inWidth: displayWidth)
     }
 }
 

@@ -57,20 +57,34 @@ public enum Layout {
     static let clipboardPreviewHeight: CGFloat = 160
     /// Max width of the full-text preview at the bottom of the clipboard context menu.
     static let clipboardMenuMaxWidth: CGFloat = 320
+    /// How wide a lane of cards is. A lane holding a `.screen` widget is wider
+    /// — see `WidgetSize.width` — but this is the width of every other one,
+    /// and of a lane that does not exist yet.
     public static let laneWidth: CGFloat = 300
+    /// How wide an embedded app screen is. psymail's mail screen is laid out
+    /// for this, and a card of controls' 300pt crowds its header and tab bar.
+    static let screenWidth: CGFloat = 432
     /// How far the panel sits from the screen's top-right corner.
     public static let panelInset: CGFloat = Space.one
 
-    /// How many lanes a display this wide can actually show.
+    /// Whether a display this wide can show one more lane beside the ones
+    /// already placed.
     ///
     /// The panel is anchored top-right and does not scroll, so a lane past
     /// this is a column hanging off the left edge of the screen with nothing
     /// to say it is there. Edit mode refuses the drop that would make one
     /// rather than letting the arrangement grow somewhere the user can't see
-    /// it (ccp-p6g).
-    public static func laneCapacity(inWidth width: CGFloat) -> Int {
+    /// it (ccp-p6g). Measured against the lanes' real widths rather than a
+    /// count, because a lane holding an app screen is wider than the rest —
+    /// two of those fill a display a count of four would have called roomy.
+    /// The lane being offered is always the default width: only lanes already
+    /// on the panel can be wider.
+    public static func fitsAnotherLane(beside laneWidths: [CGFloat], inWidth width: CGFloat) -> Bool {
+        guard !laneWidths.isEmpty else { return true }
         let usable = width - panelInset * 2 - Space.oneHalf * 2
-        return max(1, Int((usable + Space.oneHalf) / (laneWidth + Space.oneHalf)))
+        let widths = laneWidths + [laneWidth]
+        let needed = widths.reduce(0, +) + Space.oneHalf * CGFloat(widths.count - 1)
+        return needed <= usable
     }
 }
 
@@ -83,6 +97,16 @@ public extension WidgetSize {
         case .compact: 64
         case .regular: 132
         case .tall: 232
+        case .screen: 600
+        }
+    }
+
+    /// How wide a lane must be to hold this widget. A card takes the lane it
+    /// is given; an app screen brings its own width and the lane widens to it.
+    var width: CGFloat {
+        switch self {
+        case .compact, .regular, .tall: Layout.laneWidth
+        case .screen: Layout.screenWidth
         }
     }
 }
@@ -104,13 +128,6 @@ public extension Layout {
     /// The round icon buttons that sit on a widget header's trailing edge.
     /// One size so two headers never disagree about how tall their line is.
     static let headerAccessorySize: CGFloat = 28
-    /// Height of the scrollable message list in the Mail card. Shorter than the
-    /// clipboard's — a mail row is two lines to a clip's one, so the same height
-    /// would make Mail the tallest thing on the panel by a long way.
-    static let mailListHeight: CGFloat = 260
-    /// The dot marking an unread message. Small enough to read as punctuation
-    /// beside the sender rather than as a control.
-    static let unreadDotSize: CGFloat = 6
     /// The Settings window's content width — wide enough that a label and its
     /// shortcut field sit on one line without crowding.
     static let settingsWidth: CGFloat = 420
