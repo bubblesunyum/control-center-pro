@@ -4,6 +4,7 @@
 import AppKit
 import CCPKit
 import SwiftUI
+import QuickLookThumbnailing
 import UniformTypeIdentifiers
 
 /// Floating shelf panel contents — header, tiles, and bottom bar.
@@ -66,7 +67,7 @@ struct ShelfView: View {
     private var header: some View {
         HStack(spacing: Space.half) {
             HStack(spacing: Space.half) {
-                Image(systemName: "tray.full")
+                Image(systemName: "folder.fill")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Text(title)
@@ -112,8 +113,8 @@ struct ShelfView: View {
         .buttonStyle(.plain)
         .foregroundStyle(shelf.keepsWindowOpen ? Color.accentColor : Color.secondary)
         .onHover { keepOpenHovered = $0 }
-        .help(shelf.keepsWindowOpen ? "Let the shelf close on its own" : "Keep the shelf open")
-        .accessibilityLabel(shelf.keepsWindowOpen ? "Stop keeping shelf open" : "Keep shelf open")
+        .help(shelf.keepsWindowOpen ? "Let Files close on its own" : "Keep Files open")
+        .accessibilityLabel(shelf.keepsWindowOpen ? "Stop keeping Files open" : "Keep Files open")
     }
 
     private var closeButton: some View {
@@ -129,7 +130,7 @@ struct ShelfView: View {
         .foregroundStyle(.secondary)
         .onHover { closeHovered = $0 }
         .help("Close")
-        .accessibilityLabel("Close shelf")
+        .accessibilityLabel("Close Files")
     }
 
     // MARK: - Bottom bar
@@ -173,11 +174,11 @@ struct ShelfView: View {
         .disabled(shelf.selection.isEmpty && !shelf.hasUnpinnedItems)
         .help(shelf.selection.isEmpty ? "Clear unpinned" : "Remove selected")
         .accessibilityLabel(shelf.selection.isEmpty ? "Clear unpinned" : "Remove selected")
-        .accessibilityHint(shelf.selection.isEmpty ? "Removes every unpinned item from the shelf" : "Removes selected items")
+        .accessibilityHint(shelf.selection.isEmpty ? "Removes every unpinned item from Files" : "Removes selected items")
     }
 
     private var title: String {
-        shelf.selection.isEmpty ? "Shelf" : "\(shelf.selection.count) selected"
+        shelf.selection.isEmpty ? "Files" : "\(shelf.selection.count) selected"
     }
 
     // MARK: - Tiles
@@ -187,7 +188,7 @@ struct ShelfView: View {
         if shelf.items.isEmpty {
             emptyState
         } else {
-            ShelfTilesGrid()
+            ShelfList()
                 .frame(height: Self.tileAreaHeight)
                 .environment(shelf)
         }
@@ -234,31 +235,26 @@ final class ShelfPanelMoveView: NSView {
     }
 }
 
-// MARK: - Tiles grid (SwiftUI replacement for AppKit ShelfTilesView)
+// MARK: - File list (replaces the tile grid)
 
-private struct ShelfTilesGrid: View {
+private struct ShelfList: View {
     @Environment(ShelfStore.self) private var shelf
-
-    private let columns = [GridItem(.fixed(78), spacing: Space.one),
-                           GridItem(.fixed(78), spacing: Space.one),
-                           GridItem(.fixed(78), spacing: Space.one)]
-    private let tileSize = CGSize(width: 78, height: 88)
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
-            LazyVGrid(columns: columns, spacing: Space.one) {
+            LazyVStack(spacing: Space.half) {
                 ForEach(shelf.items) { item in
-                    ShelfTile(item: item)
-                        .frame(width: tileSize.width, height: tileSize.height)
+                    ShelfRow(item: item)
                 }
             }
             .padding(Space.half)
         }
         .frame(height: ShelfView.tileAreaHeight)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
     }
 }
 
-private struct ShelfTile: View {
+private struct ShelfRow: View {
     let item: ShelfItem
     @Environment(ShelfStore.self) private var shelf
     @State private var hover = false
@@ -266,43 +262,28 @@ private struct ShelfTile: View {
     private var isSelected: Bool { shelf.selection.contains(item.id) }
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
-                .fill(isSelected ? Color.accentColor.opacity(0.16) : (item.isPinned ? Color.pinnedFill : Color.clear))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
-                        .strokeBorder(isSelected ? Color.accentColor : (item.isPinned ? Color.pinnedStroke : Color.clear),
-                                      lineWidth: isSelected ? 2 : Stroke.hairline)
-                )
-
-            VStack(spacing: 0) {
-                iconWell
+        HStack(spacing: Space.one) {
+            iconPreview
+            VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)
-                    .font(.caption2)
+                    .font(.caption)
                     .lineLimit(2)
                     .truncationMode(.middle)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
-                    .frame(minHeight: 24)
-                    .padding(.horizontal, Space.quarter)
-                    .padding(.top, Space.quarter)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
             }
-            .padding(.top, Space.half)
-
+            Spacer(minLength: Space.half)
             if isSelected {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.caption)
                     .foregroundStyle(Color.accentColor)
-                    .padding(Space.half)
                     .accessibilityHidden(true)
             } else if item.isPinned {
                 Image(systemName: "pin.fill")
                     .font(.caption2)
                     .foregroundStyle(Color.accentColor)
-                    .padding(Space.half)
                     .accessibilityHidden(true)
             }
-
             if hover {
                 Button { shelf.remove(item.id) } label: {
                     Image(systemName: "xmark.circle.fill")
@@ -311,28 +292,29 @@ private struct ShelfTile: View {
                         .background(Color.white.opacity(0.9).clipShape(Circle()))
                 }
                 .buttonStyle(.plain)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(Space.half)
                 .accessibilityLabel("Remove \(item.title)")
             }
         }
-        .contentShape(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+        .padding(.vertical, Space.half)
+        .padding(.horizontal, Space.quarter)
+        .contentShape(Rectangle())
         .onHover { hover = $0 }
-        .onTapGesture {
-            shelf.toggleSelection(item.id)
-        }
+        .onTapGesture { shelf.toggleSelection(item.id) }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(item.title)
-        .accessibilityValue(tileValue)
+        .accessibilityValue(rowValue)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityAction { shelf.toggleSelection(item.id) }
         .accessibilityAction(named: item.isPinned ? "Unpin" : "Pin") { shelf.togglePin(item.id) }
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(isSelected ? Color.accentColor.opacity(0.35) : Color.clear, lineWidth: isSelected ? 1 : 0)
+        )
         .onDrag {
             let writer = shelf.pasteboardWriter(for: item)
             let provider = NSItemProvider()
             if let url = writer as? NSURL, url.isFileURL {
                 provider.registerObject(url, visibility: .all)
-                // Fallback for plain-text consumers
                 if let str = item.text ?? item.urlString {
                     provider.registerObject(str as NSString, visibility: .all)
                 }
@@ -364,28 +346,68 @@ private struct ShelfTile: View {
     }
 
     @ViewBuilder
-    private var iconWell: some View {
-        let isThumbnail = item.kind == .image && item.imageFileName != nil
-        ZStack {
-            RoundedRectangle(cornerRadius: Radius.control - 2, style: .continuous)
-                .fill(Color.controlFill)
-                .frame(width: 64, height: 50)
-
-            if let image = resolvedImage {
-                Image(nsImage: image)
+    private var iconPreview: some View {
+        let previewSize = CGSize(width: 42, height: 56)
+        Group {
+            if let preview = previewImage {
+                Image(nsImage: preview)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: previewSize.width, height: previewSize.height)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            } else if item.kind == .file, let path = item.filePath {
+                FileThumbnailView(
+                    url: URL(fileURLWithPath: path),
+                    size: previewSize,
+                    fallbackIcon: fileTypeIcon,
+                    symbolName: symbolName
+                )
+            } else if let icon = fileTypeIcon {
+                Image(nsImage: icon)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: isThumbnail ? 56 : 38, height: isThumbnail ? 42 : 34)
-                    .clipShape(RoundedRectangle(cornerRadius: isThumbnail ? 4 : 0))
+                    .frame(width: 24, height: 24)
+                    .frame(width: previewSize.width, height: previewSize.height)
             } else {
                 Image(systemName: symbolName)
                     .font(.title3)
                     .foregroundStyle(.secondary)
+                    .frame(width: previewSize.width, height: previewSize.height)
             }
+        }
+        .frame(width: previewSize.width, height: previewSize.height)
+    }
+
+    private var subtitle: String {
+        switch item.kind {
+        case .file:
+            if let path = item.filePath {
+                let ext = (path as NSString).pathExtension.lowercased()
+                if !ext.isEmpty, let type = UTType(filenameExtension: ext) {
+                    return type.localizedDescription ?? ext.uppercased()
+                }
+                if !ext.isEmpty { return ext.uppercased() }
+                return "File"
+            }
+            return "File"
+        case .image:
+            if let name = item.imageFileName {
+                let ext = (name as NSString).pathExtension.uppercased()
+                return ext.isEmpty ? "Image" : "\(ext) Image"
+            }
+            return "Image"
+        case .link:
+            if let s = item.urlString, let url = URL(string: s) {
+                return url.host ?? "Link"
+            }
+            return "Link"
+        case .text:
+            return "Text"
         }
     }
 
-    private var tileValue: String {
+    private var rowValue: String {
         [isSelected ? "Selected" : nil, item.isPinned ? "Pinned" : nil]
             .compactMap { $0 }
             .joined(separator: ", ")
@@ -393,28 +415,100 @@ private struct ShelfTile: View {
 
     private var symbolName: String {
         switch item.kind {
-        case .file: return "doc.fill"
+        case .file:
+            if let path = item.filePath {
+                let ext = (path as NSString).pathExtension.lowercased()
+                if let type = UTType(filenameExtension: ext) {
+                    if type.conforms(to: .image) { return "photo.fill" }
+                    if type.conforms(to: .movie) { return "film.fill" }
+                    if type.conforms(to: .audio) { return "music.note" }
+                    if type.conforms(to: .pdf) { return "doc.richtext.fill" }
+                    if type.conforms(to: .zip) || ext == "zip" { return "doc.zipper" }
+                }
+            }
+            return "doc.fill"
         case .text: return "note.text"
         case .link: return "link"
         case .image: return "photo"
         }
     }
 
-    private var resolvedImage: NSImage? {
-        switch item.kind {
-        case .file:
-            if let path = item.filePath {
-                return NSWorkspace.shared.icon(forFile: path)
-            }
-            return nil
-        case .image:
-            if let name = item.imageFileName {
-                let url = ShelfStore.storeDirectory.appendingPathComponent(name)
+    private var previewImage: NSImage? {
+        if item.kind == .image, let name = item.imageFileName {
+            let url = ShelfStore.storeDirectory.appendingPathComponent(name)
+            if let img = NSImage(contentsOf: url) { return img }
+        }
+        if item.kind == .file, let path = item.filePath {
+            let url = URL(fileURLWithPath: path)
+            if let type = UTType(filenameExtension: url.pathExtension.lowercased()), type.conforms(to: .image) {
                 if let img = NSImage(contentsOf: url) { return img }
             }
-            return NSImage(systemSymbolName: "photo", accessibilityDescription: nil)
-        case .link, .text:
-            return nil
+        }
+        return nil
+    }
+
+    private var fileTypeIcon: NSImage? {
+        guard item.kind == .file, let path = item.filePath else { return nil }
+        return NSWorkspace.shared.icon(forFile: path)
+    }
+}
+
+private struct FileThumbnailView: View {
+    let url: URL
+    let size: CGSize
+    let fallbackIcon: NSImage?
+    let symbolName: String
+    @State private var thumb: NSImage?
+    @State private var attempted = false
+
+    var body: some View {
+        Group {
+            if let t = thumb {
+                Image(nsImage: t)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: size.width, height: size.height)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            } else if attempted {
+                Group {
+                    if let icon = fallbackIcon {
+                        Image(nsImage: icon)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 32, height: 32)
+                    } else {
+                        Image(systemName: symbolName)
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(width: size.width, height: size.height)
+            } else {
+                Color.clear
+                    .frame(width: size.width, height: size.height)
+                    .onAppear { generate() }
+            }
+        }
+        .task { generate() }
+    }
+
+    private func generate() {
+        guard !attempted, thumb == nil else { return }
+        // Use QuickLook to generate a real thumbnail (PDFs, docs, etc.) instead of a generic file icon.
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        let request = QLThumbnailGenerator.Request(fileAt: url, size: size, scale: scale, representationTypes: .all)
+        QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { rep, error in
+            DispatchQueue.main.async {
+                if let rep {
+                    self.thumb = rep.nsImage
+                    self.attempted = true
+                } else {
+                    // No thumbnail available — fall back to the workspace icon.
+                    self.attempted = true
+                }
+            }
         }
     }
 }
+
