@@ -80,20 +80,22 @@ private struct SystemStatsContent: View {
     private let breakdownLimit = 6
 
     var body: some View {
-        WidgetCard(SystemStatsWidget.descriptor) {
+        WidgetCard(SystemStatsWidget.descriptor, accessory: {
+            ActivityMonitorButton()
+        }) {
             // (5) more spacing between sections — upstream uses 10, we use 16
+            // (new tweak 1) separators removed, spacing handles division
             VStack(alignment: .leading, spacing: Space.two) {
                 cpuSection
-                Divider()
                 gpuSection
-                Divider()
                 memorySection
                 if adapter.snapshot.batteryHasBattery {
-                    Divider()
                     batterySection
                 }
             }
             .animation(.easeInOut(duration: 0.2), value: expanded)
+            // (new tweak 7) tiny extra padding at bottom of widget
+            .padding(.bottom, Space.half)
         }
         .onChange(of: adapter.snapshot) { _, _ in
             // Refresh breakdown at most every 4s while expanded, like upstream.
@@ -128,15 +130,15 @@ private struct SystemStatsContent: View {
         Button {
             toggle(.cpu)
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 chevron(for: .cpu)
                 Text("CPU")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
-                Spacer(minLength: 6)
+                Spacer(minLength: 4)
                 // (13) temperature gauge inside its section
                 if let temp = adapter.snapshot.cpuTemperature {
-                    TemperatureGauge(temperature: temp, color: cpuColor)
+                    TemperatureGauge(temperature: temp)
                 }
                 UsageBar(fraction: adapter.snapshot.cpuUsage ?? 0, tint: cpuColor)
                     .frame(width: 86)
@@ -171,14 +173,14 @@ private struct SystemStatsContent: View {
         Button {
             toggle(.gpu)
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 chevron(for: .gpu)
                 Text("GPU")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
-                Spacer(minLength: 6)
+                Spacer(minLength: 4)
                 if let temp = adapter.snapshot.gpuTemperature {
-                    TemperatureGauge(temperature: temp, color: gpuColor)
+                    TemperatureGauge(temperature: temp)
                 }
                 UsageBar(fraction: adapter.snapshot.gpuUsage ?? 0, tint: gpuColor)
                     .frame(width: 86)
@@ -193,26 +195,45 @@ private struct SystemStatsContent: View {
         .accessibilityLabel("GPU \(adapter.snapshot.gpuUsage.map { percent($0) } ?? "unknown")")
     }
 
-    // MARK: - Memory (8)(9)(10)
+    // MARK: - Memory (8)(9)(10) + new tweaks
 
     private var memorySection: some View {
         sectionContainer(kind: .memory, color: memoryColor) {
             memoryHeader
-            // (8) pressure content now lives inside the expanded memory, not as a
-            // separate always-visible row. Keep the history graph always visible.
-            if adapter.snapshot.memoryHistory.count >= 2 {
-                Sparkline(values: adapter.snapshot.memoryHistory, color: memoryColor, maxValue: 1, showsZeroBaseline: true)
-                    .frame(height: 34)
-                    .clipShape(RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
-            } else {
-                placeholderGraph(history: adapter.snapshot.memoryHistory)
+            // Graph always visible — memory + swap (new tweak 5)
+            ZStack {
+                if adapter.snapshot.memoryHistory.count >= 2 {
+                    Sparkline(values: adapter.snapshot.memoryHistory, color: memoryColor, maxValue: 1, showsZeroBaseline: true)
+                } else {
+                    // placeholder fallback still needed before first sample
+                    RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
+                        .fill(Color.controlFill)
+                }
+                // (new tweak 5) swap on graph in differently-shaded color
+                if adapter.snapshot.memorySwapHistory.count >= 2 {
+                    Sparkline(values: adapter.snapshot.memorySwapHistory, color: swapGraphColor, maxValue: 1, fillOpacity: 0.08)
+                }
+                if adapter.snapshot.memoryHistory.count < 2 && adapter.snapshot.memorySwapHistory.count < 2 {
+                    Text(adapter.snapshot.memoryHistory.isEmpty ? "Measuring…" : "Collecting…")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
+            .frame(height: 34)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
+
+            // (new tweak 5) Swap visible even when collapsed
+            if expanded != .memory {
+                memorySecondaryRow("Swap", adapter.snapshot.memorySwapUsed)
+                    .padding(.leading, 16)
+            }
+
             if expanded == .memory {
                 VStack(alignment: .leading, spacing: 5) {
-                    // (8) what was under "Pressure" — compressed/cached/swap
+                    // (new tweak 4) Pressure row with text + circle
+                    pressureExpandedRow
                     memorySecondaryRow("Compressed", adapter.snapshot.memoryCompressed)
                     memorySecondaryRow("Cached Files", adapter.snapshot.memoryCached)
-                    // (6) "Swap" not "Swap used"
                     memorySecondaryRow("Swap", adapter.snapshot.memorySwapUsed)
                 }
                 .padding(.leading, 16)
@@ -221,33 +242,69 @@ private struct SystemStatsContent: View {
         }
     }
 
+    private var pressureExpandedRow: some View {
+        let pressure = adapter.snapshot.memoryPressure
+        return HStack(spacing: 8) {
+            Text("Pressure")
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+            Spacer()
+            Circle()
+                .fill(memoryPressureColor(pressure))
+                .frame(width: 7, height: 7)
+                .shadow(color: memoryPressureColor(pressure).opacity(0.6), radius: 1.5)
+            Text(pressureLabel(pressure))
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(memoryPressureColor(pressure))
+        }
+    }
+
+    private func pressureLabel(_ pressure: SystemMemoryPressure) -> String {
+        switch pressure {
+        case .normal: return "Normal"
+        case .warning: return "Caution"
+        case .critical: return "Critical"
+        case .unknown: return "-"
+        }
+    }
+
+    private var swapGraphColor: Color {
+        // Differently-shaded variant of memory's mint — lighter / more translucent
+        colorScheme == .light ? Color(red: 0.00, green: 0.52, blue: 0.50).opacity(0.65) : Color.mint.opacity(0.65)
+    }
+
     // (8) chevron now belongs to Memory itself
     // (9) horizontal bar next to Memory title, showing total physical usage
-    // (10) pressure badge is dot-only with hover text
+    // (10) pressure badge is dot-only with hover text, hidden when expanded
     private var memoryHeader: some View {
         let snapshot = adapter.snapshot
         let used = snapshot.memoryUsed
         let total = snapshot.memoryTotal
         let fraction = (used != nil && total != nil && total! > 0) ? Double(used!) / Double(total!) : 0
+        // (new 8) left side without "GB" — "8 / 16 GB" not "8 GB / 16 GB"
         let valueText: String = {
             if let u = used, let t = total {
-                return "\(Self.bytes(u)) / \(Self.bytes(t))"
+                let left = Self.bytes(u).split(separator: " ").first.map(String.init) ?? Self.bytes(u)
+                return "\(left) / \(Self.bytes(t))"
             }
             return "--"
         }()
+        let isExpanded = expanded == .memory
         return Button {
             toggle(.memory)
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 chevron(for: .memory)
                 Text("Memory")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
-                // (10) dot-only pressure indicator
-                PressureDot(pressure: snapshot.memoryPressure, color: memoryPressureColor(snapshot.memoryPressure))
-                Spacer(minLength: 6)
-                // (9) usage bar beside title
-                UsageBar(fraction: fraction, tint: memoryColor)
+                // (10) dot-only pressure indicator — hidden when expanded (new tweak 4)
+                if !isExpanded {
+                    PressureDot(pressure: snapshot.memoryPressure, color: memoryPressureColor(snapshot.memoryPressure))
+                }
+                Spacer(minLength: 4)
+                // (9) usage bar beside title — with pressure gradient (new tweak 8)
+                UsageBar(fraction: fraction, tint: memoryColor, warningTint: memoryPressureWarningTint)
                     .frame(width: 86)
                 Text(valueText)
                     .font(.caption.weight(.semibold))
@@ -260,6 +317,14 @@ private struct SystemStatsContent: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Memory \(valueText)")
+    }
+
+    private var memoryPressureWarningTint: Color? {
+        switch adapter.snapshot.memoryPressure {
+        case .warning: return energyYellow // Caution
+        case .critical: return energyRed // Critical
+        default: return nil
+        }
     }
 
     // MARK: - Battery (3)(4)(11)(13)
@@ -284,16 +349,16 @@ private struct SystemStatsContent: View {
         return Button {
             toggle(.battery)
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 // (3) chevron like the other sections
                 chevron(for: .battery)
                 // (4) no battery icon
                 Text("Battery")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
-                Spacer(minLength: 6)
+                Spacer(minLength: 4)
                 if let temp = adapter.snapshot.batteryTemperature {
-                    TemperatureGauge(temperature: temp, color: batteryColor)
+                    TemperatureGauge(temperature: temp)
                 }
                 UsageBar(fraction: fraction, tint: chargeTint(charge ?? 0))
                     .frame(width: 86)
@@ -584,23 +649,70 @@ private struct SystemStatsContent: View {
     }
 }
 
+// MARK: - Header accessory
+
+private struct ActivityMonitorButton: View {
+    @State private var isHovered = false
+
+    var body: some View {
+        Button {
+            let fallback = URL(fileURLWithPath: "/System/Applications/Utilities/Activity Monitor.app")
+            let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.ActivityMonitor") ?? fallback
+            NSWorkspace.shared.open(url)
+        } label: {
+            Image(systemName: "arrow.up.forward.app")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 18, height: 18)
+                .background(Circle().fill(Color.primary.opacity(isHovered ? 0.1 : 0)))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .help("Open Activity Monitor")
+        .accessibilityLabel("Open Activity Monitor")
+        .animation(.easeOut(duration: 0.12), value: isHovered)
+    }
+}
+
 // MARK: - Small views
 
 /// Thin capacity bar for CPU/GPU/Memory/Battery usage (per-section color).
+/// When `warningTint` is set (memory pressure), the leading edge gradients into it.
 private struct UsageBar: View {
     let fraction: Double
     var tint: Color? = nil
+    var warningTint: Color? = nil
 
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.primary.opacity(0.08))
                 Capsule()
-                    .fill(tint ?? .accentColor)
+                    .fill(barFill(width: proxy.size.width))
                     .frame(width: max(3, proxy.size.width * min(1, max(0, fraction))))
             }
         }
         .frame(height: 5)
+    }
+
+    private func barFill(width: CGFloat) -> AnyShapeStyle {
+        let base = tint ?? .accentColor
+        guard let warning = warningTint else {
+            return AnyShapeStyle(base)
+        }
+        // Gradient from base into warning at the trailing tip
+        return AnyShapeStyle(
+            LinearGradient(
+                stops: [
+                    .init(color: base, location: 0.0),
+                    .init(color: base, location: 0.72),
+                    .init(color: warning, location: 1.0)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        )
     }
 }
 
@@ -621,33 +733,64 @@ private struct PressureDot: View {
     private var label: String {
         switch pressure {
         case .normal: return "Memory pressure: Normal"
-        case .warning: return "Memory pressure: Warning"
+        case .warning: return "Memory pressure: Caution"
         case .critical: return "Memory pressure: Critical"
         case .unknown: return "Memory pressure: Unknown"
         }
     }
 }
 
-/// (13) ¾-circle temperature gauge (speedometer style).
+/// (13) ¾-circle temperature gauge — neutral, with yellow/red leading edge when hot.
 private struct TemperatureGauge: View {
     let temperature: Double?
-    let color: Color
     var size: CGFloat = 32
 
     private let minTemp: Double = 30
     private let maxTemp: Double = 100
+    private let neutral = Color.primary.opacity(0.18)
+
+    private var warningColor: Color? {
+        guard let temp = temperature else { return nil }
+        if temp >= 85 { return Color.red }
+        if temp >= 75 { return Color.yellow }
+        return nil
+    }
 
     var body: some View {
         ZStack {
+            // background track
             Circle()
                 .trim(from: 0, to: 0.75)
                 .stroke(Color.primary.opacity(0.10), style: StrokeStyle(lineWidth: 3, lineCap: .round))
                 .rotationEffect(.degrees(135))
             if let temp = temperature {
-                Circle()
-                    .trim(from: 0, to: 0.75 * normalized(temp))
-                    .stroke(color, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                    .rotationEffect(.degrees(135))
+                if let warn = warningColor {
+                    // Base neutral arc, then warning gradient at leading edge (last ~18% of filled arc)
+                    let filled = 0.75 * normalized(temp)
+                    // Neutral portion
+                    Circle()
+                        .trim(from: 0, to: filled)
+                        .stroke(neutral, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .rotationEffect(.degrees(135))
+                    // Warning tip — gradient from neutral into warning
+                    let tipStart = max(0, filled - 0.14)
+                    Circle()
+                        .trim(from: tipStart, to: filled)
+                        .stroke(
+                            LinearGradient(
+                                colors: [neutral.opacity(0.0), warn],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ),
+                            style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(135))
+                } else {
+                    Circle()
+                        .trim(from: 0, to: 0.75 * normalized(temp))
+                        .stroke(neutral, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .rotationEffect(.degrees(135))
+                }
                 Text("\(Int(temp.rounded()))°")
                     .font(.system(size: 8, weight: .semibold, design: .rounded))
                     .monospacedDigit()

@@ -23,6 +23,7 @@ public struct SystemStatsSnapshot: Sendable, Equatable {
     public var memoryCompressed: UInt64?
     public var memoryCached: UInt64?
     public var memorySwapUsed: UInt64?
+    public var memorySwapHistory: [Double] // 0...1 fraction (swap / total)
     public var cpuTemperature: Double?
     public var gpuTemperature: Double?
     public var batteryTemperature: Double?
@@ -47,6 +48,7 @@ public struct SystemStatsSnapshot: Sendable, Equatable {
         memoryCompressed: UInt64? = nil,
         memoryCached: UInt64? = nil,
         memorySwapUsed: UInt64? = nil,
+        memorySwapHistory: [Double] = [],
         cpuTemperature: Double? = nil,
         gpuTemperature: Double? = nil,
         batteryTemperature: Double? = nil,
@@ -70,6 +72,7 @@ public struct SystemStatsSnapshot: Sendable, Equatable {
         self.memoryCompressed = memoryCompressed
         self.memoryCached = memoryCached
         self.memorySwapUsed = memorySwapUsed
+        self.memorySwapHistory = memorySwapHistory
         self.cpuTemperature = cpuTemperature
         self.gpuTemperature = gpuTemperature
         self.batteryTemperature = batteryTemperature
@@ -324,6 +327,10 @@ public final class SystemStatsAdapter {
             if total > 0 {
                 let fraction = Double(used) / Double(total)
                 next.memoryHistory = appending(next.memoryHistory, value: fraction)
+                if let swap = sample.memorySwapUsed {
+                    let swapFraction = min(1, Double(swap) / Double(total))
+                    next.memorySwapHistory = appending(next.memorySwapHistory, value: swapFraction)
+                }
             }
         } else if let pressure = sample.memoryPressure {
             next.memoryPressure = pressure
