@@ -14,12 +14,22 @@ import VorssaintEngines
 public struct SystemStatsSnapshot: Sendable, Equatable {
     public var cpuUsage: Double? // 0...1
     public var cpuHistory: [Double]
+    public var gpuUsage: Double? // 0...1
+    public var gpuHistory: [Double]
     public var memoryUsed: UInt64?
     public var memoryTotal: UInt64?
     public var memoryPressure: SystemMemoryPressure
     public var memoryHistory: [Double] // 0...1 fraction
+    public var memoryCompressed: UInt64?
+    public var memoryCached: UInt64?
+    public var memorySwapUsed: UInt64?
     public var cpuTemperature: Double?
     public var gpuTemperature: Double?
+    public var batteryTemperature: Double?
+    public var batteryCharge: Int? // 0...100
+    public var batteryIsCharging: Bool
+    public var batteryHasBattery: Bool
+    public var batteryHistory: [Double] // 0...1 fraction
     public var netDownBytesPerSec: Double?
     public var netUpBytesPerSec: Double?
     public var netDownHistory: [Double]
@@ -28,12 +38,22 @@ public struct SystemStatsSnapshot: Sendable, Equatable {
     public init(
         cpuUsage: Double? = nil,
         cpuHistory: [Double] = [],
+        gpuUsage: Double? = nil,
+        gpuHistory: [Double] = [],
         memoryUsed: UInt64? = nil,
         memoryTotal: UInt64? = nil,
         memoryPressure: SystemMemoryPressure = .unknown,
         memoryHistory: [Double] = [],
+        memoryCompressed: UInt64? = nil,
+        memoryCached: UInt64? = nil,
+        memorySwapUsed: UInt64? = nil,
         cpuTemperature: Double? = nil,
         gpuTemperature: Double? = nil,
+        batteryTemperature: Double? = nil,
+        batteryCharge: Int? = nil,
+        batteryIsCharging: Bool = false,
+        batteryHasBattery: Bool = false,
+        batteryHistory: [Double] = [],
         netDownBytesPerSec: Double? = nil,
         netUpBytesPerSec: Double? = nil,
         netDownHistory: [Double] = [],
@@ -41,12 +61,22 @@ public struct SystemStatsSnapshot: Sendable, Equatable {
     ) {
         self.cpuUsage = cpuUsage
         self.cpuHistory = cpuHistory
+        self.gpuUsage = gpuUsage
+        self.gpuHistory = gpuHistory
         self.memoryUsed = memoryUsed
         self.memoryTotal = memoryTotal
         self.memoryPressure = memoryPressure
         self.memoryHistory = memoryHistory
+        self.memoryCompressed = memoryCompressed
+        self.memoryCached = memoryCached
+        self.memorySwapUsed = memorySwapUsed
         self.cpuTemperature = cpuTemperature
         self.gpuTemperature = gpuTemperature
+        self.batteryTemperature = batteryTemperature
+        self.batteryCharge = batteryCharge
+        self.batteryIsCharging = batteryIsCharging
+        self.batteryHasBattery = batteryHasBattery
+        self.batteryHistory = batteryHistory
         self.netDownBytesPerSec = netDownBytesPerSec
         self.netUpBytesPerSec = netUpBytesPerSec
         self.netDownHistory = netDownHistory
@@ -78,11 +108,19 @@ public protocol SystemStatsSource: AnyObject, Sendable {
 /// this is just what's true now.
 public struct SystemStatsSample: Sendable, Equatable {
     public var cpuUsage: Double?
+    public var gpuUsage: Double?
     public var memoryUsed: UInt64?
     public var memoryTotal: UInt64?
     public var memoryPressure: SystemMemoryPressure?
+    public var memoryCompressed: UInt64?
+    public var memoryCached: UInt64?
+    public var memorySwapUsed: UInt64?
     public var cpuTemperature: Double?
     public var gpuTemperature: Double?
+    public var batteryTemperature: Double?
+    public var batteryCharge: Int?
+    public var batteryIsCharging: Bool?
+    public var batteryHasBattery: Bool?
     public var netDownBytesPerSec: Double?
     public var netUpBytesPerSec: Double?
     public var netTotalDown: UInt64?
@@ -90,22 +128,38 @@ public struct SystemStatsSample: Sendable, Equatable {
 
     public init(
         cpuUsage: Double? = nil,
+        gpuUsage: Double? = nil,
         memoryUsed: UInt64? = nil,
         memoryTotal: UInt64? = nil,
         memoryPressure: SystemMemoryPressure? = nil,
+        memoryCompressed: UInt64? = nil,
+        memoryCached: UInt64? = nil,
+        memorySwapUsed: UInt64? = nil,
         cpuTemperature: Double? = nil,
         gpuTemperature: Double? = nil,
+        batteryTemperature: Double? = nil,
+        batteryCharge: Int? = nil,
+        batteryIsCharging: Bool? = nil,
+        batteryHasBattery: Bool? = nil,
         netDownBytesPerSec: Double? = nil,
         netUpBytesPerSec: Double? = nil,
         netTotalDown: UInt64? = nil,
         netTotalUp: UInt64? = nil
     ) {
         self.cpuUsage = cpuUsage
+        self.gpuUsage = gpuUsage
         self.memoryUsed = memoryUsed
         self.memoryTotal = memoryTotal
         self.memoryPressure = memoryPressure
+        self.memoryCompressed = memoryCompressed
+        self.memoryCached = memoryCached
+        self.memorySwapUsed = memorySwapUsed
         self.cpuTemperature = cpuTemperature
         self.gpuTemperature = gpuTemperature
+        self.batteryTemperature = batteryTemperature
+        self.batteryCharge = batteryCharge
+        self.batteryIsCharging = batteryIsCharging
+        self.batteryHasBattery = batteryHasBattery
         self.netDownBytesPerSec = netDownBytesPerSec
         self.netUpBytesPerSec = netUpBytesPerSec
         self.netTotalDown = netTotalDown
@@ -123,16 +177,26 @@ public final class LiveSystemStatsSource: SystemStatsSource {
 
     public func sample(now: TimeInterval) async -> SystemStatsSample {
         let cpu = await sampler.cpuUsage()
+        let gpu = await sampler.gpuUsage()
         let memory = await sampler.memorySample()
         let temps = await sampler.temperatureSample(now: now)
         let network = await sampler.networkSample(now: now)
+        let power = await sampler.powerSample()
         return SystemStatsSample(
             cpuUsage: cpu,
+            gpuUsage: gpu,
             memoryUsed: memory?.used,
             memoryTotal: memory?.total,
             memoryPressure: memory.map { SystemMemoryPressure(bridged: $0.pressure) },
+            memoryCompressed: memory?.compressed,
+            memoryCached: memory?.cached,
+            memorySwapUsed: memory?.swapUsed,
             cpuTemperature: temps.cpu,
             gpuTemperature: temps.gpu,
+            batteryTemperature: temps.battery,
+            batteryCharge: power.chargePercent,
+            batteryIsCharging: power.isCharging,
+            batteryHasBattery: power.hasBattery,
             netDownBytesPerSec: network.downBytesPerSec,
             netUpBytesPerSec: network.upBytesPerSec,
             netTotalDown: network.totalDown,
@@ -237,6 +301,10 @@ public final class SystemStatsAdapter {
             next.cpuUsage = cpu
             next.cpuHistory = appending(next.cpuHistory, value: cpu)
         }
+        if let gpu = sample.gpuUsage {
+            next.gpuUsage = gpu
+            next.gpuHistory = appending(next.gpuHistory, value: gpu)
+        }
 
         if let used = sample.memoryUsed, let total = sample.memoryTotal {
             next.memoryUsed = used
@@ -244,12 +312,26 @@ public final class SystemStatsAdapter {
             if let pressure = sample.memoryPressure {
                 next.memoryPressure = pressure
             }
+            if let compressed = sample.memoryCompressed {
+                next.memoryCompressed = compressed
+            }
+            if let cached = sample.memoryCached {
+                next.memoryCached = cached
+            }
+            if let swap = sample.memorySwapUsed {
+                next.memorySwapUsed = swap
+            }
             if total > 0 {
                 let fraction = Double(used) / Double(total)
                 next.memoryHistory = appending(next.memoryHistory, value: fraction)
             }
         } else if let pressure = sample.memoryPressure {
             next.memoryPressure = pressure
+        } else {
+            // Still capture swap/compressed if memory total failed this tick
+            if let compressed = sample.memoryCompressed { next.memoryCompressed = compressed }
+            if let cached = sample.memoryCached { next.memoryCached = cached }
+            if let swap = sample.memorySwapUsed { next.memorySwapUsed = swap }
         }
 
         if let cpuTemp = sample.cpuTemperature {
@@ -257,6 +339,28 @@ public final class SystemStatsAdapter {
         }
         if let gpuTemp = sample.gpuTemperature {
             next.gpuTemperature = gpuTemp
+        }
+        if let batTemp = sample.batteryTemperature {
+            next.batteryTemperature = batTemp
+        }
+
+        if let hasBattery = sample.batteryHasBattery {
+            next.batteryHasBattery = hasBattery
+        }
+        if let charging = sample.batteryIsCharging {
+            // Clear charging history when leaving charging so the next plug-in
+            // does not start with a flat discharge tail (see review).
+            if next.batteryIsCharging && !charging {
+                next.batteryHistory = []
+            }
+            next.batteryIsCharging = charging
+        }
+        if let charge = sample.batteryCharge {
+            next.batteryCharge = charge
+            // (11) only accumulate battery history while charging
+            if next.batteryIsCharging {
+                next.batteryHistory = appending(next.batteryHistory, value: Double(charge) / 100.0)
+            }
         }
 
         if let down = sample.netDownBytesPerSec {

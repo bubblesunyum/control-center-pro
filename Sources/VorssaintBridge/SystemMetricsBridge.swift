@@ -59,6 +59,21 @@ public struct BridgedTemperatureSample: Sendable, Equatable {
     public var battery: Double?
 }
 
+/// One power reading, covering the built-in battery when present.
+public struct BridgedPowerSample: Sendable, Equatable {
+    public var chargePercent: Int?
+    public var isCharging: Bool
+    public var externalConnected: Bool
+    public var hasBattery: Bool
+
+    public init(chargePercent: Int? = nil, isCharging: Bool = false, externalConnected: Bool = false, hasBattery: Bool = false) {
+        self.chargePercent = chargePercent
+        self.isCharging = isCharging
+        self.externalConnected = externalConnected
+        self.hasBattery = hasBattery
+    }
+}
+
 // MARK: - Sampling engine (wraps upstream samplers)
 
 /// Wraps the Metrics and SystemMonitor samplers so `CCPKit` can read them
@@ -88,6 +103,8 @@ public actor BridgedMetricsSampler {
     private var cpuTemperatureCache: CachedSensorReading?
     private var gpuTemperatureCache: CachedSensorReading?
     private var batteryTemperatureCache: CachedSensorReading?
+    private var powerSampler: PowerSampler?
+    private var lastGPUUsage: Double?
 
     public init() {}
 
@@ -211,13 +228,82 @@ public actor BridgedMetricsSampler {
         }
     }
 
+    // MARK: GPU
+
+    /// GPU usage 0...1, mirroring `SystemMonitor.readGPUUsage()` plus the same
+    /// stabilization that hides compositor spikes when the panel repaints.
+    public func gpuUsage() -> Double? {
+        guard let raw = Self.readGPUUsage() else { return nil }
+        let stabilized = MetricFormat.stabilizedGPUUsage(previous: lastGPUUsage, current: raw)
+        lastGPUUsage = stabilized
+        return stabilized
+    }
+
+    private static func readGPUUsage() -> Double? {
+        var iterator = io_iterator_t()
+        guard IOServiceGetMatchingServices(kIOMainPortDefault,
+                                           IOServiceMatching("IOAccelerator"),
+                                           &iterator) == kIOReturnSuccess else { return nil }
+        defer { IOObjectRelease(iterator) }
+        var entry = IOIteratorNext(iterator)
+        while entry != 0 {
+            let current = entry
+            // Advance before any return so the pending next entry is not leaked.
+            entry = IOIteratorNext(iterator)
+            guard let ref = IORegistryEntryCreateCFProperty(current, "PerformanceStatistics" as CFString,
+                                                            kCFAllocatorDefault, 0),
+                  let stats = ref.takeRetainedValue() as? [String: Any],
+                  let utilization = stats["Device Utilization %"] as? Int
+            else {
+                IOObjectRelease(current)
+                continue
+            }
+            IOObjectRelease(current)
+            return Double(utilization) / 100.0
+        }
+        return nil
+    }
+
+    // MARK: Power / Battery
+
+    public func powerSample() -> BridgedPowerSample {
+        ensurePowerSampler()
+        guard let sampler = powerSampler else {
+            return BridgedPowerSample(hasBattery: PowerSampler.hasInternalBattery)
+        }
+        let reading = sampler.sample()
+        return BridgedPowerSample(
+            chargePercent: reading.chargePercent,
+            isCharging: reading.isCharging,
+            externalConnected: reading.externalConnected,
+            hasBattery: reading.hasBattery
+        )
+    }
+
+    private func ensurePowerSampler() {
+        if powerSampler != nil { return }
+        if !smcTried {
+            smcTried = true
+            smc = SMCClient()
+            cpuTemperaturePlatform = TemperatureSensorSelector.currentPlatform()
+        }
+        if let smc {
+            powerSampler = PowerSampler(smc: smc)
+        } else if PowerSampler.hasInternalBattery {
+            powerSampler = PowerSampler(smc: nil)
+        }
+    }
+
     private func prepareIfNeeded() {
         if !smcTried {
             smcTried = true
             smc = SMCClient()
             cpuTemperaturePlatform = TemperatureSensorSelector.currentPlatform()
         }
-        guard let client = smc, !tempKeysPrepared else { return }
+        guard let client = smc, !tempKeysPrepared else {
+            ensurePowerSampler()
+            return
+        }
         tempKeysPrepared = true
         let all = client.keys { name in
             TemperatureSensorSelector.isCPUTemperatureKey(name, platform: cpuTemperaturePlatform)
@@ -235,6 +321,7 @@ public actor BridgedMetricsSampler {
             ? [] : cpuKeys.filter { !preferredNames.contains($0.name) }
         gpuKeys = all.filter { $0.name.hasPrefix("Tg") }
         batteryKeys = all.filter { $0.name.hasPrefix("TB") }
+        ensurePowerSampler()
     }
 }
 
