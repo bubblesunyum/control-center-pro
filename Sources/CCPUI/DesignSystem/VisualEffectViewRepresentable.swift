@@ -38,5 +38,9 @@ struct VisualEffectViewRepresentable: NSViewRepresentable {
         view.layer?.cornerRadius = cornerRadius
         view.layer?.cornerCurve = .continuous
         view.layer?.masksToBounds = cornerRadius > 0
+        // Continuous corners clip without edge antialiasing — antialias all
+        // four edges so a 0.7° wiggle doesn't show a jagged fringe.
+        view.layer?.allowsEdgeAntialiasing = true
+        view.layer?.edgeAntialiasingMask = [.layerLeftEdge, .layerRightEdge, .layerBottomEdge, .layerTopEdge]
     }
 }

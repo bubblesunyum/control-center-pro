@@ -27,7 +27,18 @@ public struct WidgetHeader<Accessory: View>: View {
         self.accessory = accessory()
     }
 
+    @Environment(\.panelEditor) private var panelEditor
+    @Environment(\.currentWidgetID) private var currentWidgetID
+
     public var body: some View {
+        HStack(spacing: Space.half) {
+            holdableLabel
+            accessory
+        }
+        .frame(minHeight: Layout.headerAccessorySize)
+    }
+
+    private var holdableLabel: some View {
         HStack(spacing: Space.half) {
             Label(descriptor.title, systemImage: descriptor.symbolName)
                 .font(.headline)
@@ -38,9 +49,22 @@ public struct WidgetHeader<Accessory: View>: View {
                 CountBadge(count: count, of: descriptor.title)
             }
             Spacer(minLength: 0)
-            accessory
         }
-        .frame(minHeight: Layout.headerAccessorySize)
+        .contentShape(Rectangle())
+        .background {
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: HeaderFramePreference.self,
+                    value: currentWidgetID.map { [HeaderFrame(id: $0, frame: proxy.frame(in: .panel))] } ?? []
+                )
+            }
+        }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Hold to edit widgets")
+        .accessibilityAction {
+            guard let editor = panelEditor, !editor.isEditing else { return }
+            withAnimation(.snappy) { editor.startEditing() }
+        }
     }
 }
 

@@ -19,22 +19,23 @@ import SwiftUI
 /// a window resize inside each frame of a drag.
 @MainActor
 @Observable
-final class PanelEditor {
-    private(set) var isEditing = false
-    private(set) var lifted: Lifted?
-    private(set) var fingerAt: CGPoint = .zero
-    private(set) var previewLanding: Landing?
+public final class PanelEditor {
+    public private(set) var isEditing = false
+    public private(set) var lifted: Lifted?
+    public private(set) var fingerAt: CGPoint = .zero
+    public private(set) var previewLanding: Landing?
+    public var isShowingGallery = false
 
     /// How wide the display showing the panel is. Set by the controller, which
     /// is the only thing that knows what screen the panel is on. Whether one
     /// more lane fits depends on the lanes already placed as well as this, so
     /// it is the width that is stored rather than a count.
-    var displayWidth = CGFloat.greatestFiniteMagnitude
+    public var displayWidth = CGFloat.greatestFiniteMagnitude
 
     /// Where every slot currently sits, in panel coordinates. Reported by the
     /// lanes themselves as they lay out, because their real frames are the only
     /// honest answer to what is under the finger.
-    @ObservationIgnored var zones: [DropZone] = []
+    @ObservationIgnored public var zones: [DropZone] = []
 
     /// The zones as they were when the lift started. While the finger is down
     /// the lanes animate under it; hit-testing against the live, moving frames
@@ -43,16 +44,16 @@ final class PanelEditor {
     /// the pending landing is what keeps the drag coherent.
     @ObservationIgnored private var snapshotZones: [DropZone] = []
 
-    var isDragging: Bool { lifted != nil }
+    public var isDragging: Bool { lifted != nil }
 
     /// A card in the air: which one, how big, and whereabouts on it the user
     /// took hold.
-    struct Lifted: Equatable {
+    public struct Lifted: Equatable {
         let id: WidgetID
         let size: CGSize
         let grab: CGSize
 
-        static let scale: CGFloat = 1.04
+        public static let scale: CGFloat = 1.04
 
         /// Visual center of the scaled card when the finger is at `point`.
         func visualCenter(at point: CGPoint) -> CGPoint {
@@ -73,23 +74,37 @@ final class PanelEditor {
     }
 
     /// One slot's claim on a piece of the panel.
-    struct DropZone: Equatable {
-        let id: WidgetID
-        let lane: Int
-        let frame: CGRect
+    public struct DropZone: Equatable {
+        public let id: WidgetID
+        public let lane: Int
+        public let frame: CGRect
+
+        public init(id: WidgetID, lane: Int, frame: CGRect) {
+            self.id = id
+            self.lane = lane
+            self.frame = frame
+        }
     }
 
     /// Where a drop would put the card in the air.
-    enum Landing: Equatable {
+    public enum Landing: Equatable {
         case into(lane: Int, index: Int)
         case newLane(at: Int)
     }
 
-    func startEditing() {
+    public func startEditing() {
         isEditing = true
     }
 
-    func stopEditing() {
+    public func stopEditing() {
+        isEditing = false
+        isShowingGallery = false
+        resetDragState()
+    }
+
+    /// Exit edit mode but keep the gallery open — used by the menu bar
+    /// checkmark so adding widgets can continue without re-opening the gallery.
+    public func finishEditingPreservingGallery() {
         isEditing = false
         resetDragState()
     }
@@ -100,7 +115,7 @@ final class PanelEditor {
         snapshotZones = []
     }
 
-    func lift(_ id: WidgetID, at location: CGPoint) {
+    public func lift(_ id: WidgetID, at location: CGPoint) {
         guard let zone = zones.first(where: { $0.id == id }) else { return }
         fingerAt = location
         snapshotZones = zones
@@ -132,7 +147,7 @@ final class PanelEditor {
     /// frozen snapshot is in the old panel coordinate space, but the finger
     /// and the live zones are now in the new one — shift the snapshot so
     /// hit-testing stays aligned with what the eye sees.
-    func shiftSnapshot(dx: CGFloat) {
+    public func shiftSnapshot(dx: CGFloat) {
         guard !snapshotZones.isEmpty else { return }
         snapshotZones = snapshotZones.map {
             PanelEditor.DropZone(id: $0.id, lane: $0.lane, frame: $0.frame.offsetBy(dx: dx, dy: 0))
@@ -142,21 +157,21 @@ final class PanelEditor {
         // which is lane/index based and doesn't need shifting.
     }
 
-    func drag(to location: CGPoint) {
+    public func drag(to location: CGPoint) {
         fingerAt = location
     }
 
-    func drag(to location: CGPoint, laneWidths: [CGFloat]) {
+    public func drag(to location: CGPoint, laneWidths: [CGFloat]) {
         fingerAt = location
         previewLanding = landing(using: snapshotZones, laneWidths: laneWidths)
     }
 
-    func drop() { resetDragState() }
+    public func drop() { resetDragState() }
 
     /// A gesture that was cancelled (system interruption, second finger,
     /// view identity change) never calls `onEnded` — without this the card
     /// hangs in the air and the panel stops responding to clicks.
-    func cancel() { resetDragState() }
+    public func cancel() { resetDragState() }
 
     /// Whether the panel is holding a column open for the card in the air.
     /// Offered only while the ghost hovers the leading edge, not for the
@@ -164,7 +179,7 @@ final class PanelEditor {
     /// right inside the panel and, even with the window growing left to
     /// compensate, the two animations desync and the grid visibly jumps the
     /// moment you pick a card up.
-    func isOfferingNewLane(beside laneWidths: [CGFloat]) -> Bool {
+    public func isOfferingNewLane(beside laneWidths: [CGFloat]) -> Bool {
         previewLanding == .newLane(at: 0) && canAddLane(beside: laneWidths)
     }
 
@@ -175,7 +190,7 @@ final class PanelEditor {
     /// the dragged card already lifted out — which is the index
     /// `PanelLayout.moving(_:toLane:at:)` takes, and is why dragging a card
     /// down its own lane doesn't land it one short.
-    func landing(laneWidths: [CGFloat]) -> Landing? {
+    public func landing(laneWidths: [CGFloat]) -> Landing? {
         guard lifted != nil else { return nil }
         // While dragging, the live frames are animating under the finger;
         // hit-test against the frozen snapshot so the target doesn't thrash
@@ -204,7 +219,7 @@ final class PanelEditor {
         return canAddLane(beside: laneWidths) ? .newLane(at: 0) : nil
     }
 
-    func canAddLane(beside laneWidths: [CGFloat]) -> Bool {
+    public func canAddLane(beside laneWidths: [CGFloat]) -> Bool {
         Layout.fitsAnotherLane(beside: laneWidths, inWidth: displayWidth)
     }
 }
@@ -216,11 +231,57 @@ extension CoordinateSpaceProtocol where Self == NamedCoordinateSpace {
     static var panel: NamedCoordinateSpace { .named("ccp.panel") }
 }
 
+private struct PanelEditorKey: EnvironmentKey {
+    static let defaultValue: PanelEditor? = nil
+}
+
+extension EnvironmentValues {
+    var panelEditor: PanelEditor? {
+        get { self[PanelEditorKey.self] }
+        set { self[PanelEditorKey.self] = newValue }
+    }
+}
+
+private struct PanelArrangementKey: EnvironmentKey {
+    static let defaultValue: PanelArrangement? = nil
+}
+
+extension EnvironmentValues {
+    var panelArrangement: PanelArrangement? {
+        get { self[PanelArrangementKey.self] }
+        set { self[PanelArrangementKey.self] = newValue }
+    }
+}
+
+private struct CurrentWidgetIDKey: EnvironmentKey {
+    static let defaultValue: WidgetID? = nil
+}
+
+extension EnvironmentValues {
+    var currentWidgetID: WidgetID? {
+        get { self[CurrentWidgetIDKey.self] }
+        set { self[CurrentWidgetIDKey.self] = newValue }
+    }
+}
+
 /// How the lanes tell the editor where their slots ended up.
 struct DropZonePreference: PreferenceKey {
     static var defaultValue: [PanelEditor.DropZone] = []
 
     static func reduce(value: inout [PanelEditor.DropZone], nextValue: () -> [PanelEditor.DropZone]) {
+        value += nextValue()
+    }
+}
+
+/// Header frames — what the long-press to edit hit-tests against.
+struct HeaderFrame: Equatable {
+    let id: WidgetID
+    let frame: CGRect
+}
+
+struct HeaderFramePreference: PreferenceKey {
+    static var defaultValue: [HeaderFrame] = []
+    static func reduce(value: inout [HeaderFrame], nextValue: () -> [HeaderFrame]) {
         value += nextValue()
     }
 }

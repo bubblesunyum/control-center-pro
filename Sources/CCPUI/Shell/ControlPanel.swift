@@ -28,6 +28,9 @@ public struct ControlPanel: View {
     private let editor: PanelEditor
 
     @GestureState private var isGestureActive = false
+    @State private var headerFrames: [HeaderFrame] = []
+    @State private var holdTask: Task<Void, Never>?
+    @State private var holdWidgetID: WidgetID?
 
     init(arrangement: PanelArrangement, editor: PanelEditor) {
         self.arrangement = arrangement
@@ -35,18 +38,23 @@ public struct ControlPanel: View {
     }
 
     public var body: some View {
-        let base = VStack(alignment: .trailing, spacing: Space.oneHalf) {
-            if editor.isEditing { EditingBar(arrangement: arrangement, editor: editor) }
+        VStack(alignment: .trailing, spacing: Space.oneHalf) {
             lanes
         }
         .padding(Space.oneHalf)
         .coordinateSpace(.panel)
         .contentShape(Rectangle())
         .environment(\.isPanelEditing, editor.isEditing)
+        .environment(\.panelEditor, editor)
+        .environment(\.panelArrangement, arrangement)
         .onPreferenceChange(DropZonePreference.self) { zones in
             editor.zones = zones
         }
+        .onPreferenceChange(HeaderFramePreference.self) { frames in
+            headerFrames = frames
+        }
         .overlay(alignment: .topLeading) { cardInTheAir }
+        .overlay { if editor.isShowingGallery { galleryOverlay } }
         .animation(editor.isDragging ? nil : .snappy(duration: 0.28), value: arrangement.layout)
         .animation(.snappy(duration: 0.28), value: editor.isEditing)
         .animation(.snappy(duration: 0.2), value: editor.previewLanding)
@@ -55,37 +63,109 @@ public struct ControlPanel: View {
             // gesture (second finger, notification center). GestureState
             // resets automatically on cancel, so a hanging `lifted` is the
             // signal that onEnded never fired.
-            if !isActive, editor.isDragging {
-                editor.cancel()
+            if !isActive {
+                if editor.isDragging { editor.cancel() }
+                // Hold timer would otherwise fire after the finger is gone and
+                // re-enter edit with no finger down (or block the next hold
+                // because holdTask stays non-nil while completed).
+                holdTask?.cancel()
+                holdTask = nil
+                holdWidgetID = nil
             }
         }
-
-        if editor.isEditing {
-            base.gesture(panelDrag)
-        } else {
-            base
+        .onDisappear {
+            holdTask?.cancel()
+            holdTask = nil
+            holdWidgetID = nil
         }
+        // Always installed — a conditional `if isEditing { base.gesture(...) } else { base }`
+        // rebuilds the view tree when editing toggles and the first drag's
+        // GestureState is still wired to the old identity, so the first
+        // click-drag after entering edit mode never lifts. Keeping the
+        // recogniser live and masking it off when not editing lets the Files
+        // widget's `.onDrag` reach the row while editing is off, and makes the
+        // first reorder drag land. Use simultaneous so a header hold (panel
+        // drag when not editing) doesn't block the Files row's onDrag.
+        .simultaneousGesture(panelDrag)
+    }
+
+    private var galleryOverlay: some View {
+        ZStack {
+            // Dim behind the gallery — separate from cardShadow (which is for cards).
+            Color.black.opacity(0.28)
+                .ignoresSafeArea()
+                .onTapGesture { withAnimation(.snappy) { editor.isShowingGallery = false } }
+            GlassCard(isRaised: true) {
+                WidgetGallery(arrangement: arrangement) { withAnimation(.snappy) { editor.isShowingGallery = false } }
+            }
+            .frame(width: Layout.laneWidth)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .transition(.opacity.combined(with: .scale(scale: 0.96)))
     }
 
     /// One gesture for the whole panel, not per-card. A per-card gesture is
     /// attached to a view that moves between lanes; when the lane mutates the
     /// view is recreated and the in-flight gesture is cancelled mid-drag,
     /// leaving `lifted` hanging. A panel-level gesture lives on the stable
-    /// container and hit-tests against the frozen snapshot.
+    /// container and hit-tests against the frozen snapshot. When not editing,
+    /// a 0.5s hold on a header enters edit and lifts in one press so the
+    /// same hold can drag without re-clicking.
     private var panelDrag: some Gesture {
-        DragGesture(minimumDistance: Space.half, coordinateSpace: .panel)
+        DragGesture(minimumDistance: 0, coordinateSpace: .panel)
             .updating($isGestureActive) { _, state, _ in state = true }
             .onChanged { value in
-                guard editor.isEditing else { return }
-                if editor.lifted == nil {
-                    // Hit-test the start location against frozen-or-live zones.
-                    let hit = editor.zones.first { $0.frame.contains(value.startLocation) }
-                    guard let hit else { return }
-                    editor.lift(hit.id, at: value.startLocation)
+                // Gallery is a modal overlay — drags on the dim should not
+                // mutate the layout behind it.
+                guard !editor.isShowingGallery else { return }
+                if editor.isEditing {
+                    // Normal reorder — require a tiny move before lifting to
+                    // avoid lifting on a plain click.
+                    if editor.lifted == nil {
+                        let moved = hypot(value.translation.width, value.translation.height) > Space.half
+                        guard moved else { return }
+                        guard let hit = editor.zones.first(where: { $0.frame.contains(value.startLocation) }) else { return }
+                        editor.lift(hit.id, at: value.startLocation)
+                    }
+                    editor.drag(to: value.location, laneWidths: arrangement.laneWidths)
+                } else {
+                    // Not editing: hold on a header to enter edit + lift.
+                    // If already lifted via hold, drag (isEditing will be true on next tick, but handle here for the first move after hold).
+                    if editor.lifted != nil {
+                        editor.drag(to: value.location, laneWidths: arrangement.laneWidths)
+                        return
+                    }
+                    guard let headerHit = headerFrames.first(where: { $0.frame.contains(value.startLocation) }) else { return }
+                    let moved = hypot(value.translation.width, value.translation.height) > 4
+
+                    // Moved before hold completed — cancel and ignore this press.
+                    if moved {
+                        holdTask?.cancel()
+                        holdTask = nil
+                        holdWidgetID = nil
+                        return
+                    }
+
+                    if holdTask == nil {
+                        let startLoc = value.startLocation
+                        let widgetID = headerHit.id
+                        holdWidgetID = widgetID
+                        holdTask = Task {
+                            try? await Task.sleep(for: .seconds(0.5))
+                            guard !Task.isCancelled else { return }
+                            await MainActor.run {
+                                guard !editor.isEditing, editor.lifted == nil else { return }
+                                withAnimation(.snappy) { editor.startEditing() }
+                                editor.lift(widgetID, at: startLoc)
+                            }
+                        }
+                    }
                 }
-                editor.drag(to: value.location, laneWidths: arrangement.laneWidths)
             }
             .onEnded { _ in
+                holdTask?.cancel()
+                holdTask = nil
+                holdWidgetID = nil
                 guard let lifted = editor.lifted else { return }
                 // previewLanding was computed from the frozen snapshot on each
                 // drag frame; commit a single layout mutation on drop rather
@@ -137,37 +217,6 @@ public struct ControlPanel: View {
                 .offset(x: offset.width, y: offset.height)
                 .allowsHitTesting(false)
         }
-    }
-}
-
-/// The two controls edit mode needs: something to add with, and a way out.
-private struct EditingBar: View {
-    let arrangement: PanelArrangement
-    let editor: PanelEditor
-
-    @State private var isShowingGallery = false
-
-    var body: some View {
-        HStack(spacing: Space.one) {
-            Button {
-                isShowingGallery = true
-            } label: {
-                Image(systemName: "plus")
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .accessibilityLabel("Add a widget")
-            .popover(isPresented: $isShowingGallery, arrowEdge: .bottom) {
-                WidgetGallery(arrangement: arrangement) { isShowingGallery = false }
-            }
-
-            Button("Done") {
-                withAnimation(.snappy) { editor.stopEditing() }
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-        }
-        .transition(.move(edge: .top).combined(with: .opacity))
     }
 }
 

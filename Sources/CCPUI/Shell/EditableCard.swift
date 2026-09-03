@@ -23,6 +23,7 @@ struct EditableCard: View {
 
     var body: some View {
         LaneSlotCard(slot: slot)
+            .environment(\.currentWidgetID, slot.id)
             .wiggling(editor.isEditing && !isInTheAir)
             .overlay(alignment: .topLeading) { removeBadge }
             // The whole card, badge included: what a lifted card leaves in its

@@ -26,11 +26,11 @@ private struct Wiggle: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .rotationEffect(.degrees(isRocked ? Self.amplitude : -Self.amplitude))
+            .rotationEffect(.degrees(isActive ? (isRocked ? Self.amplitude : -Self.amplitude) : 0))
             .animation(
                 isActive
                     ? .easeInOut(duration: period).repeatForever(autoreverses: true)
-                    : .easeOut(duration: period),
+                    : .easeOut(duration: 0.22),
                 value: isRocked
             )
             .task(id: isActive) {

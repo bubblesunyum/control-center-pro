@@ -16,8 +16,8 @@ import SwiftUI
 public final class ControlPanelController {
     private let window: ControlPanelWindow
     private let content: NSHostingView<ControlPanel>
-    private let arrangement: PanelArrangement
-    private let editor = PanelEditor()
+    public let arrangement: PanelArrangement
+    public let editor = PanelEditor()
 
     /// The screen the panel is currently anchored to, kept so that growing by
     /// a lane mid-edit re-anchors against the same one it opened on.
@@ -85,6 +85,31 @@ public final class ControlPanelController {
         editor.startEditing()
     }
 
+    /// Leave edit mode while keeping the panel visible.
+    public func stopEditing() {
+        withAnimation(.snappy) { editor.stopEditing() }
+        place()
+    }
+
+    /// Leave edit mode but keep the gallery open — the menu bar checkmark
+    /// uses this so an open gallery isn't lost when confirming the layout.
+    public func finishEditingKeepingGallery() {
+        withAnimation(.snappy) { editor.finishEditingPreservingGallery() }
+        place()
+    }
+
+    /// Present the widget gallery. The panel must be visible; if it is not,
+    /// it is shown first in edit mode.
+    public func showGallery() {
+        if !isVisible {
+            showAndStartEditing(from: nil)
+        } else if !editor.isEditing {
+            withAnimation(.snappy) { editor.startEditing() }
+            place()
+        }
+        editor.isShowingGallery = true
+    }
+
     /// Show the panel and enter edit mode in one step. When the panel is
     /// already visible this re-anchors to the screen that owns the status
     /// item that was clicked and then enters edit mode.
@@ -125,6 +150,16 @@ public final class ControlPanelController {
         // is not a step back — the user has gone somewhere else.
         if reason == .escapeKey, editor.isEditing {
             withAnimation(.snappy) { editor.stopEditing() }
+        } else if reason == .clickElsewhere, editor.isEditing {
+            // Click outside while editing — exit edit but keep the panel and
+            // an open gallery. The menu bar checkmark also uses this path via
+            // the status item's click handler; without it the global monitor
+            // would hide the panel and dismiss the gallery.
+            if editor.isShowingGallery {
+                finishEditingKeepingGallery()
+            } else {
+                stopEditing()
+            }
         } else {
             hide()
         }

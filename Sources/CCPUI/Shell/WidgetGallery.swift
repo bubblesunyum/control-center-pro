@@ -22,12 +22,17 @@ struct WidgetGallery: View {
 
             Divider()
 
-            ForEach(arrangement.gallery) { entry in
-                GalleryRow(entry: entry) {
-                    withAnimation(.snappy) { arrangement.add(entry.id) }
-                    onAdd()
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(arrangement.gallery) { entry in
+                        GalleryRow(entry: entry) {
+                            withAnimation(.snappy) { arrangement.add(entry.id) }
+                            onAdd()
+                        }
+                    }
                 }
             }
+            .frame(maxHeight: 360)
         }
         .frame(width: Layout.laneWidth)
         .padding(.bottom, Space.half)
