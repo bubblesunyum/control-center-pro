@@ -85,11 +85,28 @@ if [ -f AppBundle/Secrets.plist ]; then
 fi
 printf 'APPL????' > "$BUNDLE/Contents/PkgInfo"
 
-# Ad-hoc for now. The moment a widget needs a permission macOS ties to a binary
-# hash — the audio mixer's process taps — this has to become the stable local
-# identity instead, or every rebuild silently orphans the grant. That is
-# ccp-4kq.1.
-codesign --force --sign - "$BUNDLE" > /dev/null 2>&1
+# Prefer a stable identity so TCC grants (Documents, Accessibility,
+# Screen Recording) survive rebuilds. Ad-hoc signatures change the cdhash
+# on every build, which makes macOS treat each launch as a new app and
+# re-prompt for every folder the WhatsApp organizer would touch (ccp-1kb).
+# Order matches build.sh: Developer ID first, then the local self-signed
+# "Vorssaint Utils Signing" created by Tools/setup-signing.sh, then ad-hoc.
+developer_id_identity() {
+  security find-identity -v -p codesigning 2>/dev/null \
+    | grep 'Developer ID Application' | head -1 | sed -E 's/.*"(.*)".*/\1/' || true
+}
+LEGACY_IDENTITY="Vorssaint Utils Signing"
+DEVID="$(developer_id_identity)"
+if [[ -n "$DEVID" ]]; then
+  echo "  signing with Developer ID: $DEVID" >&2
+  codesign --force --sign "$DEVID" "$BUNDLE" > /dev/null 2>&1
+elif security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
+  echo "  signing with $LEGACY_IDENTITY" >&2
+  codesign --force --sign "$LEGACY_IDENTITY" "$BUNDLE" > /dev/null 2>&1
+else
+  echo "  signing ad-hoc (no stable identity — run Tools/setup-signing.sh to keep TCC grants across rebuilds)" >&2
+  codesign --force --sign - "$BUNDLE" > /dev/null 2>&1
+fi
 
 if (( LAUNCH )); then
   restart_app "$BUNDLE" ${APP_ARGS+--args "${APP_ARGS[@]}"}

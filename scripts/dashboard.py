@@ -705,6 +705,12 @@ TASKS = {
         "busy": "running…",
         "where": "gate",
     },
+    "run-mac": {
+        "command": ["scripts/app.sh", "--launch", "--show-panel"],
+        "label": "run mac",
+        "busy": "building…",
+        "where": "header",
+    },
     # The only one that leaves this machine. It stays a plain `git push` with no
     # arguments so it can only ever do what the branch is already tracking.
     "push": {

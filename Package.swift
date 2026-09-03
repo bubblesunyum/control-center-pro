@@ -141,6 +141,18 @@ let package = Package(
                 "Vorssaint/Services/QuickTools/ScreenTextService.swift",
                 "Vorssaint/Services/QuickTools/ScreenshotScrollingCapture.swift",
 
+                // WhatsApp downloads organizer — declares NSDocuments/
+                // NSDesktop/NSDownloads folder usage and touches the file
+                // system at launch via FeatureRuntime → Cleaner binding.
+                // CCP's panel (CCPKit/CCPUI) never uses it, and its
+                // destination probing is what prompts for Documents every
+                // launch when built ad-hoc (ccp-1kb). Keep the engine out
+                // until CCP needs it; the strings and support files stay.
+                "Vorssaint/Services/ManagedDownloads/WhatsAppDownloadManager.swift",
+                "Vorssaint/Services/ManagedDownloads/WhatsAppDownloadOrganizer.swift",
+                "Vorssaint/Services/ManagedDownloads/WhatsAppDownloadScheduler.swift",
+                "Vorssaint/Services/ManagedDownloads/WhatsAppDownloadSupport.swift",
+
                 // Ours: the bridge's own documentation, not a source file.
                 "VorssaintBridge/README.md",
 

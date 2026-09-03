@@ -33,7 +33,7 @@
     "scripts/verify.sh": "0f8dfc7567660e4e"
   },
   "CLAUDE.md": {
-    "Package.swift": "5122261e47c586da",
+    "Package.swift": "20d33a734529f8d8",
     "doc": "f3f442501b16645b"
   }
 }
