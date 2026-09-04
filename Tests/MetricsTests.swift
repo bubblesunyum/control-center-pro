@@ -15324,27 +15324,6 @@ struct MetricsTests {
                 && !ScratchpadSupport.dismissesOnOutsideClick(isPinned: true, exportModalActive: false)
                 && !ScratchpadSupport.dismissesOnOutsideClick(isPinned: false, exportModalActive: true),
                "the scratchpad pin and export dialog both block outside-click dismissal")
-        let markdownPreview = ScratchpadSupport.markdownPreview(
-            "# Heading\n\n**Bold** and *italic* with [link](https://example.com)\n\n- First\n- Second\n\n1. Third\n\n```\ncode\n```")
-        expect(markdownPreview.map(\.kind) == [
-                    .heading(1), .paragraph,
-                    .unorderedListItem(depth: 1), .unorderedListItem(depth: 1),
-                    .orderedListItem(ordinal: 1, depth: 1), .code
-                ]
-                && String(markdownPreview[0].text.characters) == "Heading"
-                && String(markdownPreview[2].text.characters) == "First"
-                && String(markdownPreview[5].text.characters) == "code"
-                && markdownPreview[2].containerID == markdownPreview[3].containerID
-                && markdownPreview[2].containerID != nil
-                && markdownPreview[3].containerID != markdownPreview[4].containerID
-                && markdownPreview[1].text.runs.contains {
-                    $0.inlinePresentationIntent?.contains(.stronglyEmphasized) == true
-                }
-                && markdownPreview[1].text.runs.contains {
-                    $0.inlinePresentationIntent?.contains(.emphasized) == true
-                }
-                && markdownPreview[1].text.runs.contains { $0.link != nil },
-               "the scratchpad preview renders semantic blocks and inline formatting")
         expect(Defaults.registeredDefaults[DefaultsKey.scratchpadBackgroundOpacity] as? Double == 0.0,
                "the scratchpad keeps its familiar translucent background by default")
         expect(SettingsBackupSupport.exportKeys().contains(DefaultsKey.scratchpadBackgroundOpacity),

@@ -47,6 +47,14 @@ public enum Radius {
 public enum Layout {
     /// Height of the scrollable clipboard list — 50% taller than the original 220 to show ~7 rows.
     static let clipboardListHeight: CGFloat = 330
+
+    /// How tall the scratchpad's editor stands. Live-styled Markdown needs the
+    /// room: at 148pt a heading and a short list filled the card, and a pad you
+    /// cannot see is a worse pad than a plain-text one. Set here rather than on
+    /// `WidgetSize.tall`, which the clipboard shares and which would leave dead
+    /// glass under its own capped list.
+    static let scratchpadEditorHeight: CGFloat = 300
+
     /// Size of a row's leading icon and trailing menu button.
     static let rowActionSize: CGFloat = 22
     /// Thumbnail shown on the trailing edge of an image clipboard row.

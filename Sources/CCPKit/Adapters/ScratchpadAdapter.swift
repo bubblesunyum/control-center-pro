@@ -37,24 +37,6 @@ public enum ScratchpadRetention: String, CaseIterable, Sendable {
     }
 }
 
-// MARK: - Markdown blocks
-
-public struct ScratchpadMarkdownBlock: Sendable, Equatable {
-    public enum Kind: Equatable, Sendable {
-        case paragraph
-        case heading(Int)
-        case unorderedListItem(depth: Int)
-        case orderedListItem(ordinal: Int, depth: Int)
-        case quote(depth: Int)
-        case code
-        case thematicBreak
-    }
-
-    public let kind: Kind
-    public let containerID: Int?
-    public let text: AttributedString
-}
-
 // MARK: - Pad & Document
 
 public struct ScratchpadPad: Codable, Equatable, Identifiable, Sendable {
@@ -171,100 +153,6 @@ public struct ScratchpadDocument: Codable, Equatable, Sendable {
 // MARK: - Support
 
 public enum ScratchpadSupport {
-    public static func markdownPreview(_ text: String) -> [ScratchpadMarkdownBlock] {
-        guard !text.isEmpty else { return [] }
-        let options = AttributedString.MarkdownParsingOptions(
-            interpretedSyntax: .full,
-            failurePolicy: .returnPartiallyParsedIfPossible)
-        guard let parsed = try? AttributedString(markdown: text, options: options) else {
-            return [ScratchpadMarkdownBlock(kind: .paragraph, containerID: nil, text: AttributedString(text))]
-        }
-
-        var blocks: [ScratchpadMarkdownBlock] = []
-        var currentID: Int?
-        var currentKind = ScratchpadMarkdownBlock.Kind.paragraph
-        var currentContainerID: Int?
-        var currentText = AttributedString()
-
-        func finishBlock() {
-            guard currentID != nil else { return }
-            if currentKind == .code {
-                while currentText.characters.last?.isNewline == true {
-                    currentText.characters.removeLast()
-                }
-            }
-            blocks.append(ScratchpadMarkdownBlock(kind: currentKind,
-                                                  containerID: currentContainerID,
-                                                  text: currentText))
-            currentText = AttributedString()
-        }
-
-        for run in parsed.runs {
-            let components = run.presentationIntent?.components ?? []
-            let blockID = components.first?.identity ?? 0
-            if blockID != currentID {
-                finishBlock()
-                currentID = blockID
-                let presentation = markdownBlockPresentation(components)
-                currentKind = presentation.kind
-                currentContainerID = presentation.containerID
-            }
-            currentText.append(AttributedString(parsed[run.range]))
-        }
-        finishBlock()
-
-        return blocks.isEmpty
-            ? [ScratchpadMarkdownBlock(kind: .paragraph, containerID: nil, text: AttributedString(text))]
-            : blocks
-    }
-
-    private static func markdownBlockPresentation(
-        _ components: [PresentationIntent.IntentType]
-    ) -> (kind: ScratchpadMarkdownBlock.Kind, containerID: Int?) {
-        var listDepth = 0
-        var listIsOrdered: Bool?
-        var listOrdinal = 1
-        var quoteDepth = 0
-        var containerID: Int?
-
-        for component in components {
-            switch component.kind {
-            case .header(let level):
-                return (.heading(level), nil)
-            case .codeBlock:
-                return (.code, nil)
-            case .thematicBreak:
-                return (.thematicBreak, nil)
-            case .listItem(let ordinal):
-                if listDepth == 0 { listOrdinal = ordinal }
-            case .orderedList:
-                listDepth += 1
-                if listIsOrdered == nil { listIsOrdered = true }
-                containerID = component.identity
-            case .unorderedList:
-                listDepth += 1
-                if listIsOrdered == nil { listIsOrdered = false }
-                containerID = component.identity
-            case .blockQuote:
-                quoteDepth += 1
-                containerID = component.identity
-            case .paragraph, .table, .tableHeaderRow, .tableRow, .tableCell:
-                break
-            @unknown default:
-                break
-            }
-        }
-
-        if listIsOrdered == true {
-            return (.orderedListItem(ordinal: listOrdinal, depth: max(1, listDepth)), containerID)
-        }
-        if listIsOrdered == false {
-            return (.unorderedListItem(depth: max(1, listDepth)), containerID)
-        }
-        if quoteDepth > 0 { return (.quote(depth: quoteDepth), containerID) }
-        return (.paragraph, nil)
-    }
-
     public static func sanitizedPadName(_ name: String) -> String {
         let words = name.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
         return String(words.joined(separator: " ").prefix(ScratchpadDocument.maximumNameLength))
@@ -340,7 +228,6 @@ public final class ScratchpadAdapter {
 
     public private(set) var pads: [ScratchpadPad] = []
     public private(set) var selectedPadID: UUID?
-    public private(set) var isPreviewing = false
 
     public var selectedPadName: String {
         pads.first(where: { $0.id == selectedPadID })?.name ?? defaultName
@@ -482,7 +369,6 @@ public final class ScratchpadAdapter {
         isReplacingText = true
         text = selectedText
         isReplacingText = false
-        if text.isEmpty { isPreviewing = false }
     }
 
     // MARK: - Pad verbs
@@ -522,15 +408,7 @@ public final class ScratchpadAdapter {
     public func clear() {
         guard !text.isEmpty else { return }
         text = ""
-        if isPreviewing {
-            isPreviewing = false
-        }
         flushSave()
-    }
-
-    public func togglePreview() {
-        guard !text.isEmpty else { return }
-        isPreviewing.toggle()
     }
 
     public var isEmpty: Bool { text.isEmpty }
