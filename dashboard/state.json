@@ -1,17 +1,22 @@
 {
-  "generated": "14:26:06",
+  "generated": "14:38:03",
   "project": "control-center-pro",
   "git": {
     "branch": "main",
     "upstream": "origin/main",
-    "dirty": 2,
-    "commits_today": 5,
+    "dirty": 1,
+    "commits_today": 6,
     "last": {
-      "sha": "63a78cb",
-      "subject": "rich-text editor for notes (ccp-2zi.2)",
-      "when": "35 seconds ago"
+      "sha": "103e15d",
+      "subject": "handoff 20260904-143604 (ccp-2zi)",
+      "when": "2 minutes ago"
     },
     "unpushed": [
+      {
+        "sha": "103e15d",
+        "subject": "handoff 20260904-143604 (ccp-2zi)",
+        "at": 1788550578.0
+      },
       {
         "sha": "63a78cb",
         "subject": "rich-text editor for notes (ccp-2zi.2)",
@@ -24,10 +29,21 @@
       }
     ],
     "unpushed_beads": [
+      "ccp-2zi",
       "ccp-2zi.1",
       "ccp-2zi.2"
     ],
     "bead_commits": {
+      "ccp-2zi": {
+        "commits": 1,
+        "at": 1788550578.0,
+        "list": [
+          {
+            "sha": "103e15d",
+            "subject": "handoff 20260904-143604 (ccp-2zi)"
+          }
+        ]
+      },
       "ccp-2zi.2": {
         "commits": 1,
         "at": 1788549929.0,
@@ -239,6 +255,13 @@
           "ccp-2zi.2",
           "ccp-2zi.1",
           "ccp-2zi.7"
+        ],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "103e15d",
+            "subject": "handoff 20260904-143604 (ccp-2zi)"
+          }
         ]
       },
       {
@@ -3240,14 +3263,7 @@
   },
   "worktree": [
     {
-      "path": ".beads/interactions.jsonl",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": ".beads/issues.jsonl",
+      "path": "dashboard/state.json",
       "staged": false,
       "untracked": false,
       "status": "M",
@@ -3256,7 +3272,7 @@
   ],
   "verify": {
     "status": "passed",
-    "when": "just now",
+    "when": "1m ago",
     "tests": "",
     "steps": [
       {
@@ -3270,12 +3286,12 @@
     ],
     "unverified": [
       {
-        "sha": "63a78cb",
-        "subject": "rich-text editor for notes (ccp-2zi.2)"
+        "sha": "103e15d",
+        "subject": "handoff 20260904-143604 (ccp-2zi)"
       }
     ],
     "took": "8s",
-    "at": 1788549917.2618332
+    "at": 1788550571.828849
   },
   "runs": {
     "verify": {
@@ -3399,15 +3415,15 @@
           "path": "harness/laurels.jsonl",
           "origin": "harness",
           "role": "praise, replayed one at a time",
-          "tokens": 476
+          "tokens": 505
         },
         {
-          "id": "harness/handoffs/20260904-001023.md",
-          "name": "20260904-001023.md",
-          "path": "harness/handoffs/20260904-001023.md",
+          "id": "harness/handoffs/20260904-143604.md",
+          "name": "20260904-143604.md",
+          "path": "harness/handoffs/20260904-143604.md",
           "origin": "harness",
           "role": "the last session's closing note",
-          "tokens": 278
+          "tokens": 364
         },
         {
           "id": "CLAUDE.md",
@@ -3451,7 +3467,7 @@
           "path": ".beads/issues.jsonl",
           "origin": "harness",
           "role": "the issue graph, exported for git",
-          "tokens": 35085
+          "tokens": 35202
         },
         {
           "id": ".claude/skills/beads/SKILL.md",
@@ -3592,14 +3608,14 @@
       },
       {
         "name": "session brief",
-        "tokens": 453
+        "tokens": 492
       },
       {
         "name": "skill descriptions",
         "tokens": 378
       }
     ],
-    "always_total": 3291,
+    "always_total": 3330,
     "on_demand": [
       {
         "name": "workflow",
@@ -3638,7 +3654,7 @@
         "tokens": 491
       }
     ],
-    "brief_tokens": 453,
+    "brief_tokens": 492,
     "prime_tokens": 1569
   }
 }

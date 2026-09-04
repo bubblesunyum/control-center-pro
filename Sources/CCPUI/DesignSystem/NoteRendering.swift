@@ -18,9 +18,20 @@ import SwiftUI
 /// "this is decoration" would come to be worn by the user's own words — and
 /// the reading would drop them.
 enum NoteRendering {
-    /// What is drawn in front of a block, and how the reader knows what kind
-    /// of block it is looking at.
-    static func marker(for kind: NoteBlock.Kind) -> String {
+    /// What is drawn in front of a block: how deep it sits, then how the
+    /// reader knows what kind of block it is looking at.
+    ///
+    /// The indent is spaces for the same reason the bullet is a character —
+    /// a plain `TextEditor` draws its string and nothing else. Two per level
+    /// rather than four: a lane-width card has no room to spend, and a list
+    /// may nest eight deep.
+    static let indentation = "  "
+
+    static func marker(for block: NoteBlock) -> String {
+        String(repeating: indentation, count: block.indent) + marker(for: block.kind)
+    }
+
+    private static func marker(for kind: NoteBlock.Kind) -> String {
         switch kind {
         case .bulleted: "• "
         case .numbered: "– "
@@ -48,7 +59,7 @@ enum NoteRendering {
     }
 
     private static func markerText(for block: NoteBlock) -> AttributedString {
-        var marker = AttributedString(marker(for: block.kind))
+        var marker = AttributedString(marker(for: block))
         marker.foregroundColor = .labelMuted
         return marker
     }
@@ -72,11 +83,41 @@ enum NoteRendering {
     /// again.
     static func document(from text: AttributedString) -> NoteDocument {
         let read = NoteDocument(text)
-        return NoteDocument(blocks: read.blocks.map { block in
-            let marker = marker(for: block.kind)
-            guard !marker.isEmpty, block.plainText.hasPrefix(marker) else { return block }
-            return block.droppingFirst(marker.count)
-        }).normalized()
+        return NoteDocument(blocks: read.blocks.map(shedMarker)).normalized()
+    }
+
+    /// One block with what was drawn in front of it taken back off — or, where
+    /// that has been deleted into, the block reading as what is left of it.
+    ///
+    /// A marker is ordinary characters, so a backspace at the start of a list
+    /// item eats into it. Leaving the block a list item would hand the user a
+    /// half-bullet as their own text and never give it back.
+    ///
+    /// The indent and the glyph are shed separately, because a backspace lands
+    /// in one or the other and means a different thing in each. In the indent
+    /// it is an outdent — the item is still an item, one level shallower. In
+    /// the glyph it is the end of being that kind of block, which is what
+    /// every editor has taught people backspace at the front of a bullet does.
+    /// Reading them as one marker instead would leave a bullet stranded in the
+    /// user's own text the moment a space went missing in front of it.
+    private static func shedMarker(from block: NoteBlock) -> NoteBlock {
+        var block = block
+
+        // The drawn indent is spaces, so what survives of it is the leading
+        // spaces, and the levels are however many whole ones that still makes.
+        let drawn = block.indent * indentation.count
+        let spaces = block.plainText.prefix(drawn).prefix { $0 == " " }.count
+        block = block.droppingFirst(spaces)
+        block.indent = spaces / indentation.count
+
+        let glyph = marker(for: block.kind)
+        guard !glyph.isEmpty else { return block }
+        let text = block.plainText
+        if text.hasPrefix(glyph) { return block.droppingFirst(glyph.count) }
+
+        var demoted = block.droppingFirst(text.commonPrefix(with: glyph).count)
+        demoted.kind = .paragraph
+        return demoted
     }
 
     // MARK: - Caret
@@ -110,6 +151,24 @@ enum NoteRendering {
         return text.endIndex
     }
 
+    /// Which block a note offset falls in, and where a block's own text
+    /// starts in that same counting. The commands work in blocks and the
+    /// caret works in offsets, so one of them has to be able to speak the
+    /// other's language, and offsets are already the currency the redraw uses.
+    static func blockPosition(atNoteOffset offset: Int, in document: NoteDocument) -> Int {
+        var start = 0
+        for (position, block) in document.blocks.enumerated() {
+            let end = start + block.plainText.count
+            if offset <= end { return position }
+            start = end + 1
+        }
+        return max(0, document.blocks.count - 1)
+    }
+
+    static func noteOffset(ofBlockAt position: Int, in document: NoteDocument) -> Int {
+        document.blocks.prefix(position).reduce(0) { $0 + $1.plainText.count + 1 }
+    }
+
     /// One block's extent in the text, and how much of it is not the note's
     /// own characters — the separating newline and the marker.
     private struct BlockExtent {
@@ -123,13 +182,13 @@ enum NoteRendering {
         var start: AttributedString.Index?
         var end = text.startIndex
         var position: Int?
-        var kind = NoteBlock.Kind.paragraph
+        var block = NoteBlock(.paragraph)
 
         func close() {
             guard let lower = start else { return }
             let length = text.characters.distance(from: lower, to: end)
             let separator = extents.isEmpty ? 0 : 1
-            let marker = marker(for: kind)
+            let marker = marker(for: block)
             let markerLength = String(text[lower..<end].characters)
                 .dropFirst(separator).hasPrefix(marker) ? marker.count : 0
             let leading = separator + markerLength
@@ -143,7 +202,7 @@ enum NoteRendering {
                 close()
                 start = run.range.lowerBound
                 position = run.noteBlockPosition
-                kind = run.noteBlockKind ?? .paragraph
+                block = NoteBlock(run.noteBlockKind ?? .paragraph, indent: run.noteBlockIndent ?? 0)
             }
             end = run.range.upperBound
         }

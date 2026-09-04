@@ -17,7 +17,7 @@ final class NoteRenderingTests: XCTestCase {
         // bullet's attributes, so anything keyed on an attribute would drop
         // every character the user just wrote.
         var typed = NoteRendering.text(for: NoteDocument(blocks: [NoteBlock(.bulleted, text: "")]))
-        let marker = NoteRendering.marker(for: .bulleted)
+        let marker = NoteRendering.marker(for: NoteBlock(.bulleted))
         typed.characters.insert(contentsOf: "milk",
                                 at: typed.index(typed.startIndex, offsetByCharacters: marker.count))
 
@@ -57,7 +57,7 @@ final class NoteRenderingTests: XCTestCase {
     func testReturnInAListItemChangesStructure() {
         let before = NoteDocument(blocks: [NoteBlock(.bulleted, text: "onetwo")])
         var typed = NoteRendering.text(for: before)
-        let marker = NoteRendering.marker(for: .bulleted)
+        let marker = NoteRendering.marker(for: NoteBlock(.bulleted))
         typed.characters.insert(contentsOf: "\n",
                                 at: typed.index(typed.startIndex,
                                                 offsetByCharacters: marker.count + 3))
@@ -106,7 +106,7 @@ final class NoteRenderingTests: XCTestCase {
         let document = NoteDocument(blocks: [NoteBlock(.bulleted, text: "milk")])
         let text = NoteRendering.text(for: document)
         let index = NoteRendering.index(atNoteOffset: 0, in: text)
-        let marker = NoteRendering.marker(for: .bulleted)
+        let marker = NoteRendering.marker(for: NoteBlock(.bulleted))
         XCTAssertEqual(text.characters.distance(from: text.startIndex, to: index), marker.count)
     }
 
@@ -122,5 +122,124 @@ final class NoteRenderingTests: XCTestCase {
         let after = NoteRendering.text(for: listed)
         let moved = NoteRendering.index(atNoteOffset: 2, in: after)
         XCTAssertEqual(String(after[moved...].characters), "lk")
+    }
+
+    // MARK: - Indent
+
+    func testIndentIsDrawnInFrontOfTheMarkerAndShedAgain() {
+        let document = NoteDocument(blocks: [NoteBlock(.bulleted, indent: 2, text: "nested")])
+        let text = NoteRendering.text(for: document)
+        XCTAssertTrue(String(text.characters).hasPrefix(NoteRendering.indentation
+            + NoteRendering.indentation + "\u{2022} "))
+        XCTAssertEqual(NoteRendering.document(from: text), document)
+    }
+
+    func testCaretSurvivesAnIndentChangingUnderIt() {
+        let shallow = NoteDocument(blocks: [NoteBlock(.bulleted, text: "milk")])
+        let deep = NoteDocument(blocks: [NoteBlock(.bulleted, indent: 3, text: "milk")])
+        let drawn = NoteRendering.text(for: shallow)
+        let caret = NoteRendering.index(atNoteOffset: 2, in: drawn)
+        XCTAssertEqual(NoteRendering.noteOffset(of: caret, in: drawn), 2)
+
+        let redrawn = NoteRendering.text(for: deep)
+        let moved = NoteRendering.index(atNoteOffset: 2, in: redrawn)
+        XCTAssertEqual(String(redrawn[moved...].characters), "lk")
+    }
+
+    // MARK: - Blocks and offsets
+
+    func testEachOffsetLandsInItsOwnBlock() {
+        let document = NoteDocument(blocks: [
+            NoteBlock(.heading(level: 1), text: "Title"),
+            NoteBlock(.bulleted, text: "milk"),
+            NoteBlock(.paragraph, text: "note"),
+        ])
+        // "Title" is 0...5, the boundary offset belonging to the line it ends.
+        XCTAssertEqual(NoteRendering.blockPosition(atNoteOffset: 0, in: document), 0)
+        XCTAssertEqual(NoteRendering.blockPosition(atNoteOffset: 5, in: document), 0)
+        XCTAssertEqual(NoteRendering.blockPosition(atNoteOffset: 6, in: document), 1)
+        XCTAssertEqual(NoteRendering.blockPosition(atNoteOffset: 11, in: document), 2)
+        XCTAssertEqual(NoteRendering.blockPosition(atNoteOffset: 999, in: document), 2)
+    }
+
+    func testABlockStartsWhereItsOffsetSaysItDoes() {
+        let document = NoteDocument(blocks: [
+            NoteBlock(.paragraph, text: "one"),
+            NoteBlock(.paragraph, text: "two"),
+        ])
+        let start = NoteRendering.noteOffset(ofBlockAt: 1, in: document)
+        XCTAssertEqual(NoteRendering.blockPosition(atNoteOffset: start, in: document), 1)
+
+        let drawn = NoteRendering.text(for: document)
+        let caret = NoteRendering.index(atNoteOffset: start, in: drawn)
+        XCTAssertEqual(String(drawn[caret...].characters), "two")
+    }
+
+    func testCaretLandsAfterTheMarkerOfABlockJustAutoformatted() throws {
+        // What the editor does the moment "- " turns into a bullet: the typed
+        // marker is gone and the drawn one must not swallow the caret.
+        let formatted = NoteDocument(blocks: [NoteBlock(.paragraph, text: "- ")])
+            .autoformatted(at: 0)
+        let document = try XCTUnwrap(formatted)
+        let drawn = NoteRendering.text(for: document)
+        let caret = NoteRendering.index(
+            atNoteOffset: NoteRendering.noteOffset(ofBlockAt: 0, in: document), in: drawn)
+        XCTAssertEqual(caret, drawn.endIndex)
+        XCTAssertEqual(String(drawn.characters), NoteRendering.marker(for: NoteBlock(.bulleted)))
+    }
+
+    // MARK: - Deleting into a marker
+
+    func testBackspaceIntoABulletTakesTheBulletAwayRatherThanTheText() {
+        // The marker is ordinary characters, so it can be deleted into. What
+        // must not happen is the leftover bullet becoming the user's text.
+        var text = NoteRendering.text(for: NoteDocument(blocks: [NoteBlock(.bulleted, text: "milk")]))
+        let marker = NoteRendering.marker(for: NoteBlock(.bulleted))
+        let caret = text.index(text.startIndex, offsetByCharacters: marker.count)
+        text.characters.remove(at: text.index(caret, offsetByCharacters: -1))
+
+        let document = NoteRendering.document(from: text)
+        XCTAssertEqual(document.blocks.map(\.kind), [.paragraph])
+        XCTAssertEqual(document.blocks.map(\.plainText), ["milk"])
+    }
+
+    func testBackspaceOnAnEmptyToDoLeavesAnEmptyParagraph() {
+        var text = NoteRendering.text(for: NoteDocument(blocks: [NoteBlock(.todo(isDone: false))]))
+        text.characters.removeLast()
+
+        let document = NoteRendering.document(from: text)
+        XCTAssertEqual(document.blocks.map(\.kind), [.paragraph])
+        XCTAssertTrue(document.isEmpty)
+    }
+
+    func testBackspaceIntoTheBulletOfAnIndentedItemKeepsWhereItSat() {
+        // The glyph goes, the indent does not: they are drawn separately and
+        // a backspace only ever lands in one of them.
+        var text = NoteRendering.text(for: NoteDocument(blocks: [
+            NoteBlock(.bulleted, indent: 2, text: "nested"),
+        ]))
+        let marker = NoteRendering.marker(for: NoteBlock(.bulleted, indent: 2))
+        text.characters.remove(at: text.index(text.startIndex,
+                                              offsetByCharacters: marker.count - 1))
+
+        let document = NoteRendering.document(from: text)
+        XCTAssertEqual(document.blocks.map(\.kind), [.paragraph])
+        XCTAssertEqual(document.blocks.map(\.indent), [2])
+        XCTAssertEqual(document.blocks.map(\.plainText), ["nested"])
+    }
+
+    func testBackspaceInTheIndentOutdentsAndLeavesTheBulletAlone() {
+        // The defect this guards: reading the indent and the bullet as one
+        // marker stranded the bullet in the user's own text as literal
+        // characters the moment a space in front of it went missing.
+        var text = NoteRendering.text(for: NoteDocument(blocks: [
+            NoteBlock(.bulleted, indent: 2, text: "nested"),
+        ]))
+        text.characters.remove(at: text.startIndex)
+
+        let document = NoteRendering.document(from: text)
+        XCTAssertEqual(document.blocks.map(\.kind), [.bulleted])
+        XCTAssertEqual(document.blocks.map(\.indent), [1])
+        XCTAssertEqual(document.blocks.map(\.plainText), ["nested"])
     }
 }
