@@ -1,126 +1,25 @@
 {
-  "generated": "15:29:26",
+  "generated": "15:42:45",
   "project": "control-center-pro",
   "git": {
-    "branch": "main",
-    "upstream": "origin/main",
-    "dirty": 3,
-    "commits_today": 10,
+    "branch": "spike/markdown-engine",
+    "upstream": "",
+    "dirty": 0,
+    "commits_today": 11,
     "last": {
-      "sha": "dcc7bb4",
-      "subject": "handoff 20260904-150118 (ccp-2zi)",
-      "when": "28 minutes ago"
+      "sha": "72e0355",
+      "subject": "spike: live-styled markdown in the scratchpad (ccp-dn5)",
+      "when": "28 seconds ago"
     },
-    "unpushed": [
-      {
-        "sha": "dcc7bb4",
-        "subject": "handoff 20260904-150118 (ccp-2zi)",
-        "at": 1788552112.0
-      },
-      {
-        "sha": "db349e2",
-        "subject": "traps from the note editor and the Craft plan (ccp-2zi)",
-        "at": 1788551636.0
-      },
-      {
-        "sha": "90124ac",
-        "subject": "plan for two-way Craft sync (ccp-2zi.8)",
-        "at": 1788551618.0
-      },
-      {
-        "sha": "1a4db2a",
-        "subject": "block kind commands for the note editor (ccp-2zi.9)",
-        "at": 1788551578.0
-      },
-      {
-        "sha": "103e15d",
-        "subject": "handoff 20260904-143604 (ccp-2zi)",
-        "at": 1788550578.0
-      },
-      {
-        "sha": "63a78cb",
-        "subject": "rich-text editor for notes (ccp-2zi.2)",
-        "at": 1788549929.0
-      },
-      {
-        "sha": "42aeeee",
-        "subject": "rich-text note document model (ccp-2zi.1)",
-        "at": 1788548830.0
-      }
-    ],
-    "unpushed_beads": [
-      "ccp-2zi",
-      "ccp-2zi.1",
-      "ccp-2zi.2",
-      "ccp-2zi.8",
-      "ccp-2zi.9"
-    ],
-    "bead_commits": {
-      "ccp-2zi": {
-        "commits": 3,
-        "at": 1788552112.0,
-        "list": [
-          {
-            "sha": "dcc7bb4",
-            "subject": "handoff 20260904-150118 (ccp-2zi)"
-          },
-          {
-            "sha": "db349e2",
-            "subject": "traps from the note editor and the Craft plan (ccp-2zi)"
-          },
-          {
-            "sha": "103e15d",
-            "subject": "handoff 20260904-143604 (ccp-2zi)"
-          }
-        ]
-      },
-      "ccp-2zi.8": {
-        "commits": 1,
-        "at": 1788551618.0,
-        "list": [
-          {
-            "sha": "90124ac",
-            "subject": "plan for two-way Craft sync (ccp-2zi.8)"
-          }
-        ]
-      },
-      "ccp-2zi.9": {
-        "commits": 1,
-        "at": 1788551578.0,
-        "list": [
-          {
-            "sha": "1a4db2a",
-            "subject": "block kind commands for the note editor (ccp-2zi.9)"
-          }
-        ]
-      },
-      "ccp-2zi.2": {
-        "commits": 1,
-        "at": 1788549929.0,
-        "list": [
-          {
-            "sha": "63a78cb",
-            "subject": "rich-text editor for notes (ccp-2zi.2)"
-          }
-        ]
-      },
-      "ccp-2zi.1": {
-        "commits": 1,
-        "at": 1788548830.0,
-        "list": [
-          {
-            "sha": "42aeeee",
-            "subject": "rich-text note document model (ccp-2zi.1)"
-          }
-        ]
-      }
-    }
+    "unpushed": [],
+    "unpushed_beads": [],
+    "bead_commits": {}
   },
   "ledger": {
     "counts": {
-      "open": 63,
-      "ready": 61,
-      "in_progress": 0,
+      "open": 62,
+      "ready": 60,
+      "in_progress": 1,
       "closed": 90,
       "blocked": 0
     },
@@ -128,15 +27,15 @@
       {
         "id": "ccp-dn5",
         "title": "adopt swift-markdown-engine and make markdown the pad's truth",
-        "status": "open",
-        "ready": true,
+        "status": "in_progress",
+        "ready": false,
         "in_review": false,
         "backlog": false,
         "labels": [],
         "priority": 1,
         "type": "task",
         "parent": "ccp-2zi",
-        "updated_at": "2026-09-04T20:29:05Z",
+        "updated_at": "2026-09-04T20:36:50Z",
         "created_at": "2026-09-04T20:28:40Z",
         "deps": [],
         "description": "",
@@ -333,21 +232,6 @@
           "ccp-64m",
           "ccp-dot",
           "ccp-2zi.7"
-        ],
-        "commit_count": 3,
-        "commits": [
-          {
-            "sha": "dcc7bb4",
-            "subject": "handoff 20260904-150118 (ccp-2zi)"
-          },
-          {
-            "sha": "db349e2",
-            "subject": "traps from the note editor and the Craft plan (ccp-2zi)"
-          },
-          {
-            "sha": "103e15d",
-            "subject": "handoff 20260904-143604 (ccp-2zi)"
-          }
         ]
       },
       {
@@ -1562,14 +1446,7 @@
         "notes": "",
         "close_reason": "Plan written from the real docs and filed as the bead's design. Two findings reshaped the epic: only a space-scoped connection can create documents (so CCP requires one), and PUT /blocks updates in place taking markdown, so a push is a block diff rather than the delete-and-repost the epic feared \u2014 and the markdown bridge from ccp-2zi.1 is already the mapping. Settled: unknown Craft blocks are preserved and never touched via a store-side sidecar of CCP-owned ids; conflicts append a dated 'Conflicted copy' to the Craft document so nothing loses; the editor stays disabled until the note has actua",
         "owner": "bubbles@cortico.ai",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "90124ac",
-            "subject": "plan for two-way Craft sync (ccp-2zi.8)"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-2zi.9",
@@ -1590,14 +1467,7 @@
         "notes": "",
         "close_reason": "Block kinds are reachable three ways: markdown-style autoformatting on the line being typed, a block-kind menu that works from a caret alone, and indent/outdent with cmd-[ and cmd-]. Indent is now drawn (counted spaces, like the markers) so it can be seen as well as set. Review found two real defects, both fixed: autoformatting scanned the whole note and could convert an unrelated paragraph and drag the caret to it (now scoped to the caret's block), and reading the indent and the glyph as one marker stranded a bullet in the user's text when a space in front of it went missing (now shed separat",
         "owner": "bubbles@cortico.ai",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "1a4db2a",
-            "subject": "block kind commands for the note editor (ccp-2zi.9)"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-2zi.2",
@@ -1618,14 +1488,7 @@
         "notes": "",
         "close_reason": "NoteEditor landed on SwiftUI's AttributedString TextEditor: styled blocks, list markers, inline mark commands with shortcuts, return-splits-block. Review found two real defects (attribute-based marker stripping dropped typed text; structural edits never redrew) \u2014 both fixed by counting markers and redrawing on structure change, with caret preservation. 210 tests green. Block kind commands split out to their own bead.",
         "owner": "bubbles@cortico.ai",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "63a78cb",
-            "subject": "rich-text editor for notes (ccp-2zi.2)"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-2zi.1",
@@ -1646,14 +1509,7 @@
         "notes": "",
         "close_reason": "NoteDocument model landed with AttributedString and markdown bridges, 22 tests. Review found and fixed three round-trip bugs (markdown escaping, paragraph joining, separator over-trim). The ScratchpadPad.text String->NoteDocument swap folds into ccp-2zi.4, where the UserDefaults storage is removed anyway.",
         "owner": "bubbles@cortico.ai",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "42aeeee",
-            "subject": "rich-text note document model (ccp-2zi.1)"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-abc",
@@ -3487,32 +3343,10 @@
     ],
     "stale": 0
   },
-  "worktree": [
-    {
-      "path": ".beads/interactions.jsonl",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": ".beads/issues.jsonl",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": "dashboard/state.json",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    }
-  ],
+  "worktree": [],
   "verify": {
     "status": "passed",
-    "when": "27m ago",
+    "when": "just now",
     "tests": "",
     "steps": [
       {
@@ -3526,12 +3360,12 @@
     ],
     "unverified": [
       {
-        "sha": "dcc7bb4",
-        "subject": "handoff 20260904-150118 (ccp-2zi)"
+        "sha": "72e0355",
+        "subject": "spike: live-styled markdown in the scratchpad (ccp-dn5)"
       }
     ],
-    "took": "8s",
-    "at": 1788552107.6560373
+    "took": "12s",
+    "at": 1788554527.9077902
   },
   "runs": {
     "verify": {
@@ -3671,7 +3505,7 @@
           "path": "CLAUDE.md",
           "origin": "claude",
           "role": "project instructions, always loaded",
-          "tokens": 2460
+          "tokens": 2580
         },
         {
           "id": "/Users/bubbles/.claude/projects/-Users-bubbles-dev-control-center-pro/memory/MEMORY.md",
@@ -3707,7 +3541,7 @@
           "path": ".beads/issues.jsonl",
           "origin": "harness",
           "role": "the issue graph, exported for git",
-          "tokens": 40111
+          "tokens": 41058
         },
         {
           "id": ".claude/skills/beads/SKILL.md",
@@ -3844,18 +3678,18 @@
     "always": [
       {
         "name": "CLAUDE.md",
-        "tokens": 2460
+        "tokens": 2580
       },
       {
         "name": "session brief",
-        "tokens": 533
+        "tokens": 549
       },
       {
         "name": "skill descriptions",
         "tokens": 378
       }
     ],
-    "always_total": 3371,
+    "always_total": 3507,
     "on_demand": [
       {
         "name": "workflow",
@@ -3894,7 +3728,7 @@
         "tokens": 491
       }
     ],
-    "brief_tokens": 533,
+    "brief_tokens": 549,
     "prime_tokens": 1569
   }
 }
