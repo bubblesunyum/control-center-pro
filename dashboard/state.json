@@ -1,17 +1,22 @@
 {
-  "generated": "23:31:57",
+  "generated": "23:38:13",
   "project": "control-center-pro",
   "git": {
     "branch": "main",
     "upstream": "origin/main",
-    "dirty": 3,
-    "commits_today": 15,
+    "dirty": 0,
+    "commits_today": 16,
     "last": {
-      "sha": "31d638e",
-      "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)",
-      "when": "29 minutes ago"
+      "sha": "34018c7",
+      "subject": "handoff 20260903-233706 (ccp-4pu)",
+      "when": "30 seconds ago"
     },
     "unpushed": [
+      {
+        "sha": "34018c7",
+        "subject": "handoff 20260903-233706 (ccp-4pu)",
+        "at": 1788496662.0
+      },
       {
         "sha": "31d638e",
         "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)",
@@ -68,6 +73,24 @@
       "ccp-rly"
     ],
     "bead_commits": {
+      "ccp-4pu": {
+        "commits": 3,
+        "at": 1788496662.0,
+        "list": [
+          {
+            "sha": "34018c7",
+            "subject": "handoff 20260903-233706 (ccp-4pu)"
+          },
+          {
+            "sha": "31d638e",
+            "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)"
+          },
+          {
+            "sha": "ca36d54",
+            "subject": "stop the dashboard burning a core when nobody is watching (ccp-4pu ccp-juo ccp-o25)"
+          }
+        ]
+      },
       "ccp-o25": {
         "commits": 2,
         "at": 1788494576.0,
@@ -83,20 +106,6 @@
         ]
       },
       "ccp-juo": {
-        "commits": 2,
-        "at": 1788494576.0,
-        "list": [
-          {
-            "sha": "31d638e",
-            "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)"
-          },
-          {
-            "sha": "ca36d54",
-            "subject": "stop the dashboard burning a core when nobody is watching (ccp-4pu ccp-juo ccp-o25)"
-          }
-        ]
-      },
-      "ccp-4pu": {
         "commits": 2,
         "at": 1788494576.0,
         "list": [
@@ -1231,8 +1240,12 @@
         "close_reason": "fixed in harness-starter a9901b1 and mirrored here in ca36d54 \u2014 idle throttle plus session-end shutdown",
         "owner": "",
         "children": [],
-        "commit_count": 2,
+        "commit_count": 3,
         "commits": [
+          {
+            "sha": "34018c7",
+            "subject": "handoff 20260903-233706 (ccp-4pu)"
+          },
           {
             "sha": "31d638e",
             "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)"
@@ -3006,32 +3019,10 @@
     ],
     "stale": 0
   },
-  "worktree": [
-    {
-      "path": ".beads/interactions.jsonl",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": ".beads/issues.jsonl",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": "dashboard/state.json",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    }
-  ],
+  "worktree": [],
   "verify": {
     "status": "passed",
-    "when": "34m ago",
+    "when": "just now",
     "tests": "",
     "steps": [
       {
@@ -3045,16 +3036,12 @@
     ],
     "unverified": [
       {
-        "sha": "31d638e",
-        "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)"
-      },
-      {
-        "sha": "ca36d54",
-        "subject": "stop the dashboard burning a core when nobody is watching (ccp-4pu ccp-juo ccp-o25)"
+        "sha": "34018c7",
+        "subject": "handoff 20260903-233706 (ccp-4pu)"
       }
     ],
     "took": "8s",
-    "at": 1788494249.380629
+    "at": 1788496656.0161235
   },
   "runs": {
     "verify": {
@@ -3178,15 +3165,15 @@
           "path": "harness/laurels.jsonl",
           "origin": "harness",
           "role": "praise, replayed one at a time",
-          "tokens": 431
+          "tokens": 460
         },
         {
-          "id": "harness/handoffs/20260903-222400.md",
-          "name": "20260903-222400.md",
-          "path": "harness/handoffs/20260903-222400.md",
+          "id": "harness/handoffs/20260903-233706.md",
+          "name": "20260903-233706.md",
+          "path": "harness/handoffs/20260903-233706.md",
           "origin": "harness",
           "role": "the last session's closing note",
-          "tokens": 204
+          "tokens": 420
         },
         {
           "id": "CLAUDE.md",
@@ -3371,14 +3358,14 @@
       },
       {
         "name": "session brief",
-        "tokens": 576
+        "tokens": 573
       },
       {
         "name": "skill descriptions",
         "tokens": 378
       }
     ],
-    "always_total": 3414,
+    "always_total": 3411,
     "on_demand": [
       {
         "name": "workflow",
@@ -3417,7 +3404,7 @@
         "tokens": 491
       }
     ],
-    "brief_tokens": 576,
+    "brief_tokens": 573,
     "prime_tokens": 1569
   }
 }

@@ -34,7 +34,7 @@ public final class SystemStatsWidget: CCPWidget {
         id: "system-stats",
         title: "System",
         symbolName: "chart.bar.xaxis",
-        size: .tall
+        size: .compact
     )
 
     private let adapter: SystemStatsAdapter
@@ -58,7 +58,7 @@ public final class SystemStatsWidget: CCPWidget {
 
 // MARK: - Private types
 
-private enum SectionKind { case cpu, gpu, memory, battery }
+private enum SectionKind: Hashable { case cpu, gpu, memory, battery }
 
 private struct BreakdownRow: Identifiable {
     let id: Int32
@@ -73,11 +73,11 @@ private struct SystemStatsContent: View {
     @Bindable var adapter: SystemStatsAdapter
     @Environment(\.colorScheme) private var colorScheme
 
-    @State private var expanded: SectionKind?
-    @State private var breakdownRows: [BreakdownRow] = []
-    @State private var breakdownLoading = false
+    @State private var expanded: Set<SectionKind> = []
+    @State private var breakdownRows: [SectionKind: [BreakdownRow]] = [:]
+    @State private var breakdownLoading: Set<SectionKind> = []
     @State private var lastRefresh = Date.distantPast
-    private let breakdownLimit = 6
+    private let breakdownLimit = 12
 
     var body: some View {
         WidgetCard(SystemStatsWidget.descriptor, accessory: {
@@ -86,12 +86,12 @@ private struct SystemStatsContent: View {
             // (5) more spacing between sections — upstream uses 10, we use 16
             // (new tweak 1) separators removed, spacing handles division
             VStack(alignment: .leading, spacing: Space.two) {
-                cpuSection
-                gpuSection
-                memorySection
                 if adapter.snapshot.batteryHasBattery {
                     batterySection
                 }
+                cpuSection
+                gpuSection
+                memorySection
             }
             .animation(.easeInOut(duration: 0.2), value: expanded)
             // (new tweak 7) tiny extra padding at bottom of widget
@@ -99,13 +99,13 @@ private struct SystemStatsContent: View {
         }
         .onChange(of: adapter.snapshot) { _, _ in
             // Refresh breakdown at most every 4s while expanded, like upstream.
-            guard expanded != nil, Date().timeIntervalSince(lastRefresh) > 4 else { return }
-            refreshBreakdown()
+            guard !expanded.isEmpty, Date().timeIntervalSince(lastRefresh) > 4 else { return }
+            for kind in expanded { refreshBreakdown(for: kind) }
         }
         .onDisappear {
-            expanded = nil
-            breakdownRows = []
-            breakdownLoading = false
+            expanded = []
+            breakdownRows = [:]
+            breakdownLoading = []
         }
     }
 
@@ -114,13 +114,15 @@ private struct SystemStatsContent: View {
     private var cpuSection: some View {
         sectionContainer(kind: .cpu, color: cpuColor) {
             cpuHeader
-            // (7) graphs a bit taller — 34 vs upstream 22 / CCP 28
-            if adapter.snapshot.cpuHistory.count >= 2 {
-                Sparkline(values: adapter.snapshot.cpuHistory, color: cpuColor, maxValue: 1, showsZeroBaseline: true)
-                    .frame(height: 34)
-                    .clipShape(RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
-            } else {
-                placeholderGraph(history: adapter.snapshot.cpuHistory)
+            if expanded.contains(.cpu) {
+                // (7) graphs a bit taller — 34 vs upstream 22 / CCP 28
+                if adapter.snapshot.cpuHistory.count >= 2 {
+                    Sparkline(values: adapter.snapshot.cpuHistory, color: cpuColor, maxValue: 1, showsZeroBaseline: true)
+                        .frame(height: 34)
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
+                } else {
+                    placeholderGraph(history: adapter.snapshot.cpuHistory)
+                }
             }
             breakdownList(for: .cpu)
         }
@@ -134,12 +136,15 @@ private struct SystemStatsContent: View {
                 chevron(for: .cpu)
                 Text("CPU")
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 4)
-                // (13) temperature gauge inside its section
+                    .foregroundStyle(.primary)
+                // (13) temperature gauge inside its section — close to title, left of bar
                 if let temp = adapter.snapshot.cpuTemperature {
                     TemperatureGauge(temperature: temp)
+                } else {
+                    // Keep bar position consistent when no temp reading
+                    Color.clear.frame(width: 28, height: 1)
                 }
+                Spacer()
                 UsageBar(fraction: adapter.snapshot.cpuUsage ?? 0, tint: cpuColor)
                     .frame(width: 86)
                 Text(adapter.snapshot.cpuUsage.map { percent($0) } ?? "--")
@@ -158,12 +163,14 @@ private struct SystemStatsContent: View {
     private var gpuSection: some View {
         sectionContainer(kind: .gpu, color: gpuColor) {
             gpuHeader
-            if adapter.snapshot.gpuHistory.count >= 2 {
-                Sparkline(values: adapter.snapshot.gpuHistory, color: gpuColor, maxValue: 1, showsZeroBaseline: true)
-                    .frame(height: 34)
-                    .clipShape(RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
-            } else {
-                placeholderGraph(history: adapter.snapshot.gpuHistory)
+            if expanded.contains(.gpu) {
+                if adapter.snapshot.gpuHistory.count >= 2 {
+                    Sparkline(values: adapter.snapshot.gpuHistory, color: gpuColor, maxValue: 1, showsZeroBaseline: true)
+                        .frame(height: 34)
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
+                } else {
+                    placeholderGraph(history: adapter.snapshot.gpuHistory)
+                }
             }
             breakdownList(for: .gpu)
         }
@@ -177,11 +184,13 @@ private struct SystemStatsContent: View {
                 chevron(for: .gpu)
                 Text("GPU")
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 4)
+                    .foregroundStyle(.primary)
                 if let temp = adapter.snapshot.gpuTemperature {
                     TemperatureGauge(temperature: temp)
+                } else {
+                    Color.clear.frame(width: 28, height: 1)
                 }
+                Spacer()
                 UsageBar(fraction: adapter.snapshot.gpuUsage ?? 0, tint: gpuColor)
                     .frame(width: 86)
                 Text(adapter.snapshot.gpuUsage.map { percent($0) } ?? "--")
@@ -200,22 +209,18 @@ private struct SystemStatsContent: View {
     private var memorySection: some View {
         sectionContainer(kind: .memory, color: memoryColor) {
             memoryHeader
-            // Swap underneath header, above graph — always visible, not on graph
-            memorySecondaryRow("Swap", adapter.snapshot.memorySwapUsed)
-                .padding(.leading, 16)
-            // Graph only memory (swap no longer drawn)
-            if adapter.snapshot.memoryHistory.count >= 2 {
-                Sparkline(values: adapter.snapshot.memoryHistory, color: memoryColor, maxValue: 1, showsZeroBaseline: true)
-                    .frame(height: 34)
-                    .clipShape(RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
-            } else {
-                placeholderGraph(history: adapter.snapshot.memoryHistory)
-            }
-
-            if expanded == .memory {
+            if expanded.contains(.memory) {
+                if adapter.snapshot.memoryHistory.count >= 2 {
+                    Sparkline(values: adapter.snapshot.memoryHistory, color: memoryColor, maxValue: 1, showsZeroBaseline: true)
+                        .frame(height: 34)
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
+                } else {
+                    placeholderGraph(history: adapter.snapshot.memoryHistory)
+                }
                 VStack(alignment: .leading, spacing: 5) {
-                    // (new tweak 4) Pressure row with text + circle
+                    // Pressure above swap per request
                     pressureExpandedRow
+                    memorySecondaryRow("Swap", adapter.snapshot.memorySwapUsed, noDecimal: true)
                     memorySecondaryRow("Compressed", adapter.snapshot.memoryCompressed)
                     memorySecondaryRow("Cached Files", adapter.snapshot.memoryCached)
                 }
@@ -251,11 +256,6 @@ private struct SystemStatsContent: View {
         }
     }
 
-    private var swapGraphColor: Color {
-        // Differently-shaded variant of memory's mint — lighter / more translucent
-        colorScheme == .light ? Color(red: 0.00, green: 0.52, blue: 0.50).opacity(0.65) : Color.mint.opacity(0.65)
-    }
-
     // (8) chevron now belongs to Memory itself
     // (9) horizontal bar next to Memory title, showing total physical usage
     // (10) pressure badge is dot-only with hover text, hidden when expanded
@@ -272,7 +272,7 @@ private struct SystemStatsContent: View {
             }
             return "--"
         }()
-        let isExpanded = expanded == .memory
+        let isExpanded = expanded.contains(.memory)
         return Button {
             toggle(.memory)
         } label: {
@@ -280,12 +280,12 @@ private struct SystemStatsContent: View {
                 chevron(for: .memory)
                 Text("Memory")
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
                 // (10) dot-only pressure indicator — hidden when expanded (new tweak 4)
                 if !isExpanded {
                     PressureDot(pressure: snapshot.memoryPressure, color: memoryPressureColor(snapshot.memoryPressure))
                 }
-                Spacer(minLength: 4)
+                Spacer()
                 // (9) usage bar beside title — with pressure gradient (new tweak 8)
                 UsageBar(fraction: fraction, tint: memoryColor, warningTint: memoryPressureWarningTint)
                     .frame(width: 86)
@@ -295,6 +295,7 @@ private struct SystemStatsContent: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                     .foregroundStyle(.primary)
+                    .frame(minWidth: 56, alignment: .trailing)
             }
             .contentShape(Rectangle())
         }
@@ -315,13 +316,8 @@ private struct SystemStatsContent: View {
     private var batterySection: some View {
         sectionContainer(kind: .battery, color: batteryColor) {
             batteryHeader
-            // (11) only when charging, not when merely plugged in
-            if adapter.snapshot.batteryIsCharging, adapter.snapshot.batteryHistory.count >= 2 {
-                Sparkline(values: adapter.snapshot.batteryHistory, color: batteryColor, maxValue: 1, showsZeroBaseline: true)
-                    .frame(height: 34)
-                    .clipShape(RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
-            }
             // (3) energy apps now live under battery expansion, no separate header
+            // Graph removed per design — battery shows charge bar only
             breakdownList(for: .battery)
         }
     }
@@ -338,11 +334,13 @@ private struct SystemStatsContent: View {
                 // (4) no battery icon
                 Text("Battery")
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 4)
+                    .foregroundStyle(.primary)
                 if let temp = adapter.snapshot.batteryTemperature {
                     TemperatureGauge(temperature: temp)
+                } else {
+                    Color.clear.frame(width: 28, height: 1)
                 }
+                Spacer()
                 UsageBar(fraction: fraction, tint: chargeTint(charge ?? 0))
                     .frame(width: 86)
                 Text(charge.map { "\($0)%" } ?? "--")
@@ -368,7 +366,7 @@ private struct SystemStatsContent: View {
         Image(systemName: "chevron.right")
             .font(.system(size: 8, weight: .semibold))
             .foregroundStyle(.secondary)
-            .rotationEffect(.degrees(expanded == kind ? 90 : 0))
+            .rotationEffect(.degrees(expanded.contains(kind) ? 90 : 0))
     }
 
     private func placeholderGraph(history: [Double]) -> some View {
@@ -385,15 +383,17 @@ private struct SystemStatsContent: View {
 
     @ViewBuilder
     private func breakdownList(for kind: SectionKind) -> some View {
-        if expanded == kind {
+        if expanded.contains(kind) {
+            let rows = breakdownRows[kind] ?? []
+            let isLoading = breakdownLoading.contains(kind) && rows.isEmpty
             VStack(alignment: .leading, spacing: 4) {
-                if breakdownRows.isEmpty {
-                    Text(breakdownLoading ? "Measuring…" : emptyBreakdownText(for: kind))
+                if rows.isEmpty {
+                    Text(isLoading ? "Measuring…" : emptyBreakdownText(for: kind))
                         .font(.system(size: 10.5))
                         .foregroundStyle(.tertiary)
                         .padding(.leading, 20)
                 } else {
-                    ForEach(breakdownRows) { row in
+                    ForEach(rows) { row in
                         BreakdownProcessRow(row: row, value: breakdownValue(row, for: kind))
                     }
                 }
@@ -403,14 +403,14 @@ private struct SystemStatsContent: View {
     }
 
     @ViewBuilder
-    private func memorySecondaryRow(_ title: String, _ bytes: UInt64?) -> some View {
+    private func memorySecondaryRow(_ title: String, _ bytes: UInt64?, noDecimal: Bool = false) -> some View {
         if let bytes {
             HStack(spacing: 8) {
                 Text(title)
                     .font(.system(size: 10.5))
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text(Self.bytes(bytes))
+                Text(noDecimal ? Self.bytesWhole(bytes) : Self.bytes(bytes))
                     .font(.system(size: 11, weight: .medium))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
@@ -430,29 +430,32 @@ private struct SystemStatsContent: View {
     }
 
     private func toggle(_ kind: SectionKind) {
-        if expanded == kind {
-            expanded = nil
-            breakdownRows = []
-            breakdownLoading = false
+        if expanded.contains(kind) {
+            expanded.remove(kind)
+            breakdownRows[kind] = nil
+            breakdownLoading.remove(kind)
         } else {
-            expanded = kind
-            breakdownRows = []
-            refreshBreakdown()
+            expanded.insert(kind)
+            refreshBreakdown(for: kind)
         }
     }
 
-    private func refreshBreakdown() {
-        guard let kind = expanded else { return }
+    private func refreshBreakdown(for kind: SectionKind) {
         lastRefresh = Date()
-        breakdownLoading = breakdownRows.isEmpty
+        let isEmpty = (breakdownRows[kind]?.isEmpty ?? true)
+        if isEmpty { breakdownLoading.insert(kind) }
         let limit = breakdownLimit
         DispatchQueue.global(qos: .utility).async {
             let rows = fetchBreakdown(kind: kind, limit: limit)
             DispatchQueue.main.async {
-                guard expanded == kind else { return }
-                breakdownLoading = false
-                if !rows.isEmpty || breakdownRows.isEmpty {
-                    breakdownRows = rows
+                guard expanded.contains(kind) else {
+                    breakdownLoading.remove(kind)
+                    return
+                }
+                breakdownLoading.remove(kind)
+                let currentEmpty = (breakdownRows[kind]?.isEmpty ?? true)
+                if !rows.isEmpty || currentEmpty {
+                    breakdownRows[kind] = rows
                 }
             }
         }
@@ -591,6 +594,15 @@ private struct SystemStatsContent: View {
 
     static func bytes(_ value: UInt64) -> String {
         byteFormatter.string(fromByteCount: Int64(value))
+    }
+
+    /// Integer bytes with unit — e.g. "1.8 GB" → "2 GB", no decimals.
+    static func bytesWhole(_ value: UInt64) -> String {
+        let raw = byteFormatter.string(fromByteCount: Int64(value))
+        let parts = raw.split(separator: " ")
+        guard parts.count >= 2, let num = Double(parts[0]) else { return raw }
+        let unit = parts.dropFirst().joined(separator: " ")
+        return "\(Int(num.rounded())) \(unit)"
     }
 
     /// Header left side: integer without decimals, no unit — e.g. "8" from "8 GB" or "1.5 GB" → "2"
