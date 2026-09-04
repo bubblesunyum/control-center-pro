@@ -200,32 +200,16 @@ private struct SystemStatsContent: View {
     private var memorySection: some View {
         sectionContainer(kind: .memory, color: memoryColor) {
             memoryHeader
-            // Graph always visible — memory + swap (new tweak 5)
-            ZStack {
-                if adapter.snapshot.memoryHistory.count >= 2 {
-                    Sparkline(values: adapter.snapshot.memoryHistory, color: memoryColor, maxValue: 1, showsZeroBaseline: true)
-                } else {
-                    // placeholder fallback still needed before first sample
-                    RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
-                        .fill(Color.controlFill)
-                }
-                // (new tweak 5) swap on graph in differently-shaded color
-                if adapter.snapshot.memorySwapHistory.count >= 2 {
-                    Sparkline(values: adapter.snapshot.memorySwapHistory, color: swapGraphColor, maxValue: 1, fillOpacity: 0.08)
-                }
-                if adapter.snapshot.memoryHistory.count < 2 && adapter.snapshot.memorySwapHistory.count < 2 {
-                    Text(adapter.snapshot.memoryHistory.isEmpty ? "Measuring…" : "Collecting…")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(height: 34)
-            .clipShape(RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
-
-            // (new tweak 5) Swap visible even when collapsed
-            if expanded != .memory {
-                memorySecondaryRow("Swap", adapter.snapshot.memorySwapUsed)
-                    .padding(.leading, 16)
+            // Swap underneath header, above graph — always visible, not on graph
+            memorySecondaryRow("Swap", adapter.snapshot.memorySwapUsed)
+                .padding(.leading, 16)
+            // Graph only memory (swap no longer drawn)
+            if adapter.snapshot.memoryHistory.count >= 2 {
+                Sparkline(values: adapter.snapshot.memoryHistory, color: memoryColor, maxValue: 1, showsZeroBaseline: true)
+                    .frame(height: 34)
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
+            } else {
+                placeholderGraph(history: adapter.snapshot.memoryHistory)
             }
 
             if expanded == .memory {
@@ -234,7 +218,6 @@ private struct SystemStatsContent: View {
                     pressureExpandedRow
                     memorySecondaryRow("Compressed", adapter.snapshot.memoryCompressed)
                     memorySecondaryRow("Cached Files", adapter.snapshot.memoryCached)
-                    memorySecondaryRow("Swap", adapter.snapshot.memorySwapUsed)
                 }
                 .padding(.leading, 16)
                 breakdownList(for: .memory)
@@ -281,10 +264,10 @@ private struct SystemStatsContent: View {
         let used = snapshot.memoryUsed
         let total = snapshot.memoryTotal
         let fraction = (used != nil && total != nil && total! > 0) ? Double(used!) / Double(total!) : 0
-        // (new 8) left side without "GB" — "8 / 16 GB" not "8 GB / 16 GB"
+        // Header: no decimals on left, keep unit only on right — "8 / 16 GB"
         let valueText: String = {
             if let u = used, let t = total {
-                let left = Self.bytes(u).split(separator: " ").first.map(String.init) ?? Self.bytes(u)
+                let left = Self.bytesHeaderLeft(u)
                 return "\(left) / \(Self.bytes(t))"
             }
             return "--"
@@ -610,6 +593,16 @@ private struct SystemStatsContent: View {
         byteFormatter.string(fromByteCount: Int64(value))
     }
 
+    /// Header left side: integer without decimals, no unit — e.g. "8" from "8 GB" or "1.5 GB" → "2"
+    static func bytesHeaderLeft(_ value: UInt64) -> String {
+        let raw = byteFormatter.string(fromByteCount: Int64(value))
+        let parts = raw.split(separator: " ")
+        guard let numStr = parts.first, let num = Double(numStr) else {
+            return raw.split(separator: " ").first.map(String.init) ?? raw
+        }
+        return String(Int(num.rounded()))
+    }
+
     private func chargeTint(_ charge: Int) -> Color {
         if charge < 20 { return energyRed }
         if charge < 40 { return energyYellow }
@@ -740,14 +733,10 @@ private struct PressureDot: View {
     }
 }
 
-/// (13) ¾-circle temperature gauge — neutral, with yellow/red leading edge when hot.
+/// Temperature readout — number only, colored when hot.
 private struct TemperatureGauge: View {
     let temperature: Double?
     var size: CGFloat = 32
-
-    private let minTemp: Double = 30
-    private let maxTemp: Double = 100
-    private let neutral = Color.primary.opacity(0.18)
 
     private var warningColor: Color? {
         guard let temp = temperature else { return nil }
@@ -757,59 +746,21 @@ private struct TemperatureGauge: View {
     }
 
     var body: some View {
-        ZStack {
-            // background track
-            Circle()
-                .trim(from: 0, to: 0.75)
-                .stroke(Color.primary.opacity(0.10), style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                .rotationEffect(.degrees(135))
+        Group {
             if let temp = temperature {
-                if let warn = warningColor {
-                    // Base neutral arc, then warning gradient at leading edge (last ~18% of filled arc)
-                    let filled = 0.75 * normalized(temp)
-                    // Neutral portion
-                    Circle()
-                        .trim(from: 0, to: filled)
-                        .stroke(neutral, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                        .rotationEffect(.degrees(135))
-                    // Warning tip — gradient from neutral into warning
-                    let tipStart = max(0, filled - 0.14)
-                    Circle()
-                        .trim(from: tipStart, to: filled)
-                        .stroke(
-                            LinearGradient(
-                                colors: [neutral.opacity(0.0), warn],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            ),
-                            style: StrokeStyle(lineWidth: 3, lineCap: .round)
-                        )
-                        .rotationEffect(.degrees(135))
-                } else {
-                    Circle()
-                        .trim(from: 0, to: 0.75 * normalized(temp))
-                        .stroke(neutral, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                        .rotationEffect(.degrees(135))
-                }
                 Text("\(Int(temp.rounded()))°")
-                    .font(.system(size: 8, weight: .semibold, design: .rounded))
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(warningColor ?? .secondary)
             } else {
                 Text("--")
-                    .font(.system(size: 7, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
             }
         }
-        .frame(width: size, height: size)
+        .frame(minWidth: 28, alignment: .trailing)
         .help(temperature.map { String(format: "%.0f °C", $0) } ?? "No reading")
         .accessibilityLabel(temperature.map { String(format: "%.0f degrees", $0) } ?? "No temperature")
-    }
-
-    private func normalized(_ temp: Double) -> Double {
-        guard maxTemp > minTemp else { return 0 }
-        let clamped = min(max(temp, minTemp), maxTemp)
-        return (clamped - minTemp) / (maxTemp - minTemp)
     }
 }
 
