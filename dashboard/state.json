@@ -1,17 +1,22 @@
 {
-  "generated": "14:18:26",
+  "generated": "14:26:06",
   "project": "control-center-pro",
   "git": {
     "branch": "main",
     "upstream": "origin/main",
-    "dirty": 8,
-    "commits_today": 4,
+    "dirty": 2,
+    "commits_today": 5,
     "last": {
-      "sha": "42aeeee",
-      "subject": "rich-text note document model (ccp-2zi.1)",
-      "when": "11 minutes ago"
+      "sha": "63a78cb",
+      "subject": "rich-text editor for notes (ccp-2zi.2)",
+      "when": "35 seconds ago"
     },
     "unpushed": [
+      {
+        "sha": "63a78cb",
+        "subject": "rich-text editor for notes (ccp-2zi.2)",
+        "at": 1788549929.0
+      },
       {
         "sha": "42aeeee",
         "subject": "rich-text note document model (ccp-2zi.1)",
@@ -19,9 +24,20 @@
       }
     ],
     "unpushed_beads": [
-      "ccp-2zi.1"
+      "ccp-2zi.1",
+      "ccp-2zi.2"
     ],
     "bead_commits": {
+      "ccp-2zi.2": {
+        "commits": 1,
+        "at": 1788549929.0,
+        "list": [
+          {
+            "sha": "63a78cb",
+            "subject": "rich-text editor for notes (ccp-2zi.2)"
+          }
+        ]
+      },
       "ccp-2zi.1": {
         "commits": 1,
         "at": 1788548830.0,
@@ -36,13 +52,34 @@
   },
   "ledger": {
     "counts": {
-      "open": 58,
-      "ready": 55,
-      "in_progress": 1,
-      "closed": 86,
+      "open": 59,
+      "ready": 56,
+      "in_progress": 0,
+      "closed": 87,
       "blocked": 0
     },
     "issues": [
+      {
+        "id": "ccp-2zi.9",
+        "title": "block kind commands: make a heading, a list, a to-do",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "feature",
+        "parent": "ccp-2zi",
+        "updated_at": "2026-09-04T19:25:46Z",
+        "created_at": "2026-09-04T19:25:46Z",
+        "deps": [],
+        "description": "NoteEditor renders every block kind correctly but nothing in the UI can reach them \u2014 only inline marks can be applied, so a user cannot actually make a list.\n\nTwo ways in, and they want each other: a command (shortcut or control) that changes the block the caret is in, and markdown-style autoformatting \u2014 typing '- ', '# ', '1. ', '[] ' at the start of a line becomes the block it names. Autoformatting is the one that will get used; the explicit command is what makes it discoverable and what a selection of several blocks needs.\n\nBoth are structural changes, so both go through the redraw path NoteEditor already has (NoteDocument.hasSameStructure). Indent and outdent (tab / shift-tab in a list) belong here too \u2014 NoteBlock carries an indent that nothing can currently change.\n\nThe format bar appears on selection today; a block command has to work with only a caret, so its placement is an open question rather than another button in that bar.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
       {
         "id": "ccp-2zi.8",
         "title": "plan two-way Craft sync before writing any of it",
@@ -174,27 +211,6 @@
         "children": []
       },
       {
-        "id": "ccp-2zi.2",
-        "title": "rich-text editing in the scratchpad widget",
-        "status": "in_progress",
-        "ready": false,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 1,
-        "type": "feature",
-        "parent": "ccp-2zi",
-        "updated_at": "2026-09-04T19:13:38Z",
-        "created_at": "2026-09-04T18:52:28Z",
-        "deps": [],
-        "description": "The editor surface for the model. Today it is PlainTextEditor in Sources/CCPUI/DesignSystem. Needs formatting affordances that fit a 300pt menu-bar card: keyboard shortcuts first (cmd-B/I/K, markdown-style autoformatting), not a toolbar that eats the card.\n\nReach for the framework first per CLAUDE.md \u2014 evaluate SwiftUI TextEditor with AttributedString (macOS 26) before hand-rolling an NSTextView representable.",
-        "design": "",
-        "notes": "",
-        "close_reason": "",
-        "owner": "bubbles@cortico.ai",
-        "children": []
-      },
-      {
         "id": "ccp-2zi",
         "title": "[epic] rich-text scratchpad synced two-way with Craft",
         "status": "open",
@@ -214,6 +230,7 @@
         "close_reason": "",
         "owner": "bubbles@cortico.ai",
         "children": [
+          "ccp-2zi.9",
           "ccp-2zi.8",
           "ccp-2zi.6",
           "ccp-2zi.5",
@@ -1332,6 +1349,34 @@
         "close_reason": "",
         "owner": "bubbles@cortico.ai",
         "children": []
+      },
+      {
+        "id": "ccp-2zi.2",
+        "title": "rich-text editing in the scratchpad widget",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "feature",
+        "parent": "ccp-2zi",
+        "updated_at": "2026-09-04T19:25:47Z",
+        "created_at": "2026-09-04T18:52:28Z",
+        "deps": [],
+        "description": "The editor surface for the model. Today it is PlainTextEditor in Sources/CCPUI/DesignSystem. Needs formatting affordances that fit a 300pt menu-bar card: keyboard shortcuts first (cmd-B/I/K, markdown-style autoformatting), not a toolbar that eats the card.\n\nReach for the framework first per CLAUDE.md \u2014 evaluate SwiftUI TextEditor with AttributedString (macOS 26) before hand-rolling an NSTextView representable.",
+        "design": "",
+        "notes": "",
+        "close_reason": "NoteEditor landed on SwiftUI's AttributedString TextEditor: styled blocks, list markers, inline mark commands with shortcuts, return-splits-block. Review found two real defects (attribute-based marker stripping dropped typed text; structural edits never redrew) \u2014 both fixed by counting markers and redrawing on structure change, with caret preservation. 210 tests green. Block kind commands split out to their own bead.",
+        "owner": "bubbles@cortico.ai",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "63a78cb",
+            "subject": "rich-text editor for notes (ccp-2zi.2)"
+          }
+        ]
       },
       {
         "id": "ccp-2zi.1",
@@ -3207,48 +3252,6 @@
       "untracked": false,
       "status": "M",
       "old_path": null
-    },
-    {
-      "path": "Sources/CCPKit/Notes/NoteBlock+Splitting.swift",
-      "staged": false,
-      "untracked": true,
-      "status": "?",
-      "old_path": null
-    },
-    {
-      "path": "Sources/CCPKit/Notes/NoteDocument+AttributedString.swift",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": "Sources/CCPKit/Notes/NoteDocument+Marks.swift",
-      "staged": false,
-      "untracked": true,
-      "status": "?",
-      "old_path": null
-    },
-    {
-      "path": "Sources/CCPUI/DesignSystem/NoteEditor.swift",
-      "staged": false,
-      "untracked": true,
-      "status": "?",
-      "old_path": null
-    },
-    {
-      "path": "Tests/CCPKitTests/NoteDocumentTests.swift",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": "dashboard/state.json",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
     }
   ],
   "verify": {
@@ -3265,9 +3268,14 @@
         "ok": true
       }
     ],
-    "unverified": [],
+    "unverified": [
+      {
+        "sha": "63a78cb",
+        "subject": "rich-text editor for notes (ccp-2zi.2)"
+      }
+    ],
     "took": "8s",
-    "at": 1788549473.8869576
+    "at": 1788549917.2618332
   },
   "runs": {
     "verify": {
@@ -3443,7 +3451,7 @@
           "path": ".beads/issues.jsonl",
           "origin": "harness",
           "role": "the issue graph, exported for git",
-          "tokens": 34712
+          "tokens": 35085
         },
         {
           "id": ".claude/skills/beads/SKILL.md",
@@ -3584,14 +3592,14 @@
       },
       {
         "name": "session brief",
-        "tokens": 473
+        "tokens": 453
       },
       {
         "name": "skill descriptions",
         "tokens": 378
       }
     ],
-    "always_total": 3311,
+    "always_total": 3291,
     "on_demand": [
       {
         "name": "workflow",
@@ -3630,7 +3638,7 @@
         "tokens": 491
       }
     ],
-    "brief_tokens": 473,
+    "brief_tokens": 453,
     "prime_tokens": 1569
   }
 }
