@@ -1,17 +1,32 @@
 {
-  "generated": "14:38:03",
+  "generated": "14:54:24",
   "project": "control-center-pro",
   "git": {
     "branch": "main",
     "upstream": "origin/main",
-    "dirty": 1,
-    "commits_today": 6,
+    "dirty": 0,
+    "commits_today": 9,
     "last": {
-      "sha": "103e15d",
-      "subject": "handoff 20260904-143604 (ccp-2zi)",
-      "when": "2 minutes ago"
+      "sha": "db349e2",
+      "subject": "traps from the note editor and the Craft plan (ccp-2zi)",
+      "when": "27 seconds ago"
     },
     "unpushed": [
+      {
+        "sha": "db349e2",
+        "subject": "traps from the note editor and the Craft plan (ccp-2zi)",
+        "at": 1788551636.0
+      },
+      {
+        "sha": "90124ac",
+        "subject": "plan for two-way Craft sync (ccp-2zi.8)",
+        "at": 1788551618.0
+      },
+      {
+        "sha": "1a4db2a",
+        "subject": "block kind commands for the note editor (ccp-2zi.9)",
+        "at": 1788551578.0
+      },
       {
         "sha": "103e15d",
         "subject": "handoff 20260904-143604 (ccp-2zi)",
@@ -31,16 +46,42 @@
     "unpushed_beads": [
       "ccp-2zi",
       "ccp-2zi.1",
-      "ccp-2zi.2"
+      "ccp-2zi.2",
+      "ccp-2zi.8",
+      "ccp-2zi.9"
     ],
     "bead_commits": {
       "ccp-2zi": {
-        "commits": 1,
-        "at": 1788550578.0,
+        "commits": 2,
+        "at": 1788551636.0,
         "list": [
+          {
+            "sha": "db349e2",
+            "subject": "traps from the note editor and the Craft plan (ccp-2zi)"
+          },
           {
             "sha": "103e15d",
             "subject": "handoff 20260904-143604 (ccp-2zi)"
+          }
+        ]
+      },
+      "ccp-2zi.8": {
+        "commits": 1,
+        "at": 1788551618.0,
+        "list": [
+          {
+            "sha": "90124ac",
+            "subject": "plan for two-way Craft sync (ccp-2zi.8)"
+          }
+        ]
+      },
+      "ccp-2zi.9": {
+        "commits": 1,
+        "at": 1788551578.0,
+        "list": [
+          {
+            "sha": "1a4db2a",
+            "subject": "block kind commands for the note editor (ccp-2zi.9)"
           }
         ]
       },
@@ -68,37 +109,16 @@
   },
   "ledger": {
     "counts": {
-      "open": 59,
-      "ready": 56,
+      "open": 60,
+      "ready": 58,
       "in_progress": 0,
-      "closed": 87,
+      "closed": 89,
       "blocked": 0
     },
     "issues": [
       {
-        "id": "ccp-2zi.9",
-        "title": "block kind commands: make a heading, a list, a to-do",
-        "status": "open",
-        "ready": true,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 1,
-        "type": "feature",
-        "parent": "ccp-2zi",
-        "updated_at": "2026-09-04T19:25:46Z",
-        "created_at": "2026-09-04T19:25:46Z",
-        "deps": [],
-        "description": "NoteEditor renders every block kind correctly but nothing in the UI can reach them \u2014 only inline marks can be applied, so a user cannot actually make a list.\n\nTwo ways in, and they want each other: a command (shortcut or control) that changes the block the caret is in, and markdown-style autoformatting \u2014 typing '- ', '# ', '1. ', '[] ' at the start of a line becomes the block it names. Autoformatting is the one that will get used; the explicit command is what makes it discoverable and what a selection of several blocks needs.\n\nBoth are structural changes, so both go through the redraw path NoteEditor already has (NoteDocument.hasSameStructure). Indent and outdent (tab / shift-tab in a list) belong here too \u2014 NoteBlock carries an indent that nothing can currently change.\n\nThe format bar appears on selection today; a block command has to work with only a caret, so its placement is an open question rather than another button in that bar.",
-        "design": "",
-        "notes": "",
-        "close_reason": "",
-        "owner": "bubbles@cortico.ai",
-        "children": []
-      },
-      {
-        "id": "ccp-2zi.8",
-        "title": "plan two-way Craft sync before writing any of it",
+        "id": "ccp-jmk",
+        "title": "confirm the Craft auth scheme against a live connection",
         "status": "open",
         "ready": true,
         "in_review": false,
@@ -107,14 +127,14 @@
         "priority": 1,
         "type": "task",
         "parent": "ccp-2zi",
-        "updated_at": "2026-09-04T18:57:14Z",
-        "created_at": "2026-09-04T18:57:14Z",
+        "updated_at": "2026-09-04T19:53:18Z",
+        "created_at": "2026-09-04T19:53:18Z",
         "deps": [],
-        "description": "Investigate and produce a written plan. No sync code starts until this closes \u2014 user's explicit call.\n\nWhat the plan has to settle:\n\n- Craft Connect API reality: auth model and token lifetime, actual endpoints for list/read/write/create/delete, rate limits, whether a whole-document body replace exists or it is delete-plus-POST /blocks, what a document's modified timestamp is and whether it is trustworthy for last-writer-wins. Read the real API docs (connect.craft.do/api-docs); do not design against the search summary in the session that filed this.\n- The block mapping, both directions: which Craft block kinds the rich-text model (ccp-2zi.1) maps onto, and what happens to a Craft block CCP has no concept of. A round-trip that silently drops the user's Craft formatting is worse than not syncing.\n- Conflict: both sides changed since last sync. Detection, and where the losing text goes so it is recoverable rather than gone.\n- Timing: push debounce, pull on activate(), and what happens to a pad being edited when a pull lands.\n- Failure and offline: with no local text storage (ccp-2zi.4), what the widget shows when the store cannot be reached, and how typing is prevented from destroying ",
+        "description": "The docs never name an auth header. All they say is 'Create an API connection in the Imagine tab in Craft, and paste your API URL here', which reads as the URL itself being the credential \u2014 a per-connection secret path.\n\nNothing in ccp-2zi.3 can be written until that is confirmed against a real connection: whether there is a header at all, what the URL looks like, and what an unauthorised response is.\n\nTRAP: api.craft.co is a different company (Craft.co, company data) and searches will confidently offer its x-craft-api-key header. It has nothing to do with craft.do.\n\nNeeds the user: create a space-scoped connection in Craft and report the URL's shape.",
         "design": "",
         "notes": "",
         "close_reason": "",
-        "owner": "bubbles@cortico.ai",
+        "owner": "",
         "children": []
       },
       {
@@ -142,19 +162,19 @@
         "id": "ccp-2zi.6",
         "title": "Craft pull and two-way reconcile",
         "status": "open",
-        "ready": false,
+        "ready": true,
         "in_review": false,
         "backlog": false,
         "labels": [],
         "priority": 1,
         "type": "feature",
         "parent": "ccp-2zi",
-        "updated_at": "2026-09-04T18:52:32Z",
+        "updated_at": "2026-09-04T19:53:20Z",
         "created_at": "2026-09-04T18:52:32Z",
         "deps": [
           "ccp-2zi.8"
         ],
-        "description": "Pull each pad's Craft document on widget activate() \u2014 the panel is shut most of the time, so open is the natural sync point. Last-writer-wins by modified date, no operational transform: the user switches apps deliberately and accepts the window.\n\nStill needs deciding: what happens when both sides changed since the last sync. Silently clobbering the loser is the thing that will hurt. Minimum is that the losing text is recoverable, not gone.",
+        "description": "GET /blocks on activate() with fetchMetadata=true. Adopt the remote when the pad is clean.\n\nWhen both sides changed since the last sync \u2014 remote lastModifiedAt newer than the stored lastSyncedAt AND local edits unpushed \u2014 nothing loses: append the local version to the Craft document under a 'Conflicted copy \u2014 <date>' heading, then adopt the remote. With no local storage the store is the only honest place for a recoverable copy, and the user finds it where they already are.\n\nCompare against the server's utc from GET /connection, never the Mac's clock.\n\nOwns rebuilding the sidecar of CCP-owned block ids when it stops lining up. Written from the plan on ccp-2zi.8.",
         "design": "",
         "notes": "",
         "close_reason": "",
@@ -163,21 +183,21 @@
       },
       {
         "id": "ccp-2zi.5",
-        "title": "Craft push: debounced replace-body, one document per pad",
+        "title": "Craft push: debounced block diff, one document per pad",
         "status": "open",
-        "ready": false,
+        "ready": true,
         "in_review": false,
         "backlog": false,
         "labels": [],
         "priority": 1,
         "type": "feature",
         "parent": "ccp-2zi",
-        "updated_at": "2026-09-04T18:52:31Z",
+        "updated_at": "2026-09-04T19:53:37Z",
         "created_at": "2026-09-04T18:52:31Z",
         "deps": [
           "ccp-2zi.8"
         ],
-        "description": "~3s after the last keystroke, push the pad to its Craft document. Craft documents are blocks, so this is a replace-body (delete plus insert via POST /blocks), NOT an append \u2014 a naive debounce-append duplicates the note every 3 seconds. Create the document on first push and remember its id.\n\nNeeds a rich-text-to-Craft-blocks mapping; keep it in one place alongside the reverse.",
+        "description": "Push the pad to its Craft document ~3s after the last keystroke, and again on deactivate() and app terminate \u2014 a debounce that only fires while the panel is open loses the last three seconds of every session.\n\nNot a replace-body. PUT /blocks updates blocks in place by id and takes markdown for text blocks, so a push is a diff: PUT the changed blocks, POST the new ones, DELETE the ones CCP created and the user removed. Blocks CCP did not create are never touched.\n\nThe block ids live in CraftNoteStore's sidecar, not on NoteDocument \u2014 see the plan on ccp-2zi.8, which this bead is written from. The markdown conversion already exists (NoteDocument+Markdown, ccp-2zi.1).",
         "design": "",
         "notes": "",
         "close_reason": "",
@@ -209,7 +229,7 @@
         "id": "ccp-2zi.3",
         "title": "Craft Connect auth: token in Keychain plus a Settings row",
         "status": "open",
-        "ready": true,
+        "ready": false,
         "in_review": false,
         "backlog": false,
         "labels": [],
@@ -218,7 +238,9 @@
         "parent": "ccp-2zi",
         "updated_at": "2026-09-04T18:52:29Z",
         "created_at": "2026-09-04T18:52:29Z",
-        "deps": [],
+        "deps": [
+          "ccp-jmk"
+        ],
         "description": "Craft Connect (connect.craft.do) needs an API token. Keychain, not UserDefaults. A Settings row to enter it and to pick the target Craft space/folder. Blocks any sync work that actually talks to Craft.",
         "design": "",
         "notes": "",
@@ -246,6 +268,7 @@
         "close_reason": "",
         "owner": "bubbles@cortico.ai",
         "children": [
+          "ccp-jmk",
           "ccp-2zi.9",
           "ccp-2zi.8",
           "ccp-2zi.6",
@@ -254,15 +277,63 @@
           "ccp-2zi.3",
           "ccp-2zi.2",
           "ccp-2zi.1",
+          "ccp-64m",
+          "ccp-dot",
           "ccp-2zi.7"
         ],
-        "commit_count": 1,
+        "commit_count": 2,
         "commits": [
+          {
+            "sha": "db349e2",
+            "subject": "traps from the note editor and the Craft plan (ccp-2zi)"
+          },
           {
             "sha": "103e15d",
             "subject": "handoff 20260904-143604 (ccp-2zi)"
           }
         ]
+      },
+      {
+        "id": "ccp-64m",
+        "title": "no way back from an autoformat",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "ccp-2zi",
+        "updated_at": "2026-09-04T19:47:18Z",
+        "created_at": "2026-09-04T19:47:05Z",
+        "deps": [],
+        "description": "Typing '- ' on an empty line makes a bullet, and there is no way to say you meant the characters. cmd-Z restores the text, the editor re-reads it and autoformats it again \u2014 the undo is eaten.\n\nEvery editor solves this the same way: the backspace immediately after an autoformat undoes the format instead of deleting a character, and nothing else does. That needs one bit of state in NoteEditor \u2014 the block position an autoformat just fired at, cleared by the next edit anywhere else.\n\nNot urgent: the trigger only fires when the marker is the block's whole text (NoteDocument.autoformatted), so it can never rewrite existing prose. The cost today is only that a literal '- ' on its own line is unsayable.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-dot",
+        "title": "divider is unreachable from the block menu",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "feature",
+        "parent": "ccp-2zi",
+        "updated_at": "2026-09-04T19:47:17Z",
+        "created_at": "2026-09-04T19:47:04Z",
+        "deps": [],
+        "description": "Every block kind the model has is reachable from NoteEditor's block menu except .divider, which NoteBlockCommand deliberately omits.\n\nA divider is not a paragraph wearing a different kind \u2014 it holds no text, so turning the caret's block into one either strands the text that was there or draws a rule with words after it. It wants an *insert* command instead: put a divider block in after the current one, followed by an empty paragraph to land the caret in, so the note never ends on a rule you cannot type past.\n\nPlacement: probably the same block menu, in its own section, worded as an action ('Insert Divider') rather than a kind.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
       },
       {
         "id": "ccp-lh1.4",
@@ -1372,6 +1443,62 @@
         "close_reason": "",
         "owner": "bubbles@cortico.ai",
         "children": []
+      },
+      {
+        "id": "ccp-2zi.8",
+        "title": "plan two-way Craft sync before writing any of it",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "ccp-2zi",
+        "updated_at": "2026-09-04T19:53:38Z",
+        "created_at": "2026-09-04T18:57:14Z",
+        "deps": [],
+        "description": "Investigate and produce a written plan. No sync code starts until this closes \u2014 user's explicit call.\n\nWhat the plan has to settle:\n\n- Craft Connect API reality: auth model and token lifetime, actual endpoints for list/read/write/create/delete, rate limits, whether a whole-document body replace exists or it is delete-plus-POST /blocks, what a document's modified timestamp is and whether it is trustworthy for last-writer-wins. Read the real API docs (connect.craft.do/api-docs); do not design against the search summary in the session that filed this.\n- The block mapping, both directions: which Craft block kinds the rich-text model (ccp-2zi.1) maps onto, and what happens to a Craft block CCP has no concept of. A round-trip that silently drops the user's Craft formatting is worse than not syncing.\n- Conflict: both sides changed since last sync. Detection, and where the losing text goes so it is recoverable rather than gone.\n- Timing: push debounce, pull on activate(), and what happens to a pad being edited when a pull lands.\n- Failure and offline: with no local text storage (ccp-2zi.4), what the widget shows when the store cannot be reached, and how typing is prevented from destroying ",
+        "design": "Read from the real docs (connect.craft.do/api-docs and its space/ and documents/\nsub-pages), 2026-09-04. Everything marked UNCONFIRMED needs a live connection\nbefore code depends on it.\n\n## 1. What the API actually is\n\nCraft Connect is not one API. A *connection*, created by the user in Craft's\nImagine/Connections tab, has a scope, and the scope decides what exists:\n\n  space scope       /documents GET POST DELETE, /documents/move, /folders GET\n                    POST DELETE, /tasks, plus all the block endpoints\n  daily-notes scope daily notes and tasks\n  selected-docs     block endpoints only, inside documents the user picked by\n                    hand. NO POST /documents.\n\nDECISION: CCP requires a space-scoped connection. One document per pad means\ncreating documents, and only space scope can. Under selected-docs the user\nwould have to hand-make a Craft document per pad and reconnect \u2014 not a feature,\na chore.\n\nEndpoints CCP needs:\n  GET  /connection            space metadata, urlTemplates, and the server's\n                              own UTC clock\n  GET  /documents             ids and titles; ?fetchMetadata=true adds\n                              createdAt and lastModifiedAt\n ",
+        "notes": "",
+        "close_reason": "Plan written from the real docs and filed as the bead's design. Two findings reshaped the epic: only a space-scoped connection can create documents (so CCP requires one), and PUT /blocks updates in place taking markdown, so a push is a block diff rather than the delete-and-repost the epic feared \u2014 and the markdown bridge from ccp-2zi.1 is already the mapping. Settled: unknown Craft blocks are preserved and never touched via a store-side sidecar of CCP-owned ids; conflicts append a dated 'Conflicted copy' to the Craft document so nothing loses; the editor stays disabled until the note has actua",
+        "owner": "bubbles@cortico.ai",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "90124ac",
+            "subject": "plan for two-way Craft sync (ccp-2zi.8)"
+          }
+        ]
+      },
+      {
+        "id": "ccp-2zi.9",
+        "title": "block kind commands: make a heading, a list, a to-do",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "feature",
+        "parent": "ccp-2zi",
+        "updated_at": "2026-09-04T19:52:58Z",
+        "created_at": "2026-09-04T19:25:46Z",
+        "deps": [],
+        "description": "NoteEditor renders every block kind correctly but nothing in the UI can reach them \u2014 only inline marks can be applied, so a user cannot actually make a list.\n\nTwo ways in, and they want each other: a command (shortcut or control) that changes the block the caret is in, and markdown-style autoformatting \u2014 typing '- ', '# ', '1. ', '[] ' at the start of a line becomes the block it names. Autoformatting is the one that will get used; the explicit command is what makes it discoverable and what a selection of several blocks needs.\n\nBoth are structural changes, so both go through the redraw path NoteEditor already has (NoteDocument.hasSameStructure). Indent and outdent (tab / shift-tab in a list) belong here too \u2014 NoteBlock carries an indent that nothing can currently change.\n\nThe format bar appears on selection today; a block command has to work with only a caret, so its placement is an open question rather than another button in that bar.",
+        "design": "",
+        "notes": "",
+        "close_reason": "Block kinds are reachable three ways: markdown-style autoformatting on the line being typed, a block-kind menu that works from a caret alone, and indent/outdent with cmd-[ and cmd-]. Indent is now drawn (counted spaces, like the markers) so it can be seen as well as set. Review found two real defects, both fixed: autoformatting scanned the whole note and could convert an unrelated paragraph and drag the caret to it (now scoped to the caret's block), and reading the indent and the glyph as one marker stranded a bullet in the user's text when a space in front of it went missing (now shed separat",
+        "owner": "bubbles@cortico.ai",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "1a4db2a",
+            "subject": "block kind commands for the note editor (ccp-2zi.9)"
+          }
+        ]
       },
       {
         "id": "ccp-2zi.2",
@@ -3261,15 +3388,7 @@
     ],
     "stale": 0
   },
-  "worktree": [
-    {
-      "path": "dashboard/state.json",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    }
-  ],
+  "worktree": [],
   "verify": {
     "status": "passed",
     "when": "1m ago",
@@ -3286,12 +3405,20 @@
     ],
     "unverified": [
       {
-        "sha": "103e15d",
-        "subject": "handoff 20260904-143604 (ccp-2zi)"
+        "sha": "db349e2",
+        "subject": "traps from the note editor and the Craft plan (ccp-2zi)"
+      },
+      {
+        "sha": "90124ac",
+        "subject": "plan for two-way Craft sync (ccp-2zi.8)"
+      },
+      {
+        "sha": "1a4db2a",
+        "subject": "block kind commands for the note editor (ccp-2zi.9)"
       }
     ],
-    "took": "8s",
-    "at": 1788550571.828849
+    "took": "14s",
+    "at": 1788551562.8723192
   },
   "runs": {
     "verify": {
@@ -3467,7 +3594,7 @@
           "path": ".beads/issues.jsonl",
           "origin": "harness",
           "role": "the issue graph, exported for git",
-          "tokens": 35202
+          "tokens": 38654
         },
         {
           "id": ".claude/skills/beads/SKILL.md",
@@ -3608,14 +3735,14 @@
       },
       {
         "name": "session brief",
-        "tokens": 492
+        "tokens": 517
       },
       {
         "name": "skill descriptions",
         "tokens": 378
       }
     ],
-    "always_total": 3330,
+    "always_total": 3355,
     "on_demand": [
       {
         "name": "workflow",
@@ -3654,7 +3781,7 @@
         "tokens": 491
       }
     ],
-    "brief_tokens": 492,
+    "brief_tokens": 517,
     "prime_tokens": 1569
   }
 }
