@@ -1,15 +1,15 @@
 {
-  "generated": "16:25:37",
+  "generated": "16:28:10",
   "project": "control-center-pro",
   "git": {
     "branch": "spike/markdown-engine",
     "upstream": "",
-    "dirty": 20,
-    "commits_today": 14,
+    "dirty": 0,
+    "commits_today": 16,
     "last": {
-      "sha": "c1f3789",
-      "subject": "laurel (ccp-dn5)",
-      "when": "31 minutes ago"
+      "sha": "ec871bd",
+      "subject": "ledger export (ccp-s63)",
+      "when": "17 seconds ago"
     },
     "unpushed": [],
     "unpushed_beads": [],
@@ -19,8 +19,8 @@
     "counts": {
       "open": 61,
       "ready": 54,
-      "in_progress": 3,
-      "closed": 95,
+      "in_progress": 1,
+      "closed": 97,
       "blocked": 0
     },
     "issues": [
@@ -102,12 +102,12 @@
         "priority": 1,
         "type": "task",
         "parent": "ccp-2zi",
-        "updated_at": "2026-09-04T20:53:47Z",
+        "updated_at": "2026-09-04T21:27:13Z",
         "created_at": "2026-09-04T20:28:40Z",
         "deps": [],
         "description": "",
         "design": "DECIDED and PROVEN on branch spike/markdown-engine (commit 72e0355). Whoever\npicks this up is finishing an adoption, not evaluating one. The survey behind\nthe decision is ccp-zaj.\n\n## What is already true on that branch\n\n- Package.swift takes nodes-app/swift-markdown-engine at exact 0.12.0, a URL\n  dependency (Apache-2.0, one-way compatible with our GPL-3.0-or-later). Its\n  resolution also pins HighlighterSwift and SwiftMath; we link neither, taking\n  only the dependency-free MarkdownEngine core product. Documented in CLAUDE.md.\n- Sources/CCPUI/DesignSystem/MarkdownNoteEditor.swift is the ONE file that names\n  MarkdownEngine \u2014 the same rule the CCPKit engine adapters follow. It retunes\n  the engine's full-window defaults for a lane-width card: heading ramp\n  flattened to [1.35, 1.2, 1.1, ...] from its own [2.0, 1.5, ...], paragraph\n  spacing tightened, theme mapped onto CCP's label colours.\n- ScratchpadWidget uses it in place of PlainTextEditor. The pad's text was\n  already a String, so this was a Binding<String> for a Binding<String> \u2014 no\n  model change.\n- Gate green, 236 tests.\n\nProven on the running app, not argued: it draws correctly in the 148pt card,\nthe markers hide themselv",
-        "notes": "Left in_progress on branch spike/markdown-engine (2 commits, gate green). The spike is done and proven \u2014 the editor is wired into ScratchpadWidget and works. What remains is the design field's list: ccp-xgl first, then ccp-s63's deletion, then .5/.6. Nothing is half-applied; the branch is a coherent stopping point and main is untouched.",
+        "notes": "Left in_progress on branch spike/markdown-engine (2 commits, gate green). The spike is done and proven \u2014 the editor is wired into ScratchpadWidget and works. What remains is the design field's list: ccp-xgl first, then ccp-s63's deletion, then .5/.6. Nothing is half-applied; the branch is a coherent stopping point and main is untouched.\nTuning item 4 (\"too much air between a paragraph and the list that follows it,\nat this size\") is WITHDRAWN \u2014 measured 2026-09-04 and it is not a defect.\n\nMeasured on the full-resolution capture, not a scaled crop. Gaps in 2x pixels:\nline-to-line 16, paragraph -> list 56, list -> blockquote 47.\n\nTwo things the eye got wrong:\n- The ~50px gaps are BLANK SOURCE LINES. The pad's markdown has \\n\\n before the\n  list and before the blockquote. In a live-styled editor a blank line the user\n  typed is a line the user sees. Rendering it is correct; collapsing it would be\n  the bug, and would make the caret's position stop matching the text.\n- The two gaps are not \"two different amounts doing the same job\" (a design\n  reviewer's reading at 60 vs 95 off a downscaled crop). They are 9px apart,\n  which is the paragraph spacingFactor applied after a paragraph and n",
         "close_reason": "",
         "owner": "",
         "children": []
@@ -131,27 +131,6 @@
         "notes": "",
         "close_reason": "",
         "owner": "",
-        "children": []
-      },
-      {
-        "id": "ccp-ydj",
-        "title": "make the scratchpad bigger",
-        "status": "in_progress",
-        "ready": false,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 1,
-        "type": "task",
-        "parent": "",
-        "updated_at": "2026-09-04T21:18:06Z",
-        "created_at": "2026-09-04T18:52:54Z",
-        "deps": [],
-        "description": "Independent of the sizing epic \u2014 WidgetSize.height is a floor, so this is a token change at Sources/CCPUI/DesignSystem/Dimensions.swift:99 (.tall is 232). Width is the constrained axis and stays 300 until ccp-lh1 lands. Pairs with ccp-540, which wants the scratchpad's literals moved onto design tokens anyway.",
-        "design": "",
-        "notes": "Raised in weight by the ccp-dn5 spike (2026-09-04): with live-styled markdown the 148pt card shows about five lines, and a heading plus a short list fills it. A markdown pad you cannot see is a worse pad than a plain-text one. This now gates the adoption feeling right rather than polishing it.",
-        "close_reason": "",
-        "owner": "bubbles@cortico.ai",
         "children": []
       },
       {
@@ -328,29 +307,6 @@
         "description": "Blocks CCP cannot render as markdown are read-only in the pad and subtly marked as such, so a Craft table or embed is visible but not editable here.",
         "design": "A Craft block whose content CCP cannot faithfully render as markdown \u2014 a table\nCraft draws specially, an embed, a drawing, or a text block carrying attributes\nmarkdown has no spelling for \u2014 appears in the pad but cannot be edited there.\nThe user's call, 2026-09-04, over the alternative of letting an edit silently\nflatten the block on the next push.\n\nTwo halves, and the second is the design work:\n\n1. INERT. The region cannot take the caret, and the push side never PUTs it \u2014\n   not because it happened to hash as unchanged, but because it is unwritable\n   by rule (see ccp-xgl). Check MarkdownEngine's seams first: `isEditable` is\n   whole-view, so a per-range inert region may need the package's own support\n   or an upstream PR. That check is the first task here, because it decides\n   whether the rest is a styling job or a package conversation.\n\n2. SUBTLY MARKED. The user should be able to see their Craft content is present\n   and see that CCP is not where it gets edited \u2014 without the pad turning into\n   a wall of warnings. Subtle in the pad's own vocabulary: something like a\n   quiet left rule or a muted ground, at the weight the glass cards already\n   use. Not a banner, not a lock ico",
         "notes": "2026-09-04: \"what counts as unrenderable\" now has a documented answer rather\nthan needing to be guessed against a live connection. Craft's output-only\nmarkdown tags \u2014 <collection>, <collectionItem>, <property>, <title>,\n<properties>, <contentPreview>, <itemsPreview> \u2014 are not accepted as input, so a\nblock whose markdown contains one is read-only BY THE API, not by our choice.\n[text](invalid:out_of_scope), the form an out-of-scope block link comes back in,\nis the same: writing it back destroys the link.\n\nThat is a clean rule the push side can enforce mechanically. See\nharness/reference/craft-connect-api.md.\n\nOpen, and now the harder half of this bead: the ROUND-TRIPPABLE tags \u2014\n<callout>, <caption>, <highlight color>, <comment id>, <page> \u2014 are legal to\nwrite back but will sit in the pad as literal XML that MarkdownEngine draws as\nplain text. Those blocks are editable in principle and ugly in practice.\nDeciding what the pad does with them is now this bead's main design question.",
-        "close_reason": "",
-        "owner": "",
-        "children": []
-      },
-      {
-        "id": "ccp-s63",
-        "title": "delete the block model and the scratchpad preview path",
-        "status": "in_progress",
-        "ready": false,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 2,
-        "type": "task",
-        "parent": "ccp-2zi",
-        "updated_at": "2026-09-04T21:18:07Z",
-        "created_at": "2026-09-04T20:47:42Z",
-        "deps": [
-          "ccp-xgl"
-        ],
-        "description": "Remove ~900 lines of block model and ~740 lines of its tests, plus the widget's preview toggle, once markdown is the pad's truth. The design field lists every file.",
-        "design": "Once the pad's truth is markdown (ccp-dn5), the block model and the preview\npath are both dead code. This is a deletion, not a migration: NoteDocument and\nNoteEditor have ZERO CALL SITES outside their own files and tests \u2014 verified\n2026-09-04. They were built by ccp-2zi.1/.2/.9 for an editor that was never\nwired into the widget; the scratchpad shipped plain text with a preview toggle\nthe whole time.\n\nDelete, with their tests:\n  Sources/CCPKit/Notes/NoteDocument.swift\n  Sources/CCPKit/Notes/NoteDocument+AttributedString.swift\n  Sources/CCPKit/Notes/NoteDocument+Markdown.swift\n  Sources/CCPKit/Notes/NoteDocument+BlockCommands.swift\n  Sources/CCPKit/Notes/NoteDocument+Marks.swift\n  Sources/CCPKit/Notes/NoteBlock+Splitting.swift\n  Sources/CCPUI/DesignSystem/NoteEditor.swift\n  Sources/CCPUI/DesignSystem/NoteRendering.swift\n  Sources/CCPUI/DesignSystem/NoteBlockCommand.swift\n  Tests/CCPKitTests/NoteDocumentTests.swift\n  Tests/CCPKitTests/NoteBlockCommandsTests.swift\n  Tests/CCPUITests/NoteRenderingTests.swift\n\nAnd the preview path, which the editor now IS:\n  ScratchpadWidget's isPreviewing branch and its eye-icon toggle\n  ScratchpadMarkdownPreview (the NSTextView preview at the foot of t",
-        "notes": "",
         "close_reason": "",
         "owner": "",
         "children": []
@@ -1440,6 +1396,50 @@
         "design": "",
         "notes": "",
         "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-s63",
+        "title": "delete the block model and the scratchpad preview path",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "ccp-2zi",
+        "updated_at": "2026-09-04T21:27:29Z",
+        "created_at": "2026-09-04T20:47:42Z",
+        "deps": [
+          "ccp-xgl"
+        ],
+        "description": "Remove ~900 lines of block model and ~740 lines of its tests, plus the widget's preview toggle, once markdown is the pad's truth. The design field lists every file.",
+        "design": "Once the pad's truth is markdown (ccp-dn5), the block model and the preview\npath are both dead code. This is a deletion, not a migration: NoteDocument and\nNoteEditor have ZERO CALL SITES outside their own files and tests \u2014 verified\n2026-09-04. They were built by ccp-2zi.1/.2/.9 for an editor that was never\nwired into the widget; the scratchpad shipped plain text with a preview toggle\nthe whole time.\n\nDelete, with their tests:\n  Sources/CCPKit/Notes/NoteDocument.swift\n  Sources/CCPKit/Notes/NoteDocument+AttributedString.swift\n  Sources/CCPKit/Notes/NoteDocument+Markdown.swift\n  Sources/CCPKit/Notes/NoteDocument+BlockCommands.swift\n  Sources/CCPKit/Notes/NoteDocument+Marks.swift\n  Sources/CCPKit/Notes/NoteBlock+Splitting.swift\n  Sources/CCPUI/DesignSystem/NoteEditor.swift\n  Sources/CCPUI/DesignSystem/NoteRendering.swift\n  Sources/CCPUI/DesignSystem/NoteBlockCommand.swift\n  Tests/CCPKitTests/NoteDocumentTests.swift\n  Tests/CCPKitTests/NoteBlockCommandsTests.swift\n  Tests/CCPUITests/NoteRenderingTests.swift\n\nAnd the preview path, which the editor now IS:\n  ScratchpadWidget's isPreviewing branch and its eye-icon toggle\n  ScratchpadMarkdownPreview (the NSTextView preview at the foot of t",
+        "notes": "",
+        "close_reason": "deleted 12 files: the NoteDocument/NoteEditor/NoteRendering/NoteBlockCommand model and its three test files, plus the whole preview path (ScratchpadMarkdownBlock, ScratchpadSupport.markdownPreview, adapter isPreviewing/togglePreview, the ScratchpadMarkdownPreview NSTextView, the eye footer button). ScratchpadWidget 464 -> 300 lines. Gate green, 168 tests. The ccp-xgl dependency was ordering advice, not a real block \u2014 the deletion needed nothing from the splitter, only for the live editor to exist.",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-ydj",
+        "title": "make the scratchpad bigger",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-04T21:27:22Z",
+        "created_at": "2026-09-04T18:52:54Z",
+        "deps": [],
+        "description": "Independent of the sizing epic \u2014 WidgetSize.height is a floor, so this is a token change at Sources/CCPUI/DesignSystem/Dimensions.swift:99 (.tall is 232). Width is the constrained axis and stays 300 until ccp-lh1 lands. Pairs with ccp-540, which wants the scratchpad's literals moved onto design tokens anyway.",
+        "design": "",
+        "notes": "Raised in weight by the ccp-dn5 spike (2026-09-04): with live-styled markdown the 148pt card shows about five lines, and a heading plus a short list fills it. A markdown pad you cannot see is a worse pad than a plain-text one. This now gates the adoption feeling right rather than polishing it.",
+        "close_reason": "editor 148pt -> 300pt via a new Layout.scratchpadEditorHeight token, not WidgetSize.tall \u2014 the clipboard shares .tall and caps its own list at 330, so moving the shared token would have left dead glass under the clips.",
         "owner": "bubbles@cortico.ai",
         "children": []
       },
@@ -3485,151 +3485,10 @@
     ],
     "stale": 0
   },
-  "worktree": [
-    {
-      "path": "Sources/CCPKit/Notes/NoteBlock+Splitting.swift",
-      "staged": true,
-      "untracked": false,
-      "status": "D",
-      "old_path": null
-    },
-    {
-      "path": "Sources/CCPKit/Notes/NoteDocument+AttributedString.swift",
-      "staged": true,
-      "untracked": false,
-      "status": "D",
-      "old_path": null
-    },
-    {
-      "path": "Sources/CCPKit/Notes/NoteDocument+BlockCommands.swift",
-      "staged": true,
-      "untracked": false,
-      "status": "D",
-      "old_path": null
-    },
-    {
-      "path": "Sources/CCPKit/Notes/NoteDocument+Markdown.swift",
-      "staged": true,
-      "untracked": false,
-      "status": "D",
-      "old_path": null
-    },
-    {
-      "path": "Sources/CCPKit/Notes/NoteDocument+Marks.swift",
-      "staged": true,
-      "untracked": false,
-      "status": "D",
-      "old_path": null
-    },
-    {
-      "path": "Sources/CCPKit/Notes/NoteDocument.swift",
-      "staged": true,
-      "untracked": false,
-      "status": "D",
-      "old_path": null
-    },
-    {
-      "path": "Sources/CCPUI/DesignSystem/NoteBlockCommand.swift",
-      "staged": true,
-      "untracked": false,
-      "status": "D",
-      "old_path": null
-    },
-    {
-      "path": "Sources/CCPUI/DesignSystem/NoteEditor.swift",
-      "staged": true,
-      "untracked": false,
-      "status": "D",
-      "old_path": null
-    },
-    {
-      "path": "Sources/CCPUI/DesignSystem/NoteRendering.swift",
-      "staged": true,
-      "untracked": false,
-      "status": "D",
-      "old_path": null
-    },
-    {
-      "path": "Tests/CCPKitTests/NoteBlockCommandsTests.swift",
-      "staged": true,
-      "untracked": false,
-      "status": "D",
-      "old_path": null
-    },
-    {
-      "path": "Tests/CCPKitTests/NoteDocumentTests.swift",
-      "staged": true,
-      "untracked": false,
-      "status": "D",
-      "old_path": null
-    },
-    {
-      "path": "Tests/CCPUITests/NoteRenderingTests.swift",
-      "staged": true,
-      "untracked": false,
-      "status": "D",
-      "old_path": null
-    },
-    {
-      "path": ".beads/interactions.jsonl",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": ".beads/issues.jsonl",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": "Sources/CCPKit/Adapters/ScratchpadAdapter.swift",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": "Sources/CCPUI/DesignSystem/Dimensions.swift",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": "Sources/CCPUI/Widgets/ScratchpadWidget.swift",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": "Tests/MetricsTests.swift",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": "dashboard/state.json",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": "harness/reference/",
-      "staged": false,
-      "untracked": true,
-      "status": "?",
-      "old_path": null
-    }
-  ],
+  "worktree": [],
   "verify": {
     "status": "passed",
-    "when": "just now",
+    "when": "2m ago",
     "tests": "",
     "steps": [
       {
@@ -3641,7 +3500,16 @@
         "ok": true
       }
     ],
-    "unverified": [],
+    "unverified": [
+      {
+        "sha": "ec871bd",
+        "subject": "ledger export (ccp-s63)"
+      },
+      {
+        "sha": "d699cbf",
+        "subject": "bigger pad, and the block model deleted (ccp-ydj, ccp-s63)"
+      }
+    ],
     "took": "4s",
     "at": 1788557115.3167372
   },
@@ -3819,7 +3687,7 @@
           "path": ".beads/issues.jsonl",
           "origin": "harness",
           "role": "the issue graph, exported for git",
-          "tokens": 49218
+          "tokens": 49681
         },
         {
           "id": ".claude/skills/beads/SKILL.md",
@@ -3960,14 +3828,14 @@
       },
       {
         "name": "session brief",
-        "tokens": 621
+        "tokens": 602
       },
       {
         "name": "skill descriptions",
         "tokens": 378
       }
     ],
-    "always_total": 3579,
+    "always_total": 3560,
     "on_demand": [
       {
         "name": "workflow",
@@ -4006,7 +3874,7 @@
         "tokens": 491
       }
     ],
-    "brief_tokens": 621,
+    "brief_tokens": 602,
     "prime_tokens": 1569
   }
 }

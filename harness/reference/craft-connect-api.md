@@ -85,6 +85,45 @@ Two consequences the pad's sync design turns on:
 Indentation being significant at 2 spaces answers ccp-xgl's open nesting
 question: markdown list indentation maps onto Craft depth directly.
 
+## Round-trip behaviour
+
+Verified 2026-09-04 by posting 16 cases to a throwaway document, reading them
+back, re-writing them, and deleting them.
+
+**Craft normalises on write.** What comes back is not what you sent:
+
+| sent | returned |
+|---|---|
+| `_italics_` | `*italics*` |
+| `==highlighted==` | `<highlight color="yellow">highlighted</highlight>` |
+| `---` | `***` |
+
+**Craft also splits.** One block in can be several blocks out —
+`- parent\n  - child` becomes two (the child keeping its 2-space indent), and
+`first para\n\nsecond para` becomes two.
+
+Byte-identical on the way back: plain paragraphs, `## headings`, `**bold**`,
+`` `code` ``, `[links](url)`, `> blockquotes`, fenced code with its language,
+bullets, numbered items, an explicit `<highlight color="…">`, trailing spaces —
+and **both task-list states**, `- [ ]` and `- [x]`, which arrive with
+`listStyle: "task"`.
+
+Two consequences, and they decide the sync's shape:
+
+1. **Hash Craft's markdown, never your own.** Our text is not a fixed point: a
+   pad containing `_italics_` would read as changed on every sync and the loop
+   would never quiet. Craft's normalised form *is* a fixed point — re-PUTting 18
+   blocks exactly as returned changed nothing, and the following GET agreed with
+   the write response for all of them.
+2. **Build the block-id sidecar from the write response, not from what you
+   sent.** Every write response echoes both the canonical markdown and the
+   assigned ids, so no extra GET is needed. This is correctness rather than
+   thrift: because a POST can split one sent block into several, pairing sent
+   slices to returned ids positionally goes wrong from the first split onward.
+
+`POST /blocks` takes `position` in the **body**, not the query string; in the
+query string it 400s with `invalid_union`.
+
 ## Rate limits
 
 | Limit | Scope | Allowance |
