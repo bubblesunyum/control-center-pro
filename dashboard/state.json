@@ -1,244 +1,160 @@
 {
-  "generated": "10:32:13",
+  "generated": "23:31:57",
   "project": "control-center-pro",
   "git": {
     "branch": "main",
     "upstream": "origin/main",
-    "dirty": 1,
-    "commits_today": 0,
+    "dirty": 3,
+    "commits_today": 15,
     "last": {
-      "sha": "e931a47",
-      "subject": "sync ledger: close ccp-83i new-lane clip",
-      "when": "11 hours ago"
+      "sha": "31d638e",
+      "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)",
+      "when": "29 minutes ago"
     },
     "unpushed": [
       {
-        "sha": "e931a47",
-        "subject": "sync ledger: close ccp-83i new-lane clip",
-        "at": 1788238654.0
+        "sha": "31d638e",
+        "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)",
+        "at": 1788494576.0
       },
       {
-        "sha": "181e359",
-        "subject": "sync ledger: close ccp-8kj grid stability",
-        "at": 1788238649.0
+        "sha": "ca36d54",
+        "subject": "stop the dashboard burning a core when nobody is watching (ccp-4pu ccp-juo ccp-o25)",
+        "at": 1788494522.0
       },
       {
-        "sha": "09d052c",
-        "subject": "make drag stable \u2014 gap at original, visual center, deferred new-lane ccp-8kj",
-        "at": 1788238644.0
+        "sha": "affd7b2",
+        "subject": "handoff 20260903-222400 (ccp-35c)",
+        "at": 1788492254.0
       },
       {
-        "sha": "aff5de3",
-        "subject": "sync ledger: close ccp-drp, open ccp-83i window clip follow-up",
-        "at": 1788237646.0
+        "sha": "557eaec",
+        "subject": "clipboard: hide and paste on click, count+Clear in header (ccp-35c)",
+        "at": 1788492234.0
       },
       {
-        "sha": "cd48f4d",
-        "subject": "fix drag landing offset \u2014 finger vs ghost center and window shift ccp-drp",
-        "at": 1788237635.0
+        "sha": "1879e28",
+        "subject": "handoff 20260903-205149",
+        "at": 1788486755.0
       },
       {
-        "sha": "ca34cec",
-        "subject": "handoff 2026-08-31 show hidden files toggles ccp-5fa",
-        "at": 1788235837.0
+        "sha": "6301961",
+        "subject": "ledger sync (ccp-2ql closed)",
+        "at": 1788486704.0
       },
       {
-        "sha": "2e76639",
-        "subject": "toggles: add show hidden files icon-button to toggles pane",
-        "at": 1788234699.0
+        "sha": "4b4d8f7",
+        "subject": "polish system widget: swap under header, integer header, text-only temp with warning colors (ccp-2ql)",
+        "at": 1788486094.0
       },
       {
-        "sha": "f30e401",
-        "subject": "laurel: awesome work ccp-r9m",
-        "at": 1788233907.0
+        "sha": "a7113d6",
+        "subject": "polish system widget: remove separators, neutral gauges with warning gradients, pressure row, swap on graph, activity button (ccp-fn8)",
+        "at": 1788458307.0
       },
       {
-        "sha": "4411b03",
-        "subject": "handoff 2026-08-31 clipboard polish ccp-r9m",
-        "at": 1788233902.0
-      },
-      {
-        "sha": "e73ebca",
-        "subject": "sync ledger: close ccp-r9m tooltip follow-up",
-        "at": 1788233893.0
-      },
-      {
-        "sha": "76efc12",
-        "subject": "clipboard: remove full content from menu, show constrained tooltip on hover ccp-r9m",
-        "at": 1788233499.0
-      },
-      {
-        "sha": "1e89347",
-        "subject": "clipboard context menu max width and full text last ccp-r9m",
-        "at": 1788233205.0
-      },
-      {
-        "sha": "8bb26cf",
-        "subject": "sync ledger: close ccp-r9m",
-        "at": 1788230588.0
-      },
-      {
-        "sha": "4215f08",
-        "subject": "clipboard polish: taller, no icon/timestamp, image rhs, full content menu, scroll top on hide ccp-r9m",
-        "at": 1788230578.0
-      },
-      {
-        "sha": "12604b4",
-        "subject": "sync ledger: close ccp-kb6 (retry export)",
-        "at": 1788228959.0
-      },
-      {
-        "sha": "300b31c",
-        "subject": "sync ledger: close ccp-kb6, open ccp-540/egd/8bc polish",
-        "at": 1788228921.0
-      },
-      {
-        "sha": "525c322",
-        "subject": "handoff 2026-08-31 scratchpad ccp-kb6 shipped",
-        "at": 1788228914.0
-      },
-      {
-        "sha": "fd43835",
-        "subject": "add scratchpad widget to grid ccp-kb6",
-        "at": 1788228891.0
+        "sha": "affe8a0",
+        "subject": "pull vorssaint system ui into ccp system widget with 13 tweaks (ccp-rly)",
+        "at": 1788457420.0
       }
     ],
     "unpushed_beads": [
-      "ccp-540",
-      "ccp-5fa",
-      "ccp-83i",
-      "ccp-8kj",
-      "ccp-8ld.3",
-      "ccp-drp",
-      "ccp-kb6",
-      "ccp-r9m"
+      "ccp-2ql",
+      "ccp-35c",
+      "ccp-4pu",
+      "ccp-fn8",
+      "ccp-juo",
+      "ccp-o25",
+      "ccp-rly"
     ],
     "bead_commits": {
-      "ccp-83i": {
+      "ccp-o25": {
         "commits": 2,
-        "at": 1788238654.0,
+        "at": 1788494576.0,
         "list": [
           {
-            "sha": "e931a47",
-            "subject": "sync ledger: close ccp-83i new-lane clip"
+            "sha": "31d638e",
+            "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)"
           },
           {
-            "sha": "aff5de3",
-            "subject": "sync ledger: close ccp-drp, open ccp-83i window clip follow-up"
+            "sha": "ca36d54",
+            "subject": "stop the dashboard burning a core when nobody is watching (ccp-4pu ccp-juo ccp-o25)"
           }
         ]
       },
-      "ccp-8kj": {
+      "ccp-juo": {
         "commits": 2,
-        "at": 1788238649.0,
+        "at": 1788494576.0,
         "list": [
           {
-            "sha": "181e359",
-            "subject": "sync ledger: close ccp-8kj grid stability"
+            "sha": "31d638e",
+            "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)"
           },
           {
-            "sha": "09d052c",
-            "subject": "make drag stable \u2014 gap at original, visual center, deferred new-lane ccp-8kj"
+            "sha": "ca36d54",
+            "subject": "stop the dashboard burning a core when nobody is watching (ccp-4pu ccp-juo ccp-o25)"
           }
         ]
       },
-      "ccp-drp": {
+      "ccp-4pu": {
         "commits": 2,
-        "at": 1788237646.0,
+        "at": 1788494576.0,
         "list": [
           {
-            "sha": "aff5de3",
-            "subject": "sync ledger: close ccp-drp, open ccp-83i window clip follow-up"
+            "sha": "31d638e",
+            "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)"
           },
           {
-            "sha": "cd48f4d",
-            "subject": "fix drag landing offset \u2014 finger vs ghost center and window shift ccp-drp"
+            "sha": "ca36d54",
+            "subject": "stop the dashboard burning a core when nobody is watching (ccp-4pu ccp-juo ccp-o25)"
           }
         ]
       },
-      "ccp-5fa": {
+      "ccp-35c": {
+        "commits": 2,
+        "at": 1788492254.0,
+        "list": [
+          {
+            "sha": "affd7b2",
+            "subject": "handoff 20260903-222400 (ccp-35c)"
+          },
+          {
+            "sha": "557eaec",
+            "subject": "clipboard: hide and paste on click, count+Clear in header (ccp-35c)"
+          }
+        ]
+      },
+      "ccp-2ql": {
+        "commits": 2,
+        "at": 1788486704.0,
+        "list": [
+          {
+            "sha": "6301961",
+            "subject": "ledger sync (ccp-2ql closed)"
+          },
+          {
+            "sha": "4b4d8f7",
+            "subject": "polish system widget: swap under header, integer header, text-only temp with warning colors (ccp-2ql)"
+          }
+        ]
+      },
+      "ccp-fn8": {
         "commits": 1,
-        "at": 1788235837.0,
+        "at": 1788458307.0,
         "list": [
           {
-            "sha": "ca34cec",
-            "subject": "handoff 2026-08-31 show hidden files toggles ccp-5fa"
+            "sha": "a7113d6",
+            "subject": "polish system widget: remove separators, neutral gauges with warning gradients, pressure row, swap on graph, activity button (ccp-fn8)"
           }
         ]
       },
-      "ccp-8ld.3": {
+      "ccp-rly": {
         "commits": 1,
-        "at": 1788234699.0,
+        "at": 1788457420.0,
         "list": [
           {
-            "sha": "2e76639",
-            "subject": "toggles: add show hidden files icon-button to toggles pane"
-          }
-        ]
-      },
-      "ccp-r9m": {
-        "commits": 7,
-        "at": 1788233907.0,
-        "list": [
-          {
-            "sha": "f30e401",
-            "subject": "laurel: awesome work ccp-r9m"
-          },
-          {
-            "sha": "4411b03",
-            "subject": "handoff 2026-08-31 clipboard polish ccp-r9m"
-          },
-          {
-            "sha": "e73ebca",
-            "subject": "sync ledger: close ccp-r9m tooltip follow-up"
-          },
-          {
-            "sha": "76efc12",
-            "subject": "clipboard: remove full content from menu, show constrained tooltip on hover ccp-r9m"
-          },
-          {
-            "sha": "1e89347",
-            "subject": "clipboard context menu max width and full text last ccp-r9m"
-          },
-          {
-            "sha": "8bb26cf",
-            "subject": "sync ledger: close ccp-r9m"
-          },
-          {
-            "sha": "4215f08",
-            "subject": "clipboard polish: taller, no icon/timestamp, image rhs, full content menu, scroll top on hide ccp-r9m"
-          }
-        ]
-      },
-      "ccp-kb6": {
-        "commits": 4,
-        "at": 1788228959.0,
-        "list": [
-          {
-            "sha": "12604b4",
-            "subject": "sync ledger: close ccp-kb6 (retry export)"
-          },
-          {
-            "sha": "300b31c",
-            "subject": "sync ledger: close ccp-kb6, open ccp-540/egd/8bc polish"
-          },
-          {
-            "sha": "525c322",
-            "subject": "handoff 2026-08-31 scratchpad ccp-kb6 shipped"
-          },
-          {
-            "sha": "fd43835",
-            "subject": "add scratchpad widget to grid ccp-kb6"
-          }
-        ]
-      },
-      "ccp-540": {
-        "commits": 1,
-        "at": 1788228921.0,
-        "list": [
-          {
-            "sha": "300b31c",
-            "subject": "sync ledger: close ccp-kb6, open ccp-540/egd/8bc polish"
+            "sha": "affe8a0",
+            "subject": "pull vorssaint system ui into ccp system widget with 13 tweaks (ccp-rly)"
           }
         ]
       }
@@ -246,13 +162,265 @@
   },
   "ledger": {
     "counts": {
-      "open": 34,
-      "ready": 33,
+      "open": 45,
+      "ready": 44,
       "in_progress": 0,
-      "closed": 55,
+      "closed": 83,
       "blocked": 0
     },
     "issues": [
+      {
+        "id": "ccp-skd",
+        "title": "design: inbox list clipped under floating psymail tab bar, no bottom inset \u2014 last row half hidden (ccp-panel.png) \u2014 already ccp-caq but severity upped",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-03T17:09:43Z",
+        "created_at": "2026-09-03T17:09:43Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-518",
+        "title": "headerFrames preference lags one frame \u2014 preference propagation delay plus window shift makes hold hit-test miss right after new lane creation (ControlPanel.swift:138, HeaderFrames)",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-03T17:09:42Z",
+        "created_at": "2026-09-03T17:09:42Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-2yy",
+        "title": "holdTask leaks when panel hides without onDisappear \u2014 panel visible hold \u2192 click elsewhere hides window without cancelling hold timer, fires after hide and enters edit while hidden (ControlPanel.swift:61,76)",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-03T17:09:41Z",
+        "created_at": "2026-09-03T17:09:41Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-urk",
+        "title": "Gallery ScrollView maxHeight and PanelEnvironment extraction follow-up",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-03T16:16:44Z",
+        "created_at": "2026-09-03T16:16:44Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-srw",
+        "title": "Design system literals: replace raw 0.28 dim, 0.5s hold, 4pt threshold with Layout/Space tokens",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-03T16:16:41Z",
+        "created_at": "2026-09-03T16:16:41Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-2rh",
+        "title": "Panel drag hold-to-edit follow-up: extract hold logic to modifier and move gallery state out of PanelEditor",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-03T16:16:38Z",
+        "created_at": "2026-09-03T16:16:38Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-caq",
+        "title": "psymail's message list paints Theme.background over CCP's glass \u2014 revisit whether the embedded screen should let the panel's material through once the widget has had some use",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-02T04:10:14Z",
+        "created_at": "2026-09-02T04:10:14Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-rh9",
+        "title": "review.sh should clear stale /tmp/ccp-*.png before building a packet, or stamp each capture with its mtime so a reviewer can tell which are current",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-02T04:10:14Z",
+        "created_at": "2026-09-02T04:10:14Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-lst",
+        "title": "replace the psymail path dependency with a pinned URL once its embed surface settles",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-02T03:13:33Z",
+        "created_at": "2026-09-02T03:13:33Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-cvi",
+        "title": "OAuth credentials for the mail widget: document the Secrets.plist setup in README",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-02T02:42:40Z",
+        "created_at": "2026-09-02T02:42:40Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-9f9",
+        "title": "harness token efficiency audit: measure where session tokens actually go and cut the fixed baseline",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T18:43:28Z",
+        "created_at": "2026-09-01T18:36:02Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "measured: session floor 53.7k (4.2k this repo, 49.5k Claude Code's own) = 80% of a short session's bill; long sessions are accumulated conversation (worst 300k over 286 turns). reviewers cost ~1%, not the problem. shipped: context.py floor+spend, graphify build fixed (was CCPKit-only) + 41x measured, workflow/HARNESS updated. NOT committed \u2014 another session is editing Sources/ concurrently.",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-28d",
+        "title": "settings design review: no capture of the status item right-click menu or the recorder's recording/conflict states",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T18:27:02Z",
+        "created_at": "2026-09-01T18:27:02Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
       {
         "id": "ccp-0es",
         "title": "follow-up: surface Finder restart/sync failure in toggles UI as transient error state",
@@ -293,14 +461,7 @@
         "notes": "",
         "close_reason": "",
         "owner": "",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "ca34cec",
-            "subject": "handoff 2026-08-31 show hidden files toggles ccp-5fa"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-8bc",
@@ -363,14 +524,7 @@
         "notes": "",
         "close_reason": "",
         "owner": "",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "300b31c",
-            "subject": "sync ledger: close ccp-kb6, open ccp-540/egd/8bc polish"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-m53",
@@ -391,27 +545,6 @@
         "notes": "",
         "close_reason": "",
         "owner": "bubbles@cortico.ai",
-        "children": []
-      },
-      {
-        "id": "ccp-3cq",
-        "title": "shelf follow-up: shelf panel missing captures (shipped unseen)",
-        "status": "open",
-        "ready": true,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 2,
-        "type": "task",
-        "parent": "",
-        "updated_at": "2026-08-31T20:11:34Z",
-        "created_at": "2026-08-31T19:47:39Z",
-        "deps": [],
-        "description": "",
-        "design": "",
-        "notes": "still shipped unseen \u2014 screencapture unavailable headless (could not create image from display). Well unification and duplicate collapse proven by code only; needs empty/1/6/>6/long-title/large-type/scroll captures on GUI session before landing.",
-        "close_reason": "",
-        "owner": "",
         "children": []
       },
       {
@@ -490,27 +623,6 @@
         "parent": "",
         "updated_at": "2026-08-30T19:04:15Z",
         "created_at": "2026-08-30T19:04:15Z",
-        "deps": [],
-        "description": "",
-        "design": "",
-        "notes": "",
-        "close_reason": "",
-        "owner": "",
-        "children": []
-      },
-      {
-        "id": "ccp-78w",
-        "title": "panel toggle global hotkey (GlobalShortcut shim + CCP registration)",
-        "status": "open",
-        "ready": true,
-        "in_review": false,
-        "backlog": false,
-        "labels": [],
-        "priority": 2,
-        "type": "task",
-        "parent": "",
-        "updated_at": "2026-08-30T16:14:44Z",
-        "created_at": "2026-08-30T16:14:44Z",
         "deps": [],
         "description": "",
         "design": "",
@@ -869,14 +981,7 @@
         "notes": "",
         "close_reason": "",
         "owner": "bubbles@cortico.ai",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "2e76639",
-            "subject": "toggles: add show hidden files icon-button to toggles pane"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-4kq",
@@ -932,6 +1037,27 @@
           "ccp-8ld.2",
           "ccp-8ld.1"
         ]
+      },
+      {
+        "id": "ccp-4q8",
+        "title": "revisit graphify integration - keep or remove",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 3,
+        "type": "chore",
+        "parent": "",
+        "updated_at": "2026-09-01T16:59:43Z",
+        "created_at": "2026-09-01T16:58:41Z",
+        "deps": [],
+        "description": "Graphify was spiked on 2026-09-01 (code-only AST, 14,770 nodes / 40,672 edges, 5x token reduction on avg query, 2.3-17.8x per question). Installed as on-demand skill at .claude/skills/graphify/SKILL.md (no always-on hook, no committed graphify-out/) to keep always-loaded cost at 4105 tokens.\n\nCheck in after ~2 weeks of real use:\n- Are queries actually replacing 2+ file reads per lookup? Check opencode-stats-for-nerds / manual.\n- Is the scoped corpus (CCPKit/CCPUI/ControlCenterPro) useful, or do we need to include selected Vorssaint dirs?\n- Are duplicate-ID warnings or community noise bothering queries?\n- Does the .graphifyignore need tuning?\n\nRemoval / turn-off instructions (complete, no step leaves a residue):\n1. Remove the skill (the only harness-visible piece):\n   rm -rf .claude/skills/graphify\n2. Remove the graph + ignore:\n   rm -rf graphify-out/ Sources/graphify-out/ .graphifyignore\n   # also clear any per-subdir extracts if you ran them:\n   rm -rf .claude/skills/graphify/graphify-out 2>/dev/null; true\n3. Remove hooks if you ever added them (spike did not, but full install would have):\n   graphify hook uninstall  # or: uvx --from graphifyy graphify hook uninstall\n   git config",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
       },
       {
         "id": "ccp-els",
@@ -1022,6 +1148,663 @@
         "children": []
       },
       {
+        "id": "ccp-o25",
+        "title": "dashboard state() shells 3 bd + ~6 git subprocesses per build; collapse to fewer bd calls and cache git",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-04T04:02:56Z",
+        "created_at": "2026-09-04T03:34:57Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "bd stale ttl, one git log, verify-log and skill-file mtime caches (har-b68)",
+        "owner": "",
+        "children": [],
+        "commit_count": 2,
+        "commits": [
+          {
+            "sha": "31d638e",
+            "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)"
+          },
+          {
+            "sha": "ca36d54",
+            "subject": "stop the dashboard burning a core when nobody is watching (ccp-4pu ccp-juo ccp-o25)"
+          }
+        ]
+      },
+      {
+        "id": "ccp-juo",
+        "title": "bd forks a detached 'bd send-metrics' network POST per invocation \u2014 set metrics.disabled=true",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-04T04:02:55Z",
+        "created_at": "2026-09-04T03:34:57Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "metrics.disabled set globally; harness add now does it for new installs (har-3zd)",
+        "owner": "",
+        "children": [],
+        "commit_count": 2,
+        "commits": [
+          {
+            "sha": "31d638e",
+            "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)"
+          },
+          {
+            "sha": "ca36d54",
+            "subject": "stop the dashboard burning a core when nobody is watching (ccp-4pu ccp-juo ccp-o25)"
+          }
+        ]
+      },
+      {
+        "id": "ccp-4pu",
+        "title": "dashboard refresher polls bd every 2s forever with nobody watching \u2014 ~67% of a core across 3 dashboards",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-04T04:02:54Z",
+        "created_at": "2026-09-04T03:34:56Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "fixed in harness-starter a9901b1 and mirrored here in ca36d54 \u2014 idle throttle plus session-end shutdown",
+        "owner": "",
+        "children": [],
+        "commit_count": 2,
+        "commits": [
+          {
+            "sha": "31d638e",
+            "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)"
+          },
+          {
+            "sha": "ca36d54",
+            "subject": "stop the dashboard burning a core when nobody is watching (ccp-4pu ccp-juo ccp-o25)"
+          }
+        ]
+      },
+      {
+        "id": "ccp-35c",
+        "title": "clipboard: hide on click and paste into previous app, move Clear + count into header",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-04T03:23:58Z",
+        "created_at": "2026-09-04T03:23:43Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "Row click hides panel immediately and pastes via hidePanel/pasteIntoPreviousApp env + CGEvent Cmd+V (pasteTarget remembered at present). Clear + count moved from footer into WidgetCard header accessory HStack (count left, Clear right). Verified with TextEdit: FRESH123BEFORE after click, 168 tests pass.",
+        "owner": "",
+        "children": [],
+        "commit_count": 2,
+        "commits": [
+          {
+            "sha": "affd7b2",
+            "subject": "handoff 20260903-222400 (ccp-35c)"
+          },
+          {
+            "sha": "557eaec",
+            "subject": "clipboard: hide and paste on click, count+Clear in header (ccp-35c)"
+          }
+        ]
+      },
+      {
+        "id": "ccp-2ql",
+        "title": "polish system widget follow-up: swap placement, header decimals, remove gauge visual",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-04T01:41:40Z",
+        "created_at": "2026-09-04T01:39:51Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "moved Swap below memory header above graph, removed swap from graph, header left side now integer via bytesHeaderLeft, expanded rows keep decimals, replaced \u00be gauge with text-only TemperatureGauge colored yellow >=75 red >=85",
+        "owner": "",
+        "children": [],
+        "commit_count": 2,
+        "commits": [
+          {
+            "sha": "6301961",
+            "subject": "ledger sync (ccp-2ql closed)"
+          },
+          {
+            "sha": "4b4d8f7",
+            "subject": "polish system widget: swap under header, integer header, text-only temp with warning colors (ccp-2ql)"
+          }
+        ]
+      },
+      {
+        "id": "ccp-fn8",
+        "title": "Polish system widget per follow-up tweaks (9 items)",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-04T00:00:11Z",
+        "created_at": "2026-09-03T17:58:22Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "applied 9 polish tweaks: separators removed, reduced title/gauge gap to 6/4, gauges neutral with yellow/red leading-edge gradient at 75/85C, memory pressure row with Caution/Critical and header dot hidden when expanded, swap visible collapsed + second sparkline, activity monitor button in header, extra bottom padding, GB stripped left of slash, memory bar gradient on pressure",
+        "owner": "",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "a7113d6",
+            "subject": "polish system widget: remove separators, neutral gauges with warning gradients, pressure row, swap on graph, activity button (ccp-fn8)"
+          }
+        ]
+      },
+      {
+        "id": "ccp-rly",
+        "title": "Pull vorssaint SystemSection UI into CCP System Stats widget with 13 design tweaks",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-03T17:43:51Z",
+        "created_at": "2026-09-03T17:31:05Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "replaced CCP SystemStatsWidget with vorssaint SystemSection port: distinct colors, 3/4 gauges, expandable CPU/GPU/Memory/Battery, battery graph only when charging, swapped titles etc. Extended adapter/bridge for GPU/battery/power and fixed GPU leak, battery history, off-main AppKit.",
+        "owner": "",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "affe8a0",
+            "subject": "pull vorssaint system ui into ccp system widget with 13 tweaks (ccp-rly)"
+          }
+        ]
+      },
+      {
+        "id": "ccp-1kb",
+        "title": "Investigate Documents TCC prompt on every launch",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-03T16:57:42Z",
+        "created_at": "2026-09-03T16:52:56Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "root cause: ad-hoc signing (cdhash changes each build) + Vorssaint WhatsApp organizer declaring NSDocuments/NSDesktop/NSDownloads usage and probing file system. Fix: excluded WhatsApp ManagedDownloads files from VorssaintEngines (Package.swift) and made scripts/app.sh prefer stable Developer ID / Vorssaint Utils Signing identity so TCC grants persist. AppBundle/Info.plist already had no Documents key; the prompt was from the engine layer.",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-7pn",
+        "title": "Add run mac button to right side of header in harness dashboard",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-03T16:57:38Z",
+        "created_at": "2026-09-03T16:53:02Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "added run-mac task to TASKS where=header, builds and launches via scripts/app.sh --launch --show-panel; verified via snapshot and dashboard state",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-rz5",
+        "title": "Fix hold-edit-drag stuck, gallery blocking, menu stale, wiggle tilt, and checkmark gallery preservation",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-03T16:17:01Z",
+        "created_at": "2026-09-03T16:16:49Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "hold moved to panel-level with headerFrames, gallery overlay blocks drag, menu rebuilds synchronously before popUp, wiggle 0 when inactive, checkmark preserves gallery, verified 168 tests",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-y7z",
+        "title": "Drag Files from CCP Files widget into other apps",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "feature",
+        "parent": "",
+        "updated_at": "2026-09-02T16:40:15Z",
+        "created_at": "2026-09-02T16:28:44Z",
+        "deps": [],
+        "description": "Add drag-out support to the CCP dashboard Files widget (ShelfWidget). Currently WidgetFileRow shows preview rows but has no .onDrag; dragging from the widget should vend file URLs (via ShelfStore.fileURLs) for file/image items and temp files for text/link, similar to floating Shelf. Ensure edit-mode widget reordering doesn't swallow the file drag and verify panel dismissal doesn't close during drag. WidgetFileRow lives in Sources/CCPUI/Widgets/ShelfWidget.swift.",
+        "design": "",
+        "notes": "",
+        "close_reason": "WidgetFileRow now vends file URLs (ShelfStore.fileURLs) plus string fallbacks via NSItemProvider, gated by isPanelEditing bool to avoid swallowing by panel drag; ControlPanel exposes isPanelEditing via EnvironmentKey and installs its reorder gesture only while editing; ghost files no longer promise dead URLs; selection visuals via palette and accessibility parity with floating shelf. Build + 168 tests pass.",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-wxn",
+        "title": "handoff note for glass fix session",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-02T16:21:11Z",
+        "created_at": "2026-09-02T16:20:39Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "handoff note",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-zpf",
+        "title": "mail widget 50% taller (600->900)",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-02T16:10:03Z",
+        "created_at": "2026-09-02T16:07:00Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "mail height 600->900 verified via capture (panel taller, more messages visible)",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-3uv",
+        "title": "glass material does not match Tahoe Liquid Glass \u2014 wire glassEffect and fix blur clipping",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-02T16:10:01Z",
+        "created_at": "2026-09-02T16:06:59Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "Liquid Glass wired: GlassCard/ShelfView use glassEffect on 26 with fallback hudWindow and layer clipping; verified via capture over jellyfish light/dark",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-ef8",
+        "title": "handoff 2026-09-01",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-02T04:48:58Z",
+        "created_at": "2026-09-02T04:48:33Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "handoff written",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-cne",
+        "title": "shelf to Files: vertical list 42x56 page thumbs no bg",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-02T04:47:36Z",
+        "created_at": "2026-09-02T04:47:10Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "shipped Files widget + floating list: 42x56 portrait QL thumbs, 2-line titles, no bg",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-452",
+        "title": "embed psymail's whole mail screen (tab bar and all) as the mail widget, not a re-drawn list",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-02T04:06:15Z",
+        "created_at": "2026-09-02T03:39:59Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "MailWidget now hosts psymail's whole screen (tab bar, bundles, detail, search, compose) via the new PsymailScreen export. New .screen widget size (432x600) and lanes that size themselves from their widest slot; laneCapacity became fitsAnotherLane. ~450 lines of hand-drawn mail deleted.",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-8lh",
+        "title": "wire PsymailKit as a CCP dependency and build the mail widget",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-02T03:19:45Z",
+        "created_at": "2026-09-02T02:42:40Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "credential half is already done and committed (9f630a3, 0da7269): AppBundle/Secrets.plist gitignored + .example committed, scripts/app.sh merges keys into the assembled bundle Info.plist. psymail needs NO change for this \u2014 its Config reads Bundle.main, which for a library linked into CCP is CCP's bundle. What remains: add psymail-mini as a package dependency (its PsymailKit library lane landed in psy-clj), write MailAdapter + MailWidget, and design a 300pt lane card. Do not reuse psymail's Views/ \u2014 that is a 432x756 popover.",
+        "close_reason": "PsymailKit wired as a path dependency; MailAdapter + MailWidget shipped, reviewed by all three reviewers, findings fixed. Signed-in state verified via PSYMAIL_FIXTURES=1 scripts/capture.sh",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-mjm",
+        "title": "wire PsymailKit as a CCP dependency and build the mail widget",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-02T03:05:03Z",
+        "created_at": "2026-09-02T02:42:34Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "duplicate of ccp-8lh, which carries the notes",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-0zx",
+        "title": "investigate: psymail-mini as a ccp mail widget \u2014 extract PsymailKit engine slice",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-02T03:01:19Z",
+        "created_at": "2026-09-01T23:02:57Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "investigated. psymail's engine (Services/Models/MailStore, ~3.3k lines) is clean of macOS-26-only API; all of it is in Views/. Rather than extract a slice we raised CCP's floor to 26 (ccp-ty1) so the whole thing is portable, and added psymail's library lane (psy-clj). Build work continues in ccp-8lh.",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-ys3",
+        "title": "review follow-up: app.sh secret merge was silently lossy on non-letter keys and aborted on key collision",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-02T02:47:25Z",
+        "created_at": "2026-09-02T02:47:08Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "sed key pattern \u2192 [^ ]*; Add \u2192 Set-then-Add fallback. both verified with regression tests; gate green.",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-ty1",
+        "title": "raise deployment target 14.4 \u2192 26 and add PsymailKit library lane",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-02T01:58:10Z",
+        "created_at": "2026-09-02T00:55:29Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "raised floor 14.4\u219226 (Package.swift, AppBundle plist, docs); fixed 3 timer-tolerance regressions the raise surfaced; psymail PsymailKit library lane added in psy-clj. gate green.",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-9zj",
+        "title": "shelf: drop the empty-state box, and pin items so Clear keeps them",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T18:51:25Z",
+        "created_at": "2026-09-01T18:41:46Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "empty-state box and chip well gone; ShelfItem.isPinned with lenient decode, pinned-first ordering, clear() spares pins",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-3cq",
+        "title": "shelf follow-up: shelf panel missing captures (shipped unseen)",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T18:51:25Z",
+        "created_at": "2026-08-31T19:47:39Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "still shipped unseen \u2014 screencapture unavailable headless (could not create image from display). Well unification and duplicate collapse proven by code only; needs empty/1/6/>6/long-title/large-type/scroll captures on GUI session before landing.",
+        "close_reason": "capture.sh --shelf (and app.sh --show-shelf) shoot the floating shelf; reviewed with a pinned item present",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-aew",
+        "title": "standard widget header: icon, title, badge, trailing accessory",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T18:51:24Z",
+        "created_at": "2026-09-01T18:41:45Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "WidgetHeader + HeaderIconButton; WidgetCard takes count/accessory; shelf card's hand-rolled header retired",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-ony",
+        "title": "widen lanes 25% (240 to 300)",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T18:51:23Z",
+        "created_at": "2026-09-01T18:41:44Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "laneWidth 240 to 300; laneCapacity test updated 5/3 to 4/2",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-mzs",
+        "title": "settings window: menu bar Settings row + shortcut recorder UI",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T18:27:01Z",
+        "created_at": "2026-09-01T18:10:35Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "Settings row on the status item menu, titled window with a stock grouped Form, ShortcutRecorder + KeyCapture (upstream recording tap for system-claimed combos, local monitor for modifiers), commits on key release",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-78w",
+        "title": "panel toggle global hotkey (GlobalShortcut shim + CCP registration)",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-01T18:26:59Z",
+        "created_at": "2026-08-30T16:14:44Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "GlobalHotkey (Carbon) + KeyCombination/BridgedShortcut shims; panel toggles from a user-set combination, registered from SettingsStore and re-registered on change",
+        "owner": "",
+        "children": []
+      },
+      {
         "id": "ccp-83i",
         "title": "follow-up: new-lane target clipped while dragging because window resize gated \u2014 window shift compensates ghost offset but hides affordance",
         "status": "closed",
@@ -1040,18 +1823,7 @@
         "notes": "",
         "close_reason": "fixed by deferring new-lane until hover and animating window with snapshot shift; no longer clipped whole drag",
         "owner": "",
-        "children": [],
-        "commit_count": 2,
-        "commits": [
-          {
-            "sha": "e931a47",
-            "subject": "sync ledger: close ccp-83i new-lane clip"
-          },
-          {
-            "sha": "aff5de3",
-            "subject": "sync ledger: close ccp-drp, open ccp-83i window clip follow-up"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-8kj",
@@ -1072,18 +1844,7 @@
         "notes": "",
         "close_reason": "gap now at original at lift, visual center with 1.04 scale, new-lane only when hovering with window animated and snapshot shift; grid no longer collapses at pick-up",
         "owner": "",
-        "children": [],
-        "commit_count": 2,
-        "commits": [
-          {
-            "sha": "181e359",
-            "subject": "sync ledger: close ccp-8kj grid stability"
-          },
-          {
-            "sha": "09d052c",
-            "subject": "make drag stable \u2014 gap at original, visual center, deferred new-lane ccp-8kj"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-drp",
@@ -1104,18 +1865,7 @@
         "notes": "",
         "close_reason": "landing now follows scaled ghost center not fingertip (+window resize gated until drop); offset and 1.04 scale compensation fixed, tests updated; new-lane clipped follow-up filed as ccp-83i",
         "owner": "",
-        "children": [],
-        "commit_count": 2,
-        "commits": [
-          {
-            "sha": "aff5de3",
-            "subject": "sync ledger: close ccp-drp, open ccp-83i window clip follow-up"
-          },
-          {
-            "sha": "cd48f4d",
-            "subject": "fix drag landing offset \u2014 finger vs ghost center and window shift ccp-drp"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-r9m",
@@ -1136,38 +1886,7 @@
         "notes": "",
         "close_reason": "removed timestamp and leading icon, bumped clipboardListHeight 220->330, context menu shows full text (truncated 4k) / image preview / file names, RHS thumbnail via BridgedClipboardImages, scroll resets on hide via hideGeneration + VStack anchor + id fallback",
         "owner": "",
-        "children": [],
-        "commit_count": 7,
-        "commits": [
-          {
-            "sha": "f30e401",
-            "subject": "laurel: awesome work ccp-r9m"
-          },
-          {
-            "sha": "4411b03",
-            "subject": "handoff 2026-08-31 clipboard polish ccp-r9m"
-          },
-          {
-            "sha": "e73ebca",
-            "subject": "sync ledger: close ccp-r9m tooltip follow-up"
-          },
-          {
-            "sha": "76efc12",
-            "subject": "clipboard: remove full content from menu, show constrained tooltip on hover ccp-r9m"
-          },
-          {
-            "sha": "1e89347",
-            "subject": "clipboard context menu max width and full text last ccp-r9m"
-          },
-          {
-            "sha": "8bb26cf",
-            "subject": "sync ledger: close ccp-r9m"
-          },
-          {
-            "sha": "4215f08",
-            "subject": "clipboard polish: taller, no icon/timestamp, image rhs, full content menu, scroll top on hide ccp-r9m"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-kb6",
@@ -1188,26 +1907,7 @@
         "notes": "",
         "close_reason": "shipped fd43835 \u2014 widget in grid, reviews fixed (observer leak, nested button, preview responder, modal dismissal)",
         "owner": "",
-        "children": [],
-        "commit_count": 4,
-        "commits": [
-          {
-            "sha": "12604b4",
-            "subject": "sync ledger: close ccp-kb6 (retry export)"
-          },
-          {
-            "sha": "300b31c",
-            "subject": "sync ledger: close ccp-kb6, open ccp-540/egd/8bc polish"
-          },
-          {
-            "sha": "525c322",
-            "subject": "handoff 2026-08-31 scratchpad ccp-kb6 shipped"
-          },
-          {
-            "sha": "fd43835",
-            "subject": "add scratchpad widget to grid ccp-kb6"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-35z",
@@ -2308,7 +3008,21 @@
   },
   "worktree": [
     {
+      "path": ".beads/interactions.jsonl",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
+    },
+    {
       "path": ".beads/issues.jsonl",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
+    },
+    {
+      "path": "dashboard/state.json",
       "staged": false,
       "untracked": false,
       "status": "M",
@@ -2317,7 +3031,7 @@
   ],
   "verify": {
     "status": "passed",
-    "when": "10h ago",
+    "when": "34m ago",
     "tests": "",
     "steps": [
       {
@@ -2329,9 +3043,18 @@
         "ok": true
       }
     ],
-    "unverified": [],
-    "took": "9s",
-    "at": 1788238666.5324466
+    "unverified": [
+      {
+        "sha": "31d638e",
+        "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)"
+      },
+      {
+        "sha": "ca36d54",
+        "subject": "stop the dashboard burning a core when nobody is watching (ccp-4pu ccp-juo ccp-o25)"
+      }
+    ],
+    "took": "8s",
+    "at": 1788494249.380629
   },
   "runs": {
     "verify": {
@@ -2342,6 +3065,15 @@
       "label": "run",
       "busy": "running\u2026",
       "where": "gate"
+    },
+    "run-mac": {
+      "state": "idle",
+      "output": "",
+      "at": 0,
+      "ago": "",
+      "label": "run mac",
+      "busy": "building\u2026",
+      "where": "header"
     },
     "push": {
       "state": "idle",
@@ -2367,6 +3099,12 @@
       "loaded": 491
     },
     {
+      "name": "graphify",
+      "description": "Query a local code graph of Sources/ instead of grepping \u2014 explain/path answer in 1.4KB what costs 58KB to read (41x, measured); use before opening 2+ files to trace a symbol.",
+      "idle": 44,
+      "loaded": 869
+    },
+    {
       "name": "handoff",
       "description": "Close out a control-center-pro session on purpose \u2014 settle the ledger, leave a note for whoever wakes up next, and optionally hand straight off to a fresh agent. Use when work is wrapping up, when the context window is getting long, or when the user says to hand off, wrap up, or take a beat.",
       "idle": 73,
@@ -2376,7 +3114,7 @@
       "name": "workflow",
       "description": "How work moves through control-center-pro \u2014 the beads ledger, the verify gate, the review pass, and the token budget that keeps them affordable on one account. Use when starting a work session, deciding where a note or a discovery belongs, planning a multi-step change, handing off at the end of a session, or wondering which skill or script to reach for.",
       "idle": 89,
-      "loaded": 2739
+      "loaded": 3278
     }
   ],
   "agents": [
@@ -2402,7 +3140,7 @@
       "name": "reviewer-taste",
       "model": "haiku",
       "description": "Reviews a control-center-pro diff against the project's documented taste \u2014 composition, module size, naming, comments, accessibility. Covers the app and the harness scripts. Reads a review packet and reports violations. Runs on a cheap model; use for every change worth reviewing.",
-      "loaded": 1090
+      "loaded": 1089
     }
   ],
   "harness": [
@@ -2416,7 +3154,7 @@
           "path": ".claude/settings.json",
           "origin": "claude",
           "role": "SessionStart and Stop hooks",
-          "tokens": 207
+          "tokens": 287
         },
         {
           "id": "scripts/brief.sh",
@@ -2440,15 +3178,15 @@
           "path": "harness/laurels.jsonl",
           "origin": "harness",
           "role": "praise, replayed one at a time",
-          "tokens": 239
+          "tokens": 431
         },
         {
-          "id": "harness/handoffs/20260831-231030.md",
-          "name": "20260831-231030.md",
-          "path": "harness/handoffs/20260831-231030.md",
+          "id": "harness/handoffs/20260903-222400.md",
+          "name": "20260903-222400.md",
+          "path": "harness/handoffs/20260903-222400.md",
           "origin": "harness",
           "role": "the last session's closing note",
-          "tokens": 168
+          "tokens": 204
         },
         {
           "id": "CLAUDE.md",
@@ -2456,7 +3194,7 @@
           "path": "CLAUDE.md",
           "origin": "claude",
           "role": "project instructions, always loaded",
-          "tokens": 2178
+          "tokens": 2460
         },
         {
           "id": "/Users/bubbles/.claude/projects/-Users-bubbles-dev-control-center-pro/memory/MEMORY.md",
@@ -2492,7 +3230,7 @@
           "path": ".beads/issues.jsonl",
           "origin": "harness",
           "role": "the issue graph, exported for git",
-          "tokens": 24336
+          "tokens": 30154
         },
         {
           "id": ".claude/skills/beads/SKILL.md",
@@ -2508,7 +3246,7 @@
           "path": ".claude/skills/workflow/SKILL.md",
           "origin": "harness",
           "role": "How work moves through control-center-pro \u2014 the beads ledger, the verify gate, the review pass, and the token budget that keeps them affordable on one account. Use when starting a work session, deciding where a note or a discovery belongs, planning a multi-step change, handing off at the end of a session, or wondering which skill or script to reach for.",
-          "tokens": 2739
+          "tokens": 3278
         }
       ]
     },
@@ -2523,6 +3261,14 @@
           "origin": "claude",
           "role": "Review a control-center-pro change with agents that didn't write it \u2014 taste against the project's standards, correctness hunting real defects, and design reading screenshots of what actually rendered. Use before committing a non-trivial change, when asked to review work or a branch, or after finishing a feature.",
           "tokens": 1544
+        },
+        {
+          "id": ".claude/skills/graphify/SKILL.md",
+          "name": "graphify",
+          "path": ".claude/skills/graphify/SKILL.md",
+          "origin": "claude",
+          "role": "Query a local code graph of Sources/ instead of grepping \u2014 explain/path answer in 1.4KB what costs 58KB to read (41x, measured); use before opening 2+ files to trace a symbol.",
+          "tokens": 869
         },
         {
           "id": ".claude/skills/handoff/SKILL.md",
@@ -2590,7 +3336,7 @@
           "path": ".claude/agents/reviewer-taste.md",
           "origin": "claude",
           "role": "Reviews a control-center-pro diff against the project's documented taste \u2014 composition, module size, naming, comments, accessibility. Covers the app and the harness scripts. Reads a review packet and reports violations. Runs on a cheap model; use for every change worth reviewing.",
-          "tokens": 1090
+          "tokens": 1089
         }
       ]
     },
@@ -2604,7 +3350,7 @@
           "path": "scripts/context.py",
           "origin": "harness",
           "role": "stale-doc and context-budget guard",
-          "tokens": 2490
+          "tokens": 3342
         },
         {
           "id": ".claude/context.lock",
@@ -2621,22 +3367,22 @@
     "always": [
       {
         "name": "CLAUDE.md",
-        "tokens": 2178
+        "tokens": 2460
       },
       {
         "name": "session brief",
-        "tokens": 424
+        "tokens": 576
       },
       {
         "name": "skill descriptions",
-        "tokens": 334
+        "tokens": 378
       }
     ],
-    "always_total": 2936,
+    "always_total": 3414,
     "on_demand": [
       {
         "name": "workflow",
-        "tokens": 2739
+        "tokens": 3278
       },
       {
         "name": "reviewer-design",
@@ -2652,7 +3398,11 @@
       },
       {
         "name": "reviewer-taste",
-        "tokens": 1090
+        "tokens": 1089
+      },
+      {
+        "name": "graphify",
+        "tokens": 869
       },
       {
         "name": "handoff",
@@ -2667,7 +3417,7 @@
         "tokens": 491
       }
     ],
-    "brief_tokens": 424,
+    "brief_tokens": 576,
     "prime_tokens": 1569
   }
 }
