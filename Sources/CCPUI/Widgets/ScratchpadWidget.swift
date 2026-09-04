@@ -235,16 +235,16 @@ private struct ScratchpadContent: View {
 
     private func dismissDialog() { dialog = nil }
 
-    // MARK: Editor — plain-text surface + on-demand markdown preview
+    // MARK: Editor — live-styled markdown surface
 
     private static let editorInset = NSSize(width: 6, height: 4)
 
     private var editor: some View {
         ZStack(alignment: .topLeading) {
-            PlainTextEditor(
+            MarkdownNoteEditor(
                 text: Binding(get: { adapter.text }, set: { adapter.text = $0 }),
-                textColor: .labelColor,
-                textContainerInset: Self.editorInset
+                documentId: adapter.selectedPadID?.uuidString ?? "scratchpad",
+                placeholder: "Scratch something…"
             )
             .frame(height: 148)
             .background(Color.controlFill, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
@@ -258,16 +258,6 @@ private struct ScratchpadContent: View {
             .accessibilityHidden(adapter.isPreviewing)
             .accessibilityLabel("Scratchpad text")
             .accessibilityHint("Editable notes")
-
-            if isEmpty, !adapter.isPreviewing {
-                Text("Scratch something…")
-                    .font(.system(size: PlainTextEditor.fontSize))
-                    .foregroundStyle(.tertiary)
-                    .padding(.leading, Self.editorInset.width + PlainTextEditor.lineFragmentPadding)
-                    .padding(.top, Self.editorInset.height)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
 
             if adapter.isPreviewing {
                 ScratchpadMarkdownPreview(blocks: ScratchpadSupport.markdownPreview(adapter.text))

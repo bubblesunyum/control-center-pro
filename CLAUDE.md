@@ -17,10 +17,16 @@ Glass). The CoreAudio process-tap API the audio mixer needs floors at 14.4, well
 under it.
 `--full` adds the app smoke launch.
 
-The one dependency is **PsymailKit**, the library lane of `../psymail-mini`,
-carried by a *path* dependency — the two repos are developed as a pair in
-sibling checkouts. A checkout of control-center-pro alone will not resolve; see
-[PATCHES.md](./PATCHES.md).
+There are two dependencies, and they are different in kind. **PsymailKit** is
+the library lane of `../psymail-mini`, carried by a *path* dependency — the two
+repos are developed as a pair in sibling checkouts, so a checkout of
+control-center-pro alone will not resolve; see [PATCHES.md](./PATCHES.md).
+**MarkdownEngine** (`nodes-app/swift-markdown-engine`, Apache-2.0) is the
+scratchpad's live-styled Markdown editor, carried by a *URL* dependency pinned
+exact: unlike the Vorssaint engines we fork, it is a library we consume
+unchanged and want updates from. Its resolution also pins HighlighterSwift and
+SwiftMath, which only its opt-in code-block and LaTeX products link — CCP takes
+the dependency-free core product and neither of those.
 
 ## Architecture Overview
 

@@ -1,17 +1,22 @@
 {
-  "generated": "14:54:24",
+  "generated": "15:29:26",
   "project": "control-center-pro",
   "git": {
     "branch": "main",
     "upstream": "origin/main",
-    "dirty": 0,
-    "commits_today": 9,
+    "dirty": 3,
+    "commits_today": 10,
     "last": {
-      "sha": "db349e2",
-      "subject": "traps from the note editor and the Craft plan (ccp-2zi)",
-      "when": "27 seconds ago"
+      "sha": "dcc7bb4",
+      "subject": "handoff 20260904-150118 (ccp-2zi)",
+      "when": "28 minutes ago"
     },
     "unpushed": [
+      {
+        "sha": "dcc7bb4",
+        "subject": "handoff 20260904-150118 (ccp-2zi)",
+        "at": 1788552112.0
+      },
       {
         "sha": "db349e2",
         "subject": "traps from the note editor and the Craft plan (ccp-2zi)",
@@ -52,9 +57,13 @@
     ],
     "bead_commits": {
       "ccp-2zi": {
-        "commits": 2,
-        "at": 1788551636.0,
+        "commits": 3,
+        "at": 1788552112.0,
         "list": [
+          {
+            "sha": "dcc7bb4",
+            "subject": "handoff 20260904-150118 (ccp-2zi)"
+          },
           {
             "sha": "db349e2",
             "subject": "traps from the note editor and the Craft plan (ccp-2zi)"
@@ -109,13 +118,55 @@
   },
   "ledger": {
     "counts": {
-      "open": 60,
-      "ready": 58,
+      "open": 63,
+      "ready": 61,
       "in_progress": 0,
-      "closed": 89,
+      "closed": 90,
       "blocked": 0
     },
     "issues": [
+      {
+        "id": "ccp-dn5",
+        "title": "adopt swift-markdown-engine and make markdown the pad's truth",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "ccp-2zi",
+        "updated_at": "2026-09-04T20:29:05Z",
+        "created_at": "2026-09-04T20:28:40Z",
+        "deps": [],
+        "description": "",
+        "design": "User's call (2026-09-04): the pad should be live-styled \u2014 markdown turning into\nstyle as you type \u2014 and if Craft takes markdown on the wire, markdown should be\nthe pad's truth. This bead is the architectural change that follows.\n\nPackage: nodes-app/swift-markdown-engine, Apache-2.0, macOS 14+, AppKit +\nTextKit 2 behind a SwiftUI wrapper, zero external deps in the core product.\nAPI is NativeTextViewWrapper(text: Binding<String>) \u2014 the document IS a\nmarkdown string, which is what makes it fit. Its parser owns \"marker/fence\nhiding, caret reveal, and incremental restyling\", i.e. Obsidian-style live\npreview: the markers hide and come back when the caret lands on them.\n\n## What changes\n\nMarkdown becomes the pad's truth. NoteDocument stops being the document and\nbecomes the SYNC-SIDE value only \u2014 parsed from markdown when a push needs a\nblock diff against Craft's block ids, and built back into markdown on pull.\n\nDeleted, with their tests: NoteRendering (markers drawn as characters, the\nshedding, the caret arithmetic), NoteEditor's redraw/restore machinery,\nNoteBlock+Splitting, NoteDocument+Marks. Roughly 500-800 lines, and it is the\nhardest, most trap-prone code in the feature \u2014 see the t",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-hw0",
+        "title": "a to-do does not survive a markdown round-trip",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "ccp-2zi",
+        "updated_at": "2026-09-04T20:15:46Z",
+        "created_at": "2026-09-04T20:15:35Z",
+        "deps": [],
+        "description": "Foundation's AttributedString markdown parser has no GFM task-list support, confirmed by running it: `- [ ] todo` parses as unorderedList/listItem whose text is literally \"[ ] todo\". NoteDocument+Markdown emits `- [ ] ` correctly, so the write is fine and the read is not \u2014 a to-do comes back a bullet with brackets in the user's text, and it compounds on every sync round.\n\nBlocks Craft pull (ccp-2zi.6), where markdown is the wire format both ways.\n\nFix is in NoteDocument(markdown:) or the AttributedString bridge: on a .bulleted block, read a leading \"[ ] \"/\"[x] \" off the text and make it .todo. ~20 lines, no dependency \u2014 swift-markdown (cmark-gfm) would buy the same one extension and cost a dependency.\n\nTest: extend NoteDocumentRoundTripTests with todo blocks, both states, indented. The existing round-trip suite has no to-do case, which is why this was invisible.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
+      },
       {
         "id": "ccp-jmk",
         "title": "confirm the Craft auth scheme against a live connection",
@@ -268,6 +319,8 @@
         "close_reason": "",
         "owner": "bubbles@cortico.ai",
         "children": [
+          "ccp-dn5",
+          "ccp-hw0",
           "ccp-jmk",
           "ccp-2zi.9",
           "ccp-2zi.8",
@@ -281,8 +334,12 @@
           "ccp-dot",
           "ccp-2zi.7"
         ],
-        "commit_count": 2,
+        "commit_count": 3,
         "commits": [
+          {
+            "sha": "dcc7bb4",
+            "subject": "handoff 20260904-150118 (ccp-2zi)"
+          },
           {
             "sha": "db349e2",
             "subject": "traps from the note editor and the Craft plan (ccp-2zi)"
@@ -292,6 +349,27 @@
             "subject": "handoff 20260904-143604 (ccp-2zi)"
           }
         ]
+      },
+      {
+        "id": "ccp-zaj",
+        "title": "evaluate a third-party markdown/block editor package against the hand-rolled NoteEditor",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-04T20:23:09Z",
+        "created_at": "2026-09-04T20:13:31Z",
+        "deps": [],
+        "description": "",
+        "design": "Surveyed 2026-09-04, twice: a web-search pass, then a GitHub API sweep that\nfound what the first pass missed. Recommendation: keep the hand-rolled editor.\n\n## The near misses \u2014 the two worth knowing about\n\n- nodes-app/swift-markdown-engine (Apache-2.0, macOS 14+, 970 stars, 103\n  forks, ships in Nodes on the App Store): AppKit + TextKit 2 bridged to\n  SwiftUI. The mature option and the only one built for our exact platform.\n  But it is a LIVE-STYLED MARKDOWN SOURCE editor \u2014 the document is markdown\n  text styled in place \u2014 not a block model. Adopting it makes markdown the\n  pad's truth and NoteDocument a parse of it. Worth a real look if the block\n  model ever proves to be the thing costing us.\n- jxe/quagmire (MIT, macOS 26 + iOS 26, SwiftUI): an actual block editor, and\n  its BlockKind is close to a superset of NoteBlock.Kind \u2014 including\n  .unsupported(payload:display:), which is the preserve-unknown-Craft-blocks\n  problem ccp-2zi.8 solves by hand with a sidecar. Host owns serialization, so\n  a markdown-backed host is anticipated. 193 commits, one author, 4 tags, has\n  tests, 0 stars, pre-1.0. Fit is the real problem, not maturity: it is a\n  page-sized editor \u2014 nav mode, drag gutt",
+        "notes": "",
+        "close_reason": "",
+        "owner": "",
+        "children": []
       },
       {
         "id": "ccp-64m",
@@ -1442,6 +1520,27 @@
         "notes": "",
         "close_reason": "",
         "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-jm3",
+        "title": "adopt swift-markdown-engine and make markdown the pad's truth",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-04T20:29:05Z",
+        "created_at": "2026-09-04T20:28:34Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "duplicate of ccp-dn5",
+        "owner": "",
         "children": []
       },
       {
@@ -3388,10 +3487,32 @@
     ],
     "stale": 0
   },
-  "worktree": [],
+  "worktree": [
+    {
+      "path": ".beads/interactions.jsonl",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
+    },
+    {
+      "path": ".beads/issues.jsonl",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
+    },
+    {
+      "path": "dashboard/state.json",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
+    }
+  ],
   "verify": {
     "status": "passed",
-    "when": "1m ago",
+    "when": "27m ago",
     "tests": "",
     "steps": [
       {
@@ -3405,20 +3526,12 @@
     ],
     "unverified": [
       {
-        "sha": "db349e2",
-        "subject": "traps from the note editor and the Craft plan (ccp-2zi)"
-      },
-      {
-        "sha": "90124ac",
-        "subject": "plan for two-way Craft sync (ccp-2zi.8)"
-      },
-      {
-        "sha": "1a4db2a",
-        "subject": "block kind commands for the note editor (ccp-2zi.9)"
+        "sha": "dcc7bb4",
+        "subject": "handoff 20260904-150118 (ccp-2zi)"
       }
     ],
-    "took": "14s",
-    "at": 1788551562.8723192
+    "took": "8s",
+    "at": 1788552107.6560373
   },
   "runs": {
     "verify": {
@@ -3545,12 +3658,12 @@
           "tokens": 505
         },
         {
-          "id": "harness/handoffs/20260904-143604.md",
-          "name": "20260904-143604.md",
-          "path": "harness/handoffs/20260904-143604.md",
+          "id": "harness/handoffs/20260904-150118.md",
+          "name": "20260904-150118.md",
+          "path": "harness/handoffs/20260904-150118.md",
           "origin": "harness",
           "role": "the last session's closing note",
-          "tokens": 364
+          "tokens": 500
         },
         {
           "id": "CLAUDE.md",
@@ -3594,7 +3707,7 @@
           "path": ".beads/issues.jsonl",
           "origin": "harness",
           "role": "the issue graph, exported for git",
-          "tokens": 38654
+          "tokens": 40111
         },
         {
           "id": ".claude/skills/beads/SKILL.md",
@@ -3735,14 +3848,14 @@
       },
       {
         "name": "session brief",
-        "tokens": 517
+        "tokens": 533
       },
       {
         "name": "skill descriptions",
         "tokens": 378
       }
     ],
-    "always_total": 3355,
+    "always_total": 3371,
     "on_demand": [
       {
         "name": "workflow",
@@ -3781,7 +3894,7 @@
         "tokens": 491
       }
     ],
-    "brief_tokens": 517,
+    "brief_tokens": 533,
     "prime_tokens": 1569
   }
 }

@@ -43,6 +43,19 @@ let package = Package(
     // On merge: upstream has no dependencies, so this block is ours entirely.
     dependencies: [
         .package(path: "../psymail-mini"),
+
+        // The scratchpad's editor. A live-styled Markdown surface on TextKit 2
+        // — the markers hide as you type and come back when the caret lands on
+        // them — which is a thing the SwiftUI TextEditor cannot be made to do.
+        //
+        // A URL dependency rather than a vendored copy: unlike the Vorssaint
+        // engines we fork, this is a library we consume unchanged and want
+        // updates from. Pinned exact while it is pre-1.0 and its API is still
+        // settling.
+        //
+        // Apache-2.0, which is one-way compatible with our GPL-3.0-or-later.
+        .package(url: "https://github.com/nodes-app/swift-markdown-engine",
+                 exact: "0.12.0"),
     ],
 
     targets: [
@@ -191,7 +204,10 @@ let package = Package(
         // one adapter, not the interface.
         .target(
             name: "CCPUI",
-            dependencies: ["CCPKit"],
+            dependencies: [
+                "CCPKit",
+                .product(name: "MarkdownEngine", package: "swift-markdown-engine"),
+            ],
             path: "Sources/CCPUI"
         ),
 
