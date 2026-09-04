@@ -243,3 +243,92 @@ final class NoteDocumentRoundTripTests: XCTestCase {
         XCTAssertEqual(NoteDocument(attributed).blocks[0].plainText, "foo\n\n")
     }
 }
+
+// MARK: - Editing
+
+final class NoteDocumentEditingTests: XCTestCase {
+    // MARK: Return splits a block
+
+    func testNewlineInAParagraphStartsAnotherParagraph() {
+        var attributed = AttributedString("first\nsecond")
+        attributed.noteBlockKind = .paragraph
+        attributed.noteBlockPosition = 0
+        let document = NoteDocument(attributed)
+        XCTAssertEqual(document.blocks.map(\.plainText), ["first", "second"])
+        XCTAssertEqual(document.blocks.map(\.kind), [.paragraph, .paragraph])
+    }
+
+    func testNewlineInAHeadingDropsToAParagraph() {
+        var attributed = AttributedString("Title\nbody")
+        attributed.noteBlockKind = .heading(level: 1)
+        attributed.noteBlockPosition = 0
+        XCTAssertEqual(NoteDocument(attributed).blocks.map(\.kind),
+                       [.heading(level: 1), .paragraph])
+    }
+
+    func testNewlineInAListItemStartsAnotherItem() {
+        var attributed = AttributedString("one\ntwo")
+        attributed.noteBlockKind = .bulleted
+        attributed.noteBlockPosition = 0
+        XCTAssertEqual(NoteDocument(attributed).blocks.map(\.kind), [.bulleted, .bulleted])
+    }
+
+    func testNewlineInADoneTodoStartsAnUncheckedOne() {
+        var attributed = AttributedString("shipped\nnext")
+        attributed.noteBlockKind = .todo(isDone: true)
+        attributed.noteBlockPosition = 0
+        XCTAssertEqual(NoteDocument(attributed).blocks.map(\.kind),
+                       [.todo(isDone: true), .todo(isDone: false)])
+    }
+
+    func testNewlineInACodeBlockStaysInTheBlock() {
+        var attributed = AttributedString("let a = 1\nlet b = 2")
+        attributed.noteBlockKind = .code(language: nil)
+        attributed.noteBlockPosition = 0
+        let document = NoteDocument(attributed)
+        XCTAssertEqual(document.blocks.count, 1)
+        XCTAssertEqual(document.blocks[0].plainText, "let a = 1\nlet b = 2")
+    }
+
+    // MARK: Marks over a selection
+
+    private func attributed(_ string: String) -> AttributedString { AttributedString(string) }
+
+    func testTogglingAMarkOnPlainTextTurnsItOn() {
+        let text = attributed("hello")
+        let toggled = text.togglingMark(.bold, in: [text.startIndex..<text.endIndex])
+        XCTAssertTrue(toggled.hasMark(.bold, in: [toggled.startIndex..<toggled.endIndex]))
+    }
+
+    func testTogglingAFullyMarkedSelectionTurnsItOff() {
+        var text = attributed("hello")
+        text.inlinePresentationIntent = .stronglyEmphasized
+        let toggled = text.togglingMark(.bold, in: [text.startIndex..<text.endIndex])
+        XCTAssertFalse(toggled.hasMark(.bold, in: [toggled.startIndex..<toggled.endIndex]))
+    }
+
+    func testTogglingAPartlyMarkedSelectionFinishesTheJob() {
+        // Half bold: pressing bold should make all of it bold, not clear it.
+        var text = attributed("hello")
+        let middle = text.index(text.startIndex, offsetByCharacters: 2)
+        text[text.startIndex..<middle].inlinePresentationIntent = .stronglyEmphasized
+        let whole = text.startIndex..<text.endIndex
+        XCTAssertFalse(text.hasMark(.bold, in: [whole]))
+        XCTAssertTrue(text.togglingMark(.bold, in: [whole]).hasMark(.bold, in: [whole]))
+    }
+
+    func testTogglingKeepsOtherMarks() {
+        var text = attributed("hello")
+        text.inlinePresentationIntent = .emphasized
+        let whole = text.startIndex..<text.endIndex
+        let bolded = text.togglingMark(.bold, in: [whole])
+        XCTAssertTrue(bolded.hasMark(.italic, in: [whole]))
+        XCTAssertTrue(bolded.hasMark(.bold, in: [whole]))
+    }
+
+    func testAnEmptySelectionHasNoMarkAndTogglingIsANoOp() {
+        let text = attributed("hello")
+        XCTAssertFalse(text.hasMark(.bold, in: []))
+        XCTAssertEqual(text.togglingMark(.bold, in: []), text)
+    }
+}

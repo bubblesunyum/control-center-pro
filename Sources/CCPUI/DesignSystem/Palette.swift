@@ -46,6 +46,10 @@ public extension Color {
     /// Faint fill under the secondary network line.
     static let sparklineSecondaryFill = Color.green.opacity(0.08)
 
+    /// What a selected or engaged control reads as — a chosen pad's tab, a
+    /// formatting mark that is on.
+    static let selectedFill = Color.accentColor.opacity(0.14)
+
     /// Pinned clipboard row — faint accent so a pinned entry reads as kept.
     static let pinnedFill = Color.accentColor.opacity(0.09)
     static let pinnedStroke = Color.accentColor.opacity(0.22)

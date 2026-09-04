@@ -175,3 +175,19 @@ public struct NoteInlineStyle: Codable, Hashable, Sendable {
         self.link = link
     }
 }
+
+public extension NoteDocument {
+    /// Whether these two documents are laid out the same way — the same
+    /// blocks, of the same kinds, at the same indents.
+    ///
+    /// What an editor asks to decide whether its text is still a fair drawing
+    /// of the note. Typing inside a paragraph is not a change of structure;
+    /// pressing return is, and a list item that has just appeared needs its
+    /// bullet drawn.
+    func hasSameStructure(as other: NoteDocument) -> Bool {
+        blocks.count == other.blocks.count
+            && zip(blocks, other.blocks).allSatisfy {
+                $0.kind == $1.kind && $0.indent == $1.indent
+            }
+    }
+}

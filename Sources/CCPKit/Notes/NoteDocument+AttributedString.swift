@@ -90,27 +90,6 @@ private extension NoteBlock {
     }
 }
 
-private extension NoteInlineStyle.Marks {
-    var inlinePresentationIntent: InlinePresentationIntent? {
-        var intent: InlinePresentationIntent = []
-        if contains(.bold) { intent.insert(.stronglyEmphasized) }
-        if contains(.italic) { intent.insert(.emphasized) }
-        if contains(.strikethrough) { intent.insert(.strikethrough) }
-        if contains(.code) { intent.insert(.code) }
-        return intent.isEmpty ? nil : intent
-    }
-
-    init(_ intent: InlinePresentationIntent?) {
-        guard let intent else { self = []; return }
-        var marks: NoteInlineStyle.Marks = []
-        if intent.contains(.stronglyEmphasized) { marks.insert(.bold) }
-        if intent.contains(.emphasized) { marks.insert(.italic) }
-        if intent.contains(.strikethrough) { marks.insert(.strikethrough) }
-        if intent.contains(.code) || intent.contains(.inlineHTML) { marks.insert(.code) }
-        self = marks
-    }
-}
-
 // MARK: - AttributedString → Document
 
 public extension NoteDocument {
@@ -126,11 +105,11 @@ public extension NoteDocument {
         var current: (marker: BlockMarker, block: NoteBlock)?
 
         func finish() {
-            guard var pending = current?.block else { return }
+            guard let pending = current?.block else { return }
             let separator: NoteInline.BlockSeparator =
                 current?.marker.carriesOwnAttributes == true ? .leading : .trailing
-            pending.inlines = NoteInline.merged(pending.inlines.trimming(separator))
-            blocks.append(pending.normalized())
+            let inlines = NoteInline.merged(pending.inlines.trimming(separator))
+            blocks.append(contentsOf: pending.splitAtNewlines(inlines).map { $0.normalized() })
             current = nil
         }
 

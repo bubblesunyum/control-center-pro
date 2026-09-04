@@ -1,169 +1,34 @@
 {
-  "generated": "23:38:13",
+  "generated": "14:18:26",
   "project": "control-center-pro",
   "git": {
     "branch": "main",
     "upstream": "origin/main",
-    "dirty": 0,
-    "commits_today": 16,
+    "dirty": 8,
+    "commits_today": 4,
     "last": {
-      "sha": "34018c7",
-      "subject": "handoff 20260903-233706 (ccp-4pu)",
-      "when": "30 seconds ago"
+      "sha": "42aeeee",
+      "subject": "rich-text note document model (ccp-2zi.1)",
+      "when": "11 minutes ago"
     },
     "unpushed": [
       {
-        "sha": "34018c7",
-        "subject": "handoff 20260903-233706 (ccp-4pu)",
-        "at": 1788496662.0
-      },
-      {
-        "sha": "31d638e",
-        "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)",
-        "at": 1788494576.0
-      },
-      {
-        "sha": "ca36d54",
-        "subject": "stop the dashboard burning a core when nobody is watching (ccp-4pu ccp-juo ccp-o25)",
-        "at": 1788494522.0
-      },
-      {
-        "sha": "affd7b2",
-        "subject": "handoff 20260903-222400 (ccp-35c)",
-        "at": 1788492254.0
-      },
-      {
-        "sha": "557eaec",
-        "subject": "clipboard: hide and paste on click, count+Clear in header (ccp-35c)",
-        "at": 1788492234.0
-      },
-      {
-        "sha": "1879e28",
-        "subject": "handoff 20260903-205149",
-        "at": 1788486755.0
-      },
-      {
-        "sha": "6301961",
-        "subject": "ledger sync (ccp-2ql closed)",
-        "at": 1788486704.0
-      },
-      {
-        "sha": "4b4d8f7",
-        "subject": "polish system widget: swap under header, integer header, text-only temp with warning colors (ccp-2ql)",
-        "at": 1788486094.0
-      },
-      {
-        "sha": "a7113d6",
-        "subject": "polish system widget: remove separators, neutral gauges with warning gradients, pressure row, swap on graph, activity button (ccp-fn8)",
-        "at": 1788458307.0
-      },
-      {
-        "sha": "affe8a0",
-        "subject": "pull vorssaint system ui into ccp system widget with 13 tweaks (ccp-rly)",
-        "at": 1788457420.0
+        "sha": "42aeeee",
+        "subject": "rich-text note document model (ccp-2zi.1)",
+        "at": 1788548830.0
       }
     ],
     "unpushed_beads": [
-      "ccp-2ql",
-      "ccp-35c",
-      "ccp-4pu",
-      "ccp-fn8",
-      "ccp-juo",
-      "ccp-o25",
-      "ccp-rly"
+      "ccp-2zi.1"
     ],
     "bead_commits": {
-      "ccp-4pu": {
-        "commits": 3,
-        "at": 1788496662.0,
-        "list": [
-          {
-            "sha": "34018c7",
-            "subject": "handoff 20260903-233706 (ccp-4pu)"
-          },
-          {
-            "sha": "31d638e",
-            "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)"
-          },
-          {
-            "sha": "ca36d54",
-            "subject": "stop the dashboard burning a core when nobody is watching (ccp-4pu ccp-juo ccp-o25)"
-          }
-        ]
-      },
-      "ccp-o25": {
-        "commits": 2,
-        "at": 1788494576.0,
-        "list": [
-          {
-            "sha": "31d638e",
-            "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)"
-          },
-          {
-            "sha": "ca36d54",
-            "subject": "stop the dashboard burning a core when nobody is watching (ccp-4pu ccp-juo ccp-o25)"
-          }
-        ]
-      },
-      "ccp-juo": {
-        "commits": 2,
-        "at": 1788494576.0,
-        "list": [
-          {
-            "sha": "31d638e",
-            "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)"
-          },
-          {
-            "sha": "ca36d54",
-            "subject": "stop the dashboard burning a core when nobody is watching (ccp-4pu ccp-juo ccp-o25)"
-          }
-        ]
-      },
-      "ccp-35c": {
-        "commits": 2,
-        "at": 1788492254.0,
-        "list": [
-          {
-            "sha": "affd7b2",
-            "subject": "handoff 20260903-222400 (ccp-35c)"
-          },
-          {
-            "sha": "557eaec",
-            "subject": "clipboard: hide and paste on click, count+Clear in header (ccp-35c)"
-          }
-        ]
-      },
-      "ccp-2ql": {
-        "commits": 2,
-        "at": 1788486704.0,
-        "list": [
-          {
-            "sha": "6301961",
-            "subject": "ledger sync (ccp-2ql closed)"
-          },
-          {
-            "sha": "4b4d8f7",
-            "subject": "polish system widget: swap under header, integer header, text-only temp with warning colors (ccp-2ql)"
-          }
-        ]
-      },
-      "ccp-fn8": {
+      "ccp-2zi.1": {
         "commits": 1,
-        "at": 1788458307.0,
+        "at": 1788548830.0,
         "list": [
           {
-            "sha": "a7113d6",
-            "subject": "polish system widget: remove separators, neutral gauges with warning gradients, pressure row, swap on graph, activity button (ccp-fn8)"
-          }
-        ]
-      },
-      "ccp-rly": {
-        "commits": 1,
-        "at": 1788457420.0,
-        "list": [
-          {
-            "sha": "affe8a0",
-            "subject": "pull vorssaint system ui into ccp system widget with 13 tweaks (ccp-rly)"
+            "sha": "42aeeee",
+            "subject": "rich-text note document model (ccp-2zi.1)"
           }
         ]
       }
@@ -171,13 +36,325 @@
   },
   "ledger": {
     "counts": {
-      "open": 45,
-      "ready": 44,
-      "in_progress": 0,
-      "closed": 83,
+      "open": 58,
+      "ready": 55,
+      "in_progress": 1,
+      "closed": 86,
       "blocked": 0
     },
     "issues": [
+      {
+        "id": "ccp-2zi.8",
+        "title": "plan two-way Craft sync before writing any of it",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "ccp-2zi",
+        "updated_at": "2026-09-04T18:57:14Z",
+        "created_at": "2026-09-04T18:57:14Z",
+        "deps": [],
+        "description": "Investigate and produce a written plan. No sync code starts until this closes \u2014 user's explicit call.\n\nWhat the plan has to settle:\n\n- Craft Connect API reality: auth model and token lifetime, actual endpoints for list/read/write/create/delete, rate limits, whether a whole-document body replace exists or it is delete-plus-POST /blocks, what a document's modified timestamp is and whether it is trustworthy for last-writer-wins. Read the real API docs (connect.craft.do/api-docs); do not design against the search summary in the session that filed this.\n- The block mapping, both directions: which Craft block kinds the rich-text model (ccp-2zi.1) maps onto, and what happens to a Craft block CCP has no concept of. A round-trip that silently drops the user's Craft formatting is worse than not syncing.\n- Conflict: both sides changed since last sync. Detection, and where the losing text goes so it is recoverable rather than gone.\n- Timing: push debounce, pull on activate(), and what happens to a pad being edited when a pull lands.\n- Failure and offline: with no local text storage (ccp-2zi.4), what the widget shows when the store cannot be reached, and how typing is prevented from destroying ",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-ydj",
+        "title": "make the scratchpad bigger",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-04T18:52:54Z",
+        "created_at": "2026-09-04T18:52:54Z",
+        "deps": [],
+        "description": "Independent of the sizing epic \u2014 WidgetSize.height is a floor, so this is a token change at Sources/CCPUI/DesignSystem/Dimensions.swift:99 (.tall is 232). Width is the constrained axis and stays 300 until ccp-lh1 lands. Pairs with ccp-540, which wants the scratchpad's literals moved onto design tokens anyway.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-2zi.6",
+        "title": "Craft pull and two-way reconcile",
+        "status": "open",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "feature",
+        "parent": "ccp-2zi",
+        "updated_at": "2026-09-04T18:52:32Z",
+        "created_at": "2026-09-04T18:52:32Z",
+        "deps": [
+          "ccp-2zi.8"
+        ],
+        "description": "Pull each pad's Craft document on widget activate() \u2014 the panel is shut most of the time, so open is the natural sync point. Last-writer-wins by modified date, no operational transform: the user switches apps deliberately and accepts the window.\n\nStill needs deciding: what happens when both sides changed since the last sync. Silently clobbering the loser is the thing that will hurt. Minimum is that the losing text is recoverable, not gone.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-2zi.5",
+        "title": "Craft push: debounced replace-body, one document per pad",
+        "status": "open",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "feature",
+        "parent": "ccp-2zi",
+        "updated_at": "2026-09-04T18:52:31Z",
+        "created_at": "2026-09-04T18:52:31Z",
+        "deps": [
+          "ccp-2zi.8"
+        ],
+        "description": "~3s after the last keystroke, push the pad to its Craft document. Craft documents are blocks, so this is a replace-body (delete plus insert via POST /blocks), NOT an append \u2014 a naive debounce-append duplicates the note every 3 seconds. Create the document on first push and remember its id.\n\nNeeds a rich-text-to-Craft-blocks mapping; keep it in one place alongside the reverse.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-2zi.4",
+        "title": "NoteStore: platform-agnostic storage behind a one-line backend swap",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "feature",
+        "parent": "ccp-2zi",
+        "updated_at": "2026-09-04T19:13:37Z",
+        "created_at": "2026-09-04T18:52:30Z",
+        "deps": [],
+        "description": "The scratchpad stops storing text in UserDefaults entirely. Craft becomes the store, reached through a platform-agnostic protocol so swapping to Obsidian or Notion is a one-line change at the composition root.\n\nDecided by the user: no local truth. UserDefaults keeps only configuration (retention, selection, the pad-to-document mapping) \u2014 never the note text.\n\nThe protocol is the deliverable, not the Craft call. Shape it around what any note backend can honour \u2014 list notes, read one, write one, create, delete, a modified date \u2014 and keep every Craft noun (spaces, folders, block ids) inside CraftNoteStore. If the protocol mentions a block, it has leaked.\n\nAsync throwing, per CLAUDE.md. A store that is offline or unauthenticated is a normal state the widget renders, not an error that empties the pad \u2014 with no local truth, a failed read must never present as an empty note the user then types over.\n\nSupersedes the earlier 'local truth, Craft as mirror' framing.",
+        "design": "",
+        "notes": "Also owns swapping ScratchpadPad.text from String to NoteDocument (folded in from ccp-2zi.1, user's call): doing it against storage that is about to be deleted would be wasted work.",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-2zi.3",
+        "title": "Craft Connect auth: token in Keychain plus a Settings row",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "feature",
+        "parent": "ccp-2zi",
+        "updated_at": "2026-09-04T18:52:29Z",
+        "created_at": "2026-09-04T18:52:29Z",
+        "deps": [],
+        "description": "Craft Connect (connect.craft.do) needs an API token. Keychain, not UserDefaults. A Settings row to enter it and to pick the target Craft space/folder. Blocks any sync work that actually talks to Craft.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-2zi.2",
+        "title": "rich-text editing in the scratchpad widget",
+        "status": "in_progress",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "feature",
+        "parent": "ccp-2zi",
+        "updated_at": "2026-09-04T19:13:38Z",
+        "created_at": "2026-09-04T18:52:28Z",
+        "deps": [],
+        "description": "The editor surface for the model. Today it is PlainTextEditor in Sources/CCPUI/DesignSystem. Needs formatting affordances that fit a 300pt menu-bar card: keyboard shortcuts first (cmd-B/I/K, markdown-style autoformatting), not a toolbar that eats the card.\n\nReach for the framework first per CLAUDE.md \u2014 evaluate SwiftUI TextEditor with AttributedString (macOS 26) before hand-rolling an NSTextView representable.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-2zi",
+        "title": "[epic] rich-text scratchpad synced two-way with Craft",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "epic",
+        "parent": "",
+        "updated_at": "2026-09-04T18:56:59Z",
+        "created_at": "2026-09-04T18:52:01Z",
+        "deps": [],
+        "description": "The scratchpad grows from a plain String into a rich-text document with basic formatting, and syncs two-way with Craft via the Craft Connect REST API (connect.craft.do), one Craft document per pad.\n\nDirection: enough formatting to signal intent, not a Craft clone. The model must leave room to add block kinds later without another migration.\n\nNot the craftdocs:// URL scheme \u2014 every URL open activates Craft and steals focus from the non-activating panel, which rules it out for autosave. REST only.\n\nSync shape agreed with the user: two-way, last-writer-wins, no operational transform. The user switches apps deliberately and will notice a stale doc in Craft. Push debounced ~3s from last keystroke; pull on widget activate() (panel open), since the panel is shut most of the time.\n\nUserDefaults stays the local truth. Craft is a mirror behind a sink protocol so a dead network or expired token can never eat a note.",
+        "design": "",
+        "notes": "Storage decision (user, 2026-09-04): no UserDefaults text storage at all. Craft is the store, behind a platform-agnostic NoteStore protocol (ccp-2zi.4) swappable to Obsidian/Notion in one line. UserDefaults keeps configuration only.",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": [
+          "ccp-2zi.8",
+          "ccp-2zi.6",
+          "ccp-2zi.5",
+          "ccp-2zi.4",
+          "ccp-2zi.3",
+          "ccp-2zi.2",
+          "ccp-2zi.1",
+          "ccp-2zi.7"
+        ]
+      },
+      {
+        "id": "ccp-lh1.4",
+        "title": "panel width math with variable lane widths",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "feature",
+        "parent": "ccp-lh1",
+        "updated_at": "2026-09-04T18:52:54Z",
+        "created_at": "2026-09-04T18:52:54Z",
+        "deps": [],
+        "description": "Layout.fitsAnotherLane already measures real lane widths rather than a count, but it assumes the lane being offered is the default 300. Once any widget can be widened, the refusal rule and the panel's own width need to hold up \u2014 including a resize that would push the leftmost lane off-screen, which fitsAnotherLane does not currently cover.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-lh1.3",
+        "title": "resize grips in edit mode, snapping to size steps",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "feature",
+        "parent": "ccp-lh1",
+        "updated_at": "2026-09-04T18:52:53Z",
+        "created_at": "2026-09-04T18:52:53Z",
+        "deps": [],
+        "description": "Edit mode gains resize alongside drag. Snap targets are the size steps and the lane grid \u2014 no guide engine, no freeform x/y.\n\nCoexists with the existing hold-to-edit and drag-reorder gestures in ControlPanel/PanelEditor; see the open follow-ups ccp-2rh and ccp-518 before adding a third gesture to that file.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-lh1.2",
+        "title": "two-axis widget size, lane width derived from its widest member",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "feature",
+        "parent": "ccp-lh1",
+        "updated_at": "2026-09-04T18:52:52Z",
+        "created_at": "2026-09-04T18:52:52Z",
+        "deps": [],
+        "description": "WidgetSize gains a width axis. Layout.laneWidth stops being the answer for every lane: a lane is as wide as the widest widget in it, which is already true for .screen (432 vs 300) but expressed as a special case in Dimensions.swift. Generalize it.\n\nHeight already works \u2014 WidgetSize.height is a floor and ControlPanel draws minHeight + fixedSize, so cards grow to content today.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-lh1.1",
+        "title": "layout schema: lanes of placements, not bare ids",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "feature",
+        "parent": "ccp-lh1",
+        "updated_at": "2026-09-04T18:52:51Z",
+        "created_at": "2026-09-04T18:52:51Z",
+        "deps": [],
+        "description": "PanelLayout.Lane goes from [WidgetID] to a placement carrying the id plus an optional user size override. Must decode the existing bare-id file \u2014 the layout is user data (see the never-edit-layout-file trap) and PanelLayout's non-destructive round-trip of unknown widget ids is load-bearing; keep it.\n\nIntrinsic default size stays on WidgetDescriptor. Only the override lives here.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-2zi.7",
+        "title": "scratchpad sync status in the widget header",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "feature",
+        "parent": "ccp-2zi",
+        "updated_at": "2026-09-04T18:52:33Z",
+        "created_at": "2026-09-04T18:52:33Z",
+        "deps": [],
+        "description": "Synced / pending / failed, in the widget header. Silent failure on a notes widget reads as data loss. An icon-only indicator needs an accessibilityLabel and a value per CLAUDE.md.",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-lh1",
+        "title": "[epic] flexible widget sizing with snap points",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "epic",
+        "parent": "",
+        "updated_at": "2026-09-04T18:52:02Z",
+        "created_at": "2026-09-04T18:52:02Z",
+        "deps": [],
+        "description": "Widgets stop being one fixed lane width. Size becomes a user-settable, two-axis property stored in the layout, with resize grips in edit mode that snap to the size steps and the lane grid.\n\nDeliberately NOT a freeform x/y canvas. The panel is anchored top-right and does not scroll; fitsAnotherLane already refuses lanes that would hang off-screen. Lanes are what make edit-mode drag tractable and PanelLayout forward-compatible. The snap points are the size steps plus the lane grid \u2014 no guide engine.\n\nKey move: intrinsic default size stays on the WidgetDescriptor; what the user resized it to belongs to the layout (CLAUDE.md model/view split).",
+        "design": "",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": [
+          "ccp-lh1.4",
+          "ccp-lh1.3",
+          "ccp-lh1.2",
+          "ccp-lh1.1"
+        ]
+      },
       {
         "id": "ccp-skd",
         "title": "design: inbox list clipped under floating psymail tab bar, no bottom inset \u2014 last row half hidden (ccp-panel.png) \u2014 already ccp-caq but severity upped",
@@ -1157,6 +1334,76 @@
         "children": []
       },
       {
+        "id": "ccp-2zi.1",
+        "title": "rich-text document model for the scratchpad",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "feature",
+        "parent": "ccp-2zi",
+        "updated_at": "2026-09-04T19:13:36Z",
+        "created_at": "2026-09-04T18:52:27Z",
+        "deps": [],
+        "description": "ScratchpadPad.text: String becomes a structured rich-text document. Basic formatting first \u2014 bold, italic, strikethrough, inline code, headings, bullet/ordered lists, links \u2014 shaped so more block kinds land later without a second migration.\n\nHAZARD: ScratchpadAdapter reads and writes the same UserDefaults keys as upstream Vorssaint's floating pad (scratchpadDocument, scratchpadRetention) on purpose, so a note is shared between the two surfaces. A schema change breaks that interop. Decide explicitly: keep a plain-text projection in the stored document for upstream to read, or accept the fork and record it in PATCHES.md. Do not discover this at implementation time.\n\nScratchpadSupport.markdownPreview and the preview toggle likely collapse into the editor once text is genuinely rich \u2014 check whether isPreviewing still earns its place.",
+        "design": "",
+        "notes": "",
+        "close_reason": "NoteDocument model landed with AttributedString and markdown bridges, 22 tests. Review found and fixed three round-trip bugs (markdown escaping, paragraph joining, separator over-trim). The ScratchpadPad.text String->NoteDocument swap folds into ccp-2zi.4, where the UserDefaults storage is removed anyway.",
+        "owner": "bubbles@cortico.ai",
+        "children": [],
+        "commit_count": 1,
+        "commits": [
+          {
+            "sha": "42aeeee",
+            "subject": "rich-text note document model (ccp-2zi.1)"
+          }
+        ]
+      },
+      {
+        "id": "ccp-abc",
+        "title": "move hidden files toggle into files widget header and move copy text from screen into tools widget",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-04T05:07:57Z",
+        "created_at": "2026-09-04T05:01:17Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "hidden files now lives in Files widget header as eye/eye.slash toggle; Tools widget (renamed from Toggles, id quick-toggles kept) now hosts copy-text-from-screen via ScreenCaptureKit overlay + Vision OCR + QR fast-path + HUD",
+        "owner": "",
+        "children": []
+      },
+      {
+        "id": "ccp-42r",
+        "title": "System widget polish: bars equal + title temp close + titles white + pressure above swap + compact height",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "task",
+        "parent": "",
+        "updated_at": "2026-09-04T04:59:26Z",
+        "created_at": "2026-09-04T04:59:17Z",
+        "deps": [],
+        "description": "",
+        "design": "",
+        "notes": "",
+        "close_reason": "implemented: compact descriptor (64pt floor), bars fixed 86 with title-temp close (Spacer only before bar, placeholder 28), titles .primary, pressure above swap inside expanded memory, multi-open Set, doubled limit 12, battery graph removed, battery top, temp left of bar",
+        "owner": "",
+        "children": []
+      },
+      {
         "id": "ccp-o25",
         "title": "dashboard state() shells 3 bd + ~6 git subprocesses per build; collapse to fewer bd calls and cache git",
         "status": "closed",
@@ -1175,18 +1422,7 @@
         "notes": "",
         "close_reason": "bd stale ttl, one git log, verify-log and skill-file mtime caches (har-b68)",
         "owner": "",
-        "children": [],
-        "commit_count": 2,
-        "commits": [
-          {
-            "sha": "31d638e",
-            "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)"
-          },
-          {
-            "sha": "ca36d54",
-            "subject": "stop the dashboard burning a core when nobody is watching (ccp-4pu ccp-juo ccp-o25)"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-juo",
@@ -1207,18 +1443,7 @@
         "notes": "",
         "close_reason": "metrics.disabled set globally; harness add now does it for new installs (har-3zd)",
         "owner": "",
-        "children": [],
-        "commit_count": 2,
-        "commits": [
-          {
-            "sha": "31d638e",
-            "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)"
-          },
-          {
-            "sha": "ca36d54",
-            "subject": "stop the dashboard burning a core when nobody is watching (ccp-4pu ccp-juo ccp-o25)"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-4pu",
@@ -1239,22 +1464,7 @@
         "notes": "",
         "close_reason": "fixed in harness-starter a9901b1 and mirrored here in ca36d54 \u2014 idle throttle plus session-end shutdown",
         "owner": "",
-        "children": [],
-        "commit_count": 3,
-        "commits": [
-          {
-            "sha": "34018c7",
-            "subject": "handoff 20260903-233706 (ccp-4pu)"
-          },
-          {
-            "sha": "31d638e",
-            "subject": "ledger sync (ccp-4pu ccp-juo ccp-o25 closed)"
-          },
-          {
-            "sha": "ca36d54",
-            "subject": "stop the dashboard burning a core when nobody is watching (ccp-4pu ccp-juo ccp-o25)"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-35c",
@@ -1275,18 +1485,7 @@
         "notes": "",
         "close_reason": "Row click hides panel immediately and pastes via hidePanel/pasteIntoPreviousApp env + CGEvent Cmd+V (pasteTarget remembered at present). Clear + count moved from footer into WidgetCard header accessory HStack (count left, Clear right). Verified with TextEdit: FRESH123BEFORE after click, 168 tests pass.",
         "owner": "",
-        "children": [],
-        "commit_count": 2,
-        "commits": [
-          {
-            "sha": "affd7b2",
-            "subject": "handoff 20260903-222400 (ccp-35c)"
-          },
-          {
-            "sha": "557eaec",
-            "subject": "clipboard: hide and paste on click, count+Clear in header (ccp-35c)"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-2ql",
@@ -1307,18 +1506,7 @@
         "notes": "",
         "close_reason": "moved Swap below memory header above graph, removed swap from graph, header left side now integer via bytesHeaderLeft, expanded rows keep decimals, replaced \u00be gauge with text-only TemperatureGauge colored yellow >=75 red >=85",
         "owner": "",
-        "children": [],
-        "commit_count": 2,
-        "commits": [
-          {
-            "sha": "6301961",
-            "subject": "ledger sync (ccp-2ql closed)"
-          },
-          {
-            "sha": "4b4d8f7",
-            "subject": "polish system widget: swap under header, integer header, text-only temp with warning colors (ccp-2ql)"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-fn8",
@@ -1339,14 +1527,7 @@
         "notes": "",
         "close_reason": "applied 9 polish tweaks: separators removed, reduced title/gauge gap to 6/4, gauges neutral with yellow/red leading-edge gradient at 75/85C, memory pressure row with Caution/Critical and header dot hidden when expanded, swap visible collapsed + second sparkline, activity monitor button in header, extra bottom padding, GB stripped left of slash, memory bar gradient on pressure",
         "owner": "",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "a7113d6",
-            "subject": "polish system widget: remove separators, neutral gauges with warning gradients, pressure row, swap on graph, activity button (ccp-fn8)"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-rly",
@@ -1367,14 +1548,7 @@
         "notes": "",
         "close_reason": "replaced CCP SystemStatsWidget with vorssaint SystemSection port: distinct colors, 3/4 gauges, expandable CPU/GPU/Memory/Battery, battery graph only when charging, swapped titles etc. Extended adapter/bridge for GPU/battery/power and fixed GPU leak, battery history, off-main AppKit.",
         "owner": "",
-        "children": [],
-        "commit_count": 1,
-        "commits": [
-          {
-            "sha": "affe8a0",
-            "subject": "pull vorssaint system ui into ccp system widget with 13 tweaks (ccp-rly)"
-          }
-        ]
+        "children": []
       },
       {
         "id": "ccp-1kb",
@@ -3019,7 +3193,64 @@
     ],
     "stale": 0
   },
-  "worktree": [],
+  "worktree": [
+    {
+      "path": ".beads/interactions.jsonl",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
+    },
+    {
+      "path": ".beads/issues.jsonl",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
+    },
+    {
+      "path": "Sources/CCPKit/Notes/NoteBlock+Splitting.swift",
+      "staged": false,
+      "untracked": true,
+      "status": "?",
+      "old_path": null
+    },
+    {
+      "path": "Sources/CCPKit/Notes/NoteDocument+AttributedString.swift",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
+    },
+    {
+      "path": "Sources/CCPKit/Notes/NoteDocument+Marks.swift",
+      "staged": false,
+      "untracked": true,
+      "status": "?",
+      "old_path": null
+    },
+    {
+      "path": "Sources/CCPUI/DesignSystem/NoteEditor.swift",
+      "staged": false,
+      "untracked": true,
+      "status": "?",
+      "old_path": null
+    },
+    {
+      "path": "Tests/CCPKitTests/NoteDocumentTests.swift",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
+    },
+    {
+      "path": "dashboard/state.json",
+      "staged": false,
+      "untracked": false,
+      "status": "M",
+      "old_path": null
+    }
+  ],
   "verify": {
     "status": "passed",
     "when": "just now",
@@ -3034,14 +3265,9 @@
         "ok": true
       }
     ],
-    "unverified": [
-      {
-        "sha": "34018c7",
-        "subject": "handoff 20260903-233706 (ccp-4pu)"
-      }
-    ],
+    "unverified": [],
     "took": "8s",
-    "at": 1788496656.0161235
+    "at": 1788549473.8869576
   },
   "runs": {
     "verify": {
@@ -3165,15 +3391,15 @@
           "path": "harness/laurels.jsonl",
           "origin": "harness",
           "role": "praise, replayed one at a time",
-          "tokens": 460
+          "tokens": 476
         },
         {
-          "id": "harness/handoffs/20260903-233706.md",
-          "name": "20260903-233706.md",
-          "path": "harness/handoffs/20260903-233706.md",
+          "id": "harness/handoffs/20260904-001023.md",
+          "name": "20260904-001023.md",
+          "path": "harness/handoffs/20260904-001023.md",
           "origin": "harness",
           "role": "the last session's closing note",
-          "tokens": 420
+          "tokens": 278
         },
         {
           "id": "CLAUDE.md",
@@ -3217,7 +3443,7 @@
           "path": ".beads/issues.jsonl",
           "origin": "harness",
           "role": "the issue graph, exported for git",
-          "tokens": 30154
+          "tokens": 34712
         },
         {
           "id": ".claude/skills/beads/SKILL.md",
@@ -3358,14 +3584,14 @@
       },
       {
         "name": "session brief",
-        "tokens": 573
+        "tokens": 473
       },
       {
         "name": "skill descriptions",
         "tokens": 378
       }
     ],
-    "always_total": 3411,
+    "always_total": 3311,
     "on_demand": [
       {
         "name": "workflow",
@@ -3404,7 +3630,7 @@
         "tokens": 491
       }
     ],
-    "brief_tokens": 573,
+    "brief_tokens": 473,
     "prime_tokens": 1569
   }
 }

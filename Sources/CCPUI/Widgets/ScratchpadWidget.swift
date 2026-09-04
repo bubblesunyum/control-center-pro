@@ -184,7 +184,7 @@ private struct ScratchpadContent: View {
         .foregroundStyle(selected ? Color.primary : Color.secondary)
         .background {
             RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
-                .fill(selected ? Color.accentColor.opacity(0.14) : Color.clear)
+                .fill(selected ? Color.selectedFill : Color.clear)
         }
         .contentShape(RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
         .onTapGesture { adapter.selectPad(pad.id) }
