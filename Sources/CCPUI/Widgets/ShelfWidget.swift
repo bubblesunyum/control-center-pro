@@ -28,21 +28,35 @@ public final class ShelfWidget: CCPWidget {
         size: .compact
     )
 
-    public init() {}
+    private let hiddenFilesAdapter: QuickTogglesAdapter
+
+    public init() {
+        self.hiddenFilesAdapter = QuickTogglesAdapter()
+    }
+
+    /// Test seam: a Files widget backed by a fake hidden-files source.
+    init(source: QuickTogglesSource) {
+        self.hiddenFilesAdapter = QuickTogglesAdapter(source: source)
+    }
 
     public func makeView() -> some View {
-        ShelfWidgetContent()
+        ShelfWidgetContent(hiddenFiles: hiddenFilesAdapter)
             .environment(ShelfStore.shared)
     }
+
+    public func activate() { hiddenFilesAdapter.activate() }
+    public func deactivate() { hiddenFilesAdapter.deactivate() }
 }
 
 private struct ShelfWidgetContent: View {
     @Environment(ShelfStore.self) private var store
     @State private var window = ShelfWindowController.shared
+    @Bindable var hiddenFiles: QuickTogglesAdapter
 
     var body: some View {
         WidgetCard(ShelfWidget.descriptor, count: store.items.isEmpty ? nil : store.items.count) {
             HStack(spacing: Space.half) {
+                hiddenFilesHeaderButton
                 if !store.items.isEmpty {
                     clearButtonHeader
                 }
@@ -63,6 +77,8 @@ private struct ShelfWidgetContent: View {
             }
         }
         .animation(.smooth(duration: 0.2), value: store.items.isEmpty)
+        .animation(.easeInOut(duration: 0.2), value: hiddenFiles.hiddenFilesShown)
+        .animation(.easeInOut(duration: 0.2), value: hiddenFiles.isToggling)
         .onDrop(of: [.fileURL, .image, .url, .plainText], isTargeted: nil) { providers in
             store.accept(providers: providers)
         }
@@ -87,6 +103,43 @@ private struct ShelfWidgetContent: View {
         .help(store.selection.isEmpty ? "Clear unpinned" : "Remove selected")
         .accessibilityLabel(store.selection.isEmpty ? "Clear unpinned items" : "Remove selected from Files")
         .accessibilityHint(store.selection.isEmpty ? "Removes every unpinned item from Files" : "Removes selected items")
+    }
+
+    private var hiddenFilesHeaderButton: some View {
+        let isOn = hiddenFiles.hiddenFilesShown
+        let isBusy = hiddenFiles.isToggling
+        return Button {
+            hiddenFiles.toggleHiddenFiles()
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(isOn ? Color.accentColor.opacity(0.20) : Color.controlFill)
+                    .frame(width: Layout.headerAccessorySize, height: Layout.headerAccessorySize)
+                    .overlay(
+                        Circle().strokeBorder(
+                            isOn ? Color.accentColor.opacity(0.65) : Color.cardStroke,
+                            lineWidth: Stroke.hairline
+                        )
+                    )
+                if isBusy {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(isOn ? Color.accentColor : Color.secondary)
+                } else {
+                    Image(systemName: isOn ? "eye.slash" : "eye")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
+                }
+            }
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isBusy)
+        .help(isOn ? "Hide hidden files — Finder will restart" : "Show hidden files — Finder will restart")
+        .accessibilityLabel("Hidden Files")
+        .accessibilityValue(isOn ? "Shown" : "Hidden")
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+        .accessibilityHint("Toggles Finder hidden files. Finder restarts to apply.")
     }
 
     private var preview: some View {
