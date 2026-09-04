@@ -2,7 +2,9 @@
 // Copyright (C) 2026 Control Center Pro contributors
 
 import AppKit
+import Carbon.HIToolbox
 import CCPKit
+import CoreGraphics
 import Observation
 import SwiftUI
 
@@ -15,7 +17,7 @@ import SwiftUI
 @MainActor
 public final class ControlPanelController {
     private let window: ControlPanelWindow
-    private let content: NSHostingView<ControlPanel>
+    private let content: NSHostingView<AnyView>
     public let arrangement: PanelArrangement
     public let editor = PanelEditor()
 
@@ -25,6 +27,10 @@ public final class ControlPanelController {
     private var wasOfferingNewLane = false
 
     public private(set) var isVisible = false
+
+    /// The app that was frontmost when the panel was shown — where a clipboard
+    /// paste should land after the panel hides.
+    private var pasteTargetApp: NSRunningApplication?
 
     /// Watches for a click elsewhere or an Esc only while the panel is up.
     /// Built lazily because it dismisses this controller and so cannot be made
@@ -41,8 +47,19 @@ public final class ControlPanelController {
         // itself, and the space between them is desktop. A backdrop view here
         // would put the cards inside a container, and the container is the
         // thing this panel is deliberately not.
-        content = NSHostingView(rootView: ControlPanel(arrangement: arrangement, editor: editor))
+        let baseView = ControlPanel(arrangement: arrangement, editor: editor)
+        content = NSHostingView(rootView: AnyView(baseView))
         window.contentView = content
+
+        // Wire the panel's widgets to the controller's dismiss + paste so a
+        // clipboard row can hide immediately and then paste into the app that
+        // was frontmost before the panel opened.
+        let hide: () -> Void = { [weak self] in self?.hide() }
+        let paste: () -> Void = { [weak self] in self?.pasteIntoPreviousApp() }
+        let decorated = baseView
+            .environment(\.hidePanel, hide)
+            .environment(\.pasteIntoPreviousApp, paste)
+        content.rootView = AnyView(decorated)
 
         window.setContentSize(measuredContentSize)
 
@@ -131,6 +148,7 @@ public final class ControlPanelController {
     private func present(from statusItemButton: NSStatusBarButton?, editing: Bool) {
         anchor = statusItemButton?.window?.screen ?? NSScreen.main
         wasOfferingNewLane = false
+        rememberPasteTarget()
         arrangement.activate()
         if editing { editor.startEditing() }
         place()
@@ -307,5 +325,44 @@ public final class ControlPanelController {
         } else {
             window.setFrame(frame, display: true)
         }
+    }
+
+    // MARK: - Clipboard paste
+
+    private func rememberPasteTarget() {
+        let ownBundleID = Bundle.main.bundleIdentifier
+        guard let app = NSWorkspace.shared.frontmostApplication,
+              app.bundleIdentifier != ownBundleID,
+              app.activationPolicy == .regular,
+              !app.isTerminated
+        else {
+            pasteTargetApp = nil
+            return
+        }
+        pasteTargetApp = app
+    }
+
+    private func pasteIntoPreviousApp() {
+        guard let app = pasteTargetApp, !app.isTerminated else { return }
+        pasteTargetApp = nil
+        app.activate(options: [])
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            Self.postPasteShortcut()
+        }
+    }
+
+    private static func postPasteShortcut() {
+        guard let source = CGEventSource(stateID: .hidSystemState),
+              let keyDown = CGEvent(keyboardEventSource: source,
+                                    virtualKey: CGKeyCode(kVK_ANSI_V),
+                                    keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source,
+                                  virtualKey: CGKeyCode(kVK_ANSI_V),
+                                  keyDown: false)
+        else { return }
+        keyDown.flags = .maskCommand
+        keyUp.flags = .maskCommand
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
     }
 }

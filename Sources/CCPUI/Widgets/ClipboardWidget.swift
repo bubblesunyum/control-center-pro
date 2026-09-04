@@ -55,10 +55,24 @@ private struct ClipboardContent: View {
 
     var body: some View {
         WidgetCard(ClipboardWidget.descriptor) {
+            HStack(spacing: Space.half) {
+                Text("\(adapter.entries.count) items")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .accessibilityLabel("\(adapter.entries.count) clipboard items")
+                if adapter.entries.contains(where: { !$0.isPinned }) {
+                    Button("Clear") { adapter.clearRecent() }
+                        .font(.caption2.weight(.medium))
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("Clear recent clipboard items")
+                }
+            }
+        } content: {
             VStack(alignment: .leading, spacing: Space.one) {
                 searchField
                 entriesList
-                footer
             }
         }
     }
@@ -179,24 +193,6 @@ private struct ClipboardContent: View {
             .tracking(0.5)
             .padding(.horizontal, Space.half)
     }
-
-    private var footer: some View {
-        HStack(spacing: Space.half) {
-            Text("\(adapter.entries.count) items")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-                .accessibilityLabel("\(adapter.entries.count) clipboard items")
-            Spacer(minLength: 0)
-            if adapter.entries.contains(where: { !$0.isPinned }) {
-                Button("Clear") { adapter.clearRecent() }
-                    .font(.caption2.weight(.medium))
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("Clear recent clipboard items")
-            }
-        }
-    }
 }
 
 private struct ClipboardRow: View {
@@ -204,15 +200,19 @@ private struct ClipboardRow: View {
     @Bindable var adapter: ClipboardAdapter
     @State private var didCopy = false
     @State private var copyTask: Task<Void, Never>?
+    @Environment(\.hidePanel) private var hidePanel
+    @Environment(\.pasteIntoPreviousApp) private var pasteIntoPreviousApp
+    @Environment(\.isPanelEditing) private var isPanelEditing
 
     var body: some View {
-        Button { copy() } label: { rowContent }
+        Button { isPanelEditing ? copyOnly() : copyAndPaste() } label: { rowContent }
             .buttonStyle(.plain)
+            .disabled(isPanelEditing)
             .accessibilityLabel(
                 [entry.isPinned ? "Pinned" : nil, entry.preview]
                     .compactMap { $0 }.joined(separator: " ")
             )
-            .accessibilityHint("Copies to clipboard. Right-click for more actions")
+            .accessibilityHint("Copies and pastes into previous app. Right-click for more actions")
             .padding(.horizontal, Space.one)
             .padding(.vertical, Space.half)
             .background(
@@ -227,12 +227,12 @@ private struct ClipboardRow: View {
             .help(tooltipText)
             .contextMenu {
                 Button(entry.isPinned ? "Unpin" : "Pin") { adapter.togglePin(entry) }
-                Button("Copy") { copy() }
+                Button("Copy") { copyOnly() }
                 Divider()
                 Button("Delete", role: .destructive) { adapter.remove(entry) }
             }
             .accessibilityAction(named: entry.isPinned ? "Unpin" : "Pin") { adapter.togglePin(entry) }
-            .accessibilityAction(named: "Copy") { copy() }
+            .accessibilityAction(named: "Copy") { copyAndPaste() }
             .accessibilityAction(named: "Delete") { adapter.remove(entry) }
             .accessibilityElement(children: .contain)
             .overlay(alignment: .topTrailing) {
@@ -300,7 +300,22 @@ private struct ClipboardRow: View {
         }
     }
 
-    private func copy() {
+    private func copyAndPaste() {
+        hidePanel?()
+        adapter.copy(entry) { success in
+            guard success else { return }
+            copyTask?.cancel()
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { didCopy = true }
+            copyTask = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: 0.2)) { didCopy = false }
+            }
+            pasteIntoPreviousApp?()
+        }
+    }
+
+    private func copyOnly() {
         adapter.copy(entry) { success in
             guard success else { return }
             copyTask?.cancel()

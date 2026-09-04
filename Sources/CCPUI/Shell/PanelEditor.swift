@@ -264,6 +264,28 @@ extension EnvironmentValues {
     }
 }
 
+private struct HidePanelKey: EnvironmentKey {
+    static let defaultValue: (() -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    var hidePanel: (() -> Void)? {
+        get { self[HidePanelKey.self] }
+        set { self[HidePanelKey.self] = newValue }
+    }
+}
+
+private struct PasteIntoPreviousAppKey: EnvironmentKey {
+    static let defaultValue: (() -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    var pasteIntoPreviousApp: (() -> Void)? {
+        get { self[PasteIntoPreviousAppKey.self] }
+        set { self[PasteIntoPreviousAppKey.self] = newValue }
+    }
+}
+
 /// How the lanes tell the editor where their slots ended up.
 struct DropZonePreference: PreferenceKey {
     static var defaultValue: [PanelEditor.DropZone] = []
