@@ -127,15 +127,15 @@ struct NoteTabStrip: View {
             }
         }
         // The hover chip is a 20pt square in a 24pt pill, so 2pt of air above
-        // and below it — the trailing pad hugs tighter at a point, half the
-        // top/bottom air, so the pill ends where the chip ends.
+        // and below it — the trailing pad matches at 2pt and the chip sits
+        // evenly on all three sides.
         //
         // No min or max width here: ViewThatFits picks this fit on the tabs'
         // ideal size but lays it out with a concrete proposal, and a maxWidth
         // frame would stretch every pill out to the cap. The scrolling fit
         // below is where pills cap.
-        .padding(.leading, Space.quarter)
-        .padding(.trailing, Space.quarter / 2)
+        .padding(.leading, Space.half)
+        .padding(.trailing, Space.quarter)
         .frame(height: Layout.noteTabHeight)
         .foregroundStyle(isSelected ? Color.primary : Color.secondary)
         .background {
