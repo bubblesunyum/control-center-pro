@@ -21,7 +21,7 @@ must never be logged, committed, or written into a bead. Confirmed live.
 | `GET /documents` | `{items:[{id,title}]}`. Titles may be empty strings. |
 | `GET /documents/search` | space-wide search. (`GET /search` does not exist — it 404s.) |
 | `GET /blocks?id=&maxDepth=-1&fetchMetadata=true` | one nested block tree. 400s unless `id` or `date` is given. |
-| `POST /blocks` | `{blocks:[…], position:{position,pageId\|siblingId\|date}}` → `{items:[{id,…,markdown}]}` with assigned ids. `end`+pageId appends (the only spelling the blocks docs show); `start`+pageId posts to the head (same position object as whiteboard create — confirm order live); `after`+siblingId inserts after a block. |
+| `POST /blocks` | `{blocks:[…], position:{position,pageId\|siblingId\|date}}` → `{items:[{id,…,markdown}]}` with assigned ids. `end`+pageId appends (the only spelling the blocks docs show); `after`+siblingId inserts after a block (verified live); `before`+siblingId inserts above a block (unconfirmed vocabulary from the upload endpoint — live probe pending). `start`+pageId does NOT insert above: into a non-empty doc it merges the text into the top block (observed live 2026-09-05) — only for empty-doc first syncs. |
 | `PUT /blocks` | `{blocks:[{id, markdown, …}]}` |
 | `DELETE /blocks` | `{blockIds:[…]}` |
 | `PUT /blocks/move`, `PUT /documents/move` | reposition |

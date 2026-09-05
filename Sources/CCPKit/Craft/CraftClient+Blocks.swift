@@ -117,14 +117,20 @@ extension CraftClient {
     /// Assumed, to verify live: the server lays a shared-anchor batch down in
     /// array order after the anchor. A pasted run landing scrambled means
     /// chaining off returned ids instead.
-    public func postBlocks(_ inserts: [BlockInsert], documentID: String) async throws(CraftClientError) -> [CraftBlock] {
+    public func postBlocks(_ inserts: [BlockInsert], documentID: String, headSiblingID: String? = nil) async throws(CraftClientError) -> [CraftBlock] {
         let position: PostBody.Position
         if let anchor = inserts.compactMap(\.afterID).first {
             position = PostBody.Position(position: "after", pageId: nil, siblingId: anchor)
+        } else if let head = headSiblingID {
+            // Head of a non-empty document. "start" merges into the top block
+            // (observed live 2026-09-05) instead of inserting above it, so an
+            // anchorless group addresses the current head as a sibling.
+            // "before" is the upload endpoint's vocabulary for the same
+            // relation; the live order probe on ccp-2zi.5 watches it land.
+            position = PostBody.Position(position: "before", pageId: nil, siblingId: head)
         } else {
-            // No anchor: head of the document. The blocks docs only show
-            // "end", but the same position object on whiteboard create shows
-            // "start" with a pageId, which is this. Live A/B confirms order.
+            // First sync into an empty document, where there is no head block
+            // to address. Observed live to lay the batch down in order.
             position = PostBody.Position(position: "start", pageId: documentID, siblingId: nil)
         }
         let body = PostBody(blocks: inserts.map { PostBody.Item(markdown: $0.markdown) },

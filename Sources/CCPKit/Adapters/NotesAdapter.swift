@@ -254,9 +254,7 @@ public final class NotesAdapter {
             notes = document.notes
             scheduleSave()
             if let selectedNoteID { dirtyPadIDs.insert(selectedNoteID) }
-            // A write-back already matches the sidecar — persisting yes,
-            // re-pushing no.
-            if !isApplyingWriteBack { scheduleCraftPush() }
+            scheduleCraftPush()
         }
     }
 
@@ -279,6 +277,11 @@ public final class NotesAdapter {
     @ObservationIgnored private var isStoredDocumentUnreadable = false
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var terminationObserver: NSObjectProtocol?
+    @ObservationIgnored nonisolated(unsafe) private var credentialObserver: NSObjectProtocol?
+    // The Craft connection URL, read once per process. A Keychain read on
+    // every push is a prompt on every focus loss; the credential changes only
+    // through Settings, which posts craftCredentialDidChange.
+    @ObservationIgnored private var cachedCraftBaseURL: URL?
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let defaultName: String
     // The feature is called Notes; these keys are not, and must not be. They
@@ -296,11 +299,6 @@ public final class NotesAdapter {
     // Push bookkeeping (ccp-2zi.5). The pad-to-document mapping is config,
     // like retention and selection — never note text.
     @ObservationIgnored private let craftDocumentsKey = "scratchpadCraftDocuments"
-    // The normalisation A/B (ccp-2zi.5): write Craft's canonical spelling
-    // back into the pad on push. A `defaults`-level flag, no UI — temporary
-    // scaffolding for feeling both sides, removed by ccp-vbka. Absent reads
-    // as on.
-    @ObservationIgnored private let writeBackKey = "scratchpadCraftWriteBack"
     @ObservationIgnored private var pushTask: Task<Void, Never>?
     @ObservationIgnored private var pushRetryTask: Task<Void, Never>?
     @ObservationIgnored private var isPushInFlight = false
@@ -308,7 +306,6 @@ public final class NotesAdapter {
     @ObservationIgnored private var consecutivePushFailures = 0
     @ObservationIgnored private var pushThrottledUntil: Date?
     @ObservationIgnored private var dirtyPadIDs: Set<UUID> = []
-    @ObservationIgnored private var isApplyingWriteBack = false
     /// Seconds of quiet before an edit pushes. Owned by the type, not a
     /// design token — the 12s focus-dim clock is a different thing (ccp-srw).
     private static let pushDebounce: TimeInterval = 3
@@ -342,6 +339,9 @@ public final class NotesAdapter {
         if let observer = terminationObserver {
             NotificationCenter.default.removeObserver(observer)
         }
+        if let observer = credentialObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 
     private func observeTermination() {
@@ -360,6 +360,23 @@ public final class NotesAdapter {
                 // bytes are already safe above; Craft lags at most one
                 // session, and the next push heals it.
                 Task { [weak self] in await self?.flushCraftPush() }
+            }
+        }
+        observeCraftCredentialChanges()
+    }
+
+    /// Clear the cached Craft URL when Settings saves or forgets it.
+    /// Synchronous delivery (queue nil): an async clear leaves a window where
+    /// a push lands on the stale URL and clears the dirty bit for text the
+    /// new space never sees.
+    private func observeCraftCredentialChanges() {
+        credentialObserver = NotificationCenter.default.addObserver(
+            forName: .craftCredentialDidChange,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.cachedCraftBaseURL = nil
             }
         }
     }
@@ -586,14 +603,14 @@ public final class NotesAdapter {
         craftDocumentMap().load()
     }
 
-    /// The A/B flag: absent reads as on.
-    var craftWriteBackEnabled: Bool {
-        guard let value = defaults.object(forKey: writeBackKey) as? Bool else { return true }
-        return value
-    }
-
     private func craftBaseURL() -> URL? {
-        craftBaseURLOverride ?? (try? KeychainCraftCredentialStore().loadConnectionURL())
+        // Cached: every push otherwise IPCs into the Keychain, which prompts
+        // on focus loss under a fresh dev signature. Cleared when the
+        // credential is saved or forgotten (see observeCraftCredentialChanges).
+        if let cached = cachedCraftBaseURL { return cached }
+        let loaded = craftBaseURLOverride ?? (try? KeychainCraftCredentialStore().loadConnectionURL())
+        cachedCraftBaseURL = loaded
+        return loaded
     }
 
     private func scheduleCraftPush() {
@@ -661,8 +678,12 @@ public final class NotesAdapter {
         // Snapshot: pads clear or fail below, which mutates the set.
         for padID in Array(dirtyPadIDs) {
             do {
-                try await pushOnePad(padID, client: client)
-                dirtyPadIDs.remove(padID)
+                // False is not failure (throw is): the pad was edited
+                // mid-flight, so it stays dirty for the follow-up round.
+                let pushedClean = try await pushOnePad(padID, client: client)
+                if pushedClean {
+                    dirtyPadIDs.remove(padID)
+                }
             } catch {
                 failure = failure ?? error
             }
@@ -688,15 +709,19 @@ public final class NotesAdapter {
     /// blocks. Skips (no mapping, pad gone, empty plan) clear the dirty bit
     /// silently; edits re-dirty if the pad comes back. A throw keeps the pad
     /// dirty and every later round retries it.
-    private func pushOnePad(_ padID: UUID, client: CraftClient) async throws {
+    ///
+    /// Returns false when the pad was edited mid-flight: the stored sidecar
+    /// describes the pushed text, not the current text, so the pad stays
+    /// dirty and the already-scheduled follow-up pushes the new text.
+    private func pushOnePad(_ padID: UUID, client: CraftClient) async throws -> Bool {
         guard let document,
               let padText = document.notes.first(where: { $0.id == padID })?.text,
               let docID = craftDocumentID(for: padID)
-        else { return }
+        else { return true }
         let sidecar = sidecar(for: padID)
         let slices = CraftBlockSplitter.slices(in: padText)
         let plan = sidecar.pushPlan(for: slices)
-        guard !plan.isEmpty else { return }
+        guard !plan.isEmpty else { return true }
 
         var pendingError: Error?
         var putEcho: [CraftBlock] = []
@@ -708,10 +733,15 @@ public final class NotesAdapter {
             }
             // One batch per anchor group, in plan order; abort the rest on
             // the first throw. Echoes stay keyed by plan-insert index, so a
-            // split can never shift a later insert's attribution.
+            // split can never shift a later insert's attribution. Anchorless
+            // groups address the sidecar's head block, so a top-of-pad insert
+            // lands above it instead of merging into it.
             for group in postGroups(for: plan) {
+                let headSibling = group.first?.insert.afterID == nil
+                    ? sidecar.entries.first?.id : nil
                 let echo = try await client.postBlocks(group.map(\.insert),
-                                                       documentID: docID)
+                                                       documentID: docID,
+                                                       headSiblingID: headSibling)
                 for (i, member) in group.enumerated() where i < echo.count {
                     echoByInsert[member.index, default: []].append(echo[i])
                 }
@@ -731,6 +761,7 @@ public final class NotesAdapter {
                          putEcho: putEcho, postEchoByInsert: echoByInsert,
                          deletesConfirmed: deletesConfirmed)
         if let pendingError { throw pendingError }
+        return self.document?.notes.first(where: { $0.id == padID })?.text == padText
     }
 
     /// Observable for tests.
@@ -743,26 +774,23 @@ public final class NotesAdapter {
                                   slices: [CraftBlockSlice],
                                   putEcho: [CraftBlock], postEchoByInsert: [Int: [CraftBlock]],
                                   deletesConfirmed: Bool) {
-        let outcome = sidecar.applyingPush(text: text, slices: slices,
+        let newSidecar = sidecar.applyingPush(text: text, slices: slices,
                                            putEcho: putEcho, postEchoByInsert: postEchoByInsert,
                                            deletesConfirmed: deletesConfirmed)
-        storeSidecar(outcome.sidecar, for: padID)
-        if craftWriteBackEnabled {
-            applyWriteBack(outcome.writeBack, to: padID)
-        }
+        storeSidecar(newSidecar, for: padID)
     }
 
     /// One POST batch per anchor group, in plan order. Anchorless inserts
-    /// (head of the pad) post with "start" + pageId — the vendor's position
-    /// vocabulary for the same position object — so a top-of-pad insert
-    /// lands on top instead of stalling or appending out of order.
+    /// (head of the pad) post with "before" + the sidecar's head block id —
+    /// "start" + pageId merges into the top block instead of inserting above
+    /// it (observed live 2026-09-05) and is only for the empty-document first
+    /// sync, where there is no head block to address.
     ///
-    /// Known limit, accepted for .5: "non-empty" is read off the local
-    /// sidecar, so hand-mapping a pad onto a contentful Craft doc (outside
-    /// the provisioning flow, ccp-0gek) posts the unknown head to "start",
-    /// which is only order-correct if the doc was actually empty.
-    /// Provisioning must only ever map empty-or-pull-seeded docs; the pull
-    /// seed heals the order the one time this fires.
+    /// Known limit, accepted for .5: hand-mapping a pad onto a contentful
+    /// Craft doc (outside the provisioning flow, ccp-0gek) addresses a head
+    /// block the sidecar never saw. Provisioning must only ever map
+    /// empty-or-pull-seeded docs; the pull seed heals the order the one time
+    /// this fires.
     private func postGroups(for plan: BlockPushPlan) -> [[(index: Int, insert: BlockInsert)]] {
         guard !plan.inserts.isEmpty else { return [] }
         let indexed = plan.inserts.enumerated().map { (index: $0.offset, insert: $0.element) }
@@ -791,56 +819,6 @@ public final class NotesAdapter {
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled else { return }
             await self?.runCraftPush()
-        }
-    }
-
-    /// Fold Craft's canonical spellings back into the pad. All-or-nothing
-    /// with a range guard per edit: a user who kept typing mid-flight wins,
-    /// and a half-applied rewrite never lands.
-    ///
-    /// The selected pad goes through the text binding (persisting like any
-    /// edit, but not rescheduling the push it just satisfied). A background
-    /// pad — pushed as part of the dirty set — is edited in the document
-    /// directly, leaving the binding, the caret, and the undo stack alone;
-    /// its modified date is untouched too, since a sync event is not an edit
-    /// and retention measures user idleness.
-    ///
-    /// Known feel cost, under A/B (ccp-vbka): a whole-string set rebuilds
-    /// the editor — the caret survives by AppKit clamping luck, and undo
-    /// regains the pre-normalisation text (which re-pushes, once, if
-    /// undone). That is what the experiment measures.
-    private func applyWriteBack(_ edits: [CraftWriteBack], to padID: UUID) {
-        guard !edits.isEmpty, let document else { return }
-        let current: String
-        if padID == selectedNoteID {
-            current = text
-        } else if let note = document.notes.first(where: { $0.id == padID }) {
-            current = note.text
-        } else {
-            return
-        }
-        let ns = current as NSString
-        for edit in edits {
-            guard NSMaxRange(edit.range) <= ns.length,
-                  ns.substring(with: edit.range) == edit.prior
-            else { return }
-        }
-        var merged = current
-        for edit in edits.sorted(by: { $0.range.location > $1.range.location }) {
-            merged = (merged as NSString).replacingCharacters(in: edit.range, with: edit.markdown)
-        }
-        guard merged != current else { return }
-        if padID == selectedNoteID {
-            isApplyingWriteBack = true
-            text = merged
-            isApplyingWriteBack = false
-        } else {
-            var doc = document
-            guard let index = doc.notes.firstIndex(where: { $0.id == padID }) else { return }
-            doc.notes[index].text = merged
-            self.document = doc
-            notes = doc.notes
-            persist(doc)
         }
     }
 

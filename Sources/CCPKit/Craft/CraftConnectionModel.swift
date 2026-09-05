@@ -4,6 +4,13 @@
 import Foundation
 import Observation
 
+/// Posted after the credential is saved or forgotten, so holders of a cached
+/// base URL (the push path) re-read the Keychain instead of trusting a stale
+/// one. The URL itself never travels in the notification.
+public extension Notification.Name {
+    static let craftCredentialDidChange = Notification.Name("ccp.craftCredentialDidChange")
+}
+
 /// What the Settings row shows. The stored URL itself is never exposed — it
 /// is the credential, and a field that echoes it leaks it onto the screen.
 public enum CraftConnectionStatus: Equatable, Sendable {
@@ -84,6 +91,7 @@ public final class CraftConnectionModel {
         }
         urlText = ""
         isConfigured = true
+        NotificationCenter.default.post(name: .craftCredentialDidChange, object: nil)
         verify()
     }
 
@@ -100,6 +108,7 @@ public final class CraftConnectionModel {
         }
         isConfigured = false
         status = .notConfigured
+        NotificationCenter.default.post(name: .craftCredentialDidChange, object: nil)
     }
 
     /// One `GET /connection`, safe to call on appear: a single request in a

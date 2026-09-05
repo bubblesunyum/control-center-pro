@@ -151,10 +151,10 @@ public struct BlockSidecar: Codable, Equatable, Sendable {
     /// Entries come out in pad order. Pinned (read-only) entries keep their
     /// old pairing whatever the echoes say.
     public func applyingPush(text: String,
-                             slices: [CraftBlockSlice],
-                             putEcho: [CraftBlock],
-                             postEchoByInsert: [Int: [CraftBlock]],
-                             deletesConfirmed: Bool) -> (sidecar: BlockSidecar, writeBack: [CraftWriteBack]) {
+                              slices: [CraftBlockSlice],
+                              putEcho: [CraftBlock],
+                              postEchoByInsert: [Int: [CraftBlock]],
+                              deletesConfirmed: Bool) -> BlockSidecar {
         let script = pushScript(for: slices)
         let putByID = Dictionary(putEcho.map { ($0.id, $0) },
                                  uniquingKeysWith: { first, _ in first })
@@ -170,9 +170,8 @@ public struct BlockSidecar: Codable, Equatable, Sendable {
         }
 
         var rebuilt: [BlockSidecarEntry] = []
-        var writeBack: [CraftWriteBack] = []
         for index in slices.indices {
-            pairUpdate(&rebuilt, &writeBack, script: script, slices: slices,
+            pairUpdate(&rebuilt, script: script, slices: slices,
                        putByID: putByID, index: index)
             pairInsert(&rebuilt, insertEchoes: insertEchoes, index: index)
             carrySurvivor(&rebuilt, script: script, slices: slices, index: index,
@@ -180,8 +179,6 @@ public struct BlockSidecar: Codable, Equatable, Sendable {
             // Unconfirmed inserts stay absent so they retry, and confirmed
             // deletes simply leave no entry.
         }
-        writeBack.append(contentsOf: insertRunWriteBacks(
-            text: text, slices: slices, script: script, insertEchoes: insertEchoes))
         // A failed DELETE must restore its entries or the next diff forgets
         // they exist and they orphan. Pinned entries restore unconditionally:
         // they never rode the DELETE request, so its outcome says nothing
@@ -194,11 +191,10 @@ public struct BlockSidecar: Codable, Equatable, Sendable {
                 rebuilt.append(removal.entry)
             }
         }
-        return (BlockSidecar(entries: rebuilt), writeBack)
+        return BlockSidecar(entries: rebuilt)
     }
 
     private func pairUpdate(_ rebuilt: inout [BlockSidecarEntry],
-                            _ writeBack: inout [CraftWriteBack],
                             script: PushScript, slices: [CraftBlockSlice],
                             putByID: [String: CraftBlock],
                             index: Int) {
@@ -213,14 +209,6 @@ public struct BlockSidecar: Codable, Equatable, Sendable {
         }
         rebuilt.append(BlockSidecarEntry(id: old.id,
                                          fingerprint: Self.fingerprint(echo.markdown)))
-        if echo.markdown != slices[index].markdown {
-            // Trimmed range: the raw span's trailing line break is not ours.
-            let range = NSRange(location: slices[index].range.location,
-                                length: (slices[index].markdown as NSString).length)
-            writeBack.append(CraftWriteBack(range: range,
-                                            prior: slices[index].markdown,
-                                            markdown: echo.markdown))
-        }
     }
 
     private func pairInsert(_ rebuilt: inout [BlockSidecarEntry],
@@ -246,77 +234,6 @@ public struct BlockSidecar: Codable, Equatable, Sendable {
         }
     }
 
-    /// Write-back over maximal runs of echoed inserts. The replacement
-    /// interleaves the echoes with the pad's OWN separators between the
-    /// run's slices — a tight list rejoins with single newlines, exactly as
-    /// it was, so an unchanged push writes back nothing at all. Only within
-    /// one slice (a server-side split) is "\n\n" assumed, which is the only
-    /// split Craft has ever been observed to make.
-    ///
-    /// Run-level (not per-insert) because a split's boundaries are
-    /// unknowable — joining per-insert groups could overwrite one slice with
-    /// another's tail, while the run's values and order are exact whatever
-    /// the boundaries were. A run is contiguous by construction, so its span
-    /// never eats a survivor's text.
-    private func insertRunWriteBacks(text: String,
-                                     slices: [CraftBlockSlice],
-                                     script: PushScript,
-                                     insertEchoes: [Int: [CraftBlock]]) -> [CraftWriteBack] {
-        let offsets = script.insertions.map(\.offset).filter { insertEchoes[$0] != nil }
-        var runs: [[Int]] = []
-        for offset in offsets {
-            if let tail = runs.last?.last, tail + 1 == offset {
-                runs[runs.count - 1].append(offset)
-            } else {
-                runs.append([offset])
-            }
-        }
-        let ns = text as NSString
-        var edits: [CraftWriteBack] = []
-        for run in runs {
-            guard let first = run.first, let last = run.last,
-                  NSMaxRange(slices[last].range) <= ns.length else { continue }
-            let echoes = run.flatMap { insertEchoes[$0] ?? [] }
-            guard !echoes.isEmpty else { continue }
-            // The span's tail is trimmed like a single slice's: the raw
-            // range's trailing line break is a separator, not content.
-            let tailTrimmed = (slices[last].markdown as NSString).length
-            let end = slices[last].range.location + tailTrimmed
-            guard end >= slices[first].range.location else { continue }
-            var replacement = ""
-            // Separators run from each slice's TRIMMED end: the raw range's
-            // own trailing break belongs to the separator, not the content —
-            // reading from the raw end would swallow one newline per slice
-            // (a blank line lost, or a tight list blown open).
-            var previousEnd = slices[first].range.location
-            for (i, offset) in run.enumerated() {
-                if i > 0 {
-                    let gap = NSRange(location: previousEnd,
-                                      length: slices[offset].range.location - previousEnd)
-                    replacement += ns.substring(with: gap)
-                }
-                replacement += (insertEchoes[offset] ?? []).map(\.markdown).joined(separator: "\n\n")
-                previousEnd = slices[offset].range.location
-                    + (slices[offset].markdown as NSString).length
-            }
-            let span = NSRange(location: slices[first].range.location,
-                               length: end - slices[first].range.location)
-            let prior = ns.substring(with: span)
-            if replacement != prior {
-                edits.append(CraftWriteBack(range: span, prior: prior, markdown: replacement))
-            }
-        }
-        return edits
-    }
-}
-
-/// One write-back edit: Craft's canonical spelling over the pushed range.
-/// Applied only when the pad still holds `prior` there — a user who kept
-/// typing mid-flight wins over the echo.
-public struct CraftWriteBack: Equatable, Sendable {
-    public var range: NSRange
-    public var prior: String
-    public var markdown: String
 }
 
 /// The raw diff script: removals index the sidecar, insertions the slices.

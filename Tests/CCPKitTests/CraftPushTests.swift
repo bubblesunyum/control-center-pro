@@ -98,6 +98,7 @@ final class CraftPushWireTests: XCTestCase {
     }
 
     func testPostWithoutAnchorGoesToStartOfDocument() async throws {
+        // Empty-document first sync: no head block to address.
         let transport = ScriptedTransport([.init(statusCode: 200, json: """
             {"items":[{"id":"n1","markdown":"one"}]}
             """)])
@@ -112,6 +113,22 @@ final class CraftPushWireTests: XCTestCase {
         XCTAssertEqual(blocks.count, 1)
         XCTAssertEqual(blocks[0]["type"], "text")
         XCTAssertEqual(blocks[0]["markdown"], "one")
+    }
+
+    func testPostWithHeadSiblingGoesBeforeIt() async throws {
+        // Head of a non-empty document: "start" merges into the top block
+        // (observed live), so the head is addressed as a sibling instead.
+        let transport = ScriptedTransport([.init(statusCode: 200, json: """
+            {"items":[{"id":"n1","markdown":"new"}]}
+            """)])
+        _ = try await client(transport).postBlocks(
+            [BlockInsert(afterID: nil, markdown: "new")], documentID: "doc1",
+            headSiblingID: "b0")
+
+        let body = try transport.jsonBody(of: 0)
+        let position = try XCTUnwrap(body["position"] as? [String: String])
+        XCTAssertEqual(position["position"], "before")
+        XCTAssertEqual(position["siblingId"], "b0")
     }
 
     func testPostWithAnchorFollowsTheSibling() async throws {
@@ -211,10 +228,10 @@ final class CraftPushRebuildTests: XCTestCase {
         })
     }
 
-    func testConfirmedUpdateRecordsCanonicalFingerprintAndWriteBack() {
+    func testConfirmedUpdateRecordsCanonicalFingerprint() {
         let sidecar = seeded(["one", "two"])
         let slices = sliced("one\n\nTWO\n")
-        let (rebuilt, writeBack) = sidecar.applyingPush(
+        let rebuilt = sidecar.applyingPush(
             text: "one\n\nTWO\n",
             slices: slices,
             putEcho: [CraftBlock(id: "block-1", markdown: "TWO!")],
@@ -224,27 +241,13 @@ final class CraftPushRebuildTests: XCTestCase {
         XCTAssertEqual(rebuilt.entries.map(\.id), ["block-0", "block-1"])
         XCTAssertEqual(rebuilt.entries[1].fingerprint,
                        BlockSidecar.fingerprint("TWO!"))
-        XCTAssertEqual(writeBack.count, 1)
-        XCTAssertEqual(writeBack[0].prior, "TWO")
-        XCTAssertEqual(writeBack[0].markdown, "TWO!")
         // Quiet next round: the canonical text now diffs clean.
         XCTAssertTrue(rebuilt.pushPlan(for: [slice("one"), slice("TWO!")]).isEmpty)
     }
 
-    func testIdenticalEchoSkipsTheWriteBack() {
-        let sidecar = seeded(["one", "two"])
-        let (_, writeBack) = sidecar.applyingPush(
-            text: "one\n\nTWO\n",
-            slices: sliced("one\n\nTWO\n"),
-            putEcho: [CraftBlock(id: "block-1", markdown: "TWO")],
-            postEchoByInsert: [:],
-            deletesConfirmed: true)
-        XCTAssertTrue(writeBack.isEmpty, "nothing changed, nothing to write back")
-    }
-
     func testMissingPutEchoKeepsTheOldEntryForRetry() {
         let sidecar = seeded(["one", "two"])
-        let (rebuilt, writeBack) = sidecar.applyingPush(
+        let rebuilt = sidecar.applyingPush(
             text: "one\n\nTWO\n",
             slices: sliced("one\n\nTWO\n"),
             putEcho: [],
@@ -252,14 +255,13 @@ final class CraftPushRebuildTests: XCTestCase {
             deletesConfirmed: true)
 
         XCTAssertEqual(rebuilt, sidecar)
-        XCTAssertTrue(writeBack.isEmpty)
         // Still diffs as an update next round.
         XCTAssertEqual(rebuilt.pushPlan(for: sliced("one\n\nTWO\n")).updates.map(\.id),
                        ["block-1"])
     }
 
     func testPostEchoBecomesOrderedEntries() {
-        let (rebuilt, writeBack) = BlockSidecar().applyingPush(
+        let rebuilt = BlockSidecar().applyingPush(
             text: "one\n\ntwo\n",
             slices: sliced("one\n\ntwo\n"),
             putEcho: [],
@@ -270,12 +272,11 @@ final class CraftPushRebuildTests: XCTestCase {
             deletesConfirmed: true)
 
         XCTAssertEqual(rebuilt.entries.map(\.id), ["n1", "n2"])
-        XCTAssertTrue(writeBack.isEmpty)
         XCTAssertTrue(rebuilt.pushPlan(for: sliced("one\n\ntwo\n")).isEmpty)
     }
 
     func testSplitEchoStaysInsideItsGroup() {
-        let (rebuilt, _) = BlockSidecar().applyingPush(
+        let rebuilt = BlockSidecar().applyingPush(
             text: "one\n\ntwo\n",
             slices: sliced("one\n\ntwo\n"),
             putEcho: [],
@@ -294,7 +295,7 @@ final class CraftPushRebuildTests: XCTestCase {
         // must fingerprint B's text exactly — positional pairing across
         // groups used to hand B the split's tail.
         let sidecar = seeded(["x", "y"])
-        let (rebuilt, writeBack) = sidecar.applyingPush(
+        let rebuilt = sidecar.applyingPush(
             text: "x\n\nA\n\ny\n\nB\n",
             slices: sliced("x\n\nA\n\ny\n\nB\n"),
             putEcho: [],
@@ -308,14 +309,11 @@ final class CraftPushRebuildTests: XCTestCase {
         XCTAssertEqual(rebuilt.entries.map(\.id),
                        ["block-0", "a1", "a2", "block-1", "b1"])
         XCTAssertEqual(rebuilt.entries[4].fingerprint, BlockSidecar.fingerprint("B"))
-        XCTAssertEqual(writeBack.count, 1, "only the split insert writes back")
     }
 
-    func testTightListRejoinsWithoutInjectedBlanks() {
-        // Same-anchor batch of two list items, echo identical. The run
-        // rejoins with the pad's own single newlines — not "\n\n" — so an
-        // unchanged push writes back nothing at all.
-        let (rebuilt, writeBack) = BlockSidecar().applyingPush(
+    func testTightListEchoKeepsBothItems() {
+        // Same-anchor batch of two list items, echo identical.
+        let rebuilt = BlockSidecar().applyingPush(
             text: "- a\n- b\n",
             slices: sliced("- a\n- b\n"),
             putEcho: [],
@@ -326,11 +324,11 @@ final class CraftPushRebuildTests: XCTestCase {
             deletesConfirmed: true)
 
         XCTAssertEqual(rebuilt.entries.map(\.id), ["na", "nb"])
-        XCTAssertTrue(writeBack.isEmpty)
+        XCTAssertTrue(rebuilt.pushPlan(for: sliced("- a\n- b\n")).isEmpty)
     }
 
     func testFailedPostLeavesInsertsAbsent() {
-        let (rebuilt, writeBack) = BlockSidecar().applyingPush(
+        let rebuilt = BlockSidecar().applyingPush(
             text: "one\n",
             slices: sliced("one\n"),
             putEcho: [],
@@ -338,16 +336,15 @@ final class CraftPushRebuildTests: XCTestCase {
             deletesConfirmed: true)
 
         XCTAssertTrue(rebuilt.entries.isEmpty)
-        XCTAssertTrue(writeBack.isEmpty)
         XCTAssertEqual(rebuilt.pushPlan(for: sliced("one\n")).inserts.map(\.markdown),
                        ["one"])
     }
 
-    func testSplitEchoWritesBackTheWholeRunNotOneSlice() {
-        // [AAA, B] splits server-side into [a1, a2, b1]. Boundaries are
-        // unknowable, so the write-back spans the run: values and order
-        // exact, no slice overwritten with another's tail.
-        let (rebuilt, writeBack) = BlockSidecar().applyingPush(
+    func testSplitEchoRebuildsPadOrderExactly() {
+        // [AAA, B] splits server-side into [a1, a2, b1]. The rebuild pairs
+        // positionally, so values and order are exact whatever the split
+        // boundaries were.
+        let rebuilt = BlockSidecar().applyingPush(
             text: "AAA\n\nB\n",
             slices: sliced("AAA\n\nB\n"),
             putEcho: [],
@@ -359,20 +356,16 @@ final class CraftPushRebuildTests: XCTestCase {
             deletesConfirmed: true)
 
         XCTAssertEqual(rebuilt.entries.map(\.id), ["a1", "a2", "b1"])
-        XCTAssertEqual(writeBack.count, 1)
-        XCTAssertEqual(writeBack[0].prior, "AAA\n\nB")
-        XCTAssertEqual(writeBack[0].markdown, "a1\n\na2\n\nb1")
 
-        // Convergence: folding the write-back back in re-splits 1:1 against
-        // the recorded entries, so the next round is silent. A split can
-        // churn ids once, never miswire them.
+        // Convergence: the recorded entries re-split 1:1, so the next round
+        // is silent. A split can churn ids once, never miswire them.
         let converged = "a1\n\na2\n\nb1\n"
         XCTAssertTrue(rebuilt.pushPlan(for: CraftBlockSplitter.slices(in: converged)).isEmpty)
     }
 
     func testConfirmedDeleteDropsEntries() {
         let sidecar = seeded(["one", "two"])
-        let (rebuilt, _) = sidecar.applyingPush(
+        let rebuilt = sidecar.applyingPush(
             text: "two\n",
             slices: sliced("two\n"),
             putEcho: [],
@@ -383,7 +376,7 @@ final class CraftPushRebuildTests: XCTestCase {
 
     func testUnconfirmedDeleteRestoresEntries() {
         let sidecar = seeded(["one", "two"])
-        let (rebuilt, _) = sidecar.applyingPush(
+        let rebuilt = sidecar.applyingPush(
             text: "two\n",
             slices: sliced("two\n"),
             putEcho: [],
@@ -392,7 +385,7 @@ final class CraftPushRebuildTests: XCTestCase {
         XCTAssertEqual(Set(rebuilt.entries.map(\.id)), ["block-0", "block-1"],
                        "order may shift on restore; the next diff absorbs it as churn")
         // And the retry drops it exactly.
-        let (retried, _) = rebuilt.applyingPush(
+        let retried = rebuilt.applyingPush(
             text: "two\n",
             slices: sliced("two\n"),
             putEcho: [],
@@ -407,7 +400,7 @@ final class CraftPushRebuildTests: XCTestCase {
             BlockSidecarEntry(id: "b", fingerprint: BlockSidecar.fingerprint("two"),
                               isWritable: false),
         ])
-        let (rebuilt, writeBack) = sidecar.applyingPush(
+        let rebuilt = sidecar.applyingPush(
             text: "one\n",
             slices: sliced("one\n"),
             putEcho: [],
@@ -415,7 +408,6 @@ final class CraftPushRebuildTests: XCTestCase {
             deletesConfirmed: true)
         XCTAssertTrue(rebuilt.entries.contains(where: { $0.id == "b" }),
                       "a pinned block is never deleted, whatever the request said")
-        XCTAssertTrue(writeBack.isEmpty)
     }
 }
 
@@ -496,7 +488,7 @@ final class CraftPushAdapterTests: XCTestCase {
         return id
     }
 
-    func testFlushPutsTheEditStoresTheEchoAndWritesBack() async throws {
+    func testFlushPutsTheEditAndStoresTheEcho() async throws {
         let name = "ccp.push.flush.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
@@ -512,39 +504,24 @@ final class CraftPushAdapterTests: XCTestCase {
         XCTAssertEqual(transport.requests.count, 1, "one PUT, nothing else")
         XCTAssertEqual(adapter.sidecar(for: id).entries[1].fingerprint,
                        BlockSidecar.fingerprint("TWO!"))
-        XCTAssertEqual(adapter.text, "one\n\nTWO!\n",
-                       "the canonical spelling comes back into the pad")
+        XCTAssertEqual(adapter.text, "one\n\nTWO\n",
+                       "a push never rewrites the pad — the user's spelling stands")
     }
 
-    func testWriteBackFlagOffLeavesThePadAlone() async throws {
-        let name = "ccp.push.flagoff.\(UUID().uuidString)"
-        let store = try defaults(name)
-        defer { store.removePersistentDomain(forName: name) }
-        store.set(false, forKey: "scratchpadCraftWriteBack")
-        let transport = ScriptedTransport([.init(statusCode: 200, json: """
-            {"items":[{"id":"block-1","markdown":"TWO!"}]}
-            """)])
-        let adapter = adapter(store, transport)
-        let id = try seed(adapter, text: "one\n\ntwo\n")
-
-        adapter.text = "one\n\nTWO\n"
-        await adapter.flushCraftPush()
-
-        XCTAssertEqual(adapter.text, "one\n\nTWO\n")
-        XCTAssertEqual(adapter.sidecar(for: id).entries[1].fingerprint,
-                       BlockSidecar.fingerprint("TWO!"),
-                       "the sidecar still learns the canonical form")
-    }
-
-    func testMidFlightTypingWinsOverTheEcho() async throws {
+    func testMidFlightTypingStaysDirtyForAnotherRound() async throws {
         let name = "ccp.push.midflight.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([.init(statusCode: 200, json: """
-            {"items":[{"id":"block-1","markdown":"TWO!"}]}
-            """)])
+        let transport = ScriptedTransport([
+            .init(statusCode: 200, json: """
+                {"items":[{"id":"block-1","markdown":"TWO!"}]}
+                """),
+            .init(statusCode: 200, json: """
+                {"items":[{"id":"block-1","markdown":"TW0!"}]}
+                """),
+        ])
         let adapter = adapter(store, transport)
-        _ = try seed(adapter, text: "one\n\ntwo\n")
+        let id = try seed(adapter, text: "one\n\ntwo\n")
 
         adapter.text = "one\n\nTWO\n"
         transport.onRequest = {
@@ -553,8 +530,15 @@ final class CraftPushAdapterTests: XCTestCase {
         }
         await adapter.flushCraftPush()
 
-        XCTAssertEqual(adapter.text, "one\n\nTW0\n",
-                       "the guard range no longer matches, so no write-back lands")
+        XCTAssertEqual(adapter.text, "one\n\nTW0\n", "the pad is never rewritten by a push")
+        XCTAssertTrue(adapter.isPushDirty(id),
+                      "the sidecar describes the pushed text, not the current text")
+
+        await adapter.flushCraftPush()
+        XCTAssertFalse(adapter.isPushDirty(id))
+        XCTAssertEqual(adapter.sidecar(for: id).entries[1].fingerprint,
+                       BlockSidecar.fingerprint("TW0!"))
+        XCTAssertEqual(adapter.text, "one\n\nTW0\n")
     }
 
     func testFailureLeavesTheSidecarUntouched() async throws {
@@ -602,7 +586,6 @@ final class CraftPushAdapterTests: XCTestCase {
                 """),
             .init(statusCode: 200, json: "{}"),
         ])
-        store.set(false, forKey: "scratchpadCraftWriteBack")
         let adapter = adapter(store, transport)
         let id = try seed(adapter, text: "one\n\ntwo\n\nthree\n")
 
@@ -637,7 +620,6 @@ final class CraftPushAdapterTests: XCTestCase {
                 {"items":[{"id":"ny","markdown":"y"}]}
                 """),
         ])
-        store.set(false, forKey: "scratchpadCraftWriteBack")
         let adapter = adapter(store, transport)
         let id = try seed(adapter, text: "a\n\nb\n\nc\n")
 
@@ -651,7 +633,7 @@ final class CraftPushAdapterTests: XCTestCase {
                        "new ids land in pad order")
     }
 
-    func testPrependPostsToStartWhileAnchoredInsertsProceed() async throws {
+    func testPrependPostsBeforeTheHeadBlock() async throws {
         let name = "ccp.push.prepend.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
@@ -673,7 +655,9 @@ final class CraftPushAdapterTests: XCTestCase {
         XCTAssertEqual(transport.requests.count, 2, "both groups post")
         let firstPosition = try XCTUnwrap(
             (try transport.jsonBody(of: 0)["position"] as? [String: String]))
-        XCTAssertEqual(firstPosition["position"], "start", "the anchorless group posts to the head")
+        XCTAssertEqual(firstPosition["position"], "before",
+                       "the anchorless group addresses the head as a sibling")
+        XCTAssertEqual(firstPosition["siblingId"], "block-0")
         XCTAssertEqual(adapter.sidecar(for: id).entries.map(\.id), ["na", "block-0", "nc"],
                        "new ids land in pad order")
         XCTAssertFalse(adapter.isPushDirty(id), "nothing stalls anymore")
@@ -712,7 +696,6 @@ final class CraftPushAdapterTests: XCTestCase {
                 .joined(separator: ",")
             return ScriptedTransport.Script(statusCode: 200, json: "{\"items\":[\(echo)]}")
         }
-        store.set(false, forKey: "scratchpadCraftWriteBack")
         let adapter = adapter(store, transport)
         adapter.createNote()
         let first = adapter.notes[0].id
@@ -742,7 +725,7 @@ final class CraftPushAdapterTests: XCTestCase {
                        [BlockSidecar.fingerprint("BBB!")])
     }
 
-    func testBackgroundPadWriteBackSkipsTheBinding() async throws {
+    func testBackgroundPadPushLeavesTheVisiblePadAlone() async throws {
         let name = "ccp.push.background.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
@@ -764,10 +747,11 @@ final class CraftPushAdapterTests: XCTestCase {
         await adapter.flushCraftPush()
 
         XCTAssertEqual(adapter.text, "", "the visible pad is untouched")
-        XCTAssertEqual(adapter.notes.first(where: { $0.id == first })?.text, "AAA!",
-                       "the background pad learns the canonical spelling in its document")
+        XCTAssertEqual(adapter.notes.first(where: { $0.id == first })?.text, "AAA",
+                       "no push ever rewrites a pad")
         XCTAssertEqual(adapter.sidecar(for: first).entries.map(\.fingerprint),
-                       [BlockSidecar.fingerprint("AAA!")])
+                       [BlockSidecar.fingerprint("AAA!")],
+                       "the sidecar still learns the canonical form")
     }
 
     func testRepeatedFailureThrottlesDebouncedRuns() async throws {
