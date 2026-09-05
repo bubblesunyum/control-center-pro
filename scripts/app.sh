@@ -20,6 +20,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+APP_NAME="Control Center Pro"
+EXECUTABLE=ControlCenterPro
+BUNDLE="build/$APP_NAME.app"
+
 CONFIGURATION=debug
 LAUNCH=0
 APP_ARGS=()
@@ -37,9 +41,11 @@ done
 
 # `pkill` only sends the signal, and `open` on an .app that is still running
 # reactivates the old process instead of launching the new binary — silently
-# showing a stale build. Wait for it to actually go.
-restart_app() {
-  local bundle="$1"; shift
+# showing a stale build. Worse, LaunchServices unregisters the dead bundle
+# asynchronously after `pgrep` goes quiet, so `open` can catch the stale entry
+# and fail with `_LSOpenURLsWithCompletionHandler() failed with error -600`
+# (procNotFound). Wait for it to actually go.
+quit_app() {
   pkill -f "/Contents/MacOS/$EXECUTABLE" 2>/dev/null || true
   local waited=0
   while pgrep -f "/Contents/MacOS/$EXECUTABLE" > /dev/null 2>&1; do
@@ -50,12 +56,38 @@ restart_app() {
       return 1
     fi
   done
-  open "$bundle" "$@"
 }
 
-APP_NAME="Control Center Pro"
-EXECUTABLE=ControlCenterPro
-BUNDLE="build/$APP_NAME.app"
+# Launches the freshly assembled bundle. `open -n` forces a new instance
+# rather than reactivating a stale LaunchServices registration, and the retry
+# covers the window where LS still points at the just-quit PID. `--args` is
+# only passed when there are app args — a bare `--args` confuses `open` and
+# surfaces as the same -600 (ccp-qahu).
+restart_app() {
+  local bundle="$1"
+  quit_app || return 1
+  # `pgrep` going quiet is not LS unregistering; give it a beat.
+  sleep 0.5
+  local attempt=0
+  while (( attempt < 3 )); do
+    if (( ${#APP_ARGS[@]} > 0 )); then
+      if open -n "$bundle" --args "${APP_ARGS[@]}"; then return 0; fi
+    else
+      if open -n "$bundle"; then return 0; fi
+    fi
+    attempt=$((attempt + 1))
+    sleep 0.5
+  done
+  echo "open failed after 3 attempts" >&2
+  return 1
+}
+
+# Quit before the build so LaunchServices has the whole compile to forget the
+# old registration; the pre-launch `quit_app` inside `restart_app` is then a
+# quick no-op safety net.
+if (( LAUNCH )); then
+  quit_app
+fi
 
 swift build -c "$CONFIGURATION" --product "$EXECUTABLE" > /tmp/ccp-app-build.log 2>&1 || {
   echo "build failed — see /tmp/ccp-app-build.log" >&2
@@ -109,7 +141,7 @@ else
 fi
 
 if (( LAUNCH )); then
-  restart_app "$BUNDLE" ${APP_ARGS+--args "${APP_ARGS[@]}"}
+  restart_app "$BUNDLE"
 fi
 
 echo "$BUNDLE"
