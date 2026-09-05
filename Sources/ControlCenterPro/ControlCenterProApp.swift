@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Control Center Pro contributors
 
 import AppKit
+import CCPUI
 
 /// The entry point.
 ///
@@ -20,6 +21,11 @@ struct ControlCenterProApp {
         // same with LSUIElement; setting it here too means `swift run` behaves
         // like the shipped app rather than bouncing in the Dock.
         application.setActivationPolicy(.accessory)
+
+        // Never drawn under `.accessory`, and the panel's text fields cannot
+        // cut, copy or paste without it.
+        ApplicationMenu.install(in: application)
+
         application.run()
     }
 }
