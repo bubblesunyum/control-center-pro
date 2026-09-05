@@ -85,7 +85,7 @@ private struct NotesContent: View {
     /// against, and it keeps the hold accessibility action — a custom header
     /// that drops either silently leaves the widget undraggable.
     private var header: some View {
-        HStack(spacing: Space.half) {
+        HStack(spacing: Space.one) {
             Image(systemName: NotesWidget.descriptor.symbolName)
                 .font(.headline)
                 .foregroundStyle(.primary)

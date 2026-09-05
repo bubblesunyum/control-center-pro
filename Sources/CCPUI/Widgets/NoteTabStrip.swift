@@ -84,16 +84,18 @@ struct NoteTabStrip: View {
     private func tab(_ note: Note) -> some View {
         let isSelected = adapter.selectedNoteID == note.id
         let isHovered = hoveredNoteID == note.id
-        let showClose = adapter.canCloseNote && (isSelected || isHovered)
+        // The close control never leaves the layout — it only fades. Adding
+        // and removing it resized the pill and the name jumped under the eye.
+        let closeOpacity: CGFloat = (isSelected || isHovered) ? 1 : 0
         HStack(spacing: Space.one) {
             if renaming == note.id {
                 renameField(note)
             } else {
                 Text(note.name)
-                    .font(.caption.weight(isSelected ? .semibold : .regular))
+                    .font(.headline)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                if showClose {
+                if adapter.canCloseNote {
                     Button {
                         onCloseRequest(note)
                     } label: {
@@ -104,13 +106,15 @@ struct NoteTabStrip: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.tertiary)
+                    .opacity(closeOpacity)
+                    .disabled(closeOpacity == 0)
+                    .accessibilityHidden(closeOpacity == 0)
                     .help("Close note")
                     .accessibilityLabel("Close \(note.name)")
                 }
             }
         }
-        .padding(.leading, Space.one)
-        .padding(.trailing, showClose || renaming == note.id ? Space.half : Space.one)
+        .padding(.horizontal, Space.one)
         .frame(minWidth: 36, maxWidth: 96)
         .frame(height: Layout.noteTabHeight)
         .foregroundStyle(isSelected ? Color.primary : Color.secondary)
@@ -137,7 +141,7 @@ struct NoteTabStrip: View {
     private func renameField(_ note: Note) -> some View {
         TextField("", text: $renameDraft)
             .textFieldStyle(.plain)
-            .font(.caption)
+            .font(.headline)
             .focused($isRenaming)
             .onSubmit { commitRename(note) }
             .onExitCommand { renaming = nil }

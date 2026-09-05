@@ -17,6 +17,7 @@ private enum Ink {
     static let white24 = Color.white.opacity(0.24)
     static let black12 = Color.black.opacity(0.12)
     static let black24 = Color.black.opacity(0.24)
+    static let black32 = Color.black.opacity(0.32)
 }
 
 public extension Color {
@@ -42,9 +43,12 @@ public extension Color {
     /// black scrim darkens in either appearance, where leaning on the system
     /// background would darken in one and lighten in the other.
     static let noteScrim = Ink.black12
-    /// The note well, set into the card. A heavier scrim than the tab chrome
-    /// so the editor reads as inset rather than as another raised surface.
-    static let noteInset = Ink.black24
+    /// The note well, set into the card. A heavy scrim with none of the
+    /// card's lightening, so it reads as a hollow next to the glass around
+    /// it rather than as another tile of it. A black scrim darkens in either
+    /// appearance, where leaning on the system background would darken in one
+    /// and lighten in the other.
+    static let noteInset = Ink.black32
 
     /// What an active toggle reads as. Named so widgets ask for the meaning
     /// rather than for the system accent, which is where a different answer

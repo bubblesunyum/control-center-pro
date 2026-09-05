@@ -35,14 +35,13 @@ struct NoteSurface: View {
     }
 }
 
-/// The skin of the inset well: the same lightening the card draws, pulled back
-/// down by a heavier scrim, under a hairline and no shadow — a raised surface
-/// casts one, a hollow one does not.
+/// The skin of the inset well: the scrim alone, no lightening and no shadow.
+/// A raised surface lightens the glass and casts a shadow; a hollow darkens
+/// it and casts none.
 private struct NoteInsetChrome: ViewModifier {
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
         content
-            .background(shape.fill(Color.controlFill))
             .background(shape.fill(Color.noteInset))
             .overlay(shape.stroke(Color.cardStroke, lineWidth: Stroke.hairline))
     }
