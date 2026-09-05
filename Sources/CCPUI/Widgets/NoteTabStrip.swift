@@ -89,7 +89,7 @@ struct NoteTabStrip: View {
         // and removing it resized the pill and the name jumped under the eye.
         let closeOpacity: CGFloat = (isSelected || isHovered) ? 1 : 0
         let isCloseHovered = hoveredCloseID == note.id
-        HStack(spacing: Space.oneHalf) {
+        HStack(spacing: Space.half) {
             if renaming == note.id {
                 renameField(note)
             } else {
@@ -103,13 +103,12 @@ struct NoteTabStrip: View {
                     } label: {
                         Image(systemName: "xmark")
                             .font(.caption.weight(.semibold))
-                            .frame(width: Space.oneHalf, height: Space.oneHalf)
-                            .contentShape(Circle())
+                            .padding(Space.half)
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(isCloseHovered ? .secondary : .tertiary)
                     .background {
-                        Circle()
+                        RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
                             .fill(isCloseHovered ? Color.controlFill : Color.clear)
                     }
                     .onHover { hovering in
@@ -124,7 +123,11 @@ struct NoteTabStrip: View {
                 }
             }
         }
-        .padding(.horizontal, Space.one)
+        // The hover chip is a 20pt square in a 24pt pill, so 2pt of air above
+        // and below it — the trailing pad matches at 2pt and the chip sits
+        // evenly on all three sides.
+        .padding(.leading, Space.half)
+        .padding(.trailing, Space.quarter)
         .frame(minWidth: 32, maxWidth: 92)
         .frame(height: Layout.noteTabHeight)
         .foregroundStyle(isSelected ? Color.primary : Color.secondary)
