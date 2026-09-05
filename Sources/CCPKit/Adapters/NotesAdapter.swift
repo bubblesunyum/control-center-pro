@@ -62,6 +62,37 @@ public struct NotesDocument: Codable, Equatable, Sendable {
     public var notes: [Note]
     public var selectedID: UUID
 
+    /// The stored key is `pads`, and it stays `pads` however the feature is
+    /// named in Swift: the bytes are shared with upstream's floating pad, and
+    /// renaming the property alone silently stops decoding every note the user
+    /// already has. That is not hypothetical — it happened.
+    private enum CodingKeys: String, CodingKey {
+        case notes = "pads"
+        case selectedID
+    }
+
+    /// One build wrote the property name out as `notes`. Read that back too,
+    /// rather than treating those documents as corrupt.
+    private enum LegacyCodingKeys: String, CodingKey {
+        case notes
+    }
+
+    public init(notes: [Note], selectedID: UUID) {
+        self.notes = notes
+        self.selectedID = selectedID
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        selectedID = try container.decode(UUID.self, forKey: .selectedID)
+        if let pads = try container.decodeIfPresent([Note].self, forKey: .notes) {
+            notes = pads
+        } else {
+            let legacy = try decoder.container(keyedBy: LegacyCodingKeys.self)
+            notes = try legacy.decode([Note].self, forKey: .notes)
+        }
+    }
+
     public static func initial(defaultName: String,
                                id: UUID = UUID(),
                                text: String = "",
@@ -239,6 +270,9 @@ public final class NotesAdapter {
     @ObservationIgnored private var lastSavedDocument: NotesDocument?
     @ObservationIgnored private var hasLoaded = false
     @ObservationIgnored private var isReplacingText = false
+    /// Set when the stored bytes would not decode. The first write moves them
+    /// aside rather than over.
+    @ObservationIgnored private var isStoredDocumentUnreadable = false
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var terminationObserver: NSObjectProtocol?
     @ObservationIgnored private let defaults: UserDefaults
@@ -248,6 +282,7 @@ public final class NotesAdapter {
     // either one orphans every note already written.
     @ObservationIgnored private let documentKey = "scratchpadDocument"
     @ObservationIgnored private let retentionKey = "scratchpadRetention"
+    @ObservationIgnored private let rescueKey = "scratchpadDocument.unreadable"
 
     public convenience init() {
         self.init(defaults: .standard, defaultName: "Note")
@@ -301,6 +336,18 @@ public final class NotesAdapter {
         flushSave()
     }
 
+    /// Notes the running build cannot read are still notes. Before the first
+    /// write lands on top of them they are copied to a key nothing else
+    /// touches, so a later build — or the user with `defaults read` — can get
+    /// them back.
+    private func rescueUnreadableDocument() {
+        isStoredDocumentUnreadable = false
+        guard let stored = defaults.object(forKey: documentKey),
+              defaults.object(forKey: rescueKey) == nil
+        else { return }
+        defaults.set(stored, forKey: rescueKey)
+    }
+
     // MARK: - Document loading
 
     private func loadApplyingRetention() {
@@ -313,8 +360,17 @@ public final class NotesAdapter {
 
         if let stored = defaults.object(forKey: documentKey) {
             let data = stored as? Data
-            let decoded = data.flatMap { try? JSONDecoder().decode(NotesDocument.self, from: $0) }
-            var loaded = decoded?.sanitized(defaultName: defaultName) ?? .initial(defaultName: defaultName)
+            guard let decoded = data.flatMap({ try? JSONDecoder().decode(NotesDocument.self, from: $0) }) else {
+                // Bytes we cannot read are still the user's notes. Show an
+                // empty document, but leave the stored value exactly where it
+                // is: a build that understands it again can recover it, and
+                // writing over it cannot be taken back.
+                apply(.initial(defaultName: defaultName))
+                lastSavedDocument = nil
+                isStoredDocumentUnreadable = true
+                return
+            }
+            var loaded = decoded.sanitized(defaultName: defaultName)
             loaded.applyRetention(retention, now: Date())
             if loaded == decoded {
                 lastSavedDocument = loaded
@@ -355,6 +411,7 @@ public final class NotesAdapter {
 
     @discardableResult
     private func persist(_ document: NotesDocument) -> Bool {
+        if isStoredDocumentUnreadable { rescueUnreadableDocument() }
         if document == lastSavedDocument { return true }
         guard let data = document.encoded() else { return false }
         defaults.set(data, forKey: documentKey)
@@ -414,6 +471,23 @@ public final class NotesAdapter {
     }
 
     public var isEmpty: Bool { text.isEmpty }
+
+    /// The bundle Notes syncs towards. Craft ships under its maker's old name,
+    /// which is not a thing to work out twice.
+    public static let craftBundleIdentifier = "com.lukilabs.lukiapp"
+
+    /// Bring Craft forward. Deliberately activating — this is the one place the
+    /// user asked to leave the panel, so stealing focus is the point rather
+    /// than the hazard it is everywhere else in the sync work.
+    ///
+    /// Craft not being installed is a normal state: the button does nothing
+    /// rather than presenting an error about an app the user never had.
+    public func openCraft() {
+        guard let url = NSWorkspace.shared
+            .urlForApplication(withBundleIdentifier: Self.craftBundleIdentifier)
+        else { return }
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+    }
 
     public func exportFileName(date: Date = Date()) -> String {
         NotesSupport.exportFileName(title: selectedNoteName, date: date)

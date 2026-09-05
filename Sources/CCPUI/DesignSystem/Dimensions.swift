@@ -55,6 +55,15 @@ public enum Layout {
     /// glass under its own capped list.
     static let noteEditorHeight: CGFloat = 300
 
+    /// The vertical rail of note tabs. Narrow enough to leave the note the
+    /// larger half of a 300pt lane, wide enough that "Groceries" reads.
+    static let noteTabRailWidth: CGFloat = 84
+    /// One tab in that rail. Twelve of them plus the new-note row is the most
+    /// there can ever be, and at this height they still fit beside the editor
+    /// without the rail needing to scroll — which is what keeps the join
+    /// between the selected tab and the note computable from an index.
+    static let noteTabHeight: CGFloat = 24
+
     /// Size of a row's leading icon and trailing menu button.
     static let rowActionSize: CGFloat = 22
     /// Thumbnail shown on the trailing edge of an image clipboard row.
