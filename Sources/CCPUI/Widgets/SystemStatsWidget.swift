@@ -682,45 +682,6 @@ private struct ActivityMonitorButton: View {
 
 // MARK: - Small views
 
-/// Thin capacity bar for CPU/GPU/Memory/Battery usage (per-section color).
-/// When `warningTint` is set (memory pressure), the leading edge gradients into it.
-private struct UsageBar: View {
-    let fraction: Double
-    var tint: Color? = nil
-    var warningTint: Color? = nil
-
-    var body: some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color.primary.opacity(0.08))
-                Capsule()
-                    .fill(barFill(width: proxy.size.width))
-                    .frame(width: max(3, proxy.size.width * min(1, max(0, fraction))))
-            }
-        }
-        .frame(height: 5)
-    }
-
-    private func barFill(width: CGFloat) -> AnyShapeStyle {
-        let base = tint ?? .accentColor
-        guard let warning = warningTint else {
-            return AnyShapeStyle(base)
-        }
-        // Gradient from base into warning at the trailing tip
-        return AnyShapeStyle(
-            LinearGradient(
-                stops: [
-                    .init(color: base, location: 0.0),
-                    .init(color: base, location: 0.72),
-                    .init(color: warning, location: 1.0)
-                ],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-        )
-    }
-}
-
 /// (10) dot-only memory pressure indicator — text shows on hover.
 private struct PressureDot: View {
     let pressure: SystemMemoryPressure
