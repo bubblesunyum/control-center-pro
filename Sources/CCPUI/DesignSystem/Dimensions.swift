@@ -78,11 +78,15 @@ public enum Layout {
     static let clipboardPreviewHeight: CGFloat = 160
     /// Max width of the full-text preview at the bottom of the clipboard context menu.
     static let clipboardMenuMaxWidth: CGFloat = 320
-    /// The resize tick's arm length. Fourteen points sits deliberately between
-    /// the Space steps, and stays a token rather than an inline number so the
-    /// measured value has one home: what the captures verified is a corner
-    /// mark at this length and weight, not a frame.
-    static let resizeTickLength: CGFloat = 14
+    /// The resize grip's touch box: a 44pt square in the card's corner. The
+    /// platform minimum for a touch target, and deliberately larger than the
+    /// white arc drawn inside it — the finger lands near the edge, not on a
+    /// line. What the panel hit-tests against (see `GripFramePreference`).
+    static let resizeTouchTarget: CGFloat = 44
+    /// How far the grip's touch area overshoots its drawn box, on every side.
+    /// Near-misses on the corner must land. Kept inside the shell's 12pt
+    /// gutters, so the area never reaches into the neighbouring card.
+    static let resizeGripOvershoot: CGFloat = 8
     /// How wide a lane of cards is. A lane holding a `.screen` widget is wider
     /// — see `WidgetSize.width` — but this is the width of every other one,
     /// and of a lane that does not exist yet.

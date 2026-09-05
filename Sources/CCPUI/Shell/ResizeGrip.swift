@@ -19,13 +19,15 @@ struct ResizeGrip: View {
 
     var body: some View {
         CornerTick()
-            .stroke(.secondary, style: StrokeStyle(lineWidth: Stroke.resizeTick, lineCap: .round, lineJoin: .round))
-            .frame(width: Layout.resizeTickLength, height: Layout.resizeTickLength)
-            // A generous target around a small mark. Inset a full step inside
-            // the corner: flush to the edge, the tick straddles the card's
-            // hairline and reads as a broken border rather than a mark.
-            .padding(Space.oneHalf)
+            .stroke(.white, style: StrokeStyle(lineWidth: Stroke.resizeTick, lineCap: .round))
+            // The mark is small and the target is not: a full 44pt box in the
+            // corner, so the finger can land anywhere near the edge. Its outer
+            // corner sits exactly on the card's, which is what lets the arc
+            // below hug the card's own rounding.
+            .frame(width: Layout.resizeTouchTarget, height: Layout.resizeTouchTarget)
             .contentShape(Rectangle())
+            // White on glass needs a shadow to read over a light wallpaper.
+            .shadow(color: .cardShadow, radius: 2, y: 1)
             .background { gripReporter }
             .accessibilityLabel("Resize \(slot.title)")
             .accessibilityValue("\(slot.span.width) by \(slot.span.height)")
@@ -49,22 +51,38 @@ struct ResizeGrip: View {
 
     private var gripReporter: some View {
         GeometryReader { proxy in
+            // The touch area overshoots the drawn box on every side: the
+            // finger aims at the card's corner, not at the box, and
+            // near-misses must land. The panel hit-tests this frame, not the
+            // view's own hit-testing, so `contentShape` above cannot do it.
             Color.clear.preference(
                 key: GripFramePreference.self,
-                value: [GripFrame(id: slot.id, frame: proxy.frame(in: .panel))]
+                value: [GripFrame(
+                    id: slot.id,
+                    frame: proxy.frame(in: .panel).insetBy(
+                        dx: -Layout.resizeGripOvershoot,
+                        dy: -Layout.resizeGripOvershoot
+                    )
+                )]
             )
         }
     }
 }
 
-/// A short rounded corner: a horizontal arm along the bottom meeting a
-/// vertical arm up the trailing edge.
+/// A short arc concentric with the card's own corner: the grip box's outer
+/// corner sits exactly on the card's, so centering the arc one card-radius in
+/// hugs the edge. Inset half a step inside the hairline — flush, it would read
+/// as a broken border rather than a mark.
 private struct CornerTick: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addArc(
+            center: CGPoint(x: rect.maxX - Radius.card, y: rect.maxY - Radius.card),
+            radius: Radius.card - Space.half,
+            startAngle: .degrees(0),
+            endAngle: .degrees(90),
+            clockwise: false
+        )
         return path
     }
 }
@@ -82,7 +100,10 @@ func commitResize(
     arrangement: PanelArrangement, editor: PanelEditor
 ) -> Bool {
     if span.width != slot.span.width {
-        let offered = slot.resized(to: span).width
+        // Measure the lane as it would be — gutters and all — not the slot
+        // alone, which is narrower than the lane by the shell's gutters.
+        guard arrangement.lanes.indices.contains(lane) else { return false }
+        let offered = arrangement.lanes[lane].map { $0.id == slot.id ? $0.resized(to: span) : $0 }.width
         guard editor.canResizeLane(lane, to: offered, laneWidths: arrangement.laneWidths) else {
             return false
         }

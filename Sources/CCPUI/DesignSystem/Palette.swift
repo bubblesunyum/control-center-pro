@@ -15,6 +15,7 @@ private enum Ink {
     static let white14 = Color.white.opacity(0.14)
     static let white18 = Color.white.opacity(0.18)
     static let white24 = Color.white.opacity(0.24)
+    static let black12 = Color.black.opacity(0.12)
     static let black24 = Color.black.opacity(0.24)
 }
 
@@ -35,6 +36,12 @@ public extension Color {
     /// Fill for a pressable surface inside a card, at rest.
     static let controlFill = Ink.white08
     static let cardShadow = Ink.black24
+
+    /// The note surface sits two lightening fills above its card; without a
+    /// scrim it reads as glare rather than as a surface set into the card. A
+    /// black scrim darkens in either appearance, where leaning on the system
+    /// background would darken in one and lighten in the other.
+    static let noteScrim = Ink.black12
 
     /// What an active toggle reads as. Named so widgets ask for the meaning
     /// rather than for the system accent, which is where a different answer

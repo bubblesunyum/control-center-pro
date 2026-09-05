@@ -24,7 +24,9 @@ struct EditableCard: View {
     var body: some View {
         LaneSlotCard(slot: slot)
             .environment(\.currentWidgetID, slot.id)
-            .wiggling(editor.isEditing && !isInTheAir)
+            // The wiggle is off for now — re-enable with
+            // `editor.isEditing && !isInTheAir`.
+            .wiggling(false)
             .overlay(alignment: .topLeading) { removeBadge }
             .overlay(alignment: .bottomTrailing) { resizeGrip }
             // The whole card, badge included: what a lifted card leaves in its

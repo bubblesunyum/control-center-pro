@@ -134,6 +134,33 @@ final class PanelEditorResizeTests: XCTestCase {
             WidgetSpan(width: 1, height: 2)
         )
     }
+
+    /// The refusal measures the lane as it would be — units plus the shell's
+    /// gutter — not the slot alone. A display fitting 600pt of cards still
+    /// refuses the 612pt a 2-wide lane actually takes.
+    func testCommitCountsTheGutterBetweenColumns() {
+        let editor = PanelEditor()
+        editor.displayWidth = Layout.laneWidth * 2 + Layout.panelInset * 2 + Space.oneHalf * 2
+        let registry = WidgetRegistry()
+        registry.register(ResizeStubWidget.self)
+        let arrangement = PanelArrangement(
+            PanelLayout([[ResizeStubWidget.descriptor.id]]),
+            registry: registry
+        )
+        let slot = arrangement.slot(for: ResizeStubWidget.descriptor.id)!
+
+        XCTAssertFalse(commitResize(
+            WidgetSpan(width: 2, height: 1), of: slot, in: 0,
+            arrangement: arrangement, editor: editor
+        ))
+
+        editor.displayWidth += Space.oneHalf
+
+        XCTAssertTrue(commitResize(
+            WidgetSpan(width: 2, height: 1), of: slot, in: 0,
+            arrangement: arrangement, editor: editor
+        ))
+    }
 }
 
 @MainActor

@@ -19,6 +19,7 @@ struct NoteSurface: View {
         }
         .background(joined.fill(Color.controlFill))
         .background(joined.fill(.background.opacity(0.35)))
+        .background(joined.fill(Color.noteScrim))
         .overlay(joined.stroke(Color.cardStroke, lineWidth: Stroke.hairline))
         .shadow(color: .cardShadow, radius: Space.one, y: Space.quarter)
         .animation(.snappy(duration: 0.22), value: adapter.selectedNoteID)
@@ -67,6 +68,8 @@ private struct NoteToolbar: View {
 
     var body: some View {
         HStack(spacing: Space.half) {
+            button("trash", label: "Clear") { adapter.clear() }
+            Spacer(minLength: 0)
             button(didCopy ? "checkmark" : "doc.on.doc",
                    label: didCopy ? "Copied" : "Copy",
                    tint: didCopy ? .green : nil) {
@@ -78,8 +81,6 @@ private struct NoteToolbar: View {
                 }
             }
             button("square.and.arrow.down", label: "Export") { adapter.exportText() }
-            Spacer(minLength: 0)
-            button("trash", label: "Clear") { adapter.clear() }
         }
         .padding(.horizontal, Space.half)
         .padding(.bottom, Space.half)

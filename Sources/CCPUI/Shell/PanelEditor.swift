@@ -135,14 +135,17 @@ public final class PanelEditor {
         // Without this, `visibleSlots` filters the lifted card and the lane
         // shrinks by one card height the moment you pick it up.
         // Use the ghost's visual center, like `landing(using:)` does, so the
-        // first drag tick doesn't thrash the gap one slot.
-        let lane = zone.lane
-        let settled = snapshotZones
-            .filter { $0.lane == lane && $0.id != id }
-            .sorted { $0.frame.minY < $1.frame.minY }
-        let visualCenter = newLifted.visualCenter(at: location)
-        let index = settled.filter { $0.frame.midY < visualCenter.y }.count
-        previewLanding = .into(lane: lane, index: index)
+        // first drag tick doesn't thrash the gap one slot. The lane keeps
+        // the lifted card's frame for banding — lifting one half of a shared
+        // row must not collapse the row before the finger moves, or the drop
+        // without moving lands in the mate's seat and a no-op swaps the pair.
+        let laneCards = snapshotZones
+            .filter { $0.lane == zone.lane }
+            .sorted { ($0.frame.minY, $0.frame.minX) < ($1.frame.minY, $1.frame.minX) }
+        previewLanding = .into(
+            lane: zone.lane,
+            index: indexBelow(newLifted.visualCenter(at: location), in: laneCards, skipping: id)
+        )
     }
 
     /// Window grew/shrank while dragging (new-lane target appeared). The
@@ -278,13 +281,52 @@ public final class PanelEditor {
         let center = lifted.visualCenter(at: fingerAt)
 
         if let lane = source.first(where: { $0.frame.minX <= center.x && center.x <= $0.frame.maxX })?.lane {
-            let settled = source.filter { $0.lane == lane && $0.id != lifted.id }
-            return .into(lane: lane, index: settled.filter { $0.frame.midY < center.y }.count)
+            let cards = source.filter { $0.lane == lane }
+                .sorted { ($0.frame.minY, $0.frame.minX) < ($1.frame.minY, $1.frame.minX) }
+            return .into(lane: lane, index: indexBelow(center, in: cards, skipping: lifted.id))
         }
 
         // Left of every card is the column the panel would grow into.
         guard let leftmost = source.map(\.frame.minX).min(), center.x < leftmost else { return nil }
         return canAddLane(beside: laneWidths) ? .newLane(at: 0) : nil
+    }
+
+    /// The insertion index for `center` among the lane's cards, counted in
+    /// layout order without the card in the air.
+    ///
+    /// Cards whose frames overlap vertically are one band — a row sharing the
+    /// lane — and the finger's row decides by x: what is left of it comes
+    /// first, and a band wholly above counts whole. The card in the air keeps
+    /// its frame for banding but never counts: lifting one half of a shared
+    /// row must not collapse the row, or dropping it without moving lands in
+    /// its mate's seat. A band of one settled card is exactly the old midY
+    /// rule, so single-column lanes land where they always have.
+    private func indexBelow(_ center: CGPoint, in cards: [DropZone], skipping skipped: WidgetID) -> Int {
+        var index = 0
+        var i = cards.startIndex
+        while i < cards.endIndex {
+            var bandMaxY = cards[i].frame.maxY
+            var j = cards.index(after: i)
+            while j < cards.endIndex, cards[j].frame.minY < bandMaxY {
+                bandMaxY = max(bandMaxY, cards[j].frame.maxY)
+                j = cards.index(after: j)
+            }
+            let band = cards[i..<j]
+            let others = band.filter { $0.id != skipped }
+            if bandMaxY <= center.y {
+                index += others.count
+            } else if others.isEmpty {
+                return index
+            } else if band.count == 1 {
+                if others.first!.frame.midY < center.y { index += 1 } else { return index }
+            } else if band.first!.frame.minY > center.y {
+                return index
+            } else {
+                return index + others.filter { $0.frame.midX < center.x }.count
+            }
+            i = j
+        }
+        return index
     }
 
     public func canAddLane(beside laneWidths: [CGFloat]) -> Bool {

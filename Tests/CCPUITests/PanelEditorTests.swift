@@ -212,6 +212,92 @@ final class PanelEditorTests: XCTestCase {
 
         XCTAssertEqual(topEditor.landing(laneWidths: Self.twoDefaultLanes), bottomEditor.landing(laneWidths: Self.twoDefaultLanes))
     }
+
+    // MARK: - Rows sharing a lane
+
+    /// Lane 0 is two units wide: a and b side by side, c full-width below.
+    private var pairedRow: [PanelEditor.DropZone] {
+        [
+            .init(id: a, lane: 0, frame: CGRect(x: 12, y: 12, width: 294, height: 132)),
+            .init(id: b, lane: 0, frame: CGRect(x: 318, y: 12, width: 294, height: 132)),
+            .init(id: c, lane: 0, frame: CGRect(x: 12, y: 156, width: 600, height: 232)),
+            .init(id: "d", lane: 1, frame: CGRect(x: 624, y: 12, width: 300, height: 132)),
+        ]
+    }
+
+    /// An editor with d in the air and the ghost's center at `center`.
+    private func draggingD(toCenter center: CGPoint) -> PanelEditor {
+        let editor = editor(zones: pairedRow)
+        editor.displayWidth = .greatestFiniteMagnitude
+        editor.startEditing()
+        let zone = pairedRow.first(where: { $0.id == "d" })!
+        editor.lift("d", at: CGPoint(x: zone.frame.minX + 8, y: zone.frame.minY + 8))
+        let scale = PanelEditor.Lifted.scale
+        editor.drag(
+            to: CGPoint(
+                x: center.x + 8 * scale - zone.frame.width * scale / 2,
+                y: center.y + 8 * scale - zone.frame.height * scale / 2
+            ),
+            laneWidths: [Layout.gridWidth(units: 2), Layout.laneWidth]
+        )
+        return editor
+    }
+
+    private func rowLanding(at center: CGPoint) -> PanelEditor.Landing? {
+        draggingD(toCenter: center).landing(laneWidths: [Layout.gridWidth(units: 2), Layout.laneWidth])
+    }
+
+    func testLeftOfARowLandsFirst() {
+        XCTAssertEqual(rowLanding(at: CGPoint(x: 100, y: 60)), .into(lane: 0, index: 0))
+    }
+
+    func testBetweenSideBySideCardsLandsBetweenThem() {
+        XCTAssertEqual(rowLanding(at: CGPoint(x: 312, y: 60)), .into(lane: 0, index: 1))
+    }
+
+    func testRightOfARowLandsAfterIt() {
+        XCTAssertEqual(rowLanding(at: CGPoint(x: 550, y: 60)), .into(lane: 0, index: 2))
+    }
+
+    func testBelowARowButAboveTheNextCardLandsAfterTheRow() {
+        XCTAssertEqual(rowLanding(at: CGPoint(x: 300, y: 150)), .into(lane: 0, index: 2))
+    }
+
+    func testBelowEverythingInARowedLaneLandsLast() {
+        XCTAssertEqual(rowLanding(at: CGPoint(x: 300, y: 500)), .into(lane: 0, index: 3))
+    }
+
+    /// A 2-wide lane with an uneven row: tall a beside short b.
+    private var unevenRow: [PanelEditor.DropZone] {
+        [
+            .init(id: a, lane: 0, frame: CGRect(x: 12, y: 12, width: 294, height: 232)),
+            .init(id: b, lane: 0, frame: CGRect(x: 318, y: 12, width: 294, height: 64)),
+            .init(id: c, lane: 0, frame: CGRect(x: 12, y: 256, width: 600, height: 132)),
+        ]
+    }
+
+    /// Lift `id` where it sits and release without moving: the gap stays
+    /// home. The lifted card holds its row open for banding — without that,
+    /// the row collapses to its mate and the midY rule seats the card in the
+    /// mate's place, so a no-op gesture swaps the pair.
+    private func liftAndHold(_ id: WidgetID, in zones: [PanelEditor.DropZone]) -> PanelEditor.Landing? {
+        let editor = editor(zones: zones)
+        editor.displayWidth = .greatestFiniteMagnitude
+        editor.startEditing()
+        let zone = zones.first(where: { $0.id == id })!
+        let at = CGPoint(x: zone.frame.minX + 8, y: zone.frame.minY + 8)
+        editor.lift(id, at: at)
+        editor.drag(to: at, laneWidths: [Layout.gridWidth(units: 2)])
+        return editor.landing(laneWidths: [Layout.gridWidth(units: 2)])
+    }
+
+    func testLiftingTheShortHalfOfARowKeepsItsSeat() {
+        XCTAssertEqual(liftAndHold(b, in: unevenRow), .into(lane: 0, index: 1))
+    }
+
+    func testLiftingTheTallHalfOfARowKeepsItsSeat() {
+        XCTAssertEqual(liftAndHold(a, in: unevenRow), .into(lane: 0, index: 0))
+    }
 }
 
 @MainActor
