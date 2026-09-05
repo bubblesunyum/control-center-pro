@@ -18,6 +18,7 @@ struct NoteTabStrip: View {
     @State private var renameDraft = ""
     @State private var hoveredNoteID: UUID?
     @State private var hoveredCloseID: UUID?
+    @State private var isPlusHovered = false
     @FocusState private var isRenaming: Bool
 
     var body: some View {
@@ -66,6 +67,8 @@ struct NoteTabStrip: View {
         }
     }
 
+    /// A plain plus that hugs the last tab, wearing the same hover chip as
+    /// the close controls — one step brighter, over a muted fill.
     private var plusButton: some View {
         Button {
             adapter.createNote()
@@ -76,7 +79,12 @@ struct NoteTabStrip: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(isPlusHovered ? Color.primary : Color.secondary)
+        .background {
+            RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
+                .fill(isPlusHovered && adapter.canCreateNote ? Color.controlFill : Color.clear)
+        }
+        .onHover { isPlusHovered = $0 }
         .disabled(!adapter.canCreateNote)
         .help(adapter.canCreateNote ? "New note" : "Note limit reached (\(NotesDocument.maximumNoteCount))")
         .accessibilityLabel("New note")
@@ -127,15 +135,15 @@ struct NoteTabStrip: View {
             }
         }
         // The hover chip is a 20pt square in a 24pt pill, so 2pt of air above
-        // and below it. Six points lead (a half step plus a quarter) and four
-        // trail.
+        // and below it. Six points lead (a half step plus a quarter) and
+        // three trail (a quarter plus half a quarter).
         //
         // No min or max width here: ViewThatFits picks this fit on the tabs'
         // ideal size but lays it out with a concrete proposal, and a maxWidth
         // frame would stretch every pill out to the cap. The scrolling fit
         // below is where pills cap.
         .padding(.leading, Space.half + Space.quarter)
-        .padding(.trailing, Space.half)
+        .padding(.trailing, Space.quarter + Space.quarter / 2)
         .frame(height: Layout.noteTabHeight)
         .foregroundStyle(isSelected ? Color.primary : Color.secondary)
         .background {
