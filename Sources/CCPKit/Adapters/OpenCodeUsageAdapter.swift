@@ -129,6 +129,9 @@ public final class LiveOpenCodeUsageSource: OpenCodeUsageSource {
         )
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        // The gateway 403s broad/bot user agents — a tool must identify
+        // itself — so this names the app rather than sending the default.
+        request.setValue("ControlCenterPro", forHTTPHeaderField: "User-Agent")
         let data: Data
         do {
             let (body, response) = try await session.data(for: request)
@@ -253,10 +256,14 @@ public final class OpenCodeUsageAdapter {
     public private(set) var snapshot: OpenCodeUsageSnapshot
     public private(set) var lastUpdated: Date?
     public private(set) var lastError: OpenCodeUsageError?
+    /// Whether the shown percents are ledger-precise decimals rather than the
+    /// endpoint's truncated ints.
+    public private(set) var isPrecise = false
     /// Ticks every 30s while open so "resets in 3h 12m" stays honest.
     public private(set) var now = Date()
 
     @ObservationIgnored private let source: OpenCodeUsageSource
+    @ObservationIgnored private let spend: OpenCodeSpendStore?
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var ticker: Timer?
@@ -270,10 +277,12 @@ public final class OpenCodeUsageAdapter {
 
     public init(
         source: OpenCodeUsageSource,
+        spend: OpenCodeSpendStore? = SQLiteOpenCodeSpendStore(),
         cacheTTL: Duration = defaultCacheTTL,
         initialSnapshot: OpenCodeUsageSnapshot = .empty
     ) {
         self.source = source
+        self.spend = spend
         self.cacheTTL = cacheTTL
         self.snapshot = initialSnapshot
     }
@@ -314,6 +323,7 @@ public final class OpenCodeUsageAdapter {
             self.snapshot = snapshot
             self.lastUpdated = Date()
             self.lastError = nil
+            await refine(snapshot: snapshot)
         } catch is CancellationError {
             return
         } catch let error as OpenCodeUsageError {
@@ -323,6 +333,46 @@ public final class OpenCodeUsageAdapter {
             guard !Task.isCancelled else { return }
             self.lastError = .unavailable
         }
+    }
+
+    /// Replace the endpoint's truncated ints with ledger-precise decimals.
+    /// A failed spend read is not an error — the endpoint's ints are still
+    /// shown, just coarsely.
+    private func refine(snapshot: OpenCodeUsageSnapshot) async {
+        guard let spend else {
+            isPrecise = false
+            return
+        }
+        let starts = OpenCodeWindowStarts.from(
+            resets: (
+                snapshot.rolling?.resetsAt,
+                snapshot.weekly?.resetsAt,
+                snapshot.monthly?.resetsAt
+            ),
+            now: Date()
+        )
+        guard let windows = try? await spend.spend(since: starts),
+              !Task.isCancelled
+        else {
+            isPrecise = false
+            return
+        }
+        self.snapshot = OpenCodeUsageSnapshot(
+            rolling: precise(snapshot.rolling, spend: windows.rolling, def: .rolling),
+            weekly: precise(snapshot.weekly, spend: windows.weekly, def: .weekly),
+            monthly: precise(snapshot.monthly, spend: windows.monthly, def: .monthly)
+        )
+        isPrecise = true
+    }
+
+    private func precise(
+        _ window: OpenCodeUsageWindow?,
+        spend: Double,
+        def: OpenCodeUsageWindowDef
+    ) -> OpenCodeUsageWindow? {
+        guard var window else { return nil }
+        window.percent = spend / def.limitDollars * 100
+        return window
     }
 
     private var isStale: Bool {
