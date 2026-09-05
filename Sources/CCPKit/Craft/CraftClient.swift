@@ -23,6 +23,9 @@ public enum CraftClientError: Error, Equatable {
     /// does not decode. A failed check is "store unreachable", never a reason
     /// to touch local state.
     case unreachable(statusCode: Int?)
+    /// The shared budget said slow down. Carries the server's Retry-After
+    /// when it named one; the push backs off to it, capped.
+    case rateLimited(retryAfter: TimeInterval?)
 }
 
 /// The network boundary. URLSession conforms; tests stub it.
@@ -39,8 +42,8 @@ extension URLSession: CraftTransport {
 /// The smallest useful Craft Connect client: validate a connection URL with
 /// `GET /connection`. Push and pull build on the base URL handling here.
 public struct CraftClient: Sendable {
-    private let baseURL: URL
-    private let transport: any CraftTransport
+    let baseURL: URL
+    let transport: any CraftTransport
 
     public init(baseURL: URL, transport: (any CraftTransport)? = nil) {
         self.baseURL = baseURL

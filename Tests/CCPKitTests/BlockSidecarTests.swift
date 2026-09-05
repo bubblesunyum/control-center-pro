@@ -256,4 +256,24 @@ final class BlockSidecarStorageTests: XCTestCase {
         XCTAssertEqual(store.data(forKey: "scratchpadCraftSidecars.unreadable"), garbage)
         XCTAssertEqual(adapter.sidecar(for: id), sidecar)
     }
+
+    func testStoredEmptyMapDoesNotArmTheRescue() throws {
+        let name = "ccp.sidecar.empty.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { cleanup(name, store) }
+        let adapter = NotesAdapter(defaults: store, defaultName: "Note")
+        let id = try XCTUnwrap(adapter.selectedNoteID)
+
+        // What older builds wrote when the last entry dropped: valid JSON,
+        // not corruption.
+        store.set(Data("{}".utf8), forKey: "scratchpadCraftSidecars")
+        XCTAssertTrue(adapter.sidecar(for: id).entries.isEmpty)
+
+        let sidecar = BlockSidecar(entries: [BlockSidecarEntry(id: "b1", fingerprint: "f")])
+        adapter.storeSidecar(sidecar, for: id)
+
+        XCTAssertNil(store.object(forKey: "scratchpadCraftSidecars.unreadable"),
+                      "no rescue copy for bytes that decoded fine")
+        XCTAssertEqual(adapter.sidecar(for: id), sidecar)
+    }
 }

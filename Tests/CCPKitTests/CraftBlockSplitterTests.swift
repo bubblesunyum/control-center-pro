@@ -33,8 +33,15 @@ final class CraftBlockSplitterTests: XCTestCase {
                           BlockSidecar.fingerprint(slices[1].markdown))
     }
 
-    func testBlankLinesAreSeparatorsNotBlocks() {
-        XCTAssertEqual(CraftBlockSplitter.slices(in: "\n\n\n").count, 0)
+    func testSoftWrappedLinesStayOneBlock() {
+        // No blank line, no block boundary: consecutive lines are one
+        // paragraph (Craft splits the same way — "a\n\nb" is two blocks,
+        // "a\nb" is one).
+        XCTAssertEqual(CraftBlockSplitter.slices(in: "line one\nline two\n").map(\.markdown),
+                       ["line one\nline two"])
+    }
+
+    func testBlankLinesAreSeparatorsNotBlocks() {        XCTAssertEqual(CraftBlockSplitter.slices(in: "\n\n\n").count, 0)
         XCTAssertEqual(CraftBlockSplitter.slices(in: "").count, 0)
         let slices = CraftBlockSplitter.slices(in: "one\n\n\ntwo\n")
         XCTAssertEqual(slices.map(\.markdown), ["one", "two"])

@@ -253,6 +253,10 @@ public final class NotesAdapter {
             self.document = document
             notes = document.notes
             scheduleSave()
+            if let selectedNoteID { dirtyPadIDs.insert(selectedNoteID) }
+            // A write-back already matches the sidecar — persisting yes,
+            // re-pushing no.
+            if !isApplyingWriteBack { scheduleCraftPush() }
         }
     }
 
@@ -289,6 +293,29 @@ public final class NotesAdapter {
     @ObservationIgnored private let sidecarKey = "scratchpadCraftSidecars"
     @ObservationIgnored private let sidecarsRescueKey = "scratchpadCraftSidecars.unreadable"
     @ObservationIgnored private var isStoredSidecarsUnreadable = false
+    // Push bookkeeping (ccp-2zi.5). The pad-to-document mapping is config,
+    // like retention and selection — never note text.
+    @ObservationIgnored private let craftDocumentsKey = "scratchpadCraftDocuments"
+    // The normalisation A/B (ccp-2zi.5): write Craft's canonical spelling
+    // back into the pad on push. A `defaults`-level flag, no UI — temporary
+    // scaffolding for feeling both sides, removed by ccp-vbka. Absent reads
+    // as on.
+    @ObservationIgnored private let writeBackKey = "scratchpadCraftWriteBack"
+    @ObservationIgnored private var pushTask: Task<Void, Never>?
+    @ObservationIgnored private var pushRetryTask: Task<Void, Never>?
+    @ObservationIgnored private var isPushInFlight = false
+    @ObservationIgnored private var needsPushAfterFlight = false
+    @ObservationIgnored private var consecutivePushFailures = 0
+    @ObservationIgnored private var pushThrottledUntil: Date?
+    @ObservationIgnored private var dirtyPadIDs: Set<UUID> = []
+    @ObservationIgnored private var isApplyingWriteBack = false
+    /// Seconds of quiet before an edit pushes. Owned by the type, not a
+    /// design token — the 12s focus-dim clock is a different thing (ccp-srw).
+    private static let pushDebounce: TimeInterval = 3
+    /// Test seams: scripted transport and a fixed URL, so pushes run without
+    /// the Keychain or the network.
+    @ObservationIgnored internal var craftTransport: (any CraftTransport)?
+    @ObservationIgnored internal var craftBaseURLOverride: URL?
 
     public convenience init() {
         self.init(defaults: .standard, defaultName: "Note")
@@ -328,6 +355,11 @@ public final class NotesAdapter {
             guard let self else { return }
             MainActor.assumeIsolated {
                 self.flushSave()
+                // Best-effort only: a three-request push will not finish while
+                // the process exits, and blocking quit to try is worse. Local
+                // bytes are already safe above; Craft lags at most one
+                // session, and the next push heals it.
+                Task { [weak self] in await self?.flushCraftPush() }
             }
         }
     }
@@ -340,6 +372,9 @@ public final class NotesAdapter {
 
     public func deactivate() {
         flushSave()
+        // A debounce that only fires while the panel is open loses the last
+        // three seconds of every session: push now instead.
+        Task { [weak self] in await self?.flushCraftPush() }
     }
 
     /// Notes the running build cannot read are still notes. Before the first
@@ -476,6 +511,8 @@ public final class NotesAdapter {
     public func closeNote(_ id: UUID) -> Bool {
         guard let document, let next = document.removing(id), persist(next) else { return false }
         dropSidecar(for: id)
+        dropCraftDocumentID(for: id)
+        dirtyPadIDs.remove(id)
         apply(next)
         return true
     }
@@ -490,30 +527,22 @@ public final class NotesAdapter {
     }
 
     public func storeSidecar(_ sidecar: BlockSidecar, for id: UUID) {
-        var all = storedSidecars()
-        all[id.uuidString] = sidecar
-        persistSidecars(all)
+        if isStoredSidecarsUnreadable { rescueUnreadableSidecars() }
+        sidecarMap().set(sidecar, for: id.uuidString)
     }
 
     public func dropSidecar(for id: UUID) {
-        var all = storedSidecars()
-        guard all.removeValue(forKey: id.uuidString) != nil else { return }
-        persistSidecars(all)
+        guard storedSidecars()[id.uuidString] != nil else { return }
+        sidecarMap().set(nil, for: id.uuidString)
+    }
+
+    private func sidecarMap() -> DefaultsMap<BlockSidecar> {
+        DefaultsMap(defaults: defaults, key: sidecarKey)
     }
 
     private func storedSidecars() -> [String: BlockSidecar] {
-        guard let data = defaults.data(forKey: sidecarKey) else { return [:] }
-        guard let decoded = try? JSONDecoder().decode([String: BlockSidecar].self, from: data) else {
-            isStoredSidecarsUnreadable = true
-            return [:]
-        }
-        return decoded
-    }
-
-    private func persistSidecars(_ sidecars: [String: BlockSidecar]) {
-        guard let data = try? JSONEncoder().encode(sidecars) else { return }
-        if isStoredSidecarsUnreadable { rescueUnreadableSidecars() }
-        defaults.set(data, forKey: sidecarKey)
+        if sidecarMap().hasUndecodableBytes { isStoredSidecarsUnreadable = true }
+        return sidecarMap().load()
     }
 
     /// Bytes we cannot read are still some later build's recovery path. Copied
@@ -525,6 +554,318 @@ public final class NotesAdapter {
               defaults.object(forKey: sidecarsRescueKey) == nil
         else { return }
         defaults.set(stored, forKey: sidecarsRescueKey)
+    }
+
+    // MARK: - Craft push
+
+    /// The Craft document a pad syncs to, if one was mapped. Set today by
+    /// hand (`defaults write`); choosing and provisioning documents gets its
+    /// own UI once the create shape is confirmed live.
+    public func craftDocumentID(for id: UUID) -> String? {
+        storedCraftDocuments()[id.uuidString]
+    }
+
+    public func setCraftDocumentID(_ docID: String, for id: UUID) {
+        craftDocumentMap().set(docID, for: id.uuidString)
+        // A new sync relationship gets fresh chances.
+        consecutivePushFailures = 0
+        pushThrottledUntil = nil
+    }
+
+    public func dropCraftDocumentID(for id: UUID) {
+        let map = craftDocumentMap()
+        guard map.load()[id.uuidString] != nil else { return }
+        map.set(nil, for: id.uuidString)
+    }
+
+    private func craftDocumentMap() -> DefaultsMap<String> {
+        DefaultsMap(defaults: defaults, key: craftDocumentsKey)
+    }
+
+    private func storedCraftDocuments() -> [String: String] {
+        craftDocumentMap().load()
+    }
+
+    /// The A/B flag: absent reads as on.
+    var craftWriteBackEnabled: Bool {
+        guard let value = defaults.object(forKey: writeBackKey) as? Bool else { return true }
+        return value
+    }
+
+    private func craftBaseURL() -> URL? {
+        craftBaseURLOverride ?? (try? KeychainCraftCredentialStore().loadConnectionURL())
+    }
+
+    private func scheduleCraftPush() {
+        // The retry task is deliberately NOT cancelled here: an edit during
+        // backoff must not eat the only scheduled healing. Both tasks funnel
+        // into runCraftPush, where the second is a cheap no-op.
+        pushTask?.cancel()
+        pushTask = nil
+        guard !isPushInFlight else {
+            needsPushAfterFlight = true
+            return
+        }
+        pushTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Self.pushDebounce))
+            guard !Task.isCancelled else { return }
+            await self?.runCraftPush()
+        }
+    }
+
+    /// Push now: the deactivate path and tests. Explicit, so it bypasses the
+    /// throttle window — a panel close right after a failure still tries.
+    /// Coalesces with an in-flight push rather than running beside it.
+    public func flushCraftPush() async {
+        pushTask?.cancel()
+        pushTask = nil
+        pushRetryTask?.cancel()
+        pushRetryTask = nil
+        await pushNow()
+    }
+
+    private func runCraftPush() async {
+        pushTask = nil
+        // A throttled drop must not lose the retry: the edit that armed this
+        // run cancelled nothing, but an older topology might have, so top up
+        // a missing retry for the remaining window.
+        if isPushThrottled {
+            if pushRetryTask == nil, let until = pushThrottledUntil {
+                schedulePushRetry(after: max(until.timeIntervalSinceNow, 0))
+            }
+            return
+        }
+        await pushNow()
+    }
+
+    /// Observable for tests: a failed push stays failed until the window
+    /// passes, and debounced runs hold until then.
+    var isPushThrottled: Bool {
+        if let throttledUntil = pushThrottledUntil { Date() < throttledUntil } else { false }
+    }
+
+    private func pushNow() async {
+        pushTask = nil
+        guard !isPushInFlight else { needsPushAfterFlight = true; return }
+        guard let baseURL = craftBaseURL() else { return }
+        isPushInFlight = true
+        defer {
+            isPushInFlight = false
+            if needsPushAfterFlight {
+                needsPushAfterFlight = false
+                scheduleCraftPush()
+            }
+        }
+        let client = CraftClient(baseURL: baseURL, transport: craftTransport)
+        var failure: Error?
+        // Snapshot: pads clear or fail below, which mutates the set.
+        for padID in Array(dirtyPadIDs) {
+            do {
+                if try await pushOnePad(padID, client: client) {
+                    dirtyPadIDs.remove(padID)
+                }
+            } catch {
+                failure = failure ?? error
+            }
+        }
+        if let failure {
+            consecutivePushFailures += 1
+            let delay = retryDelay(for: failure)
+            // Gate debounced runs for the same window the retry waits out:
+            // typing must not hammer a server that just said slow down. The
+            // dirty set keeps the intent; the next edit past the window
+            // retries, and so does the retry task if nothing cancels it.
+            pushThrottledUntil = Date().addingTimeInterval(delay ?? Self.pushRetryDelays[2])
+            schedulePushRetry(after: delay)
+        } else {
+            consecutivePushFailures = 0
+            pushThrottledUntil = nil
+        }
+    }
+
+    /// Push one dirty pad. Progress is stored even on the way out: every leg
+    /// records what the server confirmed, so a retry diffs from the last
+    /// confirmed state — replaying a confirmed POST is what duplicates
+    /// blocks. Skips (no mapping, pad gone, empty plan) clear the dirty bit
+    /// silently; edits re-dirty if the pad comes back.
+    ///
+    /// Returns false when a prepend stalled: nothing failed, but the pad is
+    /// not fully recorded, so it stays dirty and every later round retries
+    /// it — including panel-close flushes, not just retypes of that pad.
+    private func pushOnePad(_ padID: UUID, client: CraftClient) async throws -> Bool {
+        guard let document,
+              let padText = document.notes.first(where: { $0.id == padID })?.text,
+              let docID = craftDocumentID(for: padID)
+        else { return true }
+        let sidecar = sidecar(for: padID)
+        let slices = CraftBlockSplitter.slices(in: padText)
+        let plan = sidecar.pushPlan(for: slices)
+        guard !plan.isEmpty else { return true }
+
+        var pendingError: Error?
+        var putEcho: [CraftBlock] = []
+        var echoByInsert: [Int: [CraftBlock]] = [:]
+        var deletesConfirmed = plan.deletes.isEmpty
+        do {
+            if !plan.updates.isEmpty {
+                putEcho = try await client.updateBlocks(plan.updates)
+            }
+            // One batch per anchor group, in plan order; abort the rest on
+            // the first throw. Echoes stay keyed by plan-insert index, so a
+            // split can never shift a later insert's attribution.
+            if let groups = postGroups(for: plan, sidecar: sidecar) {
+                for group in groups {
+                    let echo = try await client.postBlocks(group.map(\.insert),
+                                                           documentID: docID)
+                    for (i, member) in group.enumerated() where i < echo.count {
+                        echoByInsert[member.index, default: []].append(echo[i])
+                    }
+                    if echo.count > group.count, let last = group.last {
+                        echoByInsert[last.index, default: []]
+                            .append(contentsOf: echo.dropFirst(group.count))
+                    }
+                }
+            }
+            if !plan.deletes.isEmpty {
+                try await client.deleteBlocks(plan.deletes)
+                deletesConfirmed = true
+            }
+        } catch {
+            pendingError = error
+        }
+        storePushOutcome(padID: padID, sidecar: sidecar, text: padText, slices: slices,
+                         putEcho: putEcho, postEchoByInsert: echoByInsert,
+                         deletesConfirmed: deletesConfirmed)
+        if let pendingError { throw pendingError }
+        return !plan.inserts.contains(where: { $0.afterID == nil }) || sidecar.entries.isEmpty
+    }
+
+    /// Observable for tests.
+    func isPushDirty(_ id: UUID) -> Bool { dirtyPadIDs.contains(id) }
+
+    /// Observable for tests: a failed push leaves a retry scheduled.
+    var hasScheduledRetry: Bool { pushRetryTask != nil }
+
+    private func storePushOutcome(padID: UUID, sidecar: BlockSidecar, text: String,
+                                  slices: [CraftBlockSlice],
+                                  putEcho: [CraftBlock], postEchoByInsert: [Int: [CraftBlock]],
+                                  deletesConfirmed: Bool) {
+        let outcome = sidecar.applyingPush(text: text, slices: slices,
+                                           putEcho: putEcho, postEchoByInsert: postEchoByInsert,
+                                           deletesConfirmed: deletesConfirmed)
+        storeSidecar(outcome.sidecar, for: padID)
+        if craftWriteBackEnabled {
+            applyWriteBack(outcome.writeBack, to: padID)
+        }
+    }
+
+    /// A prepend into a non-empty document has no confirmed position spelling
+    /// (ccp-2zi.5): refuse its group rather than posting to the end in the
+    /// wrong order. Stalls those inserts until `begin` is confirmed live;
+    /// everything else still goes, and the refused inserts retry every round
+    /// after.
+    ///
+    /// Known limit, accepted for .5: "non-empty" is read off the local
+    /// sidecar, so hand-mapping a pad onto a contentful Craft doc (outside
+    /// the provisioning flow, ccp-0gek) still appends once. Provisioning
+    /// must only ever map empty-or-pull-seeded docs; the pull seed heals the
+    /// order the one time this fires.
+    private func postGroups(for plan: BlockPushPlan,
+                            sidecar: BlockSidecar) -> [[(index: Int, insert: BlockInsert)]]? {
+        guard !plan.inserts.isEmpty else { return [] }
+        let indexed = plan.inserts.enumerated().map { (index: $0.offset, insert: $0.element) }
+        let groups = groupedInserts(indexed)
+        // Refuse only the unanchorable group, not the whole POST.
+        return groups.filter { group in
+            group.first?.insert.afterID != nil || sidecar.entries.isEmpty
+        }
+    }
+
+    private static let pushRetryDelays: [TimeInterval] = [30, 120, 300]
+
+    private func retryDelay(for error: Error) -> TimeInterval? {
+        switch error as? CraftClientError {
+        case .rateLimited(let retryAfter):
+            // Floored: a Retry-After of 0 must not hot-loop against a server
+            // that just said slow down.
+            return min(max(retryAfter ?? Self.pushRetryDelays[0], 5), Self.pushRetryDelays[2])
+        case .unreachable, nil:
+            let step = min(consecutivePushFailures - 1, Self.pushRetryDelays.count - 1)
+            guard consecutivePushFailures <= Self.pushRetryDelays.count else { return nil }
+            return Self.pushRetryDelays[max(step, 0)]
+        }
+    }
+
+    private func schedulePushRetry(after delay: TimeInterval?) {
+        guard let delay else { return }
+        pushRetryTask?.cancel()
+        pushRetryTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            await self?.runCraftPush()
+        }
+    }
+
+    /// Fold Craft's canonical spellings back into the pad. All-or-nothing
+    /// with a range guard per edit: a user who kept typing mid-flight wins,
+    /// and a half-applied rewrite never lands.
+    ///
+    /// The selected pad goes through the text binding (persisting like any
+    /// edit, but not rescheduling the push it just satisfied). A background
+    /// pad — pushed as part of the dirty set — is edited in the document
+    /// directly, leaving the binding, the caret, and the undo stack alone;
+    /// its modified date is untouched too, since a sync event is not an edit
+    /// and retention measures user idleness.
+    ///
+    /// Known feel cost, under A/B (ccp-vbka): a whole-string set rebuilds
+    /// the editor — the caret survives by AppKit clamping luck, and undo
+    /// regains the pre-normalisation text (which re-pushes, once, if
+    /// undone). That is what the experiment measures.
+    private func applyWriteBack(_ edits: [CraftWriteBack], to padID: UUID) {
+        guard !edits.isEmpty, let document else { return }
+        let current: String
+        if padID == selectedNoteID {
+            current = text
+        } else if let note = document.notes.first(where: { $0.id == padID }) {
+            current = note.text
+        } else {
+            return
+        }
+        let ns = current as NSString
+        for edit in edits {
+            guard NSMaxRange(edit.range) <= ns.length,
+                  ns.substring(with: edit.range) == edit.prior
+            else { return }
+        }
+        var merged = current
+        for edit in edits.sorted(by: { $0.range.location > $1.range.location }) {
+            merged = (merged as NSString).replacingCharacters(in: edit.range, with: edit.markdown)
+        }
+        guard merged != current else { return }
+        if padID == selectedNoteID {
+            isApplyingWriteBack = true
+            text = merged
+            isApplyingWriteBack = false
+        } else {
+            var doc = document
+            guard let index = doc.notes.firstIndex(where: { $0.id == padID }) else { return }
+            doc.notes[index].text = merged
+            self.document = doc
+            notes = doc.notes
+            persist(doc)
+        }
+    }
+
+    /// Order-preserving group-by for batching inserts per anchor.
+    private func groupedInserts(_ inserts: [(index: Int, insert: BlockInsert)])
+        -> [[(index: Int, insert: BlockInsert)]] {
+        var order: [String?] = []
+        var groups: [String?: [(index: Int, insert: BlockInsert)]] = [:]
+        for member in inserts {
+            if groups[member.insert.afterID] == nil { order.append(member.insert.afterID) }
+            groups[member.insert.afterID, default: []].append(member)
+        }
+        return order.compactMap { groups[$0] }
     }
 
     // MARK: - Actions

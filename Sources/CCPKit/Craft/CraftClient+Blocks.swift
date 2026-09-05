@@ -1,0 +1,139 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Control Center Pro contributors
+
+import Foundation
+
+/// One block as Craft echoes it back. Every write response carries the
+/// canonical markdown and the assigned ids, which is what the sidecar is
+/// built from — never what was sent, since a POST can split one sent block
+/// into several.
+public struct CraftBlock: Codable, Equatable, Sendable {
+    public var id: String
+    public var markdown: String
+
+    public init(id: String, markdown: String) {
+        self.id = id
+        self.markdown = markdown
+    }
+}
+
+extension CraftClient {
+    // MARK: - Block writes
+
+    private struct PutBody: Encodable {
+        struct Item: Encodable {
+            var id: String
+            var markdown: String
+        }
+        var blocks: [Item]
+    }
+
+    private struct PostBody: Encodable {
+        struct Item: Encodable {
+            var type = "text"
+            var markdown: String
+        }
+        struct Position: Encodable {
+            var position: String
+            var pageId: String?
+            var siblingId: String?
+        }
+        var blocks: [Item]
+        var position: Position
+    }
+
+    private struct DeleteBody: Encodable {
+        var blockIds: [String]
+    }
+
+    private struct BlocksEnvelope: Decodable {
+        var blocks: [CraftBlock]?
+    }
+
+    /// Decode a write echo tolerantly: the documented shape is an envelope,
+    /// but a bare array must not fail the whole push if that is what arrives.
+    /// Items without both an id and markdown are skipped, never guessed at.
+    static func decodeBlocks(from data: Data) -> [CraftBlock]? {
+        let decoder = JSONDecoder()
+        if let envelope = try? decoder.decode(BlocksEnvelope.self, from: data),
+           let blocks = envelope.blocks {
+            return blocks
+        }
+        return try? decoder.decode([CraftBlock].self, from: data)
+    }
+
+    private func send(_ path: String, method: String, body: some Encodable) async throws(CraftClientError) -> (Data, HTTPURLResponse) {
+        var request = URLRequest(url: baseURL.appending(path: path))
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONEncoder().encode(body)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await transport.data(for: request)
+        } catch {
+            throw CraftClientError.unreachable(statusCode: nil)
+        }
+        guard let http = response as? HTTPURLResponse else {
+            throw CraftClientError.unreachable(statusCode: nil)
+        }
+        // 429 carries the shared budget state: honour Retry-After when the
+        // server names one, so the next attempt lands inside the window.
+        if http.statusCode == 429 {
+            let header = http.value(forHTTPHeaderField: "Retry-After")
+            throw CraftClientError.rateLimited(retryAfter: header.flatMap(TimeInterval.init))
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw CraftClientError.unreachable(statusCode: http.statusCode)
+        }
+        return (data, http)
+    }
+
+    /// `PUT /blocks` — changed slices over the ids the sidecar holds. Sends
+    /// `{id, markdown}` only, so everything else on the block is untouched.
+    /// Returns the echo: the canonical markdown per id.
+    public func updateBlocks(_ updates: [BlockUpdate]) async throws(CraftClientError) -> [CraftBlock] {
+        let body = PutBody(blocks: updates.map { PutBody.Item(id: $0.id, markdown: $0.markdown) })
+        let (data, _) = try await send("blocks", method: "PUT", body: body)
+        return Self.decodeBlocks(from: data) ?? []
+    }
+
+    /// `POST /blocks` — new slices, one batch, in plan order. One batch means
+    /// one anchor: every insert must share it (the adapter groups by anchor
+    /// and calls per group). The echo comes back in request order with
+    /// assigned ids; a split (one slice becoming several blocks) shows up as
+    /// extra items, which the sidecar rebuild pairs positionally.
+    ///
+    /// Assumed, to verify live: the server lays a shared-anchor batch down in
+    /// array order after the anchor. A pasted run landing scrambled means
+    /// chaining off returned ids instead.
+    public func postBlocks(_ inserts: [BlockInsert], documentID: String) async throws(CraftClientError) -> [CraftBlock] {
+        let position: PostBody.Position
+        if let anchor = inserts.compactMap(\.afterID).first {
+            position = PostBody.Position(position: "after", pageId: nil, siblingId: anchor)
+        } else {
+            // First sync into an empty document. A nil anchor against a
+            // NON-empty document is a prepend, whose spelling is unconfirmed
+            // (ccp-2zi.5) — the adapter refuses those before this is reached.
+            position = PostBody.Position(position: "end", pageId: documentID, siblingId: nil)
+        }
+        let body = PostBody(blocks: inserts.map { PostBody.Item(markdown: $0.markdown) },
+                            position: position)
+        let (data, _) = try await send("blocks", method: "POST", body: body)
+        let echo = Self.decodeBlocks(from: data) ?? []
+        // A short echo is a protocol anomaly, not a partial success: splits
+        // only ever ADD items, so fewer items than inserts means the response
+        // cannot be attributed. Recording it would wire ids to the wrong
+        // slices; fail instead and let the whole group retry.
+        guard echo.count >= inserts.count else {
+            throw CraftClientError.unreachable(statusCode: nil)
+        }
+        return echo
+    }
+
+    /// `DELETE /blocks` — ids the diff found missing. Never called for
+    /// read-only entries; the diff pins those before this is reached.
+    public func deleteBlocks(_ ids: [String]) async throws(CraftClientError) {
+        let (_, _) = try await send("blocks", method: "DELETE", body: DeleteBody(blockIds: ids))
+    }
+}
