@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: StatusItemController?
     private var arrangement: PanelArrangement?
     private var settings: SettingsStore?
+    private var craft: CraftConnectionModel?
     private var hotkey: GlobalHotkey?
     private var settingsWindow: SettingsWindowController?
 
@@ -44,7 +45,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkey.use(settings.panelShortcut)
         trackShortcutChanges()
 
-        let settingsWindow = SettingsWindowController(settings: settings, hotkey: hotkey)
+        let craftConnection = CraftConnectionModel()
+        self.craft = craftConnection
+
+        let settingsWindow = SettingsWindowController(settings: settings,
+                                                        craft: craftConnection,
+                                                        hotkey: hotkey)
         self.settingsWindow = settingsWindow
         statusItem = StatusItemController(panel: panel, settingsWindow: settingsWindow)
 

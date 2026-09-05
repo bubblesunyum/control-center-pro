@@ -15,11 +15,13 @@ import SwiftUI
 @MainActor
 public final class SettingsWindowController {
     private let settings: SettingsStore
+    private let craft: CraftConnectionModel
     private let hotkey: GlobalHotkey
     private var window: NSWindow?
 
-    public init(settings: SettingsStore, hotkey: GlobalHotkey) {
+    public init(settings: SettingsStore, craft: CraftConnectionModel, hotkey: GlobalHotkey) {
         self.settings = settings
+        self.craft = craft
         self.hotkey = hotkey
     }
 
@@ -36,7 +38,7 @@ public final class SettingsWindowController {
     }
 
     private func makeWindow() -> NSWindow {
-        let host = NSHostingController(rootView: SettingsView(settings: settings, hotkey: hotkey))
+        let host = NSHostingController(rootView: SettingsView(settings: settings, craft: craft, hotkey: hotkey))
         host.sizingOptions = .preferredContentSize
 
         let window = NSWindow(contentViewController: host)
