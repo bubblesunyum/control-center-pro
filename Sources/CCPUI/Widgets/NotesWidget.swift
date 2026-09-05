@@ -7,10 +7,11 @@ import SwiftUI
 /// Notes: short-lived text — meeting notes, numbers, fragments on their way
 /// somewhere else — written in the panel and kept in tabs.
 ///
-/// The card is two objects rather than one. The Notes card carries the title
-/// and the way out to Craft; raised above it, the note floats over its own
-/// rail of tabs, and the selected tab reads as flowing under the note's edge.
-/// ``NoteSurface`` owns that pair.
+/// The tabs live in the header as a horizontal strip, in place of a title:
+/// the selected tab wears a muted fill, a plain plus beside it makes a new
+/// note, and the way out to Craft stays on the trailing edge. Under the
+/// header the note sits as a single inset well. ``NoteSurface`` owns that
+/// well.
 ///
 /// Document mechanics (tabs, retention, debounced UserDefaults persistence) are
 /// the values Vorssaint's floating pad uses, via `NotesAdapter`, so a note
@@ -55,13 +56,17 @@ private struct NotesContent: View {
     @Bindable var adapter: NotesAdapter
     @State private var noteToClose: Note?
 
+    @Environment(\.panelEditor) private var panelEditor
+    @Environment(\.currentWidgetID) private var currentWidgetID
+
     var body: some View {
-        WidgetCard(NotesWidget.descriptor) {
-            HeaderIconButton(systemImage: "arrow.up.forward.app", label: "Open in Craft") {
-                adapter.openCraft()
+        GlassCard {
+            VStack(alignment: .leading, spacing: Space.one) {
+                header
+                NoteSurface(adapter: adapter)
             }
-        } content: {
-            NoteSurface(adapter: adapter, onCloseRequest: requestClose)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(Space.oneHalf)
         }
         .alert("Delete Note", isPresented: isConfirmingClose, presenting: noteToClose) { note in
             Button("Cancel", role: .cancel) { noteToClose = nil }
@@ -72,6 +77,51 @@ private struct NotesContent: View {
         } message: { note in
             Text("Delete “\(note.name)”? Its text will be lost.")
         }
+    }
+
+    /// The header is the tab strip, not a title: tabs, a plain plus, then the
+    /// way out to Craft. It still publishes the header frame the panel's
+    /// hold-to-edit hit-tests against, and it keeps the hold accessibility
+    /// action — a custom header that drops either silently leaves the widget
+    /// undraggable.
+    private var header: some View {
+        HStack(spacing: Space.half) {
+            NoteTabStrip(adapter: adapter, onCloseRequest: requestClose)
+            Button {
+                adapter.createNote()
+            } label: {
+                Image(systemName: "plus")
+                    .font(.caption.weight(.semibold))
+                    .frame(width: Layout.rowActionSize, height: Layout.rowActionSize)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .disabled(!adapter.canCreateNote)
+            .help(adapter.canCreateNote ? "New note" : "Note limit reached (\(NotesDocument.maximumNoteCount))")
+            .accessibilityLabel("New note")
+            Spacer(minLength: 0)
+            HeaderIconButton(systemImage: "arrow.up.forward.app", label: "Open in Craft") {
+                adapter.openCraft()
+            }
+        }
+        .frame(minHeight: Layout.headerAccessorySize)
+        .contentShape(Rectangle())
+        .background {
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: HeaderFramePreference.self,
+                    value: currentWidgetID.map { [HeaderFrame(id: $0, frame: proxy.frame(in: .panel))] } ?? []
+                )
+            }
+        }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Hold to edit widgets")
+        .accessibilityAction {
+            guard let editor = panelEditor, !editor.isEditing else { return }
+            withAnimation(.snappy) { editor.startEditing() }
+        }
+        .animation(.snappy(duration: 0.22), value: adapter.selectedNoteID)
     }
 
     /// An empty note goes without asking; only text that would be lost is worth

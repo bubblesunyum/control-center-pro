@@ -42,6 +42,9 @@ public extension Color {
     /// black scrim darkens in either appearance, where leaning on the system
     /// background would darken in one and lighten in the other.
     static let noteScrim = Ink.black12
+    /// The note well, set into the card. A heavier scrim than the tab chrome
+    /// so the editor reads as inset rather than as another raised surface.
+    static let noteInset = Ink.black24
 
     /// What an active toggle reads as. Named so widgets ask for the meaning
     /// rather than for the system accent, which is where a different answer

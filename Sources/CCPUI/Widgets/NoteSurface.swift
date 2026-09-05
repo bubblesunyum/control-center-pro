@@ -4,37 +4,16 @@
 import CCPKit
 import SwiftUI
 
-/// The rail of tabs and the note as two objects, not one: the tab list is its
-/// own card floating beneath the note, offset left so only its trailing edge
-/// tucks under it. The note sits above in the z-order, and the selected tab's
-/// name row is where the two visibly meet — joined by overlap rather than by
-/// a shared outline, so each container carries its own elevation.
+/// The note itself as a single well set into the card.
+///
+/// The tabs live up in the header now, so there is no rail to join to — just
+/// one inset surface carrying the editor over its toolbar. It reads as inset
+/// because it is darker than the glass around it, with no drop shadow of its
+/// own.
 struct NoteSurface: View {
     @Bindable var adapter: NotesAdapter
-    let onCloseRequest: (Note) -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: -Layout.noteTuck) {
-            tabs
-                .zIndex(0)
-            note
-                .zIndex(1)
-        }
-        // The join no longer slides anywhere, but the selected row still
-        // cross-fades.
-        .animation(.snappy(duration: 0.22), value: adapter.selectedNoteID)
-    }
-
-    /// The tab list as its own card.
-    private var tabs: some View {
-        NoteTabRail(adapter: adapter, onCloseRequest: onCloseRequest)
-            .frame(width: Layout.noteTabRailWidth)
-            .noteCardChrome()
-    }
-
-    // MARK: The note
-
-    private var note: some View {
         VStack(spacing: 0) {
             MarkdownNoteEditor(
                 text: Binding(get: { adapter.text }, set: { adapter.text = $0 }),
@@ -52,27 +31,26 @@ struct NoteSurface: View {
             NoteToolbar(adapter: adapter)
         }
         .frame(maxWidth: .infinity)
-        .noteCardChrome()
+        .noteInsetChrome()
     }
 }
 
-/// The skin both Notes containers share: the fills, hairline and shadow the
-/// single surface used to draw once, now drawn per piece now that the two
-/// honestly overlap.
-private struct NoteCardChrome: ViewModifier {    func body(content: Content) -> some View {
+/// The skin of the inset well: the same lightening the card draws, pulled back
+/// down by a heavier scrim, under a hairline and no shadow — a raised surface
+/// casts one, a hollow one does not.
+private struct NoteInsetChrome: ViewModifier {
+    func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
         content
             .background(shape.fill(Color.controlFill))
-            .background(shape.fill(.background.opacity(0.35)))
-            .background(shape.fill(Color.noteScrim))
+            .background(shape.fill(Color.noteInset))
             .overlay(shape.stroke(Color.cardStroke, lineWidth: Stroke.hairline))
-            .shadow(color: .cardShadow, radius: Space.one, y: Space.quarter)
     }
 }
 
 private extension View {
-    func noteCardChrome() -> some View {
-        modifier(NoteCardChrome())
+    func noteInsetChrome() -> some View {
+        modifier(NoteInsetChrome())
     }
 }
 
@@ -99,8 +77,8 @@ private struct NoteToolbar: View {
             }
             button("square.and.arrow.down", label: "Export") { adapter.exportText() }
         }
-        .padding(.horizontal, Space.half)
-        .padding(.bottom, Space.half)
+        .padding(.horizontal, Space.one)
+        .padding(.bottom, Space.one)
         .disabled(isEmpty)
         .opacity(isEmpty ? 0.5 : 1)
     }

@@ -4,42 +4,47 @@
 import CCPKit
 import SwiftUI
 
-/// The column of note tabs down the leading edge of the Notes card.
+/// The notes' tabs as a horizontal strip living in the widget header.
 ///
-/// The rail never scrolls: the note count is capped low enough that every tab
-/// plus the new-note row fits beside the editor, so the tab card stays a
-/// short fixed column rather than growing a scroll region of its own.
-struct NoteTabRail: View {
+/// The strip never wraps: twelve tabs overflow a lane, so it scrolls and
+/// follows the selection. The selected tab wears a muted fill — the header's
+/// answer to "where am I" now that there is no title beside it.
+struct NoteTabStrip: View {
     @Bindable var adapter: NotesAdapter
     let onCloseRequest: (Note) -> Void
 
     @State private var renaming: UUID?
     @State private var renameDraft = ""
+    @State private var hoveredNoteID: UUID?
     @FocusState private var isRenaming: Bool
 
     var body: some View {
-        VStack(spacing: Self.rowSpacing) {
-            ForEach(adapter.notes) { note in
-                row(note)
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: Space.quarter) {
+                    ForEach(adapter.notes) { note in
+                        tab(note)
+                            .id(note.id)
+                    }
+                }
+                .padding(.vertical, Space.quarter / 2)
             }
-            newNoteButton
-            Spacer(minLength: 0)
+            .onChange(of: adapter.selectedNoteID) { _, selected in
+                guard let selected else { return }
+                withAnimation(.easeOut(duration: 0.15)) {
+                    proxy.scrollTo(selected, anchor: .center)
+                }
+            }
         }
-        // The note tucks over this card's trailing edge, so the rail's
-        // content ends where the overlap begins: a close button half under
-        // the note is a control that looks broken and lands half its taps on
-        // the wrong card.
-        .padding(.trailing, Layout.noteTuck)
     }
 
-    /// The gap between tab rows.
-    static let rowSpacing = Space.quarter
-
-    // MARK: Rows
+    // MARK: Tabs
 
     @ViewBuilder
-    private func row(_ note: Note) -> some View {
+    private func tab(_ note: Note) -> some View {
         let isSelected = adapter.selectedNoteID == note.id
+        let isHovered = hoveredNoteID == note.id
+        let showClose = adapter.canCloseNote && (isSelected || isHovered)
         HStack(spacing: Space.quarter) {
             if renaming == note.id {
                 renameField(note)
@@ -48,16 +53,37 @@ struct NoteTabRail: View {
                     .font(.caption.weight(isSelected ? .semibold : .regular))
                     .lineLimit(1)
                     .truncationMode(.tail)
-                Spacer(minLength: 0)
-                closeButton(note)
+                if showClose {
+                    Button {
+                        onCloseRequest(note)
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.caption2.weight(.semibold))
+                            .frame(width: Space.one, height: Space.one)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.tertiary)
+                    .help("Close note")
+                    .accessibilityLabel("Close \(note.name)")
+                }
             }
         }
-        .padding(.horizontal, Space.half)
+        .padding(.leading, Space.one)
+        .padding(.trailing, showClose || renaming == note.id ? Space.half : Space.one)
+        .frame(minWidth: 36, maxWidth: 96)
         .frame(height: Layout.noteTabHeight)
         .foregroundStyle(isSelected ? Color.primary : Color.secondary)
-        .contentShape(Rectangle())
+        .background {
+            RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
+                .fill(isSelected ? Color.controlFill : isHovered ? Color.controlFill.opacity(0.5) : Color.clear)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
         .onTapGesture(count: 2) { beginRename(note) }
         .onTapGesture { adapter.selectNote(note.id) }
+        .onHover { hovering in
+            if hovering { hoveredNoteID = note.id } else if hoveredNoteID == note.id { hoveredNoteID = nil }
+        }
         .contextMenu {
             Button("Rename") { beginRename(note) }
             Button("Delete", role: .destructive) { onCloseRequest(note) }
@@ -81,45 +107,10 @@ struct NoteTabRail: View {
             .accessibilityLabel("Note name")
     }
 
-    private func closeButton(_ note: Note) -> some View {
-        Button {
-            onCloseRequest(note)
-        } label: {
-            Image(systemName: "xmark")
-                .font(.system(size: 8, weight: .bold))
-                .frame(width: Space.oneHalf, height: Space.oneHalf)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.tertiary)
-        .disabled(!adapter.canCloseNote)
-        .opacity(adapter.canCloseNote ? 1 : 0)
-        .help("Close note")
-        .accessibilityLabel("Close \(note.name)")
-    }
-
-    private var newNoteButton: some View {
-        Button {
-            adapter.createNote()
-        } label: {
-            Label("New Note", systemImage: "plus")
-                .font(.caption.weight(.semibold))
-                .labelStyle(.iconOnly)
-                .frame(maxWidth: .infinity)
-                .frame(height: Layout.noteTabHeight)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
-        .disabled(!adapter.canCreateNote)
-        .help(adapter.canCreateNote ? "New note" : "Note limit reached (\(NotesDocument.maximumNoteCount))")
-        .accessibilityLabel("New note")
-    }
-
     // MARK: Renaming
 
     private func beginRename(_ note: Note) {
-        // One draft and one focus flag serve every row, so moving straight
+        // One draft and one focus flag serve every tab, so moving straight
         // from renaming one tab to renaming another never blurs the first —
         // `isRenaming` is already true and `onChange` does not fire. Commit it
         // here instead of dropping what the user typed.
