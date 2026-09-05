@@ -147,12 +147,15 @@ final class RocketAdapterTests: XCTestCase {
     // MARK: - Status item matching
 
     func testMatcherAcceptsRocketStatusItem() {
+        XCTAssertTrue(LiveRocketSource.isStatusItem(description: nil, title: nil, role: "AXMenuBarItem"),
+                      "raw AXDescription of the status item is nil; System Events invents 'status menu'")
+        XCTAssertTrue(LiveRocketSource.isStatusItem(description: nil, title: "", role: "AXMenuBarItem"))
         XCTAssertTrue(LiveRocketSource.isStatusItem(description: "status menu", title: nil, role: "AXMenuBarItem"))
     }
 
     func testMatcherRejectsAppMenuItems() {
         XCTAssertFalse(LiveRocketSource.isStatusItem(description: nil, title: "Preferences…", role: "AXMenuBarItem"))
-        XCTAssertFalse(LiveRocketSource.isStatusItem(description: "status menu", title: nil, role: "AXMenu"))
+        XCTAssertFalse(LiveRocketSource.isStatusItem(description: nil, title: nil, role: "AXMenu"))
         XCTAssertFalse(LiveRocketSource.isStatusItem(description: "clock", title: nil, role: "AXMenuBarItem"))
     }
 }

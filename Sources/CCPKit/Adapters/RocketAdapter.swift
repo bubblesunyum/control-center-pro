@@ -98,9 +98,12 @@ public final class LiveRocketSource: RocketSource {
     }
 
     /// Whether an element is Rocket's status item rather than an app-menu
-    /// item: unnamed, carrying the description the status item exposes.
+    /// item: icon-only, so untitled. The raw AXDescription is nil — System
+    /// Events synthesizes "status menu" for the same element, so that string
+    /// is accepted too in case some OS versions expose it directly.
     static func isStatusItem(description: String?, title: String?, role: String?) -> Bool {
-        role == "AXMenuBarItem" && (title ?? "").isEmpty && description == statusItemDescription
+        role == "AXMenuBarItem" && (title ?? "").isEmpty
+            && (description == nil || description == statusItemDescription)
     }
 
     private static func isStatusItem(_ element: AXUIElement) -> Bool {
