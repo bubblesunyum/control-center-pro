@@ -16,13 +16,13 @@ final class OpenCodeUsageFormattingTests: XCTestCase {
         let now = Date()
         XCTAssertEqual(
             OpenCodeUsageWidget.resetText(until: now.addingTimeInterval(45 * 60), now: now),
-            "resets in 45m")
+            "45m")
         XCTAssertEqual(
             OpenCodeUsageWidget.resetText(until: now.addingTimeInterval(3 * 3600 + 12 * 60), now: now),
-            "resets in 3h 12m")
+            "3h 12m")
         XCTAssertEqual(
             OpenCodeUsageWidget.resetText(until: now.addingTimeInterval(4 * 86400 + 5 * 3600), now: now),
-            "resets in 4d 5h")
+            "4d 5h")
     }
 
     func testResetHandlesMissingAndPast() {
@@ -33,6 +33,6 @@ final class OpenCodeUsageFormattingTests: XCTestCase {
             "resetting…")
         XCTAssertEqual(
             OpenCodeUsageWidget.resetText(until: now.addingTimeInterval(20), now: now),
-            "resets in 1m")
+            "1m")
     }
 }

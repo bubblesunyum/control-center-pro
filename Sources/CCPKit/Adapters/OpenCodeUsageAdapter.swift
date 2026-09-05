@@ -259,7 +259,7 @@ public final class OpenCodeUsageAdapter {
     /// Whether the shown percents are ledger-precise decimals rather than the
     /// endpoint's truncated ints.
     public private(set) var isPrecise = false
-    /// Ticks every 30s while open so "resets in 3h 12m" stays honest.
+    /// Ticks every 30s while open so "3h 12m" stays honest.
     public private(set) var now = Date()
 
     @ObservationIgnored private let source: OpenCodeUsageSource

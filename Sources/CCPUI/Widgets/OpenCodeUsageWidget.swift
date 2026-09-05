@@ -90,17 +90,15 @@ private struct OpenCodeUsageContent: View {
                         .foregroundStyle(.orange)
                 }
                 Spacer()
+                Text(OpenCodeUsageWidget.resetText(until: window?.resetsAt, now: now))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
                 Text(OpenCodeUsageWidget.percentText(window?.percent))
                     .font(.caption.weight(.semibold))
                     .monospacedDigit()
             }
             UsageBar(fraction: (window?.percent ?? 0) / 100)
-            HStack {
-                Spacer()
-                Text(OpenCodeUsageWidget.resetText(until: window?.resetsAt, now: now))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title) \(OpenCodeUsageWidget.percentText(window?.percent)), \(OpenCodeUsageWidget.resetText(until: window?.resetsAt, now: now))")
@@ -135,11 +133,11 @@ extension OpenCodeUsageWidget {
         let minutes = Int(remaining / 60)
         switch minutes {
         case 0..<60:
-            return "resets in \(max(minutes, 1))m"
+            return "\(max(minutes, 1))m"
         case 60..<(48 * 60):
-            return "resets in \(minutes / 60)h \(minutes % 60)m"
+            return "\(minutes / 60)h \(minutes % 60)m"
         default:
-            return "resets in \(minutes / (24 * 60))d \((minutes % (24 * 60)) / 60)h"
+            return "\(minutes / (24 * 60))d \((minutes % (24 * 60)) / 60)h"
         }
     }
 }
