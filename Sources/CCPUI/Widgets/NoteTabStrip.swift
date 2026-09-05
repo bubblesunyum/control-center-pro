@@ -22,7 +22,7 @@ struct NoteTabStrip: View {
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: Space.quarter) {
+            HStack(spacing: Space.half) {
                 tabViews
                 plusButton
             }
@@ -48,7 +48,7 @@ struct NoteTabStrip: View {
     private var scrollingTabs: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Space.quarter) {
+                HStack(spacing: Space.half) {
                     ForEach(adapter.notes) { note in
                         tab(note)
                             .frame(maxWidth: Layout.noteTabMaxWidth)
@@ -127,15 +127,15 @@ struct NoteTabStrip: View {
             }
         }
         // The hover chip is a 20pt square in a 24pt pill, so 2pt of air above
-        // and below it — the trailing pad matches at 2pt and the chip sits
-        // evenly on all three sides.
+        // and below it. Six points lead (a half step plus a quarter) and four
+        // trail.
         //
         // No min or max width here: ViewThatFits picks this fit on the tabs'
         // ideal size but lays it out with a concrete proposal, and a maxWidth
         // frame would stretch every pill out to the cap. The scrolling fit
         // below is where pills cap.
-        .padding(.leading, Space.half)
-        .padding(.trailing, Space.quarter)
+        .padding(.leading, Space.half + Space.quarter)
+        .padding(.trailing, Space.half)
         .frame(height: Layout.noteTabHeight)
         .foregroundStyle(isSelected ? Color.primary : Color.secondary)
         .background {
