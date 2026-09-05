@@ -50,6 +50,10 @@ public typealias ToolsWidget = QuickTogglesWidget
 // MARK: - Content
 
 private struct ToolsContent: View {
+    // Rocket is hidden while the user tries Mojito — flip to true to bring
+    // it back. Adapter + tests stay in the repo on purpose.
+    private static let isRocketEnabled = false
+
     @Bindable var rocket: RocketAdapter
     @Environment(\.hidePanel) private var hidePanel
     @State private var isCapturing = false
@@ -61,8 +65,9 @@ private struct ToolsContent: View {
                 copyTextButton
                 // Rocket keeps working with its icon hidden, so the strip
                 // gives the hidden icon back its menu. Not installed means
-                // no button rather than a dead one.
-                if rocket.isInstalled {
+                // no button rather than a dead one. Hidden for now while
+                // the user tries Mojito (see isRocketEnabled above).
+                if Self.isRocketEnabled && rocket.isInstalled {
                     rocketButton
                 }
                 Spacer(minLength: 0)
