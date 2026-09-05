@@ -92,8 +92,12 @@ private struct CountBadge: View {
     }
 }
 
-/// A round icon button sized to sit in a widget header without pushing the
+/// A bare icon button that sits in a widget header without pushing the
 /// title's line height around.
+///
+/// Deliberately chromeless — no fill, no stroke. Header buttons are a quiet
+/// toolbar, not controls calling for attention; a button that needs emphasis
+/// says so with `isActive`, which tints the glyph itself.
 public struct HeaderIconButton: View {
     private let systemImage: String
     private let label: String
@@ -117,14 +121,7 @@ public struct HeaderIconButton: View {
             Image(systemName: systemImage)
                 .font(.caption.weight(.semibold))
                 .frame(width: Layout.headerAccessorySize, height: Layout.headerAccessorySize)
-                .background(Circle().fill(isActive ? Color.accentColor.opacity(0.20) : Color.controlFill))
-                .overlay(
-                    Circle().strokeBorder(
-                        isActive ? Color.accentColor.opacity(0.65) : Color.cardStroke,
-                        lineWidth: Stroke.hairline
-                    )
-                )
-                .contentShape(Circle())
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .foregroundStyle(isActive ? Color.accentColor : .secondary)

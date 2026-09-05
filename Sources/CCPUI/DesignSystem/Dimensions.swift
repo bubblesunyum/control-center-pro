@@ -78,11 +78,8 @@ public enum Layout {
     /// Thumbnail shown on the trailing edge of an image clipboard row.
     static let clipboardThumbnailWidth: CGFloat = 44
     static let clipboardThumbnailHeight: CGFloat = 32
-    /// Width range of the clipboard search pill: it hugs its text rather than
-    /// filling the card, so the count rides beside it.
-    static let clipboardSearchMinWidth: CGFloat = 96
-    static let clipboardSearchIdealWidth: CGFloat = 120
-    static let clipboardSearchMaxWidth: CGFloat = 160
+    /// Width of the clipboard's expanding header search field.
+    static let clipboardSearchWidth: CGFloat = 144
     /// Larger preview used in the context menu for an image entry.
     static let clipboardPreviewWidth: CGFloat = 220
     static let clipboardPreviewHeight: CGFloat = 160

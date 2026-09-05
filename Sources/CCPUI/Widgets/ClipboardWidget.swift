@@ -42,6 +42,8 @@ public final class ClipboardWidget: CCPWidget {
 private struct ClipboardContent: View {
     @Bindable var adapter: ClipboardAdapter
     @State private var query = ""
+    @State private var isSearching = false
+    @FocusState private var searchFocused: Bool
 
     private var filtered: [ClipboardEntry] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -53,56 +55,48 @@ private struct ClipboardContent: View {
     private var pinned: [ClipboardEntry] { filtered.filter(\.isPinned) }
     private var recent: [ClipboardEntry] { filtered.filter { !$0.isPinned } }
 
+    private var hasUnpinned: Bool { adapter.entries.contains(where: { !$0.isPinned }) }
+
     var body: some View {
         WidgetCard(ClipboardWidget.descriptor) {
-            if adapter.entries.contains(where: { !$0.isPinned }) {
-                HeaderIconButton(
-                    systemImage: "trash",
-                    label: "Clear recent clipboard items",
-                    isActive: true
-                ) {
-                    adapter.clearRecent()
+            HStack(spacing: Space.half) {
+                if hasUnpinned, !isSearching {
+                    HeaderIconButton(
+                        systemImage: "trash",
+                        label: "Clear recent clipboard items"
+                    ) {
+                        adapter.clearRecent()
+                    }
+                    .accessibilityHint("Removes every unpinned clipboard item")
+                    .transition(.scale(scale: 0.7).combined(with: .opacity))
                 }
-                .accessibilityHint("Removes every unpinned clipboard item")
+                if isSearching {
+                    expandingSearchField
+                        .transition(.scale(scale: 0.7).combined(with: .opacity))
+                } else {
+                    HeaderIconButton(
+                        systemImage: "magnifyingglass",
+                        label: "Search clipboard history"
+                    ) {
+                        withAnimation(.snappy) { isSearching = true }
+                    }
+                    .transition(.scale(scale: 0.7).combined(with: .opacity))
+                }
             }
         } content: {
-            VStack(alignment: .leading, spacing: Space.one) {
-                searchRow
-                entriesList
+            entriesList
+        }
+        .onChange(of: isSearching) { _, searching in
+            if searching { searchFocused = true }
+        }
+        .onChange(of: searchFocused) { _, focused in
+            if !focused, query.isEmpty, isSearching {
+                withAnimation(.snappy) { isSearching = false }
             }
         }
     }
 
-    private var searchRow: some View {
-        HStack(spacing: Space.half) {
-            searchField
-            Spacer(minLength: Space.half)
-            Text(countText)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-                .lineLimit(1)
-                .accessibilityLabel(countAccessibilityLabel)
-        }
-    }
-
-    /// The total beside the search pill, narrowing to a result count while
-    /// filtering so the number always describes the rows below it.
-    private var countText: String {
-        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return "\(adapter.entries.count) items"
-        }
-        return "\(filtered.count) of \(adapter.entries.count)"
-    }
-
-    private var countAccessibilityLabel: String {
-        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return "\(adapter.entries.count) clipboard items"
-        }
-        return "\(filtered.count) of \(adapter.entries.count) clipboard items match the search"
-    }
-
-    private var searchField: some View {
+    private var expandingSearchField: some View {
         HStack(spacing: Space.half) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
@@ -110,27 +104,23 @@ private struct ClipboardContent: View {
             TextField("Search", text: $query)
                 .font(.caption)
                 .textFieldStyle(.plain)
-                .frame(
-                    minWidth: Layout.clipboardSearchMinWidth,
-                    idealWidth: Layout.clipboardSearchIdealWidth,
-                    maxWidth: Layout.clipboardSearchMaxWidth
-                )
+                .focused($searchFocused)
+                .frame(width: Layout.clipboardSearchWidth)
                 .accessibilityLabel("Search clipboard history")
-            if !query.isEmpty {
-                Button {
+            Button {
+                if query.isEmpty {
+                    withAnimation(.snappy) { isSearching = false }
+                } else {
                     query = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
+                    searchFocused = true
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
+            } label: {
+                Image(systemName: query.isEmpty ? "xmark" : "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(query.isEmpty ? "Close search" : "Clear search")
         }
-        .fixedSize(horizontal: true, vertical: false)
-        .padding(.horizontal, Space.one)
-        .padding(.vertical, Space.one)
-        .background(Color.controlFill, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
     }
 
     @ViewBuilder
@@ -151,20 +141,25 @@ private struct ClipboardContent: View {
                 ScrollView {
                     VStack(spacing: 0) {
                         Color.clear.frame(height: 0).id("ccp.clipboard.top")
-                        LazyVStack(alignment: .leading, spacing: Space.half) {
+                        LazyVStack(alignment: .leading, spacing: 0) {
                             if !pinned.isEmpty {
                                 sectionLabel("Pinned")
-                                ForEach(pinned) { entry in
-                                    ClipboardRow(entry: entry, adapter: adapter)
-                                }
-                                if !recent.isEmpty {
-                                    Divider().padding(.vertical, Space.half)
+                                ForEach(Array(pinned.enumerated()), id: \.element.id) { index, entry in
+                                    ClipboardRow(
+                                        entry: entry,
+                                        adapter: adapter,
+                                        isLast: index == pinned.count - 1 && recent.isEmpty
+                                    )
                                 }
                             }
                             if !recent.isEmpty {
                                 if !pinned.isEmpty { sectionLabel("Recent") }
-                                ForEach(recent) { entry in
-                                    ClipboardRow(entry: entry, adapter: adapter)
+                                ForEach(Array(recent.enumerated()), id: \.element.id) { index, entry in
+                                    ClipboardRow(
+                                        entry: entry,
+                                        adapter: adapter,
+                                        isLast: index == recent.count - 1
+                                    )
                                 }
                             }
                         }
@@ -223,12 +218,15 @@ private struct ClipboardContent: View {
             .foregroundStyle(.secondary)
             .tracking(0.5)
             .padding(.horizontal, Space.half)
+            .padding(.vertical, Space.half)
     }
 }
 
 private struct ClipboardRow: View {
     let entry: ClipboardEntry
     @Bindable var adapter: ClipboardAdapter
+    /// The last row draws no separator — the list ends, not divides.
+    let isLast: Bool
     @State private var didCopy = false
     @State private var copyTask: Task<Void, Never>?
     @Environment(\.hidePanel) private var hidePanel
@@ -236,7 +234,12 @@ private struct ClipboardRow: View {
     @Environment(\.isPanelEditing) private var isPanelEditing
 
     var body: some View {
-        Button { isPanelEditing ? copyOnly() : copyAndPaste() } label: { rowContent }
+        VStack(alignment: .leading, spacing: 0) {
+            Button { isPanelEditing ? copyOnly() : copyAndPaste() } label: {
+                rowContent
+                    .padding(.horizontal, Space.oneHalf)
+                    .padding(.vertical, Space.one)
+            }
             .buttonStyle(.plain)
             .disabled(isPanelEditing)
             .accessibilityLabel(
@@ -244,16 +247,6 @@ private struct ClipboardRow: View {
                     .compactMap { $0 }.joined(separator: " ")
             )
             .accessibilityHint("Copies and pastes into previous app. Right-click for more actions")
-            .padding(.horizontal, Space.oneHalf)
-            .padding(.vertical, Space.one)
-            .background(
-                RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
-                    .fill(entry.isPinned ? Color.pinnedFill : Color.controlFill)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
-                    .strokeBorder(entry.isPinned ? Color.pinnedStroke : Color.clear, lineWidth: Stroke.hairline)
-            )
             .contentShape(Rectangle())
             .help(tooltipText)
             .contextMenu {
@@ -280,6 +273,11 @@ private struct ClipboardRow: View {
             }
             .animation(.easeOut(duration: 0.2), value: didCopy)
             .onDisappear { copyTask?.cancel() }
+            if !isLast {
+                Divider()
+                    .padding(.leading, Space.oneHalf)
+            }
+        }
     }
 
     private var rowContent: some View {
