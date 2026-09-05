@@ -192,6 +192,134 @@ final class ParagraphReturnMonitorTests: XCTestCase {
         XCTAssertNotNil(events.send(keyCode: 36, modifiers: []))
         XCTAssertEqual(textView.string, "ab")
     }
+
+    // MARK: - Lists (ccp-1amf)
+
+    /// Monitors under test. The installed closure holds its monitor weakly,
+    /// so a helper-local one would vanish on return and every key would pass
+    /// through — the test owns them, the way NotesWidget does in production.
+    private var liveMonitors: [ParagraphReturnMonitor] = []
+
+    private func listMonitor(text: String, caret: Int) -> (FakeKeyMonitors, RecordingTextView) {
+        let events = FakeKeyMonitors()
+        let textView = RecordingTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        textView.string = text
+        textView.setSelectedRange(NSRange(location: caret, length: 0))
+        let monitor = ParagraphReturnMonitor(monitors: events.interface) { textView }
+        monitor.start()
+        liveMonitors.append(monitor)
+        return (events, textView)
+    }
+
+    func testReturnMintsTheNextBullet() {
+        let (events, textView) = listMonitor(text: "- Buy milk", caret: 10)
+
+        XCTAssertNil(events.send(keyCode: 36, modifiers: []))
+        XCTAssertEqual(textView.string, "- Buy milk\n- ")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 13, length: 0))
+    }
+
+    func testReturnMidItemSplitsIt() {
+        let (events, textView) = listMonitor(text: "- Buy", caret: 3)
+
+        XCTAssertNil(events.send(keyCode: 36, modifiers: []))
+        XCTAssertEqual(textView.string, "- B\n- uy")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 6, length: 0))
+    }
+
+    func testSelectAllReplacesInsteadOfDuplicating() {
+        // The reported bug: a selection starting in the marker minted beside
+        // the selection instead of replacing it.
+        let events = FakeKeyMonitors()
+        let textView = RecordingTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        textView.string = "- Buy"
+        textView.setSelectedRange(NSRange(location: 0, length: 5))
+        let monitor = ParagraphReturnMonitor(monitors: events.interface) { textView }
+        monitor.start()
+
+        XCTAssertNil(events.send(keyCode: 36, modifiers: []))
+        XCTAssertEqual(textView.string, "\n- ")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 2, length: 0))
+    }
+
+    func testMultiLineSelectionLeavesNothingBehind() {
+        let events = FakeKeyMonitors()
+        let textView = RecordingTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        textView.string = "- A\n- B"
+        textView.setSelectedRange(NSRange(location: 0, length: 7))
+        let monitor = ParagraphReturnMonitor(monitors: events.interface) { textView }
+        monitor.start()
+
+        XCTAssertNil(events.send(keyCode: 36, modifiers: []))
+        XCTAssertEqual(textView.string, "\n- ")
+    }
+
+    func testReturnInTheMarkerOpensAnItemAbove() {
+        let (events, textView) = listMonitor(text: "- Buy", caret: 0)
+
+        XCTAssertNil(events.send(keyCode: 36, modifiers: []))
+        XCTAssertEqual(textView.string, "- \n- Buy")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 2, length: 0),
+                       "the caret stays in the new item; the original keeps its text")
+    }
+
+    func testReturnOnAnEmptyBulletRemovesIt() {
+        let (events, textView) = listMonitor(text: "- ", caret: 2)
+
+        XCTAssertNil(events.send(keyCode: 36, modifiers: []))
+        XCTAssertEqual(textView.string, "")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 0, length: 0))
+    }
+
+    func testReturnOnANestedEmptyBulletOutdents() {
+        let (events, textView) = listMonitor(text: "  - ", caret: 4)
+
+        XCTAssertNil(events.send(keyCode: 36, modifiers: []))
+        XCTAssertEqual(textView.string, "- ")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 2, length: 0))
+    }
+
+    func testReturnMintsAnUncheckedTodo() {
+        let (events, textView) = listMonitor(text: "- [x] Done", caret: 10)
+
+        XCTAssertNil(events.send(keyCode: 36, modifiers: []))
+        XCTAssertEqual(textView.string, "- [x] Done\n- [ ] ")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 17, length: 0))
+    }
+
+    func testReturnOnAnEmptyTodoRemovesIt() {
+        let (events, textView) = listMonitor(text: "- [ ]", caret: 5)
+
+        XCTAssertNil(events.send(keyCode: 36, modifiers: []))
+        XCTAssertEqual(textView.string, "")
+    }
+
+    func testReturnIncrementsANumberedMarker() {
+        let (events, textView) = listMonitor(text: "3) Go", caret: 5)
+
+        XCTAssertNil(events.send(keyCode: 36, modifiers: []))
+        XCTAssertEqual(textView.string, "3) Go\n4) ")
+    }
+
+    func testShiftReturnInAListStaysSoft() {
+        let (events, textView) = listMonitor(text: "- Buy", caret: 5)
+
+        XCTAssertNotNil(events.send(keyCode: 36, modifiers: .shift),
+                        "a soft continuation never mints")
+        XCTAssertEqual(textView.string, "- Buy")
+        XCTAssertTrue(textView.insertions.isEmpty)
+    }
+
+    func testProseThatLooksListyIsLeftAlone() {
+        // A year, a bare number, a version, a dash without its space, a quote,
+        // a heading: none mints, none is ever deleted.
+        for text in ["2026", "1.", "1.2 X", "-x", "> quote", "## H", "```"] {
+            let (events, textView) = listMonitor(text: text, caret: text.count)
+
+            XCTAssertNil(events.send(keyCode: 36, modifiers: []), "still a paragraph break: \(text)")
+            XCTAssertEqual(textView.string, "\(text)\n\n", "kept verbatim: \(text)")
+        }
+    }
 }
 
 /// A text view that applies `insertText` by hand. A windowless `NSTextView`
