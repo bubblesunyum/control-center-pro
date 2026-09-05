@@ -6,9 +6,10 @@ import SwiftUI
 
 /// The notes' tabs as a horizontal strip living in the widget header.
 ///
-/// The strip never wraps: twelve tabs overflow a lane, so it scrolls and
-/// follows the selection. The selected tab wears a muted fill — the header's
-/// answer to "where am I" now that there is no title beside it.
+/// The selected tab wears a muted fill — the header's answer to "where am I"
+/// now that there is no title beside it — and a plain plus hugs the last tab.
+/// Twelve tabs never fit a lane, so past what fits the strip scrolls under a
+/// pinned plus instead of pushing it off the edge, and follows the selection.
 struct NoteTabStrip: View {
     @Bindable var adapter: NotesAdapter
     let onCloseRequest: (Note) -> Void
@@ -19,6 +20,29 @@ struct NoteTabStrip: View {
     @FocusState private var isRenaming: Bool
 
     var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: Space.quarter) {
+                tabViews
+                plusButton
+            }
+            HStack(spacing: Space.half) {
+                scrollingTabs
+                plusButton
+            }
+        }
+    }
+
+    /// The tabs at their natural width, for the fit the strip prefers.
+    @ViewBuilder
+    private var tabViews: some View {
+        ForEach(adapter.notes) { note in
+            tab(note)
+        }
+    }
+
+    /// The tabs under a scroll view, for when there are more than fit.
+    @ViewBuilder
+    private var scrollingTabs: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Space.quarter) {
@@ -38,6 +62,22 @@ struct NoteTabStrip: View {
         }
     }
 
+    private var plusButton: some View {
+        Button {
+            adapter.createNote()
+        } label: {
+            Image(systemName: "plus")
+                .font(.caption.weight(.semibold))
+                .frame(width: Layout.rowActionSize, height: Layout.rowActionSize)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .disabled(!adapter.canCreateNote)
+        .help(adapter.canCreateNote ? "New note" : "Note limit reached (\(NotesDocument.maximumNoteCount))")
+        .accessibilityLabel("New note")
+    }
+
     // MARK: Tabs
 
     @ViewBuilder
@@ -45,7 +85,7 @@ struct NoteTabStrip: View {
         let isSelected = adapter.selectedNoteID == note.id
         let isHovered = hoveredNoteID == note.id
         let showClose = adapter.canCloseNote && (isSelected || isHovered)
-        HStack(spacing: Space.quarter) {
+        HStack(spacing: Space.one) {
             if renaming == note.id {
                 renameField(note)
             } else {

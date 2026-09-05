@@ -79,27 +79,18 @@ private struct NotesContent: View {
         }
     }
 
-    /// The header is the tab strip, not a title: tabs, a plain plus, then the
-    /// way out to Craft. It still publishes the header frame the panel's
-    /// hold-to-edit hit-tests against, and it keeps the hold accessibility
-    /// action — a custom header that drops either silently leaves the widget
-    /// undraggable.
+    /// The header is the tab strip, not a title: the widget's icon, its tabs
+    /// with the plus hugging the last one, then the way out to Craft. It
+    /// still publishes the header frame the panel's hold-to-edit hit-tests
+    /// against, and it keeps the hold accessibility action — a custom header
+    /// that drops either silently leaves the widget undraggable.
     private var header: some View {
         HStack(spacing: Space.half) {
+            Image(systemName: NotesWidget.descriptor.symbolName)
+                .font(.headline)
+                .foregroundStyle(.primary)
+                .accessibilityHidden(true)
             NoteTabStrip(adapter: adapter, onCloseRequest: requestClose)
-            Button {
-                adapter.createNote()
-            } label: {
-                Image(systemName: "plus")
-                    .font(.caption.weight(.semibold))
-                    .frame(width: Layout.rowActionSize, height: Layout.rowActionSize)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .disabled(!adapter.canCreateNote)
-            .help(adapter.canCreateNote ? "New note" : "Note limit reached (\(NotesDocument.maximumNoteCount))")
-            .accessibilityLabel("New note")
             Spacer(minLength: 0)
             HeaderIconButton(systemImage: "arrow.up.forward.app", label: "Open in Craft") {
                 adapter.openCraft()
