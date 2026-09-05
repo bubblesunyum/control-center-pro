@@ -115,20 +115,133 @@ final class CraftPushWireTests: XCTestCase {
         XCTAssertEqual(blocks[0]["markdown"], "one")
     }
 
-    func testPostWithHeadSiblingGoesBeforeIt() async throws {
-        // Head of a non-empty document: "start" merges into the top block
-        // (observed live), so the head is addressed as a sibling instead.
-        let transport = ScriptedTransport([.init(statusCode: 200, json: """
-            {"items":[{"id":"n1","markdown":"new"}]}
-            """)])
-        _ = try await client(transport).postBlocks(
+    func testPostWithHeadSiblingPostsAtEndThenMovesBeforeIt() async throws {
+        // Head of a non-empty document: neither "start"+pageId nor
+        // "before"+siblingId inserts above the first block — both merge into
+        // it (observed live 2026-09-05) — so the batch lands at the end and
+        // is moved before the head (ccp-gfe5).
+        let transport = ScriptedTransport([
+            .init(statusCode: 200, json: """
+                {"items":[{"id":"n1","markdown":"new"}]}
+                """),
+            .init(statusCode: 200, json: """
+                {"items":[{"id":"n1"}]}
+                """),
+        ])
+        let echo = try await client(transport).postBlocks(
             [BlockInsert(afterID: nil, markdown: "new")], documentID: "doc1",
             headSiblingID: "b0")
 
-        let body = try transport.jsonBody(of: 0)
-        let position = try XCTUnwrap(body["position"] as? [String: String])
-        XCTAssertEqual(position["position"], "before")
-        XCTAssertEqual(position["siblingId"], "b0")
+        XCTAssertEqual(echo, [CraftBlock(id: "n1", markdown: "new")])
+        XCTAssertEqual(transport.requests.count, 2)
+        let postBody = try transport.jsonBody(of: 0)
+        let postPosition = try XCTUnwrap(postBody["position"] as? [String: String])
+        XCTAssertEqual(postPosition["position"], "end")
+        XCTAssertEqual(postPosition["pageId"], "doc1")
+        XCTAssertEqual(transport.requests[1].httpMethod, "PUT")
+        XCTAssertEqual(transport.requests[1].url?.absoluteString.hasSuffix("blocks/move"), true)
+        let moveBody = try transport.jsonBody(of: 1)
+        XCTAssertEqual(moveBody["blockIds"] as? [String], ["n1"])
+        let movePosition = try XCTUnwrap(moveBody["position"] as? [String: String])
+        XCTAssertEqual(movePosition["position"], "before")
+        XCTAssertEqual(movePosition["siblingId"], "b0")
+    }
+
+    func testHeadMoveFailureRollsBackThePost() async throws {
+        // POST ok, MOVE 500s: the posted block is deleted so a retry
+        // re-posts rather than orphaning a copy at the end.
+        let transport = ScriptedTransport([
+            .init(statusCode: 200, json: """
+                {"items":[{"id":"n1","markdown":"new"}]}
+                """),
+            .init(statusCode: 500, json: "{}"),
+            .init(statusCode: 200, json: "{}"),
+        ])
+        do {
+            _ = try await client(transport).postBlocks(
+                [BlockInsert(afterID: nil, markdown: "new")], documentID: "doc1",
+                headSiblingID: "b0")
+            XCTFail("a failed move must throw — the head insert did not land")
+        } catch let error as CraftClientError {
+            XCTAssertEqual(error, .unreachable(statusCode: 500))
+        } catch {
+            XCTFail("wrong error: \(error)")
+        }
+
+        XCTAssertEqual(transport.requests.count, 3)
+        XCTAssertEqual(transport.requests[2].httpMethod, "DELETE")
+        let deleteBody = try transport.jsonBody(of: 2)
+        XCTAssertEqual(deleteBody["blockIds"] as? [String], ["n1"])
+    }
+
+    func testHeadMoveEchoMustNameBackEveryPostedID() async throws {
+        // POST ok, MOVE 200s but echoes no ids: the blocks sit at the end
+        // while the sidecar would claim the head — roll back like a failure.
+        let transport = ScriptedTransport([
+            .init(statusCode: 200, json: """
+                {"items":[{"id":"n1","markdown":"x"},{"id":"n2","markdown":"y"}]}
+                """),
+            .init(statusCode: 200, json: """
+                {"items":[]}
+                """),
+            .init(statusCode: 200, json: "{}"),
+        ])
+        do {
+            _ = try await client(transport).postBlocks(
+                [BlockInsert(afterID: nil, markdown: "x"),
+                 BlockInsert(afterID: nil, markdown: "y")], documentID: "doc1",
+                headSiblingID: "b0")
+            XCTFail("a short move echo cannot be attributed — fail, don't record")
+        } catch let error as CraftClientError {
+            XCTAssertEqual(error, .unreachable(statusCode: nil))
+        } catch {
+            XCTFail("wrong error: \(error)")
+        }
+
+        XCTAssertEqual(transport.requests.count, 3, "POST, MOVE, rollback DELETE")
+        let deleteBody = try transport.jsonBody(of: 2)
+        XCTAssertEqual(Set(deleteBody["blockIds"] as? [String] ?? []), ["n1", "n2"])
+    }
+
+    func testHeadMoveEchoToleratesOtherEnvelopes() async throws {
+        // The move echo carries ids only, in whatever envelope arrives.
+        for json in ["{\"blocks\":[{\"id\":\"n1\"}]}", "[{\"id\":\"n1\"}]"] {
+            let transport = ScriptedTransport([
+                .init(statusCode: 200, json: """
+                    {"items":[{"id":"n1","markdown":"new"}]}
+                    """),
+                .init(statusCode: 200, json: json),
+            ])
+            let echo = try await client(transport).postBlocks(
+                [BlockInsert(afterID: nil, markdown: "new")], documentID: "doc1",
+                headSiblingID: "b0")
+            XCTAssertEqual(echo.map(\.id), ["n1"], "envelope: \(json)")
+            XCTAssertEqual(transport.requests.count, 2, "no rollback on \(json)")
+        }
+    }
+
+    func testHeadMoveRateLimitSkipsTheRollback() async throws {
+        // POST ok, MOVE 429s: another write into a throttled window only
+        // spends budget, so the limit rethrows bare and the limit's own
+        // retry re-posts.
+        let transport = ScriptedTransport([
+            .init(statusCode: 200, json: """
+                {"items":[{"id":"n1","markdown":"new"}]}
+                """),
+            .init(statusCode: 429, json: "{}", headers: ["Retry-After": "9"]),
+        ])
+        do {
+            _ = try await client(transport).postBlocks(
+                [BlockInsert(afterID: nil, markdown: "new")], documentID: "doc1",
+                headSiblingID: "b0")
+            XCTFail("a limited move must throw")
+        } catch let error as CraftClientError {
+            XCTAssertEqual(error, .rateLimited(retryAfter: 9))
+        } catch {
+            XCTFail("wrong error: \(error)")
+        }
+
+        XCTAssertEqual(transport.requests.count, 2, "no DELETE into the throttled window")
     }
 
     func testPostWithAnchorFollowsTheSibling() async throws {
@@ -633,13 +746,16 @@ final class CraftPushAdapterTests: XCTestCase {
                        "new ids land in pad order")
     }
 
-    func testPrependPostsBeforeTheHeadBlock() async throws {
+    func testPrependPostsAtEndThenMovesBeforeTheHeadBlock() async throws {
         let name = "ccp.push.prepend.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([
             .init(statusCode: 200, json: """
                 {"items":[{"id":"na","markdown":"A"}]}
+                """),
+            .init(statusCode: 200, json: """
+                {"items":[{"id":"na"}]}
                 """),
             .init(statusCode: 200, json: """
                 {"items":[{"id":"nc","markdown":"c"}]}
@@ -652,12 +768,18 @@ final class CraftPushAdapterTests: XCTestCase {
         adapter.text = "A\n\nB\n\nc\n"
         await adapter.flushCraftPush()
 
-        XCTAssertEqual(transport.requests.count, 2, "both groups post")
-        let firstPosition = try XCTUnwrap(
+        XCTAssertEqual(transport.requests.count, 3, "head group posts and moves, anchored group posts")
+        let postPosition = try XCTUnwrap(
             (try transport.jsonBody(of: 0)["position"] as? [String: String]))
-        XCTAssertEqual(firstPosition["position"], "before",
-                       "the anchorless group addresses the head as a sibling")
-        XCTAssertEqual(firstPosition["siblingId"], "block-0")
+        XCTAssertEqual(postPosition["position"], "end",
+                       "the anchorless group lands at the end, where appends stay separate")
+        XCTAssertEqual(postPosition["pageId"], "doc1")
+        XCTAssertEqual(transport.requests[1].httpMethod, "PUT")
+        let moveBody = try transport.jsonBody(of: 1)
+        XCTAssertEqual(moveBody["blockIds"] as? [String], ["na"])
+        let movePosition = try XCTUnwrap(moveBody["position"] as? [String: String])
+        XCTAssertEqual(movePosition["position"], "before")
+        XCTAssertEqual(movePosition["siblingId"], "block-0")
         XCTAssertEqual(adapter.sidecar(for: id).entries.map(\.id), ["na", "block-0", "nc"],
                        "new ids land in pad order")
         XCTAssertFalse(adapter.isPushDirty(id), "nothing stalls anymore")

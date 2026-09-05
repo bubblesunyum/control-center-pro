@@ -21,10 +21,10 @@ must never be logged, committed, or written into a bead. Confirmed live.
 | `GET /documents` | `{items:[{id,title}]}`. Titles may be empty strings. |
 | `GET /documents/search` | space-wide search. (`GET /search` does not exist — it 404s.) |
 | `GET /blocks?id=&maxDepth=-1&fetchMetadata=true` | one nested block tree. 400s unless `id` or `date` is given. |
-| `POST /blocks` | `{blocks:[…], position:{position,pageId\|siblingId\|date}}` → `{items:[{id,…,markdown}]}` with assigned ids. `end`+pageId appends (the only spelling the blocks docs show); `after`+siblingId inserts after a block (verified live); `before`+siblingId inserts above a block (unconfirmed vocabulary from the upload endpoint — live probe pending). `start`+pageId does NOT insert above: into a non-empty doc it merges the text into the top block (observed live 2026-09-05) — only for empty-doc first syncs. |
+| `POST /blocks` | `{blocks:[…], position:{position,pageId\|siblingId\|date}}` → `{items:[{id,…,markdown}]}` with assigned ids. `end`+pageId appends (the only spelling the blocks docs show); `after`+siblingId inserts after a block (verified live); `before`+siblingId inserts above a block everywhere EXCEPT above the first child (verified live 2026-09-05: mid-doc `before` creates a separate block in order, but before-the-head merges into the head block, exactly like `start`+pageId does). `pageId`+`siblingId` together 400 with `invalid_union` — the position union is strict (verified live). Head insertion therefore rides two requests: POST at `end`+pageId, then `PUT /blocks/move` the new ids `before` the head (verified live, single and 3-block batches arrive separate and in order; `start`+pageId stays for empty-doc first syncs only). |
 | `PUT /blocks` | `{blocks:[{id, markdown, …}]}` |
 | `DELETE /blocks` | `{blockIds:[…]}` |
-| `PUT /blocks/move`, `PUT /documents/move` | reposition |
+| `PUT /blocks/move`, `PUT /documents/move` | reposition blocks / documents. Block moves take the same position union as POST (`{blockIds:[…], position:{…}}`) and the echo carries ids only (`{items:[{id}]}` — no markdown). Verified live 2026-09-05: moving a fresh end-append `before` the head lands it above the head as a separate block, in batch order. |
 | `GET /tasks?scope=` | `inbox`, `active`, `upcoming`, `logbook` |
 
 A document id **is** its root block id.

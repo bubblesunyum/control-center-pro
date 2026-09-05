@@ -734,8 +734,8 @@ public final class NotesAdapter {
             // One batch per anchor group, in plan order; abort the rest on
             // the first throw. Echoes stay keyed by plan-insert index, so a
             // split can never shift a later insert's attribution. Anchorless
-            // groups address the sidecar's head block, so a top-of-pad insert
-            // lands above it instead of merging into it.
+            // groups carry the sidecar's head into postBlocks, which posts
+            // at the end and moves before it (ccp-gfe5).
             for group in postGroups(for: plan) {
                 let headSibling = group.first?.insert.afterID == nil
                     ? sidecar.entries.first?.id : nil
@@ -781,10 +781,11 @@ public final class NotesAdapter {
     }
 
     /// One POST batch per anchor group, in plan order. Anchorless inserts
-    /// (head of the pad) post with "before" + the sidecar's head block id —
-    /// "start" + pageId merges into the top block instead of inserting above
-    /// it (observed live 2026-09-05) and is only for the empty-document first
-    /// sync, where there is no head block to address.
+    /// (head of the pad) post at the end and move before the sidecar's head
+    /// block: no single POST inserts above the first block — "start"+pageId
+    /// and "before"+siblingId both merge into it (observed live 2026-09-05,
+    /// ccp-gfe5). The empty-document first sync keeps "start"+pageId, where
+    /// there is no head block to address.
     ///
     /// Known limit, accepted for .5: hand-mapping a pad onto a contentful
     /// Craft doc (outside the provisioning flow, ccp-0gek) addresses a head

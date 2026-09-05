@@ -46,12 +46,50 @@ extension CraftClient {
         var blockIds: [String]
     }
 
+    private struct MoveBody: Encodable {
+        var blockIds: [String]
+        var position: PostBody.Position
+    }
+
     private struct ItemsEnvelope: Decodable {
         var items: [CraftBlock]?
     }
 
     private struct BlocksEnvelope: Decodable {
         var blocks: [CraftBlock]?
+    }
+
+    private struct MovedEnvelope: Decodable {
+        struct Item: Decodable {
+            var id: String
+        }
+        var items: [Item]?
+    }
+
+    private struct MovedBlocksEnvelope: Decodable {
+        struct Item: Decodable {
+            var id: String
+        }
+        var blocks: [Item]?
+    }
+
+    /// The move echo carries ids only, never markdown — and in whatever
+    /// envelope the server chose. Tolerated like the write echo: `items`,
+    /// `blocks`, or a bare array. Nil when nothing parsed.
+    static func decodeMovedIDs(from data: Data) -> [String]? {
+        let decoder = JSONDecoder()
+        if let envelope = try? decoder.decode(MovedEnvelope.self, from: data),
+           let items = envelope.items {
+            return items.map(\.id)
+        }
+        if let envelope = try? decoder.decode(MovedBlocksEnvelope.self, from: data),
+           let items = envelope.blocks {
+            return items.map(\.id)
+        }
+        if let items = try? decoder.decode([MovedEnvelope.Item].self, from: data) {
+            return items.map(\.id)
+        }
+        return nil
     }
 
     /// Decode a write echo tolerantly: the documented shape is an `items`
@@ -122,12 +160,15 @@ extension CraftClient {
         if let anchor = inserts.compactMap(\.afterID).first {
             position = PostBody.Position(position: "after", pageId: nil, siblingId: anchor)
         } else if let head = headSiblingID {
-            // Head of a non-empty document. "start" merges into the top block
-            // (observed live 2026-09-05) instead of inserting above it, so an
-            // anchorless group addresses the current head as a sibling.
-            // "before" is the upload endpoint's vocabulary for the same
-            // relation; the live order probe on ccp-2zi.5 watches it land.
-            position = PostBody.Position(position: "before", pageId: nil, siblingId: head)
+            // Head of a non-empty document. Neither "start"+pageId nor
+            // "before"+siblingId inserts above the first block — both merge
+            // into it (observed live 2026-09-05), and pageId+siblingId
+            // together 400 with invalid_union, so no single POST can address
+            // the head. The batch lands at the end, where appends stay
+            // separate and ordered, and is moved before the head — verified
+            // live to arrive separate and in order, including multi-block
+            // batches (ccp-gfe5).
+            return try await postHead(inserts, documentID: documentID, headSiblingID: head)
         } else {
             // First sync into an empty document, where there is no head block
             // to address. Observed live to lay the batch down in order.
@@ -145,6 +186,63 @@ extension CraftClient {
             throw CraftClientError.unreachable(statusCode: nil)
         }
         return echo
+    }
+
+    /// Head inserts ride two requests: POST at the end, then MOVE before the
+    /// head. The POST echo carries the canonical markdown for the sidecar;
+    /// the move echo carries ids only and must name back every posted id —
+    /// a short or mismatched move echo leaves blocks at the end while the
+    /// sidecar would claim the head, so it rolls back like a failure.
+    ///
+    /// A failed move rolls the posted blocks back with a best-effort DELETE,
+    /// so a retry re-posts rather than orphaning a copy at the end — except
+    /// on rate-limit, where another write answers backpressure with more
+    /// pressure: the posted blocks stay, the limit's own retry re-posts, and
+    /// the duplicate is visible to delete until the pull seed (ccp-2zi.6)
+    /// heals order. If any rollback itself fails the orphans stay, and the
+    /// retry will duplicate them — accepted: it needs two failures in a row.
+    private func postHead(_ inserts: [BlockInsert], documentID: String,
+                          headSiblingID: String) async throws(CraftClientError) -> [CraftBlock] {
+        let body = PostBody(blocks: inserts.map { PostBody.Item(markdown: $0.markdown) },
+                            position: PostBody.Position(position: "end", pageId: documentID,
+                                                        siblingId: nil))
+        let (data, _) = try await send("blocks", method: "POST", body: body)
+        let echo = Self.decodeBlocks(from: data) ?? []
+        guard echo.count >= inserts.count else {
+            throw CraftClientError.unreachable(statusCode: nil)
+        }
+        let postedIDs = echo.map(\.id)
+        do {
+            let movedIDs = try await moveBlocks(postedIDs, before: headSiblingID)
+            guard Set(movedIDs) == Set(postedIDs), movedIDs.count == postedIDs.count else {
+                throw CraftClientError.unreachable(statusCode: nil)
+            }
+        } catch {
+            // Typed throws guarantees CraftClientError; the fallback is
+            // unreachable rather than a guess.
+            let moveError = (error as? CraftClientError) ?? .unreachable(statusCode: nil)
+            // Backpressure answers backpressure with nothing: another write
+            // into a throttled window only spends budget.
+            if case .rateLimited = moveError {
+                throw moveError
+            }
+            try? await deleteBlocks(postedIDs)
+            throw moveError
+        }
+        return echo
+    }
+
+    /// `PUT /blocks/move` — ids before a sibling. Returns the moved ids;
+    /// the echo carries no markdown, so callers pair it by id only.
+    public func moveBlocks(_ ids: [String], before siblingId: String) async throws(CraftClientError) -> [String] {
+        let body = MoveBody(blockIds: ids,
+                            position: PostBody.Position(position: "before", pageId: nil,
+                                                        siblingId: siblingId))
+        let (data, _) = try await send("blocks/move", method: "PUT", body: body)
+        guard let movedIDs = Self.decodeMovedIDs(from: data) else {
+            throw CraftClientError.unreachable(statusCode: nil)
+        }
+        return movedIDs
     }
 
     /// `DELETE /blocks` — ids the diff found missing. Never called for
