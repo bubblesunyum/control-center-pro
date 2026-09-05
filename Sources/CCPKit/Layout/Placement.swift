@@ -8,7 +8,10 @@
 /// describes the widget rather than the slot it sat in. A placement without
 /// one is just the id, on disk as well as in memory: it encodes as the bare
 /// string a build from before resizes existed wrote, so an old build reads a
-/// new file as the arrangement it already understands, minus the sizes.
+/// file back as long as nothing in it was ever resized. A file containing a
+/// resize is a file with a shape the old build never knew — it fails that
+/// whole file the way any schema change does, and the store sets it aside
+/// rather than overwriting it.
 public struct Placement: Codable, Hashable, Sendable {
     public var id: WidgetID
     public var span: WidgetSpan

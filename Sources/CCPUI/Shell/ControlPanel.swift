@@ -29,6 +29,7 @@ public struct ControlPanel: View {
 
     @GestureState private var isGestureActive = false
     @State private var headerFrames: [HeaderFrame] = []
+    @State private var gripFrames: [GripFrame] = []
     @State private var holdTask: Task<Void, Never>?
     @State private var holdWidgetID: WidgetID?
 
@@ -53,6 +54,9 @@ public struct ControlPanel: View {
         .onPreferenceChange(HeaderFramePreference.self) { frames in
             headerFrames = frames
         }
+        .onPreferenceChange(GripFramePreference.self) { frames in
+            gripFrames = frames
+        }
         .overlay(alignment: .topLeading) { cardInTheAir }
         .overlay { if editor.isShowingGallery { galleryOverlay } }
         .animation(editor.isDragging ? nil : .snappy(duration: 0.28), value: arrangement.layout)
@@ -65,6 +69,9 @@ public struct ControlPanel: View {
             // signal that onEnded never fired.
             if !isActive {
                 if editor.isDragging { editor.cancel() }
+                // A grip drag the system cancelled never sees onEnded, so its
+                // preview would otherwise outlive the gesture.
+                editor.endResize()
                 // Hold timer would otherwise fire after the finger is gone and
                 // re-enter edit with no finger down (or block the next hold
                 // because holdTask stays non-nil while completed).
@@ -77,6 +84,9 @@ public struct ControlPanel: View {
             holdTask?.cancel()
             holdTask = nil
             holdWidgetID = nil
+            // A grip drag the system cancelled never sees onEnded, so its
+            // preview would otherwise outlive the panel.
+            editor.endResize()
         }
         // Always installed — a conditional `if isEditing { base.gesture(...) } else { base }`
         // rebuilds the view tree when editing toggles and the first drag's
@@ -119,6 +129,10 @@ public struct ControlPanel: View {
                 // mutate the layout behind it.
                 guard !editor.isShowingGallery else { return }
                 if editor.isEditing {
+                    // A press starting on a resize grip belongs to the grip —
+                    // lifting the card under it would answer a resize with a
+                    // reorder.
+                    if gripFrames.contains(where: { $0.frame.contains(value.startLocation) }) { return }
                     // Normal reorder — require a tiny move before lifting to
                     // avoid lifting on a plain click.
                     if editor.lifted == nil {
@@ -226,8 +240,6 @@ private struct WidgetLane: View {
     let arrangement: PanelArrangement
     let editor: PanelEditor
 
-    private var width: CGFloat { slots.width }
-
     private var visibleSlots: [LaneSlot] {
         guard let lifted = editor.lifted else { return slots }
         return slots.filter { $0.id != lifted.id }
@@ -246,12 +258,16 @@ private struct WidgetLane: View {
     }
 
     var body: some View {
+        // While a grip is dragged the lane draws the preview span instead of
+        // the stored one; the commit lands on release. Cards keep their
+        // stored slots — identity and removal are not preview state.
+        let shownWidth = slots.map(editor.previewing).width
         VStack(spacing: Space.oneHalf) {
             ForEach(Array(visibleSlots.enumerated()), id: \.element.id) { offset, slot in
                 if gapIndex == offset { dropGap }
                 EditableCard(slot: slot, lane: lane, arrangement: arrangement, editor: editor)
-                    .frame(width: width)
-                    .frame(minHeight: slot.height)
+                    .frame(width: shownWidth)
+                    .frame(minHeight: editor.previewing(slot).height)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if gapIndex == visibleSlots.count { dropGap }
@@ -278,7 +294,7 @@ private struct WidgetLane: View {
                 RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
                     .fill(Color.dropGapFill)
             )
-            .frame(width: width, height: editor.lifted?.size.height ?? WidgetSize.compact.height)
+            .frame(width: slots.map(editor.previewing).width, height: editor.lifted?.size.height ?? WidgetSize.compact.height)
             .transition(.opacity.combined(with: .scale(scale: 0.98)))
     }
 }
@@ -335,6 +351,16 @@ extension PanelArrangement {
 }
 
 extension LaneSlot {
+    /// The slot with its span replaced — what a resize previews and commits,
+    /// and what the width guard measures the offer with. An absent widget has
+    /// nothing to resize, so its slot comes back unchanged.
+    func resized(to span: WidgetSpan) -> LaneSlot {
+        switch self {
+        case .widget(let widget, _): return .widget(widget, span)
+        case .unavailable: return self
+        }
+    }
+
     /// A slot standing in for a widget this build doesn't have has no
     /// descriptor to ask, and the smallest card is the least the lane's shape
     /// can be wrong by.

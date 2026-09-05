@@ -164,6 +164,33 @@ final class PanelArrangementRearrangingTests: XCTestCase {
 
         XCTAssertEqual(store.load().ids, [[stub, other]])
     }
+
+    /// A resize is not a replacement: the widget keeps its live object, and
+    /// only its span changes.
+    func testAResizedWidgetIsTheSameLiveWidget() {
+        let panel = arrangement(PanelLayout([[stub], [other]]))
+        let before = panel.slot(for: stub)?.instance
+
+        panel.resize(stub, to: WidgetSpan(width: 1, height: 2))
+
+        XCTAssertIdentical(before, panel.slot(for: stub)?.instance)
+        XCTAssertEqual(panel.slot(for: stub)?.span, WidgetSpan(width: 1, height: 2))
+        XCTAssertEqual(panel.layout.ids, [[stub], [other]])
+    }
+
+    func testAResizeWritesTheLayoutOut() {
+        let store = temporaryStore(default: PanelLayout.empty)
+        let panel = PanelArrangement(
+            PanelLayout([[stub]]),
+            registry: stubRegistry(),
+            autosave: LayoutAutosave(store: store)
+        )
+
+        panel.resize(stub, to: WidgetSpan(width: 2, height: 1))
+        panel.flush()
+
+        XCTAssertEqual(store.load().lanes, [[Placement(id: stub, span: WidgetSpan(width: 2, height: 1))]])
+    }
 }
 
 /// The gallery: what the panel could hold, and putting one on it.

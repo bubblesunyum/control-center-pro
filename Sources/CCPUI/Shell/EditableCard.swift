@@ -26,6 +26,7 @@ struct EditableCard: View {
             .environment(\.currentWidgetID, slot.id)
             .wiggling(editor.isEditing && !isInTheAir)
             .overlay(alignment: .topLeading) { removeBadge }
+            .overlay(alignment: .bottomTrailing) { resizeGrip }
             // The whole card, badge included: what a lifted card leaves in its
             // lane is a gap, and a gap with a remove button floating in it is
             // a control belonging to nothing. Hit-testing is handled by the
@@ -67,5 +68,14 @@ struct EditableCard: View {
         }
     }
 
-
+    /// The resize grip: a handle on the card's bottom-trailing corner, in edit
+    /// mode only, on cards that take part in resizing. The panel-level gesture
+    /// leaves presses that start on the grip alone (see `GripFramePreference`
+    /// in ResizeGrip.swift), so the two never fight over one touch.
+    @ViewBuilder private var resizeGrip: some View {
+        if editor.isEditing, !isInTheAir,
+           let widget = slot.instance, widget.descriptor.size.isResizable {
+            ResizeGrip(slot: slot, lane: lane, arrangement: arrangement, editor: editor)
+        }
+    }
 }

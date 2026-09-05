@@ -239,6 +239,7 @@ public final class ControlPanelController {
         trackLayoutChanges()
         trackLiftChanges()
         trackNewLaneChanges()
+        trackResizeChanges()
     }
 
     private func trackLayoutChanges() {
@@ -302,6 +303,23 @@ public final class ControlPanelController {
                 let dx = Layout.laneWidth + Space.oneHalf
                 self.place(animated: true)
                 self.editor.shiftSnapshot(dx: isNowOffering ? dx : -dx)
+            }
+        }
+    }
+
+    /// A resize previews without touching the layout, so none of the trackers
+    /// above fire for it — and the lane would draw its preview in a window
+    /// still cut for the old size. The drag counts in translation, not panel
+    /// coordinates, so growing the window under the finger breaks no math.
+    private func trackResizeChanges() {
+        withObservationTracking {
+            _ = editor.resizePreview
+        } onChange: {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.trackResizeChanges()
+                guard self.isVisible else { return }
+                self.place(animated: true)
             }
         }
     }

@@ -87,6 +87,13 @@ public final class PanelArrangement {
         apply(layout.removing(id))
     }
 
+    /// Set `id`'s size override. The widget stays the same live object — a
+    /// resize is not a replacement, so whatever it was showing survives it —
+    /// and the write goes out like any other edit.
+    public func resize(_ id: WidgetID, to span: WidgetSpan) {
+        apply(layout.resizing(id, to: span))
+    }
+
     private func apply(_ rearranged: PanelLayout) {
         guard rearranged != layout else { return }
         layout = rearranged

@@ -84,24 +84,30 @@ public enum Layout {
     /// How far the panel sits from the screen's top-right corner.
     public static let panelInset: CGFloat = Space.one
 
-    /// Whether a display this wide can show one more lane beside the ones
-    /// already placed.
+    /// Whether lanes these wide fit on a display this wide.
     ///
-    /// The panel is anchored top-right and does not scroll, so a lane past
-    /// this is a column hanging off the left edge of the screen with nothing
-    /// to say it is there. Edit mode refuses the drop that would make one
+    /// The panel is anchored top-right and does not scroll, so widths past
+    /// this are columns hanging off the left edge of the screen with nothing
+    /// to say they are there. Edit mode refuses the drop that would make one
     /// rather than letting the arrangement grow somewhere the user can't see
     /// it (ccp-p6g). Measured against the lanes' real widths rather than a
     /// count, because a lane holding an app screen is wider than the rest —
     /// two of those fill a display a count of four would have called roomy.
-    /// The lane being offered is always the default width: only lanes already
-    /// on the panel can be wider.
-    public static func fitsAnotherLane(beside laneWidths: [CGFloat], inWidth width: CGFloat) -> Bool {
-        guard !laneWidths.isEmpty else { return true }
+    public static func fits(widths: [CGFloat], inWidth width: CGFloat) -> Bool {
+        guard !widths.isEmpty else { return true }
         let usable = width - panelInset * 2 - Space.oneHalf * 2
-        let widths = laneWidths + [laneWidth]
         let needed = widths.reduce(0, +) + Space.oneHalf * CGFloat(widths.count - 1)
         return needed <= usable
+    }
+
+    /// Whether the display has room for one more lane beside these.
+    ///
+    /// The lane being offered is always the default width: only lanes already
+    /// on the panel can be wider. A resize offering a wider lane asks
+    /// `fits(widths:)` directly, with its own width substituted in.
+    public static func fitsAnotherLane(beside laneWidths: [CGFloat], inWidth width: CGFloat) -> Bool {
+        guard !laneWidths.isEmpty else { return true }
+        return fits(widths: laneWidths + [laneWidth], inWidth: width)
     }
 }
 

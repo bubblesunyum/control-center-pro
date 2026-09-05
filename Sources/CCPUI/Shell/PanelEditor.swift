@@ -99,6 +99,7 @@ public final class PanelEditor {
     public func stopEditing() {
         isEditing = false
         isShowingGallery = false
+        endResize()
         resetDragState()
     }
 
@@ -106,6 +107,7 @@ public final class PanelEditor {
     /// checkmark so adding widgets can continue without re-opening the gallery.
     public func finishEditingPreservingGallery() {
         isEditing = false
+        endResize()
         resetDragState()
     }
 
@@ -172,6 +174,65 @@ public final class PanelEditor {
     /// view identity change) never calls `onEnded` — without this the card
     /// hangs in the air and the panel stops responding to clicks.
     public func cancel() { resetDragState() }
+
+    // MARK: - Resizing
+    //
+    // A resize previews in here and commits to the layout once, on release —
+    // the same one-mutation shape as a drag. Mutating the layout per pixel
+    // would re-resolve the arrangement and re-schedule the autosave every
+    // frame; a preview is just a span the lane draws instead of the stored
+    // one until the finger comes up.
+
+    /// The card under the grip and the span it would land at, or `nil` when
+    /// no grip is being dragged.
+    public private(set) var resizePreview: ResizePreview?
+
+    public struct ResizePreview: Equatable {
+        let id: WidgetID
+        var span: WidgetSpan
+    }
+
+    public func beginResize(_ id: WidgetID, from span: WidgetSpan) {
+        // One grip at a time: a second finger never preempts the drag already
+        // in flight, or the two releases wipe each other's preview out.
+        guard resizePreview == nil else { return }
+        resizePreview = ResizePreview(id: id, span: span)
+    }
+
+    /// The drag's translation, counted in whole steps of the widget's base
+    /// size from the span it started at: one lane-unit right is one width
+    /// step, one base-height down is one height step. The span clamps to
+    /// 1x–3x on the way in, so a wild drag parks at the end rather than
+    /// somewhere meaningless.
+    public func updateResize(translation: CGSize, from start: WidgetSpan, baseSize: CGSize) {
+        guard resizePreview != nil else { return }
+        let next = WidgetSpan(
+            width: start.width + Int((translation.width / baseSize.width).rounded()),
+            height: start.height + Int((translation.height / baseSize.height).rounded())
+        )
+        // Assigning the same span still notifies observers, and the window
+        // tracker re-fits on every one — so only a changed step lands.
+        guard next != resizePreview?.span else { return }
+        resizePreview?.span = next
+    }
+
+    public func endResize() { resizePreview = nil }
+
+    /// The slot as drawn while a resize is in flight: the card under the grip
+    /// wears its preview span, everything else its stored one.
+    public func previewing(_ slot: LaneSlot) -> LaneSlot {
+        guard let preview = resizePreview, preview.id == slot.id else { return slot }
+        return slot.resized(to: preview.span)
+    }
+
+    /// Whether widening `lane` to `width` still fits the display — the commit
+    /// guard for a width grip, and the resize half of `fits(widths:)`.
+    public func canResizeLane(_ lane: Int, to width: CGFloat, laneWidths: [CGFloat]) -> Bool {
+        guard laneWidths.indices.contains(lane) else { return false }
+        var widths = laneWidths
+        widths[lane] = width
+        return Layout.fits(widths: widths, inWidth: displayWidth)
+    }
 
     /// Whether the panel is holding a column open for the card in the air.
     /// Offered only while the ghost hovers the leading edge, not for the
