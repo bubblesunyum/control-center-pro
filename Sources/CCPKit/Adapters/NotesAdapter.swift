@@ -661,9 +661,8 @@ public final class NotesAdapter {
         // Snapshot: pads clear or fail below, which mutates the set.
         for padID in Array(dirtyPadIDs) {
             do {
-                if try await pushOnePad(padID, client: client) {
-                    dirtyPadIDs.remove(padID)
-                }
+                try await pushOnePad(padID, client: client)
+                dirtyPadIDs.remove(padID)
             } catch {
                 failure = failure ?? error
             }
@@ -687,20 +686,17 @@ public final class NotesAdapter {
     /// records what the server confirmed, so a retry diffs from the last
     /// confirmed state — replaying a confirmed POST is what duplicates
     /// blocks. Skips (no mapping, pad gone, empty plan) clear the dirty bit
-    /// silently; edits re-dirty if the pad comes back.
-    ///
-    /// Returns false when a prepend stalled: nothing failed, but the pad is
-    /// not fully recorded, so it stays dirty and every later round retries
-    /// it — including panel-close flushes, not just retypes of that pad.
-    private func pushOnePad(_ padID: UUID, client: CraftClient) async throws -> Bool {
+    /// silently; edits re-dirty if the pad comes back. A throw keeps the pad
+    /// dirty and every later round retries it.
+    private func pushOnePad(_ padID: UUID, client: CraftClient) async throws {
         guard let document,
               let padText = document.notes.first(where: { $0.id == padID })?.text,
               let docID = craftDocumentID(for: padID)
-        else { return true }
+        else { return }
         let sidecar = sidecar(for: padID)
         let slices = CraftBlockSplitter.slices(in: padText)
         let plan = sidecar.pushPlan(for: slices)
-        guard !plan.isEmpty else { return true }
+        guard !plan.isEmpty else { return }
 
         var pendingError: Error?
         var putEcho: [CraftBlock] = []
@@ -713,17 +709,15 @@ public final class NotesAdapter {
             // One batch per anchor group, in plan order; abort the rest on
             // the first throw. Echoes stay keyed by plan-insert index, so a
             // split can never shift a later insert's attribution.
-            if let groups = postGroups(for: plan, sidecar: sidecar) {
-                for group in groups {
-                    let echo = try await client.postBlocks(group.map(\.insert),
-                                                           documentID: docID)
-                    for (i, member) in group.enumerated() where i < echo.count {
-                        echoByInsert[member.index, default: []].append(echo[i])
-                    }
-                    if echo.count > group.count, let last = group.last {
-                        echoByInsert[last.index, default: []]
-                            .append(contentsOf: echo.dropFirst(group.count))
-                    }
+            for group in postGroups(for: plan) {
+                let echo = try await client.postBlocks(group.map(\.insert),
+                                                       documentID: docID)
+                for (i, member) in group.enumerated() where i < echo.count {
+                    echoByInsert[member.index, default: []].append(echo[i])
+                }
+                if echo.count > group.count, let last = group.last {
+                    echoByInsert[last.index, default: []]
+                        .append(contentsOf: echo.dropFirst(group.count))
                 }
             }
             if !plan.deletes.isEmpty {
@@ -737,7 +731,6 @@ public final class NotesAdapter {
                          putEcho: putEcho, postEchoByInsert: echoByInsert,
                          deletesConfirmed: deletesConfirmed)
         if let pendingError { throw pendingError }
-        return !plan.inserts.contains(where: { $0.afterID == nil }) || sidecar.entries.isEmpty
     }
 
     /// Observable for tests.
@@ -759,26 +752,21 @@ public final class NotesAdapter {
         }
     }
 
-    /// A prepend into a non-empty document has no confirmed position spelling
-    /// (ccp-2zi.5): refuse its group rather than posting to the end in the
-    /// wrong order. Stalls those inserts until `begin` is confirmed live;
-    /// everything else still goes, and the refused inserts retry every round
-    /// after.
+    /// One POST batch per anchor group, in plan order. Anchorless inserts
+    /// (head of the pad) post with "start" + pageId — the vendor's position
+    /// vocabulary for the same position object — so a top-of-pad insert
+    /// lands on top instead of stalling or appending out of order.
     ///
     /// Known limit, accepted for .5: "non-empty" is read off the local
     /// sidecar, so hand-mapping a pad onto a contentful Craft doc (outside
-    /// the provisioning flow, ccp-0gek) still appends once. Provisioning
-    /// must only ever map empty-or-pull-seeded docs; the pull seed heals the
-    /// order the one time this fires.
-    private func postGroups(for plan: BlockPushPlan,
-                            sidecar: BlockSidecar) -> [[(index: Int, insert: BlockInsert)]]? {
+    /// the provisioning flow, ccp-0gek) posts the unknown head to "start",
+    /// which is only order-correct if the doc was actually empty.
+    /// Provisioning must only ever map empty-or-pull-seeded docs; the pull
+    /// seed heals the order the one time this fires.
+    private func postGroups(for plan: BlockPushPlan) -> [[(index: Int, insert: BlockInsert)]] {
         guard !plan.inserts.isEmpty else { return [] }
         let indexed = plan.inserts.enumerated().map { (index: $0.offset, insert: $0.element) }
-        let groups = groupedInserts(indexed)
-        // Refuse only the unanchorable group, not the whole POST.
-        return groups.filter { group in
-            group.first?.insert.afterID != nil || sidecar.entries.isEmpty
-        }
+        return groupedInserts(indexed)
     }
 
     private static let pushRetryDelays: [TimeInterval] = [30, 120, 300]

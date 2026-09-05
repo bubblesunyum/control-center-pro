@@ -46,15 +46,24 @@ extension CraftClient {
         var blockIds: [String]
     }
 
+    private struct ItemsEnvelope: Decodable {
+        var items: [CraftBlock]?
+    }
+
     private struct BlocksEnvelope: Decodable {
         var blocks: [CraftBlock]?
     }
 
-    /// Decode a write echo tolerantly: the documented shape is an envelope,
-    /// but a bare array must not fail the whole push if that is what arrives.
+    /// Decode a write echo tolerantly: the documented shape is an `items`
+    /// envelope, but a `blocks` envelope or bare array must not fail the
+    /// whole push if that is what arrives.
     /// Items without both an id and markdown are skipped, never guessed at.
     static func decodeBlocks(from data: Data) -> [CraftBlock]? {
         let decoder = JSONDecoder()
+        if let envelope = try? decoder.decode(ItemsEnvelope.self, from: data),
+           let blocks = envelope.items {
+            return blocks
+        }
         if let envelope = try? decoder.decode(BlocksEnvelope.self, from: data),
            let blocks = envelope.blocks {
             return blocks
@@ -100,9 +109,10 @@ extension CraftClient {
 
     /// `POST /blocks` — new slices, one batch, in plan order. One batch means
     /// one anchor: every insert must share it (the adapter groups by anchor
-    /// and calls per group). The echo comes back in request order with
-    /// assigned ids; a split (one slice becoming several blocks) shows up as
-    /// extra items, which the sidecar rebuild pairs positionally.
+    /// and calls per group). The echo comes back in an `items` envelope in
+    /// request order with assigned ids; a split (one slice becoming several
+    /// blocks) shows up as extra items, which the sidecar rebuild pairs
+    /// positionally.
     ///
     /// Assumed, to verify live: the server lays a shared-anchor batch down in
     /// array order after the anchor. A pasted run landing scrambled means
@@ -112,10 +122,10 @@ extension CraftClient {
         if let anchor = inserts.compactMap(\.afterID).first {
             position = PostBody.Position(position: "after", pageId: nil, siblingId: anchor)
         } else {
-            // First sync into an empty document. A nil anchor against a
-            // NON-empty document is a prepend, whose spelling is unconfirmed
-            // (ccp-2zi.5) — the adapter refuses those before this is reached.
-            position = PostBody.Position(position: "end", pageId: documentID, siblingId: nil)
+            // No anchor: head of the document. The blocks docs only show
+            // "end", but the same position object on whiteboard create shows
+            // "start" with a pageId, which is this. Live A/B confirms order.
+            position = PostBody.Position(position: "start", pageId: documentID, siblingId: nil)
         }
         let body = PostBody(blocks: inserts.map { PostBody.Item(markdown: $0.markdown) },
                             position: position)

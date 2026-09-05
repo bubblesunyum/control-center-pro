@@ -54,8 +54,8 @@ final class ScriptedTransport: CraftTransport, @unchecked Sendable {
 }
 
 /// The wire half of the push: methods, paths, batched bodies, echo parsing,
-/// and the failure mapping. Shapes here are the documented ones; the vendor
-/// excerpt (ccp-2zi.5) confirms the rest before this closes.
+/// and the failure mapping. Echoes arrive in the documented `items` envelope;
+/// the older `blocks` envelope and bare arrays still parse as tolerance.
 final class CraftPushWireTests: XCTestCase {
     private let base = URL(string: "https://connect.craft.do/links/test/api/v1")!
 
@@ -65,7 +65,7 @@ final class CraftPushWireTests: XCTestCase {
 
     func testPutSendsBatchedUpdatesAndReadsTheEnvelopeEcho() async throws {
         let transport = ScriptedTransport([.init(statusCode: 200, json: """
-            {"blocks":[{"id":"b1","markdown":"TWO!","type":"text"}]}
+            {"items":[{"id":"b1","markdown":"TWO!","type":"text"}]}
             """)])
         let echo = try await client(transport).updateBlocks(
             [BlockUpdate(id: "b1", markdown: "TWO")])
@@ -88,16 +88,25 @@ final class CraftPushWireTests: XCTestCase {
         XCTAssertEqual(echo, [CraftBlock(id: "b1", markdown: "TWO!")])
     }
 
-    func testPostWithoutAnchorGoesToEndOfDocument() async throws {
+    func testEchoParsesTheLegacyBlocksEnvelopeToo() async throws {
         let transport = ScriptedTransport([.init(statusCode: 200, json: """
-            {"blocks":[{"id":"n1","markdown":"one"}]}
+            {"blocks":[{"id":"b1","markdown":"TWO!"}]}
+            """)])
+        let echo = try await client(transport).updateBlocks(
+            [BlockUpdate(id: "b1", markdown: "TWO")])
+        XCTAssertEqual(echo, [CraftBlock(id: "b1", markdown: "TWO!")])
+    }
+
+    func testPostWithoutAnchorGoesToStartOfDocument() async throws {
+        let transport = ScriptedTransport([.init(statusCode: 200, json: """
+            {"items":[{"id":"n1","markdown":"one"}]}
             """)])
         _ = try await client(transport).postBlocks(
             [BlockInsert(afterID: nil, markdown: "one")], documentID: "doc1")
 
         let body = try transport.jsonBody(of: 0)
         let position = try XCTUnwrap(body["position"] as? [String: String])
-        XCTAssertEqual(position["position"], "end")
+        XCTAssertEqual(position["position"], "start")
         XCTAssertEqual(position["pageId"], "doc1")
         let blocks = try XCTUnwrap(body["blocks"] as? [[String: String]])
         XCTAssertEqual(blocks.count, 1)
@@ -107,7 +116,7 @@ final class CraftPushWireTests: XCTestCase {
 
     func testPostWithAnchorFollowsTheSibling() async throws {
         let transport = ScriptedTransport([.init(statusCode: 200, json: """
-            {"blocks":[{"id":"n1","markdown":"new"}]}
+            {"items":[{"id":"n1","markdown":"new"}]}
             """)])
         _ = try await client(transport).postBlocks(
             [BlockInsert(afterID: "b0", markdown: "new")], documentID: "doc1")
@@ -168,7 +177,7 @@ final class CraftPushWireTests: XCTestCase {
 
     func testShortEchoFailsTheGroup() async throws {
         let transport = ScriptedTransport([.init(statusCode: 200, json: """
-            {"blocks":[{"id":"n1","markdown":"x"}]}
+            {"items":[{"id":"n1","markdown":"x"}]}
             """)])
         do {
             _ = try await client(transport).postBlocks(
@@ -492,7 +501,7 @@ final class CraftPushAdapterTests: XCTestCase {
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([.init(statusCode: 200, json: """
-            {"blocks":[{"id":"block-1","markdown":"TWO!"}]}
+            {"items":[{"id":"block-1","markdown":"TWO!"}]}
             """)])
         let adapter = adapter(store, transport)
         let id = try seed(adapter, text: "one\n\ntwo\n")
@@ -513,7 +522,7 @@ final class CraftPushAdapterTests: XCTestCase {
         defer { store.removePersistentDomain(forName: name) }
         store.set(false, forKey: "scratchpadCraftWriteBack")
         let transport = ScriptedTransport([.init(statusCode: 200, json: """
-            {"blocks":[{"id":"block-1","markdown":"TWO!"}]}
+            {"items":[{"id":"block-1","markdown":"TWO!"}]}
             """)])
         let adapter = adapter(store, transport)
         let id = try seed(adapter, text: "one\n\ntwo\n")
@@ -532,7 +541,7 @@ final class CraftPushAdapterTests: XCTestCase {
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([.init(statusCode: 200, json: """
-            {"blocks":[{"id":"block-1","markdown":"TWO!"}]}
+            {"items":[{"id":"block-1","markdown":"TWO!"}]}
             """)])
         let adapter = adapter(store, transport)
         _ = try seed(adapter, text: "one\n\ntwo\n")
@@ -585,11 +594,11 @@ final class CraftPushAdapterTests: XCTestCase {
         // PUT ok, DELETE 500s. Then everything ok.
         let transport = ScriptedTransport([
             .init(statusCode: 200, json: """
-                {"blocks":[{"id":"block-1","markdown":"TWO!"}]}
+                {"items":[{"id":"block-1","markdown":"TWO!"}]}
                 """),
             .init(statusCode: 500, json: "{}"),
             .init(statusCode: 200, json: """
-                {"blocks":[{"id":"block-1","markdown":"TWO!"}]}
+                {"items":[{"id":"block-1","markdown":"TWO!"}]}
                 """),
             .init(statusCode: 200, json: "{}"),
         ])
@@ -619,13 +628,13 @@ final class CraftPushAdapterTests: XCTestCase {
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([
             .init(statusCode: 200, json: """
-                {"blocks":[{"id":"block-0","markdown":"A"}]}
+                {"items":[{"id":"block-0","markdown":"A"}]}
                 """),
             .init(statusCode: 200, json: """
-                {"blocks":[{"id":"nx","markdown":"x"}]}
+                {"items":[{"id":"nx","markdown":"x"}]}
                 """),
             .init(statusCode: 200, json: """
-                {"blocks":[{"id":"ny","markdown":"y"}]}
+                {"items":[{"id":"ny","markdown":"y"}]}
                 """),
         ])
         store.set(false, forKey: "scratchpadCraftWriteBack")
@@ -642,24 +651,32 @@ final class CraftPushAdapterTests: XCTestCase {
                        "new ids land in pad order")
     }
 
-    func testPrependStallsAloneWhileAnchoredInsertsProceed() async throws {
+    func testPrependPostsToStartWhileAnchoredInsertsProceed() async throws {
         let name = "ccp.push.prepend.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([.init(statusCode: 200, json: """
-            {"blocks":[{"id":"nc","markdown":"c"}]}
-            """)])
+        let transport = ScriptedTransport([
+            .init(statusCode: 200, json: """
+                {"items":[{"id":"na","markdown":"A"}]}
+                """),
+            .init(statusCode: 200, json: """
+                {"items":[{"id":"nc","markdown":"c"}]}
+                """),
+        ])
         let adapter = adapter(store, transport)
         let id = try seed(adapter, text: "B\n")
 
-        // A has no anchor (prepend, spelling unconfirmed) but c anchors to B.
+        // A has no anchor (head of the pad) but c anchors to B.
         adapter.text = "A\n\nB\n\nc\n"
         await adapter.flushCraftPush()
 
-        XCTAssertEqual(transport.requests.count, 1, "only the anchored group posts")
-        XCTAssertEqual(adapter.sidecar(for: id).entries.map(\.id), ["block-0", "nc"],
-                       "the prepend stays absent and retries; nothing misorders")
-        XCTAssertTrue(adapter.isPushDirty(id), "a stalled pad stays dirty for later rounds")
+        XCTAssertEqual(transport.requests.count, 2, "both groups post")
+        let firstPosition = try XCTUnwrap(
+            (try transport.jsonBody(of: 0)["position"] as? [String: String]))
+        XCTAssertEqual(firstPosition["position"], "start", "the anchorless group posts to the head")
+        XCTAssertEqual(adapter.sidecar(for: id).entries.map(\.id), ["na", "block-0", "nc"],
+                       "new ids land in pad order")
+        XCTAssertFalse(adapter.isPushDirty(id), "nothing stalls anymore")
     }
 
     func testRetrySurvivesANewEdit() async throws {
@@ -693,7 +710,7 @@ final class CraftPushAdapterTests: XCTestCase {
             let blocks = (body["blocks"] as? [[String: String]]) ?? []
             let echo = blocks.map { "{\"id\":\"\($0["id"]!)\",\"markdown\":\"\($0["markdown"]!)!\"}" }
                 .joined(separator: ",")
-            return ScriptedTransport.Script(statusCode: 200, json: "{\"blocks\":[\(echo)]}")
+            return ScriptedTransport.Script(statusCode: 200, json: "{\"items\":[\(echo)]}")
         }
         store.set(false, forKey: "scratchpadCraftWriteBack")
         let adapter = adapter(store, transport)
@@ -730,7 +747,7 @@ final class CraftPushAdapterTests: XCTestCase {
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([.init(statusCode: 200, json: """
-            {"blocks":[{"id":"a0","markdown":"AAA!"}]}
+            {"items":[{"id":"a0","markdown":"AAA!"}]}
             """)])
         let adapter = adapter(store, transport)
         adapter.createNote()
