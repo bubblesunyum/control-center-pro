@@ -247,21 +247,25 @@ public struct ControlPanel: View {
 
     private var lanes: some View {
         HStack(alignment: .top, spacing: Space.oneHalf) {
-            // A lane that doesn't exist yet, offered while something is in the
-            // air to put in it and the display has room for another column
-            // (ccp-p6g). It leads rather than trails because the panel is
-            // pinned to the right of the screen: a column opening on that side
-            // would shove every card sideways under the finger holding one.
-            // It is never in the layout — an empty lane is exactly what
-            // `normalized()` closes up.
-            if editor.isOfferingNewLane(beside: arrangement.laneWidths) {
-                NewLaneTarget(isTargeted: editor.previewLanding == .newLane(at: 0))
-                    .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .trailing)))
-            }
+            // A lane that doesn't exist yet, offered where the ghost hovers —
+            // leading edge, gutter, or trailing edge. Never in the layout: an
+            // empty lane is exactly what `normalized()` closes up. A middle or
+            // trailing preview shoves the lanes left of it on screen (the
+            // window grows left, pinned right); the leading edge stays put.
+            newLaneTarget(at: 0)
 
             ForEach(arrangement.lanes.indices, id: \.self) { index in
                 WidgetLane(lane: index, slots: arrangement.lanes[index], arrangement: arrangement, editor: editor)
+                newLaneTarget(at: index + 1)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func newLaneTarget(at lane: Int) -> some View {
+        if editor.offeredNewLaneAt(beside: arrangement.laneWidths) == lane {
+            NewLaneTarget()
+                .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .trailing)))
         }
     }
 
@@ -432,23 +436,21 @@ private struct WidgetLane: View {
 }
 
 /// Where a new lane would go. Dashed rather than drawn as glass, because it is
-/// a place rather than a thing.
+/// a place rather than a thing. Only ever shown targeted — it appears where
+/// the ghost already hovers.
 private struct NewLaneTarget: View {
-    var isTargeted = false
-
     var body: some View {
         RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
             .strokeBorder(
-                isTargeted ? Color.newLaneStrokeTargeted : Color.cardStroke,
-                style: StrokeStyle(lineWidth: isTargeted ? 2 : Stroke.hairline, dash: [Space.one, Space.half])
+                Color.newLaneStrokeTargeted,
+                style: StrokeStyle(lineWidth: 2, dash: [Space.one, Space.half])
             )
             .background(
                 RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
-                    .fill(isTargeted ? Color.newLaneFillTargeted : Color.clear)
+                    .fill(Color.newLaneFillTargeted)
             )
             .frame(width: Layout.laneWidth)
             .frame(maxHeight: .infinity)
-            .animation(.easeOut(duration: 0.15), value: isTargeted)
             .accessibilityLabel("New lane")
     }
 }

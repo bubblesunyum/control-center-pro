@@ -24,7 +24,7 @@ public final class ControlPanelController {
     /// The screen the panel is currently anchored to, kept so that growing by
     /// a lane mid-edit re-anchors against the same one it opened on.
     private var anchor: NSScreen?
-    private var wasOfferingNewLane = false
+    private var previousOffer: Int?
 
     public private(set) var isVisible = false
 
@@ -82,7 +82,7 @@ public final class ControlPanelController {
     public func hide() {
         dismissal.stop()
         editor.stopEditing()
-        wasOfferingNewLane = false
+        previousOffer = nil
         window.orderOut(nil)
         isVisible = false
         // After the window is down, not before: a widget stopped first would
@@ -147,7 +147,7 @@ public final class ControlPanelController {
 
     private func present(from statusItemButton: NSStatusBarButton?, editing: Bool) {
         anchor = statusItemButton?.window?.screen ?? NSScreen.main
-        wasOfferingNewLane = false
+        previousOffer = nil
         rememberPasteTarget()
         arrangement.activate()
         if editing { editor.startEditing() }
@@ -271,12 +271,11 @@ public final class ControlPanelController {
                 // Lift now keeps the gap at the original spot, so the grid
                 // doesn't collapse and the window height stays stable. No
                 // window move at lift — new-lane growth is deferred until the
-                // finger actually hovers the leading edge (see
-                // trackNewLaneChanges), which is the only stable moment to
-                // grow.
+                // finger actually hovers a gap (see trackNewLaneChanges),
+                // which is the only stable moment to grow.
                 self.place()
                 if !self.editor.isDragging {
-                    self.wasOfferingNewLane = false
+                    self.previousOffer = nil
                 }
             }
         }
@@ -292,17 +291,32 @@ public final class ControlPanelController {
                 guard let self else { return }
                 self.trackNewLaneChanges()
                 guard self.isVisible, self.editor.isDragging else { return }
-                let isNowOffering = self.editor.isOfferingNewLane(beside: self.arrangement.laneWidths)
-                guard isNowOffering != self.wasOfferingNewLane else { return }
-                self.wasOfferingNewLane = isNowOffering
-                // Growing leftward shifts every existing lane right inside the
-                // panel by one lane width and shifts the finger's panel-local x
-                // the same amount. Nudge the frozen snapshot so the gap stays
-                // under the ghost instead of jumping 252pt. Animate the window
+                let offer = self.editor.offeredNewLaneAt(beside: self.arrangement.laneWidths)
+                guard offer != self.previousOffer else { return }
+                let previous = self.previousOffer
+                self.previousOffer = offer
+                // Growing leftward moves the panel's origin left by one lane
+                // width, so the finger's panel-local x grows by that much for
+                // the same screen point. Nudge the frozen snapshot so the gap
+                // stays under the ghost instead of jumping — per lane, because
+                // only the lanes at and right of the opening move inside the
+                // panel while the ones left of it stay. Animate the window
                 // with the same 0.2s as the gap so the ghost doesn't drift.
                 let dx = Layout.laneWidth + Space.oneHalf
-                self.place(animated: true)
-                self.editor.shiftSnapshot(dx: isNowOffering ? dx : -dx)
+                if previous == nil, let at = offer {
+                    self.place(animated: true)
+                    self.editor.shiftSnapshot(dx: dx, newLaneAt: at)
+                } else if offer == nil, let at = previous {
+                    self.place(animated: true)
+                    self.editor.shiftSnapshot(dx: -dx, newLaneAt: at)
+                } else if let from = previous, let to = offer {
+                    // One gap to another with no resize between: rebase the
+                    // shift onto the new opening. Unreachable by a continuous
+                    // finger (every path between gaps crosses a lane, which
+                    // un-offers first), but cheap to keep truthful.
+                    self.editor.shiftSnapshot(dx: -dx, newLaneAt: from)
+                    self.editor.shiftSnapshot(dx: dx, newLaneAt: to)
+                }
             }
         }
     }

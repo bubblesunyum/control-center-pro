@@ -90,10 +90,11 @@ public struct PanelLayout: Codable, Hashable, Sendable {
 
     /// The layout with `id` alone in a lane of its own, inserted at `lane`.
     ///
-    /// The panel is anchored to the right of the screen and grows leftward, so
-    /// the lane a drag creates is the new leftmost one — which is the only
-    /// place a column can appear without shoving every card already on screen
-    /// sideways while the user is still holding one.
+    /// Any gap takes one: the leading edge, between two lanes, or the
+    /// trailing edge. A leading column keeps every card where it is on screen
+    /// (the panel grows left and the lanes shift right inside it by the same
+    /// amount); a middle or trailing one moves the lanes left of it while it
+    /// previews — the price of opening where the drop will land.
     public func moving(_ id: WidgetID, toNewLaneAt lane: Int) -> PanelLayout {
         guard lane >= 0, lane <= lanes.count,
               let placement = lanes.joined().first(where: { $0.id == id }) else { return self }

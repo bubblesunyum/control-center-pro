@@ -132,6 +132,14 @@ final class PanelLayoutNewLaneTests: XCTestCase {
         XCTAssertEqual(layout.moving(a, toNewLaneAt: 1).ids, [[b], [a]])
     }
 
+    func testANewLaneBetweenTwoLanes() {
+        let layout = PanelLayout([[a], [b], [c]])
+
+        // The emptied lane still occupies its index at insert time, so
+        // landing between b and c is index 2, not 1.
+        XCTAssertEqual(layout.moving(a, toNewLaneAt: 2).ids, [[b], [a], [c]])
+    }
+
     func testTheLaneItLeftClosesUpBehindIt() {
         let layout = PanelLayout([[a], [b]])
 

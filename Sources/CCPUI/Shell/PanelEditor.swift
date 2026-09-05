@@ -151,15 +151,20 @@ public final class PanelEditor {
     /// Window grew/shrank while dragging (new-lane target appeared). The
     /// frozen snapshot is in the old panel coordinate space, but the finger
     /// and the live zones are now in the new one — shift the snapshot so
-    /// hit-testing stays aligned with what the eye sees.
-    public func shiftSnapshot(dx: CGFloat) {
+    /// hit-testing stays aligned with what the eye sees. Only the lanes at
+    /// and right of the opening move inside the panel (the ones left of it
+    /// keep their x), so only those shift: a uniform shift holds the gap
+    /// under the ghost at the instant of growth but leaves the snapshot a
+    /// lane-width right of every lane left of a middle or trailing gap on
+    /// every frame after. The gap's own index needs no shift — the preview
+    /// was computed from the old snapshot, but the gap is drawn from
+    /// `previewLanding` alone, which is lane/index based.
+    public func shiftSnapshot(dx: CGFloat, newLaneAt lane: Int) {
         guard !snapshotZones.isEmpty else { return }
         snapshotZones = snapshotZones.map {
-            PanelEditor.DropZone(id: $0.id, lane: $0.lane, frame: $0.frame.offsetBy(dx: dx, dy: 0))
+            guard $0.lane >= lane else { return $0 }
+            return PanelEditor.DropZone(id: $0.id, lane: $0.lane, frame: $0.frame.offsetBy(dx: dx, dy: 0))
         }
-        // Keep the gap's lane index stable — the preview was computed from
-        // the old snapshot, but the gap is drawn from `previewLanding` alone,
-        // which is lane/index based and doesn't need shifting.
     }
 
     public func drag(to location: CGPoint) {
@@ -287,14 +292,12 @@ public final class PanelEditor {
         return Layout.fits(widths: widths, inWidth: displayWidth)
     }
 
-    /// Whether the panel is holding a column open for the card in the air.
-    /// Offered only while the ghost hovers the leading edge, not for the
-    /// whole drag — inserting a full lane at lift shifts the entire grid
-    /// right inside the panel and, even with the window growing left to
-    /// compensate, the two animations desync and the grid visibly jumps the
-    /// moment you pick a card up.
-    public func isOfferingNewLane(beside laneWidths: [CGFloat]) -> Bool {
-        previewLanding == .newLane(at: 0) && canAddLane(beside: laneWidths)
+    /// The lane a drop would open, if the ghost is hovering a gap and the
+    /// display has room for another column — `nil` over a lane, when the
+    /// display is full, or with nothing in the air.
+    public func offeredNewLaneAt(beside laneWidths: [CGFloat]) -> Int? {
+        guard case .newLane(let at) = previewLanding, canAddLane(beside: laneWidths) else { return nil }
+        return at
     }
 
     /// Where the card in the air would land: the lane under the finger and the
@@ -329,9 +332,22 @@ public final class PanelEditor {
             return .into(lane: lane, index: indexBelow(center, in: cards, skipping: lifted.id))
         }
 
-        // Left of every card is the column the panel would grow into.
-        guard let leftmost = source.map(\.frame.minX).min(), center.x < leftmost else { return nil }
-        return canAddLane(beside: laneWidths) ? .newLane(at: 0) : nil
+        // Outside every lane's x-range is the column the panel would grow
+        // into: left of everything, right of everything, or the gutter
+        // between two lanes. The insertion index is the count of lanes fully
+        // left of the ghost — every lane minus those reaching past it — which
+        // is the layout index a new lane opens at: visual order matches
+        // layout order, so lanes 0..<k sit left of gap k.
+        guard !source.isEmpty else { return nil }
+        let lanes = Set(source.map(\.lane))
+        let insertAt = lanes.subtracting(source.filter { $0.frame.maxX >= center.x }.map(\.lane)).count
+        // A card alone in its lane has no adjacent gap to open: lifting it
+        // empties the lane and the insert collapses straight back, so the
+        // commit is a no-op the preview must not promise.
+        if let home = source.first(where: { $0.id == lifted.id }),
+           source.filter({ $0.lane == home.lane }).count == 1,
+           insertAt == home.lane || insertAt == home.lane + 1 { return nil }
+        return canAddLane(beside: laneWidths) ? .newLane(at: insertAt) : nil
     }
 
     /// The insertion index for `center` among the lane's cards, counted in

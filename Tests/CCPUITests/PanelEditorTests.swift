@@ -48,6 +48,31 @@ final class PanelEditorTests: XCTestCase {
         return editor
     }
 
+    /// An editor with `id` in the air and the ghost's visual center at
+    /// `center`. Inverts `Lifted.visualCenter(at:)` so tests can say where the
+    /// card looks like it is rather than where the fingertip sits.
+    private func draggingCentered(_ id: WidgetID, to center: CGPoint, roomForLanes: Int = .max) -> PanelEditor {
+        let editor = editor(zones: twoLanes)
+        editor.displayWidth = Self.displayWidth(fitting: roomForLanes)
+        editor.startEditing()
+        guard let zone = twoLanes.first(where: { $0.id == id }) else { return editor }
+        editor.lift(id, at: CGPoint(x: zone.frame.minX + 8, y: zone.frame.minY + 8))
+        editor.drag(
+            to: Self.fingerFor(center: center, zone: zone),
+            laneWidths: Self.twoDefaultLanes
+        )
+        return editor
+    }
+
+    /// The fingertip putting `zone`'s ghost center at `center` for an 8pt grab.
+    private static func fingerFor(center: CGPoint, zone: PanelEditor.DropZone) -> CGPoint {
+        let scale = PanelEditor.Lifted.scale
+        return CGPoint(
+            x: center.x + 8 * scale - zone.frame.width * scale / 2,
+            y: center.y + 8 * scale - zone.frame.height * scale / 2
+        )
+    }
+
     /// The widths of the lanes `twoLanes` describes.
     private static let twoDefaultLanes = [Layout.laneWidth, Layout.laneWidth]
 
@@ -106,28 +131,131 @@ final class PanelEditorTests: XCTestCase {
         XCTAssertEqual(landing, .newLane(at: 0))
     }
 
+    /// The gutter between two lanes opens a lane between them. twoLanes holds
+    /// a at 12..252 and c at 264.., so 258 is the middle of the 12pt gutter.
+    func testBetweenLanesOpensANewMiddleLane() {
+        let editor = draggingCentered(a, to: CGPoint(x: 258, y: 60), roomForLanes: 4)
+
+        XCTAssertEqual(editor.landing(laneWidths: Self.twoDefaultLanes), .newLane(at: 1))
+        XCTAssertNotNil(editor.offeredNewLaneAt(beside: Self.twoDefaultLanes))
+    }
+
+    /// Right of everything opens a lane past the end.
+    func testRightOfEverythingOpensANewTrailingLane() {
+        let editor = draggingCentered(a, to: CGPoint(x: 560, y: 60), roomForLanes: 4)
+
+        XCTAssertEqual(editor.landing(laneWidths: Self.twoDefaultLanes), .newLane(at: 2))
+        XCTAssertNotNil(editor.offeredNewLaneAt(beside: Self.twoDefaultLanes))
+    }
+
+    /// A card alone in its lane has no adjacent gap to open: the commit would
+    /// collapse straight back, so no lane is offered there. c sits alone in
+    /// lane 1 — the middle gutter and the trailing edge are its neighbours.
+    func testGapsAdjacentToASoleOccupantOfferNothing() {
+        let middle = draggingCentered(c, to: CGPoint(x: 258, y: 60), roomForLanes: 4)
+        XCTAssertNil(middle.landing(laneWidths: Self.twoDefaultLanes))
+        XCTAssertNil(middle.offeredNewLaneAt(beside: Self.twoDefaultLanes))
+
+        let trailing = draggingCentered(c, to: CGPoint(x: 560, y: 60), roomForLanes: 4)
+        XCTAssertNil(trailing.landing(laneWidths: Self.twoDefaultLanes))
+        XCTAssertNil(trailing.offeredNewLaneAt(beside: Self.twoDefaultLanes))
+    }
+
+    /// The far gap from a sole occupant is a real move and still offered.
+    func testFarGapFromASoleOccupantStillOpens() {
+        let leading = draggingCentered(c, to: CGPoint(x: -100, y: 60), roomForLanes: 4)
+
+        XCTAssertEqual(leading.landing(laneWidths: Self.twoDefaultLanes), .newLane(at: 0))
+        XCTAssertNotNil(leading.offeredNewLaneAt(beside: Self.twoDefaultLanes))
+    }
+
+    /// One lane has no gap worth opening: either edge collapses back.
+    func testASingleLaneOffersNoNewLane() {
+        let zones = [PanelEditor.DropZone(id: a, lane: 0, frame: CGRect(x: 12, y: 12, width: 240, height: 132))]
+        let widths = [Layout.laneWidth]
+        func landing(at center: CGPoint) -> PanelEditor.Landing? {
+            let editor = editor(zones: zones)
+            editor.displayWidth = Self.displayWidth(fitting: 4)
+            editor.startEditing()
+            editor.lift(a, at: CGPoint(x: 20, y: 20))
+            editor.drag(to: Self.fingerFor(center: center, zone: zones[0]), laneWidths: widths)
+            return editor.landing(laneWidths: widths)
+        }
+
+        XCTAssertNil(landing(at: CGPoint(x: -100, y: 60)))
+        XCTAssertNil(landing(at: CGPoint(x: 400, y: 60)))
+    }
+
+    /// The window grows left by one lane to preview the column; the snapshot
+    /// follows per lane so later frames hit-test against what the eye sees.
+    /// Trailing gap: no lane moves inside the panel, so none of the snapshot
+    /// shifts — the ghost over lane 1 still lands in lane 1.
+    func testSnapshotShiftAfterTrailingOffer() {
+        let editor = editor(zones: twoLanes)
+        editor.displayWidth = Self.displayWidth(fitting: 4)
+        editor.startEditing()
+        let zone = twoLanes.first(where: { $0.id == a })!
+        editor.lift(a, at: CGPoint(x: zone.frame.minX + 8, y: zone.frame.minY + 8))
+        editor.drag(to: Self.fingerFor(center: CGPoint(x: 560, y: 60), zone: zone), laneWidths: Self.twoDefaultLanes)
+        XCTAssertEqual(editor.previewLanding, .newLane(at: 2))
+
+        editor.shiftSnapshot(dx: Layout.laneWidth + Space.oneHalf, newLaneAt: 2)
+        editor.drag(to: Self.fingerFor(center: CGPoint(x: 384, y: 60), zone: zone), laneWidths: Self.twoDefaultLanes)
+
+        XCTAssertEqual(editor.landing(laneWidths: Self.twoDefaultLanes), .into(lane: 1, index: 0))
+    }
+
+    /// Middle gap: only the lanes right of the opening shift.
+    func testSnapshotShiftAfterMiddleOffer() {
+        let editor = editor(zones: twoLanes)
+        editor.displayWidth = Self.displayWidth(fitting: 4)
+        editor.startEditing()
+        let zone = twoLanes.first(where: { $0.id == a })!
+        editor.lift(a, at: CGPoint(x: zone.frame.minX + 8, y: zone.frame.minY + 8))
+        editor.drag(to: Self.fingerFor(center: CGPoint(x: 258, y: 60), zone: zone), laneWidths: Self.twoDefaultLanes)
+        XCTAssertEqual(editor.previewLanding, .newLane(at: 1))
+
+        editor.shiftSnapshot(dx: Layout.laneWidth + Space.oneHalf, newLaneAt: 1)
+        editor.drag(to: Self.fingerFor(center: CGPoint(x: 132, y: 60), zone: zone), laneWidths: Self.twoDefaultLanes)
+
+        XCTAssertEqual(editor.landing(laneWidths: Self.twoDefaultLanes), .into(lane: 0, index: 0))
+    }
+
     /// ccp-p6g: the panel is anchored top-right and doesn't scroll, so a lane
     /// the display can't show is one the user would lose things in.
     func testNoNewLaneWhenTheDisplayIsFull() {
-        let editor = dragging(a, to: CGPoint(x: -110, y: 20), roomForLanes: 2)
+        let leading = dragging(a, to: CGPoint(x: -110, y: 20), roomForLanes: 2)
+        XCTAssertNil(leading.landing(laneWidths: Self.twoDefaultLanes))
+        XCTAssertNil(leading.offeredNewLaneAt(beside: Self.twoDefaultLanes))
 
-        XCTAssertNil(editor.landing(laneWidths: Self.twoDefaultLanes))
-        XCTAssertFalse(editor.isOfferingNewLane(beside: Self.twoDefaultLanes))
+        let middle = draggingCentered(a, to: CGPoint(x: 258, y: 60), roomForLanes: 2)
+        XCTAssertNil(middle.landing(laneWidths: Self.twoDefaultLanes))
+        XCTAssertNil(middle.offeredNewLaneAt(beside: Self.twoDefaultLanes))
+
+        let trailing = draggingCentered(a, to: CGPoint(x: 560, y: 60), roomForLanes: 2)
+        XCTAssertNil(trailing.landing(laneWidths: Self.twoDefaultLanes))
+        XCTAssertNil(trailing.offeredNewLaneAt(beside: Self.twoDefaultLanes))
     }
 
-    func testTheNewLaneIsOfferedOnlyWhenHoveringLeadingEdge() {
+    func testTheNewLaneIsOfferedOnlyWhenHoveringAGapOrEdge() {
         // New lane no longer offered for whole drag — that shifted the grid
         // at lift even before the finger went left. Now it appears only when
-        // the ghost hovers the leading edge.
+        // the ghost hovers a gap between lanes or an outer edge.
         let notHovering = dragging(a, to: CGPoint(x: 300, y: 20), roomForLanes: 4)
-        XCTAssertFalse(notHovering.isOfferingNewLane(beside: Self.twoDefaultLanes))
+        XCTAssertNil(notHovering.offeredNewLaneAt(beside: Self.twoDefaultLanes))
 
-        let hovering = dragging(a, to: CGPoint(x: -110, y: 20), roomForLanes: 4)
-        XCTAssertTrue(hovering.isOfferingNewLane(beside: Self.twoDefaultLanes))
+        let hoveringLeading = dragging(a, to: CGPoint(x: -110, y: 20), roomForLanes: 4)
+        XCTAssertNotNil(hoveringLeading.offeredNewLaneAt(beside: Self.twoDefaultLanes))
+
+        let hoveringMiddle = draggingCentered(a, to: CGPoint(x: 258, y: 60), roomForLanes: 4)
+        XCTAssertNotNil(hoveringMiddle.offeredNewLaneAt(beside: Self.twoDefaultLanes))
+
+        let hoveringTrailing = draggingCentered(a, to: CGPoint(x: 560, y: 60), roomForLanes: 4)
+        XCTAssertNotNil(hoveringTrailing.offeredNewLaneAt(beside: Self.twoDefaultLanes))
     }
 
     func testNothingIsOfferedWhenNothingIsInTheAir() {
-        XCTAssertFalse(editor(zones: twoLanes).isOfferingNewLane(beside: Self.twoDefaultLanes))
+        XCTAssertNil(editor(zones: twoLanes).offeredNewLaneAt(beside: Self.twoDefaultLanes))
     }
 
     func testALandingNeedsSomethingInTheAir() {
