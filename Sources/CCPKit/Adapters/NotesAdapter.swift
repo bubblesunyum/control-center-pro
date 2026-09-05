@@ -8,12 +8,12 @@ import UniformTypeIdentifiers
 
 // MARK: - Retention
 
-/// How long each scratchpad keeps text that nobody edits. The check runs only
+/// How long each note keeps text that nobody edits. The check runs only
 /// when the widget loads, against the stored edit dates, so the feature needs
-/// no timer at all. Pulled from Vorssaint's ScratchpadSupport — same interval
-/// values, same stored key, so a document written by the floating pad reads
+/// no timer at all. Pulled from Vorssaint's NotesSupport — same interval
+/// values, same stored key, so a document written by the floating note reads
 /// correctly here and vice-versa.
-public enum ScratchpadRetention: String, CaseIterable, Sendable {
+public enum NoteRetention: String, CaseIterable, Sendable {
     case never
     case day
     case week
@@ -29,17 +29,17 @@ public enum ScratchpadRetention: String, CaseIterable, Sendable {
         }
     }
 
-    public static func sanitized(_ rawValue: String?) -> ScratchpadRetention {
-        guard let rawValue, let retention = ScratchpadRetention(rawValue: rawValue) else {
+    public static func sanitized(_ rawValue: String?) -> NoteRetention {
+        guard let rawValue, let retention = NoteRetention(rawValue: rawValue) else {
             return .never
         }
         return retention
     }
 }
 
-// MARK: - Pad & Document
+// MARK: - Note & Document
 
-public struct ScratchpadPad: Codable, Equatable, Identifiable, Sendable {
+public struct Note: Codable, Equatable, Identifiable, Sendable {
     public let id: UUID
     public var name: String
     public var text: String
@@ -53,27 +53,27 @@ public struct ScratchpadPad: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
-/// The whole scratchpad state travels as one small document. Stable ids keep
+/// The whole notes state travels as one small document. Stable ids keep
 /// selection independent from names, while array order is the tab order.
-public struct ScratchpadDocument: Codable, Equatable, Sendable {
-    public static let maximumPadCount = 12
+public struct NotesDocument: Codable, Equatable, Sendable {
+    public static let maximumNoteCount = 12
     public static let maximumNameLength = 40
 
-    public var pads: [ScratchpadPad]
+    public var notes: [Note]
     public var selectedID: UUID
 
     public static func initial(defaultName: String,
                                id: UUID = UUID(),
                                text: String = "",
-                               modifiedAt: Date? = nil) -> ScratchpadDocument {
-        let name = ScratchpadSupport.nextPadName(defaultName: defaultName, existingNames: [])
-        let pad = ScratchpadPad(id: id, name: name, text: text, modifiedAt: text.isEmpty ? nil : modifiedAt)
-        return ScratchpadDocument(pads: [pad], selectedID: pad.id)
+                               modifiedAt: Date? = nil) -> NotesDocument {
+        let name = NotesSupport.nextNoteName(defaultName: defaultName, existingNames: [])
+        let note = Note(id: id, name: name, text: text, modifiedAt: text.isEmpty ? nil : modifiedAt)
+        return NotesDocument(notes: [note], selectedID: note.id)
     }
 
-    public static func decoded(_ data: Data?, defaultName: String) -> ScratchpadDocument? {
+    public static func decoded(_ data: Data?, defaultName: String) -> NotesDocument? {
         guard let data,
-              let decoded = try? JSONDecoder().decode(ScratchpadDocument.self, from: data)
+              let decoded = try? JSONDecoder().decode(NotesDocument.self, from: data)
         else { return nil }
         return decoded.sanitized(defaultName: defaultName)
     }
@@ -82,89 +82,89 @@ public struct ScratchpadDocument: Codable, Equatable, Sendable {
         try? JSONEncoder().encode(self)
     }
 
-    public func sanitized(defaultName: String) -> ScratchpadDocument {
+    public func sanitized(defaultName: String) -> NotesDocument {
         var seen = Set<UUID>()
-        var cleanPads: [ScratchpadPad] = []
-        for pad in pads.prefix(Self.maximumPadCount) where seen.insert(pad.id).inserted {
-            let fallback = ScratchpadSupport.nextPadName(defaultName: defaultName,
+        var cleanPads: [Note] = []
+        for note in notes.prefix(Self.maximumNoteCount) where seen.insert(note.id).inserted {
+            let fallback = NotesSupport.nextNoteName(defaultName: defaultName,
                                                          existingNames: cleanPads.map(\.name))
-            let name = ScratchpadSupport.sanitizedPadName(pad.name)
-            cleanPads.append(ScratchpadPad(id: pad.id,
+            let name = NotesSupport.sanitizedNoteName(note.name)
+            cleanPads.append(Note(id: note.id,
                                            name: name.isEmpty ? fallback : name,
-                                           text: pad.text,
-                                           modifiedAt: pad.text.isEmpty ? nil : pad.modifiedAt))
+                                           text: note.text,
+                                           modifiedAt: note.text.isEmpty ? nil : note.modifiedAt))
         }
         guard !cleanPads.isEmpty else { return .initial(defaultName: defaultName) }
         let selection = cleanPads.contains(where: { $0.id == selectedID }) ? selectedID : cleanPads[0].id
-        return ScratchpadDocument(pads: cleanPads, selectedID: selection)
+        return NotesDocument(notes: cleanPads, selectedID: selection)
     }
 
-    public func addingPad(defaultName: String, id: UUID = UUID()) -> ScratchpadDocument? {
-        guard pads.count < Self.maximumPadCount else { return nil }
+    public func addingNote(defaultName: String, id: UUID = UUID()) -> NotesDocument? {
+        guard notes.count < Self.maximumNoteCount else { return nil }
         var next = self
-        let name = ScratchpadSupport.nextPadName(defaultName: defaultName, existingNames: pads.map(\.name))
-        next.pads.append(ScratchpadPad(id: id, name: name, text: "", modifiedAt: nil))
+        let name = NotesSupport.nextNoteName(defaultName: defaultName, existingNames: notes.map(\.name))
+        next.notes.append(Note(id: id, name: name, text: "", modifiedAt: nil))
         next.selectedID = id
         return next
     }
 
-    public func selecting(_ id: UUID) -> ScratchpadDocument? {
-        guard pads.contains(where: { $0.id == id }) else { return nil }
+    public func selecting(_ id: UUID) -> NotesDocument? {
+        guard notes.contains(where: { $0.id == id }) else { return nil }
         var next = self
         next.selectedID = id
         return next
     }
 
-    public func renaming(_ id: UUID, to proposedName: String) -> ScratchpadDocument? {
-        let name = ScratchpadSupport.sanitizedPadName(proposedName)
-        guard !name.isEmpty, let index = pads.firstIndex(where: { $0.id == id }) else { return nil }
+    public func renaming(_ id: UUID, to proposedName: String) -> NotesDocument? {
+        let name = NotesSupport.sanitizedNoteName(proposedName)
+        guard !name.isEmpty, let index = notes.firstIndex(where: { $0.id == id }) else { return nil }
         var next = self
-        next.pads[index].name = name
+        next.notes[index].name = name
         return next
     }
 
-    public func removing(_ id: UUID) -> ScratchpadDocument? {
-        guard pads.count > 1, let index = pads.firstIndex(where: { $0.id == id }) else { return nil }
+    public func removing(_ id: UUID) -> NotesDocument? {
+        guard notes.count > 1, let index = notes.firstIndex(where: { $0.id == id }) else { return nil }
         var next = self
-        next.pads.remove(at: index)
+        next.notes.remove(at: index)
         if selectedID == id {
-            next.selectedID = next.pads[min(index, next.pads.count - 1)].id
+            next.selectedID = next.notes[min(index, next.notes.count - 1)].id
         }
         return next
     }
 
     public mutating func updateSelectedText(_ text: String, modifiedAt: Date) {
-        guard let index = pads.firstIndex(where: { $0.id == selectedID }),
-              pads[index].text != text else { return }
-        pads[index].text = text
-        pads[index].modifiedAt = text.isEmpty ? nil : modifiedAt
+        guard let index = notes.firstIndex(where: { $0.id == selectedID }),
+              notes[index].text != text else { return }
+        notes[index].text = text
+        notes[index].modifiedAt = text.isEmpty ? nil : modifiedAt
     }
 
-    public mutating func applyRetention(_ retention: ScratchpadRetention, now: Date) {
-        for index in pads.indices where ScratchpadSupport.shouldClear(
-            lastEdited: pads[index].modifiedAt, now: now, retention: retention
+    public mutating func applyRetention(_ retention: NoteRetention, now: Date) {
+        for index in notes.indices where NotesSupport.shouldClear(
+            lastEdited: notes[index].modifiedAt, now: now, retention: retention
         ) {
-            pads[index].text = ""
-            pads[index].modifiedAt = nil
+            notes[index].text = ""
+            notes[index].modifiedAt = nil
         }
     }
 }
 
 // MARK: - Support
 
-public enum ScratchpadSupport {
-    public static func sanitizedPadName(_ name: String) -> String {
+public enum NotesSupport {
+    public static func sanitizedNoteName(_ name: String) -> String {
         let words = name.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
-        return String(words.joined(separator: " ").prefix(ScratchpadDocument.maximumNameLength))
+        return String(words.joined(separator: " ").prefix(NotesDocument.maximumNameLength))
     }
 
-    public static func nextPadName(defaultName: String, existingNames: [String]) -> String {
-        let base = sanitizedPadName(defaultName)
-        let safeBase = base.isEmpty ? "Scratchpad" : base
+    public static func nextNoteName(defaultName: String, existingNames: [String]) -> String {
+        let base = sanitizedNoteName(defaultName)
+        let safeBase = base.isEmpty ? "Note" : base
         let used = Set(existingNames)
         let firstName = "\(safeBase) 1"
         guard used.contains(safeBase) || used.contains(firstName) else { return firstName }
-        for number in 2...ScratchpadDocument.maximumPadCount where !used.contains("\(safeBase) \(number)") {
+        for number in 2...NotesDocument.maximumNoteCount where !used.contains("\(safeBase) \(number)") {
             return "\(safeBase) \(number)"
         }
         return "\(safeBase) \(existingNames.count + 1)"
@@ -173,19 +173,19 @@ public enum ScratchpadSupport {
     public static func migratedLegacyDocument(text: String,
                                               lastEdited: Date?,
                                               defaultName: String,
-                                              retention: ScratchpadRetention,
+                                              retention: NoteRetention,
                                               now: Date,
-                                              id: UUID = UUID()) -> ScratchpadDocument {
-        var document = ScratchpadDocument.initial(defaultName: defaultName, id: id, text: text, modifiedAt: lastEdited)
+                                              id: UUID = UUID()) -> NotesDocument {
+        var document = NotesDocument.initial(defaultName: defaultName, id: id, text: text, modifiedAt: lastEdited)
         document.applyRetention(retention, now: now)
         return document
     }
 
-    public static func requiresCloseConfirmation(_ pad: ScratchpadPad) -> Bool {
-        !pad.text.isEmpty
+    public static func requiresCloseConfirmation(_ note: Note) -> Bool {
+        !note.text.isEmpty
     }
 
-    public static func shouldClear(lastEdited: Date?, now: Date, retention: ScratchpadRetention) -> Bool {
+    public static func shouldClear(lastEdited: Date?, now: Date, retention: NoteRetention) -> Bool {
         guard let limit = retention.maxIdleInterval, let lastEdited else { return false }
         let idle = now.timeIntervalSince(lastEdited)
         return idle > limit
@@ -195,7 +195,7 @@ public enum ScratchpadSupport {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd"
-        let safeTitle = sanitizedPadName(title)
+        let safeTitle = sanitizedNoteName(title)
             .replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ":", with: "-")
         return "\(safeTitle) \(formatter.string(from: date)).txt"
@@ -208,47 +208,49 @@ public enum ScratchpadSupport {
 /// and persists every edit debounced — the same contract the floating pad's
 /// service offers, without the panel, hotkey, or pin logic.
 ///
-/// Reads and writes the same UserDefaults keys as the upstream service
-/// (`scratchpadDocument`, `scratchpadRetention`) so a note written in one
-/// surface is there in the other, and so the retention sweep that runs on load
-/// is single-sourced.
+/// Reads and writes the same UserDefaults keys as the upstream service so a
+/// note written in one surface is there in the other, and so the retention
+/// sweep that runs on load is single-sourced.
 @MainActor
 @Observable
-public final class ScratchpadAdapter {
+public final class NotesAdapter {
     // Published for the widget.
     public var text: String = "" {
         didSet {
             guard hasLoaded, !isReplacingText, var document else { return }
             document.updateSelectedText(text, modifiedAt: Date())
             self.document = document
-            pads = document.pads
+            notes = document.notes
             scheduleSave()
         }
     }
 
-    public private(set) var pads: [ScratchpadPad] = []
-    public private(set) var selectedPadID: UUID?
+    public private(set) var notes: [Note] = []
+    public private(set) var selectedNoteID: UUID?
 
-    public var selectedPadName: String {
-        pads.first(where: { $0.id == selectedPadID })?.name ?? defaultName
+    public var selectedNoteName: String {
+        notes.first(where: { $0.id == selectedNoteID })?.name ?? defaultName
     }
 
-    public var canCreatePad: Bool { pads.count < ScratchpadDocument.maximumPadCount }
-    public var canClosePad: Bool { pads.count > 1 }
+    public var canCreateNote: Bool { notes.count < NotesDocument.maximumNoteCount }
+    public var canCloseNote: Bool { notes.count > 1 }
 
-    @ObservationIgnored private var document: ScratchpadDocument?
-    @ObservationIgnored private var lastSavedDocument: ScratchpadDocument?
+    @ObservationIgnored private var document: NotesDocument?
+    @ObservationIgnored private var lastSavedDocument: NotesDocument?
     @ObservationIgnored private var hasLoaded = false
     @ObservationIgnored private var isReplacingText = false
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var terminationObserver: NSObjectProtocol?
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let defaultName: String
+    // The feature is called Notes; these keys are not, and must not be. They
+    // are upstream's, shared with Vorssaint's floating scratchpad, and renaming
+    // either one orphans every note already written.
     @ObservationIgnored private let documentKey = "scratchpadDocument"
     @ObservationIgnored private let retentionKey = "scratchpadRetention"
 
     public convenience init() {
-        self.init(defaults: .standard, defaultName: "Scratchpad")
+        self.init(defaults: .standard, defaultName: "Note")
     }
 
     public init(defaults: UserDefaults, defaultName: String) {
@@ -259,9 +261,9 @@ public final class ScratchpadAdapter {
     }
 
     /// Test seam: in-memory document without touching defaults.
-    public init(document: ScratchpadDocument) {
+    public init(document: NotesDocument) {
         self.defaults = .standard
-        self.defaultName = "Scratchpad"
+        self.defaultName = "Note"
         hasLoaded = true
         apply(document)
         lastSavedDocument = document
@@ -307,11 +309,11 @@ public final class ScratchpadAdapter {
             flushSave()
             return
         }
-        let retention = ScratchpadRetention.sanitized(defaults.string(forKey: retentionKey))
+        let retention = NoteRetention.sanitized(defaults.string(forKey: retentionKey))
 
         if let stored = defaults.object(forKey: documentKey) {
             let data = stored as? Data
-            let decoded = data.flatMap { try? JSONDecoder().decode(ScratchpadDocument.self, from: $0) }
+            let decoded = data.flatMap { try? JSONDecoder().decode(NotesDocument.self, from: $0) }
             var loaded = decoded?.sanitized(defaultName: defaultName) ?? .initial(defaultName: defaultName)
             loaded.applyRetention(retention, now: Date())
             if loaded == decoded {
@@ -328,7 +330,7 @@ public final class ScratchpadAdapter {
         // that container is bundle-id-scoped (`com.vorssaint.*` vs
         // `com.controlcenterpro.*`), so CCP's first launch has no file to
         // migrate — intentional not to reach into the old bundle's folder.
-        let migrated = ScratchpadDocument.initial(defaultName: defaultName)
+        let migrated = NotesDocument.initial(defaultName: defaultName)
         var withRetention = migrated
         withRetention.applyRetention(retention, now: Date())
         _ = persist(withRetention)
@@ -352,7 +354,7 @@ public final class ScratchpadAdapter {
     }
 
     @discardableResult
-    private func persist(_ document: ScratchpadDocument) -> Bool {
+    private func persist(_ document: NotesDocument) -> Bool {
         if document == lastSavedDocument { return true }
         guard let data = document.encoded() else { return false }
         defaults.set(data, forKey: documentKey)
@@ -361,36 +363,36 @@ public final class ScratchpadAdapter {
         return true
     }
 
-    private func apply(_ document: ScratchpadDocument) {
+    private func apply(_ document: NotesDocument) {
         self.document = document
-        pads = document.pads
-        selectedPadID = document.selectedID
-        let selectedText = document.pads.first(where: { $0.id == document.selectedID })?.text ?? ""
+        notes = document.notes
+        selectedNoteID = document.selectedID
+        let selectedText = document.notes.first(where: { $0.id == document.selectedID })?.text ?? ""
         isReplacingText = true
         text = selectedText
         isReplacingText = false
     }
 
-    // MARK: - Pad verbs
+    // MARK: - Note verbs
 
-    public func createPad(defaultName: String? = nil) {
+    public func createNote(defaultName: String? = nil) {
         let name = defaultName ?? self.defaultName
-        guard let document, let next = document.addingPad(defaultName: name), persist(next) else { return }
+        guard let document, let next = document.addingNote(defaultName: name), persist(next) else { return }
         apply(next)
     }
 
-    public func selectPad(_ id: UUID) {
-        guard id != selectedPadID, let document, let next = document.selecting(id), persist(next) else { return }
+    public func selectNote(_ id: UUID) {
+        guard id != selectedNoteID, let document, let next = document.selecting(id), persist(next) else { return }
         apply(next)
     }
 
-    public func renamePad(_ id: UUID, to name: String) {
+    public func renameNote(_ id: UUID, to name: String) {
         guard let document, let next = document.renaming(id, to: name), persist(next) else { return }
         apply(next)
     }
 
     @discardableResult
-    public func closePad(_ id: UUID) -> Bool {
+    public func closeNote(_ id: UUID) -> Bool {
         guard let document, let next = document.removing(id), persist(next) else { return false }
         apply(next)
         return true
@@ -414,7 +416,7 @@ public final class ScratchpadAdapter {
     public var isEmpty: Bool { text.isEmpty }
 
     public func exportFileName(date: Date = Date()) -> String {
-        ScratchpadSupport.exportFileName(title: selectedPadName, date: date)
+        NotesSupport.exportFileName(title: selectedNoteName, date: date)
     }
 
     /// Saves `text` to a file chosen via save panel. Kept on the adapter so

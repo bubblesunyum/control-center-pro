@@ -53,6 +53,6 @@ public func makeStandardRegistry() -> WidgetRegistry {
     registry.register(ClipboardWidget.self)
     registry.register(MailWidget.self)
     registry.register(ShelfWidget.self)
-    registry.register(ScratchpadWidget.self)
+    registry.register(NotesWidget.self)
     return registry
 }

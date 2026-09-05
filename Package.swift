@@ -44,7 +44,7 @@ let package = Package(
     dependencies: [
         .package(path: "../psymail-mini"),
 
-        // The scratchpad's editor. A live-styled Markdown surface on TextKit 2
+        // The Notes widget's editor. A live-styled Markdown surface on TextKit 2
         // — the markers hide as you type and come back when the caret lands on
         // them — which is a thing the SwiftUI TextEditor cannot be made to do.
         //

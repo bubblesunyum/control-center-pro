@@ -5,43 +5,44 @@ import CCPKit
 import SwiftUI
 import AppKit
 
-/// A scratchpad for short-lived text — meeting notes, numbers, fragments on
-/// their way somewhere else — shown directly in the grid.
+/// Notes: short-lived text — meeting notes, numbers, fragments on their way
+/// somewhere else — written in the panel and kept in tabs.
 ///
-/// UI is pulled from Vorssaint's floating ScratchpadView but reshaped as a
-/// lane widget: the floating panel's chrome (pin, drag handle, resize overlay,
-/// HUD backdrop) is gone, and the editor lives inside the shared `WidgetCard`
-/// glass so the note reads as one more control-center tile rather than a window
+/// UI is pulled from Vorssaint's floating scratchpad but reshaped as a lane
+/// widget: the floating panel's chrome (pin, drag handle, resize overlay, HUD
+/// backdrop) is gone, and the editor lives inside the shared `WidgetCard` glass
+/// so the note reads as one more control-center tile rather than a window
 /// inside a window. Document mechanics (tabs, retention, debounced UserDefaults
-/// persistence) are the same values Vorssaint uses, via
-/// `ScratchpadAdapter`, so a note written here is there in the floating pad and
-/// vice-versa.
+/// persistence) are the same values Vorssaint uses, via `NotesAdapter`, so a
+/// note written here is there in the floating pad and vice-versa.
 @MainActor
-public final class ScratchpadWidget: CCPWidget {
+public final class NotesWidget: CCPWidget {
     public static let descriptor = WidgetDescriptor(
+        // The id is stored in every saved layout, so it stays what it has
+        // always been even though the widget is now called Notes.
         id: "scratchpad",
-        title: "Scratchpad",
+        title: "Notes",
         symbolName: "note.text",
         size: .tall
     )
 
-    private let adapter: ScratchpadAdapter
+    private let adapter: NotesAdapter
 
     public init() {
-        self.adapter = ScratchpadAdapter()
+        self.adapter = NotesAdapter()
     }
 
     /// Test seam: widget backed by an in-memory document.
-    init(document: ScratchpadDocument) {
-        self.adapter = ScratchpadAdapter(document: document)
+    init(document: NotesDocument) {
+        self.adapter = NotesAdapter(document: document)
     }
 
-    init(adapter: ScratchpadAdapter) {
+    init(adapter: NotesAdapter) {
         self.adapter = adapter
     }
 
     public func makeView() -> some View {
-        ScratchpadContent(adapter: adapter)
+        NotesContent(adapter: adapter)
     }
 
     public func activate() { adapter.activate() }
@@ -50,17 +51,17 @@ public final class ScratchpadWidget: CCPWidget {
 
 // MARK: - Content
 
-private struct ScratchpadContent: View {
-    @Bindable var adapter: ScratchpadAdapter
+private struct NotesContent: View {
+    @Bindable var adapter: NotesAdapter
     @State private var didCopy = false
-    @State private var dialog: ScratchpadDialog?
+    @State private var dialog: NoteDialog?
     @State private var renameDraft = ""
-    @State private var hoveredPadID: UUID?
+    @State private var hoveredNoteID: UUID?
 
     private var isEmpty: Bool { adapter.text.isEmpty }
 
     var body: some View {
-        WidgetCard(ScratchpadWidget.descriptor) {
+        WidgetCard(NotesWidget.descriptor) {
             VStack(alignment: .leading, spacing: Space.one) {
                 tabBar
                 editor
@@ -69,49 +70,49 @@ private struct ScratchpadContent: View {
         }
         .alert(dialogTitle, isPresented: dialogIsPresented) {
             switch dialog {
-            case .rename(let pad):
-                TextField(pad.name, text: $renameDraft)
+            case .rename(let note):
+                TextField(note.name, text: $renameDraft)
                 Button("Cancel", role: .cancel) { dismissDialog() }
                 Button("Save") {
-                    adapter.renamePad(pad.id, to: renameDraft)
+                    adapter.renameNote(note.id, to: renameDraft)
                     dismissDialog()
                 }
-            case .close(let pad):
+            case .close(let note):
                 Button("Cancel", role: .cancel) { dismissDialog() }
-                Button("Close Pad", role: .destructive) {
-                    _ = adapter.closePad(pad.id)
+                Button("Close Note", role: .destructive) {
+                    _ = adapter.closeNote(note.id)
                     dismissDialog()
                 }
             case nil:
                 EmptyView()
             }
         } message: {
-            if case .close(let pad) = dialog {
-                Text("Close “\(pad.name)”? Its text will be lost.")
+            if case .close(let note) = dialog {
+                Text("Close “\(note.name)”? Its text will be lost.")
             }
         }
     }
 
-    // MARK: Tab bar — pulled from ScratchpadView's tab strip, compressed for 240pt
+    // MARK: Tab bar — pulled from upstream's tab strip, compressed for 240pt
 
     private var tabBar: some View {
         HStack(spacing: Space.half) {
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: Space.half - Space.quarter) {
-                        ForEach(adapter.pads) { pad in
-                            tabButton(pad)
-                                .id(pad.id)
+                        ForEach(adapter.notes) { note in
+                            tabButton(note)
+                                .id(note.id)
                         }
                     }
                     .padding(.vertical, Space.quarter)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .onAppear {
-                    guard let selected = adapter.selectedPadID else { return }
+                    guard let selected = adapter.selectedNoteID else { return }
                     proxy.scrollTo(selected, anchor: .center)
                 }
-                .onChange(of: adapter.selectedPadID) { _, selected in
+                .onChange(of: adapter.selectedNoteID) { _, selected in
                     guard let selected else { return }
                     withAnimation(.easeOut(duration: 0.15)) {
                         proxy.scrollTo(selected, anchor: .center)
@@ -120,7 +121,7 @@ private struct ScratchpadContent: View {
             }
 
             Button {
-                adapter.createPad()
+                adapter.createNote()
             } label: {
                 Image(systemName: "plus")
                     .font(.caption.weight(.semibold))
@@ -128,15 +129,15 @@ private struct ScratchpadContent: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .disabled(!adapter.canCreatePad)
-            .help(adapter.canCreatePad ? "New pad" : "Pad limit reached (\(ScratchpadDocument.maximumPadCount))")
-            .accessibilityLabel("New pad")
+            .disabled(!adapter.canCreateNote)
+            .help(adapter.canCreateNote ? "New note" : "Note limit reached (\(NotesDocument.maximumNoteCount))")
+            .accessibilityLabel("New note")
 
             Menu {
-                if let selectedPad {
-                    Button("Rename Pad") { presentRename(selectedPad) }
-                    Button("Close Pad", role: .destructive) { requestClose(selectedPad) }
-                        .disabled(!adapter.canClosePad)
+                if let selectedNote {
+                    Button("Rename Note") { presentRename(selectedNote) }
+                    Button("Close Note", role: .destructive) { requestClose(selectedNote) }
+                        .disabled(!adapter.canCloseNote)
                 }
             } label: {
                 Image(systemName: "ellipsis")
@@ -147,24 +148,24 @@ private struct ScratchpadContent: View {
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-            .help("Pad actions")
-            .accessibilityLabel("Pad actions")
+            .help("Note actions")
+            .accessibilityLabel("Note actions")
         }
         .frame(height: 28)
     }
 
-    private func tabButton(_ pad: ScratchpadPad) -> some View {
-        let selected = adapter.selectedPadID == pad.id
-        let isHovered = hoveredPadID == pad.id
-        let showClose = adapter.canClosePad && (isHovered || selected)
+    private func tabButton(_ note: Note) -> some View {
+        let selected = adapter.selectedNoteID == note.id
+        let isHovered = hoveredNoteID == note.id
+        let showClose = adapter.canCloseNote && (isHovered || selected)
         return HStack(spacing: Space.quarter) {
-            Text(pad.name)
+            Text(note.name)
                 .font(.caption.weight(selected ? .semibold : .regular))
                 .lineLimit(1)
                 .truncationMode(.tail)
             if showClose {
                 Button {
-                    requestClose(pad)
+                    requestClose(note)
                 } label: {
                     Image(systemName: "xmark")
                         .font(.caption2.weight(.semibold))
@@ -173,8 +174,8 @@ private struct ScratchpadContent: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Close pad")
-                .accessibilityLabel("Close pad")
+                .help("Close note")
+                .accessibilityLabel("Close note")
             }
         }
         .padding(.leading, Space.one)
@@ -187,30 +188,30 @@ private struct ScratchpadContent: View {
                 .fill(selected ? Color.selectedFill : Color.clear)
         }
         .contentShape(RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
-        .onTapGesture { adapter.selectPad(pad.id) }
+        .onTapGesture { adapter.selectNote(note.id) }
         .onHover { hovering in
-            if hovering { hoveredPadID = pad.id } else if hoveredPadID == pad.id { hoveredPadID = nil }
+            if hovering { hoveredNoteID = note.id } else if hoveredNoteID == note.id { hoveredNoteID = nil }
         }
         .contextMenu {
-            Button("Rename Pad") { presentRename(pad) }
-            Button("Close Pad", role: .destructive) { requestClose(pad) }
-                .disabled(!adapter.canClosePad)
+            Button("Rename Note") { presentRename(note) }
+            Button("Close Note", role: .destructive) { requestClose(note) }
+                .disabled(!adapter.canCloseNote)
         }
-        .accessibilityLabel(pad.name)
+        .accessibilityLabel(note.name)
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityAddTraits(.isButton)
     }
 
-    private var selectedPad: ScratchpadPad? {
-        adapter.pads.first(where: { $0.id == adapter.selectedPadID })
+    private var selectedNote: Note? {
+        adapter.notes.first(where: { $0.id == adapter.selectedNoteID })
     }
 
     // MARK: Dialog
 
     private var dialogTitle: String {
         switch dialog {
-        case .rename: return "Rename Pad"
-        case .close: return "Close Pad"
+        case .rename: return "Rename Note"
+        case .close: return "Close Note"
         case nil: return ""
         }
     }
@@ -219,17 +220,17 @@ private struct ScratchpadContent: View {
         Binding(get: { dialog != nil }, set: { if !$0 { dismissDialog() } })
     }
 
-    private func presentRename(_ pad: ScratchpadPad) {
-        renameDraft = pad.name
-        dialog = .rename(pad)
+    private func presentRename(_ note: Note) {
+        renameDraft = note.name
+        dialog = .rename(note)
     }
 
-    private func requestClose(_ pad: ScratchpadPad) {
-        guard adapter.canClosePad else { return }
-        if !ScratchpadSupport.requiresCloseConfirmation(pad) {
-            _ = adapter.closePad(pad.id)
+    private func requestClose(_ note: Note) {
+        guard adapter.canCloseNote else { return }
+        if !NotesSupport.requiresCloseConfirmation(note) {
+            _ = adapter.closeNote(note.id)
         } else {
-            dialog = .close(pad)
+            dialog = .close(note)
         }
     }
 
@@ -240,17 +241,17 @@ private struct ScratchpadContent: View {
     private var editor: some View {
         MarkdownNoteEditor(
             text: Binding(get: { adapter.text }, set: { adapter.text = $0 }),
-            documentId: adapter.selectedPadID?.uuidString ?? "scratchpad",
-            placeholder: "Scratch something…"
+            documentId: adapter.selectedNoteID?.uuidString ?? "notes",
+            placeholder: "Write something…"
         )
-        .frame(height: Layout.scratchpadEditorHeight)
+        .frame(height: Layout.noteEditorHeight)
         .background(Color.controlFill, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
                 .strokeBorder(Color.cardStroke.opacity(0.6), lineWidth: 1)
         )
-        .accessibilityLabel("Scratchpad text")
+        .accessibilityLabel("Note text")
         .accessibilityHint("Editable Markdown notes")
     }
 
@@ -294,7 +295,7 @@ private struct ScratchpadContent: View {
     }
 }
 
-private enum ScratchpadDialog: Equatable {
-    case rename(ScratchpadPad)
-    case close(ScratchpadPad)
+private enum NoteDialog: Equatable {
+    case rename(Note)
+    case close(Note)
 }
