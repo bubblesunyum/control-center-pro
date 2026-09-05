@@ -12,10 +12,10 @@
     {
       "identity" : "swift-markdown-engine",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/nodes-app/swift-markdown-engine",
+      "location" : "https://github.com/bubblesunyum/swift-markdown-engine",
       "state" : {
-        "revision" : "e5f7607fc4021181056ef7a09dbb7573dc0237d9",
-        "version" : "0.12.0"
+        "revision" : "e7ac1759cafad0d6a8e4413e1e2365b0f235dccc",
+        "version" : "0.12.0-ccp.1"
       }
     },
     {

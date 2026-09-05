@@ -48,14 +48,16 @@ let package = Package(
         // — the markers hide as you type and come back when the caret lands on
         // them — which is a thing the SwiftUI TextEditor cannot be made to do.
         //
-        // A URL dependency rather than a vendored copy: unlike the Vorssaint
-        // engines we fork, this is a library we consume unchanged and want
-        // updates from. Pinned exact while it is pre-1.0 and its API is still
-        // settling.
+        // A fork of nodes-app/swift-markdown-engine, not the upstream: CCP
+        // needs the block AST public so the sync splitter reads the document
+        // structure the editor already computed (ccp-aa5), and upstream keeps
+        // its public surface small by policy. Pinned exact to our own tag;
+        // merges from upstream are deliberate, one at a time, onto the ccp
+        // branch the tag was cut from.
         //
         // Apache-2.0, which is one-way compatible with our GPL-3.0-or-later.
-        .package(url: "https://github.com/nodes-app/swift-markdown-engine",
-                 exact: "0.12.0"),
+        .package(url: "https://github.com/bubblesunyum/swift-markdown-engine",
+                 exact: "0.12.0-ccp.1"),
     ],
 
     targets: [
