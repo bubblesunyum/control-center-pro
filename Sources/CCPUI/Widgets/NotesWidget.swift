@@ -28,26 +28,41 @@ public final class NotesWidget: CCPWidget {
     )
 
     private let adapter: NotesAdapter
+    /// Bare return starts a new block (ccp-inoq). Owned here so its lifetime
+    /// is the panel's: the view graph is built once and hidden with
+    /// `orderOut`, which never fires `onDisappear`, so view-bound start/stop
+    /// would leave the monitor watching with the panel shut.
+    private let paragraphReturn: ParagraphReturnMonitor
 
     public init() {
         self.adapter = NotesAdapter()
+        self.paragraphReturn = ParagraphReturnMonitor()
     }
 
     /// Test seam: widget backed by an in-memory document.
     init(document: NotesDocument) {
         self.adapter = NotesAdapter(document: document)
+        self.paragraphReturn = ParagraphReturnMonitor()
     }
 
-    init(adapter: NotesAdapter) {
+    init(adapter: NotesAdapter, monitors: EventMonitors = .system) {
         self.adapter = adapter
+        self.paragraphReturn = ParagraphReturnMonitor(monitors: monitors)
     }
 
     public func makeView() -> some View {
         NotesContent(adapter: adapter)
     }
 
-    public func activate() { adapter.activate() }
-    public func deactivate() { adapter.deactivate() }
+    public func activate() {
+        adapter.activate()
+        paragraphReturn.start()
+    }
+
+    public func deactivate() {
+        paragraphReturn.stop()
+        adapter.deactivate()
+    }
 }
 
 // MARK: - Content

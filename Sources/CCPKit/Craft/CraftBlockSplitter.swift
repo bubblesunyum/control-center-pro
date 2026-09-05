@@ -25,8 +25,13 @@ public struct CraftBlockSlice: Equatable, Sendable {
 ///
 /// The cut uses the same grammar the editor styles with
 /// (`DocumentAST.parse`), so a block boundary can never fall somewhere the
-/// editor reads as mid-construct. A list arrives as one node spanning its
-/// items and Craft wants one block per item, so lists are descended into —
+/// editor reads as mid-construct. Blank lines are the ONLY boundary
+/// (ccp-inoq): the pad turns a bare return into a paragraph break at the
+/// keystroke, so by the time text arrives here a lone newline is always a
+/// soft break inside one block. Cutting on single newlines instead would
+/// churn every multi-line block on every sync and the loop would never
+/// quiet. A list arrives as one node spanning its items and Craft wants one
+/// block per item, so lists are descended into —
 /// one slice per item line, indent intact. Items are physical lines, so a
 /// wrapped item's continuation ships as its own slice; Craft splits the same
 /// way on write, and the sidecar is rebuilt from the write response, so the
