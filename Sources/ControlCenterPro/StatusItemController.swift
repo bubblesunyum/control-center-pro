@@ -29,7 +29,7 @@ final class StatusItemController {
 
         if let button = item.button {
             button.image = NSImage(
-                systemSymbolName: "square.grid.2x2",
+                systemSymbolName: "square.grid.2x2.fill",
                 accessibilityDescription: "Control Center Pro"
             )
             button.target = self
@@ -81,7 +81,7 @@ final class StatusItemController {
                 self.trackEditingChanges()
                 self.rebuildMenu()
                 if let button = self.item.button {
-                    let symbol = self.panel.editor.isEditing ? "checkmark.circle" : "square.grid.2x2"
+                    let symbol = self.panel.editor.isEditing ? "checkmark.circle.fill" : "square.grid.2x2.fill"
                     button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: self.panel.editor.isEditing ? "Done editing" : "Control Center Pro")
                 }
             }
