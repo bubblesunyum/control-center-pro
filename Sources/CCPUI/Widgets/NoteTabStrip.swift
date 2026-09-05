@@ -124,11 +124,11 @@ struct NoteTabStrip: View {
             }
         }
         // The hover chip is a 20pt square in a 24pt pill, so 2pt of air above
-        // and below it — the trailing pad matches at 2pt and the chip sits
-        // evenly on all three sides.
-        .padding(.leading, Space.half)
-        .padding(.trailing, Space.quarter)
-        .frame(minWidth: 32, maxWidth: 92)
+        // and below it — the trailing pad hugs tighter at a point, half the
+        // top/bottom air, so the pill ends where the chip ends.
+        .padding(.leading, Space.quarter)
+        .padding(.trailing, Space.quarter / 2)
+        .frame(maxWidth: 92)
         .frame(height: Layout.noteTabHeight)
         .foregroundStyle(isSelected ? Color.primary : Color.secondary)
         .background {
