@@ -12,10 +12,10 @@ import UniformTypeIdentifiers
 /// The shelf itself is not a lane widget that lives inside the panel's glass —
 /// it is a separate `NSPanel` that floats over the desktop so files can be
 /// dragged into and out of any app. This card is the panel's affordance inside
-/// CCP: it shows the count, offers to open the shelf at the mouse, and
-/// surfaces the same Clear action the floating window's own bottom bar does.
-/// With nothing on the shelf it is just its header — an empty box explaining
-/// where to drop things is the floating shelf's job, not a second one here.
+/// CCP: pinned and recent shelf items, the 9 latest downloads, and an overflow
+/// menu with the same Open/Clear actions the floating window's own bottom bar
+/// offers. With nothing anywhere — empty shelf, empty downloads — it is just
+/// its header.
 @MainActor
 public final class ShelfWidget: CCPWidget {
     public static let descriptor = WidgetDescriptor(
@@ -49,116 +49,414 @@ public final class ShelfWidget: CCPWidget {
 }
 
 private struct ShelfWidgetContent: View {
+    /// Rows shown per shelf section before the "+N more" line takes over.
+    /// The panel never scrolls, so an uncapped section would push rows the
+    /// clamp then cuts off with no way to reach them.
+    private static let maxSectionRows = 6
+
     @Environment(ShelfStore.self) private var store
     @State private var window = ShelfWindowController.shared
     @Bindable var hiddenFiles: QuickTogglesAdapter
+    @State private var isMenuPresented = false
+    @State private var isPinnedCollapsed = false
+    @State private var isDownloadsCollapsed = false
+    @State private var downloads = RecentDownloadsStore()
+
+    private var pinned: [ShelfItem] { store.items.filter(\.isPinned) }
+    private var unpinned: [ShelfItem] { store.items.filter { !$0.isPinned } }
 
     var body: some View {
-        WidgetCard(ShelfWidget.descriptor, count: store.items.isEmpty ? nil : store.items.count) {
-            HStack(spacing: Space.half) {
-                hiddenFilesHeaderButton
-                if !store.items.isEmpty {
-                    clearButtonHeader
-                }
-                HeaderIconButton(
-                    systemImage: window.isVisible ? "xmark" : "arrow.up.forward.app",
-                    label: window.isVisible ? "Hide Files" : "Open Files"
-                ) {
-                    window.toggle()
-                }
+        WidgetCard(ShelfWidget.descriptor) {
+            HeaderIconButton(systemImage: "ellipsis", label: "Files actions") {
+                isMenuPresented = true
+            }
+            .popover(isPresented: $isMenuPresented, arrowEdge: .top) {
+                ShelfOverflowMenu(
+                    window: window,
+                    hiddenFiles: hiddenFiles,
+                    dismiss: { isMenuPresented = false }
+                )
+                .environment(store)
             }
         } content: {
-            // Nothing below the header until something is on the shelf: an
-            // empty box explaining where to drop is a second, larger empty
-            // state next to the one the floating shelf already draws.
-            if !store.items.isEmpty {
-                preview
-                    .transition(.blurReplace)
+            // Nothing below the header until something is anywhere: an empty
+            // box explaining where to drop is the floating shelf's job, not a
+            // second one here.
+            if !store.items.isEmpty || !downloads.files.isEmpty {
+                VStack(alignment: .leading, spacing: Space.half) {
+                    if !pinned.isEmpty {
+                        shelfSectionHeader(title: "Pinned", isCollapsed: isPinnedCollapsed) {
+                            isPinnedCollapsed.toggle()
+                        }
+                        if !isPinnedCollapsed {
+                            ForEach(pinned.prefix(Self.maxSectionRows)) { item in
+                                shelfRow(for: item)
+                            }
+                            moreLabel(remaining: pinned.count - Self.maxSectionRows)
+                        }
+                    }
+                    if !unpinned.isEmpty {
+                        if !pinned.isEmpty, !isPinnedCollapsed {
+                            Divider().padding(.vertical, Space.quarter)
+                        }
+                        ForEach(unpinned.prefix(Self.maxSectionRows)) { item in
+                            shelfRow(for: item)
+                        }
+                        moreLabel(remaining: unpinned.count - Self.maxSectionRows)
+                    }
+                    if !downloads.files.isEmpty {
+                        if !store.items.isEmpty {
+                            Divider().padding(.vertical, Space.quarter)
+                        }
+                        shelfSectionHeader(title: "Recent Downloads", isCollapsed: isDownloadsCollapsed) {
+                            isDownloadsCollapsed.toggle()
+                        }
+                        if !isDownloadsCollapsed {
+                            ForEach(downloads.files) { file in
+                                RecentDownloadRow(file: file)
+                            }
+                        }
+                    }
+                }
+                .padding(.top, Space.half)
+                .transition(.blurReplace)
             }
         }
         .animation(.smooth(duration: 0.2), value: store.items.isEmpty)
         .animation(.easeInOut(duration: 0.2), value: hiddenFiles.hiddenFilesShown)
         .animation(.easeInOut(duration: 0.2), value: hiddenFiles.isToggling)
+        .task { await downloads.reload() }
         .onDrop(of: [.fileURL, .image, .url, .plainText], isTargeted: nil) { providers in
             store.accept(providers: providers)
         }
     }
 
-    private var clearButtonHeader: some View {
-        Button {
-            if store.selection.isEmpty {
-                store.clear()
-            } else {
-                store.removeSelected()
+    private func shelfRow(for item: ShelfItem) -> some View {
+        WidgetFileRow(item: item)
+            .contextMenu {
+                Button(item.isPinned ? "Unpin" : "Pin") { store.togglePin(item.id) }
+                Button("Remove", role: .destructive) { store.remove(item.id) }
             }
-        } label: {
-            Image(systemName: store.selection.isEmpty ? "trash" : "trash.fill")
-                .font(.caption.weight(.semibold))
-                .frame(width: Layout.headerAccessorySize, height: Layout.headerAccessorySize)
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
-        .disabled(store.selection.isEmpty && !store.hasUnpinnedItems)
-        .help(store.selection.isEmpty ? "Clear unpinned" : "Remove selected")
-        .accessibilityLabel(store.selection.isEmpty ? "Clear unpinned items" : "Remove selected from Files")
-        .accessibilityHint(store.selection.isEmpty ? "Removes every unpinned item from Files" : "Removes selected items")
     }
 
-    private var hiddenFilesHeaderButton: some View {
+    @ViewBuilder
+    private func moreLabel(remaining: Int) -> some View {
+        if remaining > 0 {
+            Text("+\(remaining) more")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, Space.half)
+        }
+    }
+
+    private func shelfSectionHeader(
+        title: String,
+        isCollapsed: Bool,
+        toggle: @escaping () -> Void
+    ) -> some View {
+        Button(action: toggle) {
+            HStack(spacing: Space.half) {
+                Text(title.uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .tracking(0.5)
+                Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, Space.half)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(title) section")
+        .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
+        .accessibilityHint(isCollapsed ? "Expands this section" : "Collapses this section")
+    }
+}
+
+/// The Files card's overflow menu: the header's three actions behind one
+/// three-dot button, in the language of an iOS context menu — section labels,
+/// icon-led rows, a toggle row under TOOLS.
+///
+/// psymail's own glass menu (`Menu`/`MenuRow` in psymail-mini's app target) is
+/// not part of `PsymailKit`, so this is CCP's own rendering in that language
+/// rather than a reuse: same fixed icon column, same hover fill, same section
+/// headers, drawn with CCP's tokens.
+private struct ShelfOverflowMenu: View {
+    @Environment(ShelfStore.self) private var store
+    let window: ShelfWindowController
+    @Bindable var hiddenFiles: QuickTogglesAdapter
+    let dismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Actions".uppercased())
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .tracking(0.5)
+                .padding(.horizontal, Space.one)
+                .padding(.top, Space.half)
+                .padding(.bottom, Space.quarter)
+            ShelfMenuRow(
+                systemImage: window.isVisible ? "xmark" : "arrow.up.forward.app",
+                title: window.isVisible ? "Hide shelf" : "Open shelf"
+            ) {
+                window.toggle()
+                dismiss()
+            }
+            .accessibilityHint(window.isVisible ? "Hides the floating Files window" : "Shows the floating Files window")
+            if store.selection.isEmpty {
+                ShelfMenuRow(systemImage: "trash", title: "Clear all", isDestructive: true) {
+                    store.clear()
+                    dismiss()
+                }
+                .disabled(!store.hasUnpinnedItems)
+                .help("Removes every unpinned item from Files")
+                .accessibilityHint("Removes every unpinned item from Files")
+            } else {
+                ShelfMenuRow(
+                    systemImage: "trash.fill",
+                    title: "Remove selected (\(store.selection.count))",
+                    isDestructive: true
+                ) {
+                    store.removeSelected()
+                    dismiss()
+                }
+                .help("Removes selected items from Files")
+            }
+            Divider().padding(.vertical, Space.half)
+            Text("Tools".uppercased())
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .tracking(0.5)
+                .padding(.horizontal, Space.one)
+                .padding(.bottom, Space.quarter)
+            hiddenFilesRow
+        }
+        .padding(.vertical, Space.half)
+        .frame(minWidth: Layout.shelfMenuWidth)
+    }
+
+    private var hiddenFilesRow: some View {
         let isOn = hiddenFiles.hiddenFilesShown
         let isBusy = hiddenFiles.isToggling
         return Button {
             hiddenFiles.toggleHiddenFiles()
         } label: {
-            ZStack {
-                Circle()
-                    .fill(isOn ? Color.accentColor.opacity(0.20) : Color.controlFill)
-                    .frame(width: Layout.headerAccessorySize, height: Layout.headerAccessorySize)
-                    .overlay(
-                        Circle().strokeBorder(
-                            isOn ? Color.accentColor.opacity(0.65) : Color.cardStroke,
-                            lineWidth: Stroke.hairline
-                        )
-                    )
+            HStack(spacing: Space.one) {
+                Image(systemName: isOn ? "eye.slash" : "eye")
+                    .fontWeight(.medium)
+                    .frame(width: Layout.rowActionSize)
+                Text("Show hidden files")
+                Spacer(minLength: Space.one)
                 if isBusy {
                     ProgressView()
                         .controlSize(.small)
                         .tint(isOn ? Color.accentColor : Color.secondary)
-                } else {
-                    Image(systemName: isOn ? "eye.slash" : "eye")
+                } else if isOn {
+                    Image(systemName: "checkmark")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
+                        .foregroundStyle(Color.accentColor)
+                        .accessibilityHidden(true)
                 }
             }
-            .contentShape(Circle())
+            .font(.caption)
+            .foregroundStyle(isOn ? Color.accentColor : Color.primary)
+            .padding(.horizontal, Space.one)
+            .padding(.vertical, Space.half)
+            .frame(maxWidth: .infinity, minHeight: Layout.shelfMenuRowHeight)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                    .fill(Color.clear)
+            )
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ShelfMenuRowStyle())
         .disabled(isBusy)
         .help(isOn ? "Hide hidden files — Finder will restart" : "Show hidden files — Finder will restart")
-        .accessibilityLabel("Hidden Files")
-        .accessibilityValue(isOn ? "Shown" : "Hidden")
-        .accessibilityAddTraits(isOn ? .isSelected : [])
+        .accessibilityLabel("Show hidden files")
+        .accessibilityValue(isOn ? "On" : "Off")
         .accessibilityHint("Toggles Finder hidden files. Finder restarts to apply.")
     }
+}
 
-    private var preview: some View {
-        VStack(alignment: .leading, spacing: Space.half) {
-            ForEach(store.items.prefix(6)) { item in
-                WidgetFileRow(item: item)
-                    .contextMenu {
-                        Button(item.isPinned ? "Unpin" : "Pin") { store.togglePin(item.id) }
-                        Button("Remove", role: .destructive) { store.remove(item.id) }
-                    }
+/// One row in the overflow menu: a leading symbol in a fixed column and a
+/// title, with the row's hover fill. psymail's `MenuRow` is not exported by
+/// `PsymailKit`, so this is CCP's own in that shape, in CCP tokens.
+private struct ShelfMenuRow: View {
+    let systemImage: String
+    let title: String
+    var isDestructive = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: Space.one) {
+                Image(systemName: systemImage)
+                    .fontWeight(.medium)
+                    .frame(width: Layout.rowActionSize)
+                Text(title)
+                Spacer(minLength: Space.one)
             }
-            if store.items.count > 6 {
-                Text("+\(store.items.count - 6) more")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, Space.half)
+            .font(.caption)
+            .foregroundStyle(isDestructive ? Color.red : Color.primary)
+            .padding(.horizontal, Space.one)
+            .padding(.vertical, Space.half)
+            .frame(maxWidth: .infinity, minHeight: Layout.shelfMenuRowHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(ShelfMenuRowStyle())
+        .accessibilityLabel(title)
+    }
+}
+
+private struct ShelfMenuRowStyle: ButtonStyle {
+    @State private var hovered = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                hovered || configuration.isPressed
+                    ? Color.menuRowHover
+                    : Color.clear,
+                in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+            )
+            .onHover { hovered = $0 }
+    }
+}
+
+/// The latest files in ~/Downloads, re-read every time the card appears.
+/// Enumeration runs off the main thread so a crowded folder never blocks the
+/// panel opening; thumbnails stay derived in the row, never stored.
+@MainActor
+@Observable
+private final class RecentDownloadsStore {
+    static let maxCount = 9
+
+    var files: [RecentFile] = []
+
+    func reload() async {
+        let files = await Task.detached(priority: .utility, operation: Self.load).value
+        guard !Task.isCancelled else { return }
+        self.files = files
+    }
+
+    nonisolated private static func load() -> [RecentFile] {
+        guard let dir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first else {
+            return []
+        }
+        let keys: [URLResourceKey] = [.contentModificationDateKey, .isDirectoryKey]
+        guard let urls = try? FileManager.default.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: keys,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+        let dated = urls.compactMap { url -> (URL, Date, Bool)? in
+            let values = try? url.resourceValues(forKeys: Set(keys))
+            guard let date = values?.contentModificationDate else { return nil }
+            return (url, date, values?.isDirectory ?? false)
+        }
+        return dated
+            .sorted { $0.1 > $1.1 }
+            .prefix(maxCount)
+            .map { RecentFile(url: $0.0, isDirectory: $0.2) }
+    }
+}
+
+private struct RecentFile: Identifiable {
+    let url: URL
+    let isDirectory: Bool
+
+    var id: String { url.path }
+    var name: String { url.lastPathComponent }
+}
+
+private struct RecentDownloadRow: View {
+    let file: RecentFile
+    @Environment(\.isPanelEditing) private var isPanelEditing
+    @State private var isHovered = false
+
+    var body: some View {
+        Button {
+            if !isPanelEditing {
+                NSWorkspace.shared.open(file.url)
+            }
+        } label: {
+            HStack(spacing: Space.one) {
+                iconPreview
+                Text(file.name)
+                    .font(.caption)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: Space.half)
+                if isHovered {
+                    Image(systemName: "arrow.up.forward.app")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                }
+            }
+            .padding(.vertical, Space.quarter)
+            .padding(.horizontal, Space.quarter)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isPanelEditing)
+        .onHover { isHovered = $0 }
+        .contextMenu {
+            Button("Open") { NSWorkspace.shared.open(file.url) }
+            Button("Show in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([file.url])
             }
         }
-        .padding(.top, Space.half)
+        .accessibilityLabel(file.name)
+        .accessibilityHint("Opens in its default app")
+        .help(file.name)
+        .modifier(RecentDownloadDragModifier(url: file.url))
+    }
+
+    @ViewBuilder
+    private var iconPreview: some View {
+        let previewSize = CGSize(width: Layout.shelfPreviewWidth, height: Layout.shelfPreviewHeight)
+        Group {
+            if file.isDirectory {
+                Image(systemName: "folder.fill")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .frame(width: previewSize.width, height: previewSize.height)
+            } else {
+                FileThumbnailView(
+                    url: file.url,
+                    size: previewSize,
+                    fallbackIcon: NSWorkspace.shared.icon(forFile: file.url.path),
+                    symbolName: "doc.fill"
+                )
+            }
+        }
+        .frame(width: previewSize.width, height: previewSize.height)
+    }
+}
+
+private struct RecentDownloadDragModifier: ViewModifier {
+    let url: URL
+    @Environment(\.isPanelEditing) private var isPanelEditing
+
+    func body(content: Content) -> some View {
+        if isPanelEditing {
+            content
+        } else {
+            content.onDrag {
+                let provider = NSItemProvider()
+                provider.registerObject(url as NSURL, visibility: .all)
+                provider.suggestedName = url.lastPathComponent
+                return provider
+            }
+        }
     }
 }
 
@@ -239,7 +537,7 @@ private struct WidgetFileRow: View {
 
     @ViewBuilder
     private var iconPreview: some View {
-        let previewSize = CGSize(width: 42, height: 56)
+        let previewSize = CGSize(width: Layout.shelfPreviewWidth, height: Layout.shelfPreviewHeight)
         Group {
             if let preview = previewImage {
                 Image(nsImage: preview)
