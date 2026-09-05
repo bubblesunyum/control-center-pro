@@ -97,7 +97,7 @@ private struct ShelfWidgetContent: View {
                     }
                     if !unpinned.isEmpty {
                         if !pinned.isEmpty, !isPinnedCollapsed {
-                            Divider().padding(.vertical, Space.quarter)
+                            Color.clear.frame(height: Space.half)
                         }
                         ForEach(unpinned.prefix(Self.maxSectionRows)) { item in
                             shelfRow(for: item)
@@ -105,9 +105,6 @@ private struct ShelfWidgetContent: View {
                         moreLabel(remaining: unpinned.count - Self.maxSectionRows)
                     }
                     if !downloads.files.isEmpty {
-                        if !store.items.isEmpty {
-                            Divider().padding(.vertical, Space.quarter)
-                        }
                         shelfSectionHeader(title: "Recent Downloads", isCollapsed: isDownloadsCollapsed) {
                             isDownloadsCollapsed.toggle()
                         }
@@ -169,6 +166,8 @@ private struct ShelfWidgetContent: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .padding(.top, Space.oneHalf)
+        .padding(.bottom, Space.half)
         .accessibilityLabel("\(title) section")
         .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
         .accessibilityHint(isCollapsed ? "Expands this section" : "Collapses this section")
