@@ -6,38 +6,27 @@ import SwiftUI
 
 /// The handle a card is resized by: bottom-trailing corner, edit mode only.
 ///
-/// Dragging counts whole steps of the widget's base size — one lane-unit
-/// right is one width step, one base-height down is one height step — and the
-/// lane draws the preview live. On release the span commits once, or snaps
-/// back when a wider lane would hang off the screen.
-///
-/// The drag previews in the editor and never touches the layout mid-gesture,
-/// so the card stays in its lane and this per-card gesture's view identity
-/// stays put — which is why a per-card gesture is safe here and would hang a
-/// reorder. VoiceOver users get the same steps as actions.
+/// It is a mark rather than a button — the iPadOS windowing resize tick, a
+/// short rounded corner hugging the card's own. The drag itself belongs to
+/// the panel-level gesture, which hit-tests the press against the frames this
+/// reports: a per-card gesture never reliably saw the touch, and the panel's
+/// already gets every one. VoiceOver users get the same steps as actions.
 struct ResizeGrip: View {
     let slot: LaneSlot
     let lane: Int
     let arrangement: PanelArrangement
     let editor: PanelEditor
 
-    /// The step the drag counts in. The widget's own base size, not its
-    /// current one: steps stay the same width wherever the drag starts.
-    private var baseSize: CGSize {
-        CGSize(
-            width: Layout.laneWidth,
-            height: slot.instance?.descriptor.size.height ?? WidgetSize.regular.height
-        )
-    }
-
     var body: some View {
-        Image(systemName: "arrow.up.left.and.arrow.down.right")
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .padding(Space.half)
+        CornerTick()
+            .stroke(.secondary, style: StrokeStyle(lineWidth: Stroke.resizeTick, lineCap: .round, lineJoin: .round))
+            .frame(width: Layout.resizeTickLength, height: Layout.resizeTickLength)
+            // A generous target around a small mark. Inset a full step inside
+            // the corner: flush to the edge, the tick straddles the card's
+            // hairline and reads as a broken border rather than a mark.
+            .padding(Space.oneHalf)
             .contentShape(Rectangle())
             .background { gripReporter }
-            .gesture(resizeGesture)
             .accessibilityLabel("Resize \(slot.title)")
             .accessibilityValue("\(slot.span.width) by \(slot.span.height)")
             .accessibilityAction(named: "Make wider") { step(by: CGSize(width: 1, height: 0)) }
@@ -46,41 +35,16 @@ struct ResizeGrip: View {
             .accessibilityAction(named: "Make shorter") { step(by: CGSize(width: 0, height: -1)) }
     }
 
-    private var resizeGesture: some Gesture {
-        DragGesture()
-            .onChanged { value in
-                if editor.resizePreview == nil {
-                    editor.beginResize(slot.id, from: slot.span)
-                }
-                // A second finger's drag never steers the preview already in
-                // flight — beginResize refused to preempt it above.
-                guard editor.resizePreview?.id == slot.id else { return }
-                editor.updateResize(translation: value.translation, from: slot.span, baseSize: baseSize)
-            }
-            .onEnded { _ in
-                defer { editor.endResize() }
-                guard let preview = editor.resizePreview, preview.id == slot.id else { return }
-                commit(preview.span)
-            }
-    }
-
     /// One step from the stored span, through the commit path — so the
     /// keyboard and VoiceOver actions meet the same refusal rule as the drag.
     private func step(by delta: CGSize) {
-        commit(WidgetSpan(
-            width: slot.span.width + Int(delta.width),
-            height: slot.span.height + Int(delta.height)
-        ))
-    }
-
-    /// The span through the commit path: refused when a wider lane would hang
-    /// off the screen, which snaps the preview back instead.
-    private func commit(_ span: WidgetSpan) {
-        if span.width != slot.span.width {
-            let offered = slot.resized(to: span).width
-            guard editor.canResizeLane(lane, to: offered, laneWidths: arrangement.laneWidths) else { return }
-        }
-        arrangement.resize(slot.id, to: span)
+        commitResize(
+            WidgetSpan(
+                width: slot.span.width + Int(delta.width),
+                height: slot.span.height + Int(delta.height)
+            ),
+            of: slot, in: lane, arrangement: arrangement, editor: editor
+        )
     }
 
     private var gripReporter: some View {
@@ -93,10 +57,44 @@ struct ResizeGrip: View {
     }
 }
 
+/// A short rounded corner: a horizontal arm along the bottom meeting a
+/// vertical arm up the trailing edge.
+private struct CornerTick: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        return path
+    }
+}
+
+/// The one resize commit: the drag's release and the VoiceOver step both go
+/// through here, so the refusal rule lives in exactly one place.
+///
+/// A wider lane that would hang off the screen is refused rather than
+/// written, and the preview snaps back instead. Returns whether the span
+/// landed.
+@discardableResult
+@MainActor
+func commitResize(
+    _ span: WidgetSpan, of slot: LaneSlot, in lane: Int,
+    arrangement: PanelArrangement, editor: PanelEditor
+) -> Bool {
+    if span.width != slot.span.width {
+        let offered = slot.resized(to: span).width
+        guard editor.canResizeLane(lane, to: offered, laneWidths: arrangement.laneWidths) else {
+            return false
+        }
+    }
+    arrangement.resize(slot.id, to: span)
+    return true
+}
+
 /// Where the resize grips are, in panel coordinates. The panel-level drag
 /// gesture reads these the way it reads header frames: a press starting on a
-/// grip belongs to the grip, and lifting the card under it would answer a
-/// resize with a reorder.
+/// grip begins a resize, and lifting the card under it would answer a resize
+/// with a reorder.
 struct GripFrame: Equatable {
     let id: WidgetID
     let frame: CGRect

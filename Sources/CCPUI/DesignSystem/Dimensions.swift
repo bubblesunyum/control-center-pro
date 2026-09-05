@@ -23,6 +23,10 @@ public enum Stroke {
     /// The hairline around a card. One point, not one pixel — on a Retina
     /// display a 1px line is thinner than the system draws its own.
     public static let hairline: CGFloat = 1
+    /// The resize tick's weight. Heavier than a hairline on purpose, and held
+    /// here rather than inline: the tick is a bare mark on glass with no
+    /// surrounding chrome, so its legibility is the number.
+    public static let resizeTick: CGFloat = 2.5
 }
 
 /// The panel and its cards are a nested pair of rounded rectangles: the card
@@ -74,6 +78,11 @@ public enum Layout {
     static let clipboardPreviewHeight: CGFloat = 160
     /// Max width of the full-text preview at the bottom of the clipboard context menu.
     static let clipboardMenuMaxWidth: CGFloat = 320
+    /// The resize tick's arm length. Fourteen points sits deliberately between
+    /// the Space steps, and stays a token rather than an inline number so the
+    /// measured value has one home: what the captures verified is a corner
+    /// mark at this length and weight, not a frame.
+    static let resizeTickLength: CGFloat = 14
     /// How wide a lane of cards is. A lane holding a `.screen` widget is wider
     /// — see `WidgetSize.width` — but this is the width of every other one,
     /// and of a lane that does not exist yet.

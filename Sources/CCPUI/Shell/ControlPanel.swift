@@ -129,10 +129,21 @@ public struct ControlPanel: View {
                 // mutate the layout behind it.
                 guard !editor.isShowingGallery else { return }
                 if editor.isEditing {
-                    // A press starting on a resize grip belongs to the grip —
-                    // lifting the card under it would answer a resize with a
-                    // reorder.
-                    if gripFrames.contains(where: { $0.frame.contains(value.startLocation) }) { return }
+                    // A resize in flight steers by translation; a press
+                    // starting on a grip begins one. Both return before the
+                    // reorder path — answering a resize with a reorder is the
+                    // failure these guards exist to prevent. A stale grip
+                    // frame with no slot behind it falls through to reorder,
+                    // which is what a press on a card means.
+                    if editor.resizePreview != nil {
+                        editor.updateResize(translation: value.translation)
+                        return
+                    }
+                    if let grip = gripFrames.first(where: { $0.frame.contains(value.startLocation) }),
+                       let slot = arrangement.slot(for: grip.id) {
+                        editor.beginResize(grip.id, from: slot.span, baseSize: slot.resizeStep)
+                        return
+                    }
                     // Normal reorder — require a tiny move before lifting to
                     // avoid lifting on a plain click.
                     if editor.lifted == nil {
@@ -150,7 +161,7 @@ public struct ControlPanel: View {
                         return
                     }
                     guard let headerHit = headerFrames.first(where: { $0.frame.contains(value.startLocation) }) else { return }
-                    let moved = hypot(value.translation.width, value.translation.height) > 4
+                    let moved = hypot(value.translation.width, value.translation.height) > Space.half
 
                     // Moved before hold completed — cancel and ignore this press.
                     if moved {
@@ -180,6 +191,18 @@ public struct ControlPanel: View {
                 holdTask?.cancel()
                 holdTask = nil
                 holdWidgetID = nil
+                // A resize commits once, on release — or snaps back when a
+                // wider lane would hang off the screen.
+                if let preview = editor.resizePreview {
+                    editor.endResize()
+                    if let slot = arrangement.slot(for: preview.id),
+                       let lane = arrangement.layout.position(of: preview.id)?.lane {
+                        commitResize(
+                            preview.span, of: slot, in: lane,
+                            arrangement: arrangement, editor: editor
+                        )
+                    }
+                }
                 guard let lifted = editor.lifted else { return }
                 // previewLanding was computed from the frozen snapshot on each
                 // drag frame; commit a single layout mutation on drop rather
@@ -358,6 +381,17 @@ extension LaneSlot {
         switch self {
         case .widget(let widget, _): return .widget(widget, span)
         case .unavailable: return self
+        }
+    }
+
+    /// The step a resize drag counts in: the widget's own base size, not its
+    /// current span, so steps stay the same width wherever the drag starts.
+    var resizeStep: CGSize {
+        switch self {
+        case .widget(let widget, _):
+            return CGSize(width: Layout.laneWidth, height: widget.descriptor.size.height)
+        case .unavailable:
+            return CGSize(width: Layout.laneWidth, height: WidgetSize.compact.height)
         }
     }
 

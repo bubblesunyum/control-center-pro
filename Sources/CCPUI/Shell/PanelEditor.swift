@@ -190,29 +190,36 @@ public final class PanelEditor {
     public struct ResizePreview: Equatable {
         let id: WidgetID
         var span: WidgetSpan
+        /// The span the drag started from. The preview never touches the
+        /// layout mid-gesture, but the gesture may outlive the view that
+        /// started it — so the origin travels with the preview rather than
+        /// being re-read off a slot.
+        let start: WidgetSpan
+        /// The step the drag counts in: the widget's base size, so steps stay
+        /// the same width wherever the drag starts.
+        let baseSize: CGSize
     }
 
-    public func beginResize(_ id: WidgetID, from span: WidgetSpan) {
+    public func beginResize(_ id: WidgetID, from start: WidgetSpan, baseSize: CGSize) {
         // One grip at a time: a second finger never preempts the drag already
         // in flight, or the two releases wipe each other's preview out.
         guard resizePreview == nil else { return }
-        resizePreview = ResizePreview(id: id, span: span)
+        resizePreview = ResizePreview(id: id, span: start, start: start, baseSize: baseSize)
     }
 
-    /// The drag's translation, counted in whole steps of the widget's base
-    /// size from the span it started at: one lane-unit right is one width
-    /// step, one base-height down is one height step. The span clamps to
-    /// 1x–3x on the way in, so a wild drag parks at the end rather than
-    /// somewhere meaningless.
-    public func updateResize(translation: CGSize, from start: WidgetSpan, baseSize: CGSize) {
-        guard resizePreview != nil else { return }
+    /// The drag's translation, counted in whole steps from the span it
+    /// started at: one lane-unit right is one width step, one base-height
+    /// down is one height step. The span clamps to 1x–3x on the way in, so a
+    /// wild drag parks at the end rather than somewhere meaningless.
+    public func updateResize(translation: CGSize) {
+        guard let preview = resizePreview else { return }
         let next = WidgetSpan(
-            width: start.width + Int((translation.width / baseSize.width).rounded()),
-            height: start.height + Int((translation.height / baseSize.height).rounded())
+            width: preview.start.width + Int((translation.width / preview.baseSize.width).rounded()),
+            height: preview.start.height + Int((translation.height / preview.baseSize.height).rounded())
         )
         // Assigning the same span still notifies observers, and the window
         // tracker re-fits on every one — so only a changed step lands.
-        guard next != resizePreview?.span else { return }
+        guard next != preview.span else { return }
         resizePreview?.span = next
     }
 
