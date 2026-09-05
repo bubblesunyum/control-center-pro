@@ -340,6 +340,17 @@ public final class NotesAdapter {
     /// write lands on top of them they are copied to a key nothing else
     /// touches, so a later build — or the user with `defaults read` — can get
     /// them back.
+    /// A document rescued from an earlier unreadable state, if this build can
+    /// read it now. Without this the backup is only reachable by hand, which
+    /// is not a recovery path — it is a consolation.
+    private func rescuedDocument() -> NotesDocument? {
+        guard let data = defaults.data(forKey: rescueKey),
+              let document = try? JSONDecoder().decode(NotesDocument.self, from: data)
+        else { return nil }
+        defaults.removeObject(forKey: rescueKey)
+        return document
+    }
+
     private func rescueUnreadableDocument() {
         isStoredDocumentUnreadable = false
         guard let stored = defaults.object(forKey: documentKey),
@@ -360,13 +371,18 @@ public final class NotesAdapter {
 
         if let stored = defaults.object(forKey: documentKey) {
             let data = stored as? Data
-            guard let decoded = data.flatMap({ try? JSONDecoder().decode(NotesDocument.self, from: $0) }) else {
-                // Bytes we cannot read are still the user's notes. Show an
-                // empty document, but leave the stored value exactly where it
-                // is: a build that understands it again can recover it, and
-                // writing over it cannot be taken back.
-                apply(.initial(defaultName: defaultName))
-                lastSavedDocument = nil
+            guard let decoded = data.flatMap({ try? JSONDecoder().decode(NotesDocument.self, from: $0) })
+                ?? rescuedDocument()
+            else {
+                // Bytes we cannot read are still the user's notes. Stand an
+                // empty document in front of them, and treat it as already
+                // saved so that closing the panel — which flushes — writes
+                // nothing. Only an edit the user makes on purpose is allowed
+                // to land on top, and even then the old bytes are copied aside
+                // first.
+                let placeholder = NotesDocument.initial(defaultName: defaultName)
+                apply(placeholder)
+                lastSavedDocument = placeholder
                 isStoredDocumentUnreadable = true
                 return
             }
@@ -411,8 +427,10 @@ public final class NotesAdapter {
 
     @discardableResult
     private func persist(_ document: NotesDocument) -> Bool {
-        if isStoredDocumentUnreadable { rescueUnreadableDocument() }
+        // Equality first: an unchanged document must not trigger the rescue,
+        // because the rescue clears the flag that guards the bytes.
         if document == lastSavedDocument { return true }
+        if isStoredDocumentUnreadable { rescueUnreadableDocument() }
         guard let data = document.encoded() else { return false }
         defaults.set(data, forKey: documentKey)
         guard defaults.data(forKey: documentKey) == data else { return false }

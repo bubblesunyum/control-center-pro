@@ -59,6 +59,40 @@ final class NotesDocumentStorageTests: XCTestCase {
         store.removePersistentDomain(forName: name)
     }
 
+    /// The close that follows an unreadable load flushes like any other, and a
+    /// flush used to write the empty stand-in over the live key.
+    func testClosingThePanelWithoutEditingWritesNothing() throws {
+        let name = "ccp.notes.noedit.\(UUID().uuidString)"
+        let store = try defaults(name)
+        let garbage = Data("{\"this\":\"is not a document\"}".utf8)
+        store.set(garbage, forKey: "scratchpadDocument")
+
+        let adapter = NotesAdapter(defaults: store, defaultName: "Note")
+        adapter.activate()
+        adapter.deactivate()
+
+        XCTAssertEqual(store.data(forKey: "scratchpadDocument"), garbage,
+                       "an open and close with no edit must leave the bytes alone")
+        XCTAssertNil(store.data(forKey: "scratchpadDocument.unreadable"),
+                     "and must not have needed the rescue key at all")
+        store.removePersistentDomain(forName: name)
+    }
+
+    /// A backup nothing reads back is not a recovery path.
+    func testARescuedDocumentIsReadBackWhenThisBuildCanDecodeIt() throws {
+        let name = "ccp.notes.readback.\(UUID().uuidString)"
+        let store = try defaults(name)
+        store.set(Data("not a document".utf8), forKey: "scratchpadDocument")
+        store.set(storedJSON(key: "pads"), forKey: "scratchpadDocument.unreadable")
+
+        let adapter = NotesAdapter(defaults: store, defaultName: "Note")
+
+        XCTAssertEqual(adapter.text, "kept", "the rescued notes come back")
+        XCTAssertNil(store.data(forKey: "scratchpadDocument.unreadable"),
+                     "and the rescue key is consumed, not left to shadow later edits")
+        store.removePersistentDomain(forName: name)
+    }
+
     func testTheFirstRealEditMovesUnreadableBytesAsideRatherThanOverThem() throws {
         let name = "ccp.notes.rescue.\(UUID().uuidString)"
         let store = try defaults(name)

@@ -121,6 +121,14 @@ struct NoteTabRail: View {
     // MARK: Renaming
 
     private func beginRename(_ note: Note) {
+        // One draft and one focus flag serve every row, so moving straight
+        // from renaming one tab to renaming another never blurs the first —
+        // `isRenaming` is already true and `onChange` does not fire. Commit it
+        // here instead of dropping what the user typed.
+        if let inFlight = renaming, inFlight != note.id,
+           let previous = adapter.notes.first(where: { $0.id == inFlight }) {
+            commitRename(previous)
+        }
         adapter.selectNote(note.id)
         renameDraft = note.name
         renaming = note.id
