@@ -26,7 +26,7 @@ public enum Stroke {
     /// The resize tick's weight. Heavier than a hairline on purpose, and held
     /// here rather than inline: the tick is a bare mark on glass with no
     /// surrounding chrome, so its legibility is the number.
-    public static let resizeTick: CGFloat = 2.5
+    public static let resizeTick: CGFloat = 3.5
 }
 
 /// The panel and its cards are a nested pair of rounded rectangles: the card
@@ -64,9 +64,14 @@ public enum Layout {
     static let noteTabRailWidth: CGFloat = 84
     /// One tab in that rail. Twelve of them plus the new-note row is the most
     /// there can ever be, and at this height they still fit beside the editor
-    /// without the rail needing to scroll — which is what keeps the join
-    /// between the selected tab and the note computable from an index.
+    /// without the rail needing to scroll — which is what keeps the tab card
+    /// a short fixed column.
     static let noteTabHeight: CGFloat = 24
+    /// How far the note container tucks over the tab card's trailing edge: a
+    /// small overlap, enough that the selected tab reads as flowing under the
+    /// note rather than parked beside it. The rail's content clears this
+    /// strip, so no control ever sits half under the note.
+    static let noteTuck: CGFloat = Space.one
 
     /// Size of a row's leading icon and trailing menu button.
     static let rowActionSize: CGFloat = 22
@@ -86,7 +91,11 @@ public enum Layout {
     /// How far the grip's touch area overshoots its drawn box, on every side.
     /// Near-misses on the corner must land. Kept inside the shell's 12pt
     /// gutters, so the area never reaches into the neighbouring card.
-    static let resizeGripOvershoot: CGFloat = 8
+    static let resizeGripOvershoot: CGFloat = 10
+    /// How much the grip's tick grows on hover. Slight on purpose — it is a
+    /// mark hugging the card's edge, not a button — just enough to answer the
+    /// pointer before the press.
+    static let resizeGripHoverScale: CGFloat = 1.2
     /// How wide a lane of cards is. A lane holding a `.screen` widget is wider
     /// — see `WidgetSize.width` — but this is the width of every other one,
     /// and of a lane that does not exist yet.

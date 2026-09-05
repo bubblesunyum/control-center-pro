@@ -8,9 +8,9 @@ import SwiftUI
 /// somewhere else — written in the panel and kept in tabs.
 ///
 /// The card is two objects rather than one. The Notes card carries the title
-/// and the way out to Craft; raised above it, a rail of tabs and the note it
-/// belongs to share a single outline, so the selected tab reads as the note's
-/// front edge. ``NoteSurface`` owns that pair.
+/// and the way out to Craft; raised above it, the note floats over its own
+/// rail of tabs, and the selected tab reads as flowing under the note's edge.
+/// ``NoteSurface`` owns that pair.
 ///
 /// Document mechanics (tabs, retention, debounced UserDefaults persistence) are
 /// the values Vorssaint's floating pad uses, via `NotesAdapter`, so a note

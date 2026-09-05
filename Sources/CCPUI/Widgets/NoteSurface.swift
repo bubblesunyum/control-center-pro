@@ -4,36 +4,32 @@
 import CCPKit
 import SwiftUI
 
-/// The rail of tabs and the note, drawn as one raised object above the Notes
-/// card: the selected tab is the note's front edge, and the two share a single
-/// outline supplied by ``NoteJoinedShape``.
+/// The rail of tabs and the note as two objects, not one: the tab list is its
+/// own card floating beneath the note, offset left so only its trailing edge
+/// tucks under it. The note sits above in the z-order, and the selected tab's
+/// name row is where the two visibly meet — joined by overlap rather than by
+/// a shared outline, so each container carries its own elevation.
 struct NoteSurface: View {
     @Bindable var adapter: NotesAdapter
     let onCloseRequest: (Note) -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            NoteTabRail(adapter: adapter, onCloseRequest: onCloseRequest)
-                .frame(width: Layout.noteTabRailWidth)
+        HStack(alignment: .top, spacing: -Layout.noteTuck) {
+            tabs
+                .zIndex(0)
             note
+                .zIndex(1)
         }
-        .background(joined.fill(Color.controlFill))
-        .background(joined.fill(.background.opacity(0.35)))
-        .background(joined.fill(Color.noteScrim))
-        .overlay(joined.stroke(Color.cardStroke, lineWidth: Stroke.hairline))
-        .shadow(color: .cardShadow, radius: Space.one, y: Space.quarter)
+        // The join no longer slides anywhere, but the selected row still
+        // cross-fades.
         .animation(.snappy(duration: 0.22), value: adapter.selectedNoteID)
     }
 
-    private var joined: NoteJoinedShape {
-        NoteJoinedShape(tabTop: NoteTabRail.tabTop(forIndex: selectedIndex),
-                        railWidth: Layout.noteTabRailWidth,
-                        tabHeight: Layout.noteTabHeight,
-                        radius: Radius.control)
-    }
-
-    private var selectedIndex: Int {
-        adapter.notes.firstIndex { $0.id == adapter.selectedNoteID } ?? 0
+    /// The tab list as its own card.
+    private var tabs: some View {
+        NoteTabRail(adapter: adapter, onCloseRequest: onCloseRequest)
+            .frame(width: Layout.noteTabRailWidth)
+            .noteCardChrome()
     }
 
     // MARK: The note
@@ -56,6 +52,27 @@ struct NoteSurface: View {
             NoteToolbar(adapter: adapter)
         }
         .frame(maxWidth: .infinity)
+        .noteCardChrome()
+    }
+}
+
+/// The skin both Notes containers share: the fills, hairline and shadow the
+/// single surface used to draw once, now drawn per piece now that the two
+/// honestly overlap.
+private struct NoteCardChrome: ViewModifier {    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+        content
+            .background(shape.fill(Color.controlFill))
+            .background(shape.fill(.background.opacity(0.35)))
+            .background(shape.fill(Color.noteScrim))
+            .overlay(shape.stroke(Color.cardStroke, lineWidth: Stroke.hairline))
+            .shadow(color: .cardShadow, radius: Space.one, y: Space.quarter)
+    }
+}
+
+private extension View {
+    func noteCardChrome() -> some View {
+        modifier(NoteCardChrome())
     }
 }
 

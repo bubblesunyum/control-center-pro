@@ -6,10 +6,9 @@ import SwiftUI
 
 /// The column of note tabs down the leading edge of the Notes card.
 ///
-/// The rail never scrolls: a note count is capped low enough that every tab
-/// plus the new-note row fits beside the editor. That is a constraint worth
-/// keeping — it is what lets ``NoteJoinedShape`` find the selected tab from its
-/// index rather than from a preference that arrives a frame late.
+/// The rail never scrolls: the note count is capped low enough that every tab
+/// plus the new-note row fits beside the editor, so the tab card stays a
+/// short fixed column rather than growing a scroll region of its own.
 struct NoteTabRail: View {
     @Bindable var adapter: NotesAdapter
     let onCloseRequest: (Note) -> Void
@@ -26,16 +25,15 @@ struct NoteTabRail: View {
             newNoteButton
             Spacer(minLength: 0)
         }
+        // The note tucks over this card's trailing edge, so the rail's
+        // content ends where the overlap begins: a close button half under
+        // the note is a control that looks broken and lands half its taps on
+        // the wrong card.
+        .padding(.trailing, Layout.noteTuck)
     }
 
-    /// Where tab `index` starts, measured from the top of the rail. The join
-    /// is drawn from this, so the arithmetic lives beside the stack it
-    /// describes.
+    /// The gap between tab rows.
     static let rowSpacing = Space.quarter
-
-    static func tabTop(forIndex index: Int) -> CGFloat {
-        CGFloat(index) * (Layout.noteTabHeight + rowSpacing)
-    }
 
     // MARK: Rows
 

@@ -17,6 +17,8 @@ struct ResizeGrip: View {
     let arrangement: PanelArrangement
     let editor: PanelEditor
 
+    @State private var isHovered = false
+
     var body: some View {
         CornerTick()
             .stroke(.white, style: StrokeStyle(lineWidth: Stroke.resizeTick, lineCap: .round))
@@ -28,7 +30,15 @@ struct ResizeGrip: View {
             .contentShape(Rectangle())
             // White on glass needs a shadow to read over a light wallpaper.
             .shadow(color: .cardShadow, radius: 2, y: 1)
+            // The tick answers the pointer before the press: slightly larger
+            // on hover, on a spring with a little give that still settles
+            // fast. Anchored to the corner so the growth never leaves the
+            // edge it hugs.
+            .scaleEffect(isHovered ? Layout.resizeGripHoverScale : 1, anchor: .bottomTrailing)
+            .animation(.spring(response: 0.32, dampingFraction: 0.55), value: isHovered)
+            .onHover { isHovered = $0 }
             .background { gripReporter }
+            .help("Drag to resize")
             .accessibilityLabel("Resize \(slot.title)")
             .accessibilityValue("\(slot.span.width) by \(slot.span.height)")
             .accessibilityAction(named: "Make wider") { step(by: CGSize(width: 1, height: 0)) }
