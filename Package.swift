@@ -197,6 +197,9 @@ let package = Package(
             dependencies: [
                 "VorssaintEngines",
                 .product(name: "PsymailKit", package: "psymail-mini"),
+                // The Craft sync splitter cuts the pad with the same grammar
+                // the editor styles with (ccp-xgl).
+                .product(name: "MarkdownEngine", package: "swift-markdown-engine"),
             ],
             path: "Sources/CCPKit"
         ),

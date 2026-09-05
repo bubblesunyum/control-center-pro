@@ -7,9 +7,10 @@ import SwiftUI
 /// A note edited as live-styled Markdown: the text *is* the document, and the
 /// markers hide themselves until the caret lands on one.
 ///
-/// The one file that names `MarkdownEngine`, so the widgets above it see a
-/// CCP view and an upstream change lands here — the same rule the engine
-/// adapters follow in `CCPKit`.
+/// The one view file that names `MarkdownEngine`, so the widgets above it see
+/// a CCP view and an upstream change lands here — the same rule the engine
+/// adapters follow in `CCPKit`. (`CCPKit`'s sync splitter names it too, for
+/// the block AST only, never a view.)
 ///
 /// A ~148pt card is not the full-window notes app the engine was written for,
 /// so its defaults are retuned rather than accepted: the heading ramp is

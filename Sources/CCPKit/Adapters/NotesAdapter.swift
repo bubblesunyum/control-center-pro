@@ -283,6 +283,12 @@ public final class NotesAdapter {
     @ObservationIgnored private let documentKey = "scratchpadDocument"
     @ObservationIgnored private let retentionKey = "scratchpadRetention"
     @ObservationIgnored private let rescueKey = "scratchpadDocument.unreadable"
+    // The Craft block-id sidecar (ccp-xgl): pad id to the (block id, hash)
+    // pairing the push diffs against. Ours, not upstream's, so it lives
+    // under its own key — sync bookkeeping, never note text.
+    @ObservationIgnored private let sidecarKey = "scratchpadCraftSidecars"
+    @ObservationIgnored private let sidecarsRescueKey = "scratchpadCraftSidecars.unreadable"
+    @ObservationIgnored private var isStoredSidecarsUnreadable = false
 
     public convenience init() {
         self.init(defaults: .standard, defaultName: "Note")
@@ -469,8 +475,56 @@ public final class NotesAdapter {
     @discardableResult
     public func closeNote(_ id: UUID) -> Bool {
         guard let document, let next = document.removing(id), persist(next) else { return false }
+        dropSidecar(for: id)
         apply(next)
         return true
+    }
+
+    // MARK: - Craft block-id sidecar
+
+    /// The sidecar for a pad, or empty when it never synced. Bytes that do
+    /// not decode read as never-synced — like the document, a failed decode
+    /// is bytes we do not understand, never bytes we may replace.
+    public func sidecar(for id: UUID) -> BlockSidecar {
+        storedSidecars()[id.uuidString] ?? BlockSidecar()
+    }
+
+    public func storeSidecar(_ sidecar: BlockSidecar, for id: UUID) {
+        var all = storedSidecars()
+        all[id.uuidString] = sidecar
+        persistSidecars(all)
+    }
+
+    public func dropSidecar(for id: UUID) {
+        var all = storedSidecars()
+        guard all.removeValue(forKey: id.uuidString) != nil else { return }
+        persistSidecars(all)
+    }
+
+    private func storedSidecars() -> [String: BlockSidecar] {
+        guard let data = defaults.data(forKey: sidecarKey) else { return [:] }
+        guard let decoded = try? JSONDecoder().decode([String: BlockSidecar].self, from: data) else {
+            isStoredSidecarsUnreadable = true
+            return [:]
+        }
+        return decoded
+    }
+
+    private func persistSidecars(_ sidecars: [String: BlockSidecar]) {
+        guard let data = try? JSONEncoder().encode(sidecars) else { return }
+        if isStoredSidecarsUnreadable { rescueUnreadableSidecars() }
+        defaults.set(data, forKey: sidecarKey)
+    }
+
+    /// Bytes we cannot read are still some later build's recovery path. Copied
+    /// aside before the healing write lands on top, like the document — and
+    /// only once, so a second corruption never eats the first copy.
+    private func rescueUnreadableSidecars() {
+        isStoredSidecarsUnreadable = false
+        guard let stored = defaults.object(forKey: sidecarKey),
+              defaults.object(forKey: sidecarsRescueKey) == nil
+        else { return }
+        defaults.set(stored, forKey: sidecarsRescueKey)
     }
 
     // MARK: - Actions
