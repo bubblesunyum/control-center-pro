@@ -1,15 +1,15 @@
 {
-  "generated": "19:04:47",
+  "generated": "19:38:07",
   "project": "control-center-pro",
   "git": {
     "branch": "spike/markdown-engine",
     "upstream": "",
     "dirty": 3,
-    "commits_today": 18,
+    "commits_today": 24,
     "last": {
-      "sha": "833e99c",
-      "subject": "ledger export (ccp-xgl)",
-      "when": "11 minutes ago"
+      "sha": "5e7ce1c",
+      "subject": "review: an unedited close no longer writes over unreadable notes (ccp-uqn)",
+      "when": "12 seconds ago"
     },
     "unpushed": [],
     "unpushed_beads": [],
@@ -17,13 +17,41 @@
   },
   "ledger": {
     "counts": {
-      "open": 62,
-      "ready": 55,
+      "open": 65,
+      "ready": 58,
       "in_progress": 0,
-      "closed": 99,
+      "closed": 106,
       "blocked": 0
     },
     "issues": [
+      {
+        "id": "ccp-ydo",
+        "title": "[epic] Notes: rename the scratchpad and rebuild its chrome as two overlapping containers",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "epic",
+        "parent": "",
+        "updated_at": "2026-09-05T00:08:54Z",
+        "created_at": "2026-09-05T00:08:54Z",
+        "deps": [],
+        "description": "",
+        "design": "Specified by the user 2026-09-05. The scratchpad becomes NOTES, and its chrome\nstops being one flat card with a horizontal tab strip. It becomes two objects\nthat overlap and read as one continuous shape, the way Apple's Notes reads:\n\n  \u250c\u2500 Notes \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 [\u2197] \u2510   \u2190 the notes card: header + toolbar\n  \u2502 \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510                       \u2502\n  \u2502 \u2502 tab    \u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510   \u2502  \u2190 the SELECTED tab is elevated, and\n  \u2502 \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524                   \u2502   \u2502    blends from its right border into\n  \u2502 \u2502 tab    \u2502   the note        \u2502   \u2502    the note container: one shape, no\n  \u2502 \u2502 tab    \u2502                   \u2502   \u2502    seam\n  \u2502 \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2524 [note toolbar]    \u2502   \u2502\n  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2518\n\nThree pieces, and they are separable:\n\n1. THE NOTES CARD (the main window). Rounded container. Header reads\n   \"Notes  [flex space]  [\u2197 button]\"; the button opens the Craft app on this\n   machine. Under the header, the tabs run VERTICALLY, not horizontally.\n\n2. THE TAB LIST. One row per note. Each carries an X on its right for closing.\n   Rename and Delete live in the right-click menu. Double-clicking the selected\n   tab's name edits it in place \u2014 no alert sheet (today's rename is an .alert,\n ",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": [
+          "ccp-ydo.5",
+          "ccp-ydo.3",
+          "ccp-ydo.2",
+          "ccp-ydo.1",
+          "ccp-ydo.6",
+          "ccp-ydo.4"
+        ]
+      },
       {
         "id": "ccp-jqj",
         "title": "ask upstream to make MarkdownEngine's block AST and per-range editability public",
@@ -242,6 +270,48 @@
           "ccp-dot",
           "ccp-2zi.7"
         ]
+      },
+      {
+        "id": "ccp-ydo.6",
+        "title": "auto-title a new note from its first content, once, via Apple Intelligence",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "feature",
+        "parent": "ccp-ydo",
+        "updated_at": "2026-09-05T00:15:11Z",
+        "created_at": "2026-09-05T00:15:11Z",
+        "deps": [],
+        "description": "",
+        "design": "Specified by the user 2026-09-05. A brand-new note is called \"Note 3\" and stays\nthat way, so a vertical tab list of them is a list of numbers. Fix it by naming\nthe note from what the user actually wrote.\n\nTrigger, exactly once per tab: the note was created empty, content has been\nadded for the first time, and typing has been idle for 6 seconds. Then summarise\nthe text into a short tab name and rename the tab. NEVER runs again for that\ntab \u2014 not on later edits, not on reopen. The once-ness is per-tab durable state,\nso it is a field on the pad (an `didAutoTitle` bool, or nil-vs-set on a\n`titleSource`), persisted with it \u2014 not a runtime flag that resets when the\npanel closes.\n\nA user who renames the tab by hand before the timer fires wins: manual naming\ncancels the hook permanently for that tab.\n\n## The Apple Intelligence surface\n\nFoundation Models (`import FoundationModels`, macOS 26 \u2014 CCP's deployment target\nis already 26.0, so no gating needed) gives an on-device\n`SystemLanguageModel` + `LanguageModelSession`. On-device matters here: notes\nare private, and nothing should leave the machine to get a tab name.\n\nAvailability is NOT guaranteed \u2014 `SystemLanguageModel.default.availability",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-13f",
+        "title": "the rest of the widgets dim while the user is typing in Notes",
+        "status": "open",
+        "ready": true,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "feature",
+        "parent": "",
+        "updated_at": "2026-09-05T00:09:36Z",
+        "created_at": "2026-09-05T00:09:36Z",
+        "deps": [],
+        "description": "",
+        "design": "Specified by the user 2026-09-05. A few seconds after typing starts in the note\nfield, every OTHER widget in the panel fades to 69% opacity, so the note is the\nonly lit thing. They come back to full when:\n  \u2022 the mouse moves over them, or\n  \u2022 nothing at all has happened \u2014 no typing, no scroll, no interaction \u2014 for 12\n    seconds, or\n  \u2022 the widgets are hidden (panel closes): reset to normal, never restore into\n    a dimmed panel.\n\nShape it as a CAPABILITY, not a Notes feature \u2014 per CLAUDE.md, an override flag\nthreaded from the note editor into every card is the thing to avoid. The right\nseam is a panel-level focus observable that any widget can DECLARE it is being\nworked in (\"I am the focused work surface\"), plus a modifier the shell applies\nto everyone else. Notes is the first caller; a future widget with a text field\ngets it free.\n\nTwo clocks, and they are different \u2014 do not collapse them: the ~few-second\ndelay before dimming is \"the user has settled into typing\", and the 12-second\none is \"the user has stopped doing anything at all\". Both are tokens in the\ndesign system, not literals (see ccp-srw).\n\nThe fades animate. Nothing about this should snap.\n\nTrap to respect: for-await ca",
+        "notes": "",
+        "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
       },
       {
         "id": "ccp-z0a",
@@ -1396,6 +1466,153 @@
         "design": "",
         "notes": "",
         "close_reason": "",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-uqn",
+        "title": "[bug] the Notes rename destroyed the stored document, and load overwrote bytes it could not read",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 0,
+        "type": "bug",
+        "parent": "",
+        "updated_at": "2026-09-05T00:31:07Z",
+        "created_at": "2026-09-05T00:29:23Z",
+        "deps": [],
+        "description": "",
+        "design": "Happened for real, 2026-09-05, in this repo, to the user's own notes. Recorded\nbecause the second half is the part worth remembering.\n\n## What happened\n\nccp-ydo.1 renamed NotesDocument's `pads` property to `notes`. The type is\nCodable with synthesised keys, so the stored JSON key changed with it. Every\ndocument already on disk says \"pads\", so decoding returned nil.\n\n## Why that was fatal rather than annoying\n\nNotesAdapter.loadApplyingRetention did:\n\n    let decoded = data.flatMap { try? JSONDecoder().decode(...) }\n    var loaded = decoded?.sanitized(...) ?? .initial(...)\n    if loaded == decoded { ... } else { _ = persist(loaded) }\n\ndecoded == nil, so `loaded` is a fresh empty document, and `persist` wrote it\nstraight over the user's bytes ON LOAD \u2014 before a keystroke, before the panel\nwas even looked at. Three tabs of notes gone in the first launch of the renamed\nbuild. No Time Machine destination and no APFS local snapshots on this machine,\nso nothing to restore from.\n\n## Fixed\n\n1. NotesDocument now pins CodingKeys: `case notes = \"pads\"`. The Swift name and\n   the wire name are decoupled, permanently, with a comment saying why. It also\n   reads back the \"notes\" key one build wrot",
+        "notes": "",
+        "close_reason": "CodingKeys pin notes to the on-disk \"pads\" and also read back the \"notes\" key the broken build wrote; load no longer persists over bytes it failed to decode, and the first real edit moves them to scratchpadDocument.unreadable rather than over them. Four regression tests in NotesDocumentStorageTests. Both lessons in bd remember. The user's own three tabs were NOT recoverable \u2014 no Time Machine destination and no APFS snapshots on this machine.",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-ydo.5",
+        "title": "the note container: its own floating card with the toolbar along its bottom",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "feature",
+        "parent": "ccp-ydo",
+        "updated_at": "2026-09-05T00:31:07Z",
+        "created_at": "2026-09-05T00:09:23Z",
+        "deps": [],
+        "description": "",
+        "design": "The editor plus the copy/export/clear footer the widget has today, moved into their own elevated container that floats above the notes card. Selection on open defaults to a new empty note, or the last note worked on \u2014 decide which by trying both; 'last note worked on' is likely right for a scratchpad you return to, 'new empty note' for one you dump into. The MarkdownNoteEditor itself does not change.",
+        "notes": "",
+        "close_reason": "The note is its own container joined to the tab, with the copy/export/clear toolbar along its bottom. Editor fills the container rather than sitting at a fixed 300pt \u2014 pinned, it left a strip of container that looked editable and swallowed clicks. Selection on open stays last-note-worked-on, restored from the document.",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-ydo.4",
+        "title": "double-clicking the selected tab's name renames it in place",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 2,
+        "type": "feature",
+        "parent": "ccp-ydo",
+        "updated_at": "2026-09-05T00:31:06Z",
+        "created_at": "2026-09-05T00:09:22Z",
+        "deps": [],
+        "description": "",
+        "design": "Replaces today's .alert rename, which is far too heavy for a scratch note's name. Double-click swaps the Text for a focused TextField in the same frame; Return or losing focus commits, Escape reverts. Keep Rename in the right-click menu as the discoverable path \u2014 double-click is the fast path, not the only one, and it is not reachable by keyboard alone. Name still goes through ScratchpadSupport.sanitizedPadName.",
+        "notes": "",
+        "close_reason": "Double-click a tab swaps its label for a focused TextField in the same frame; Return or losing focus commits through renameNote (which sanitises), Escape reverts. Rename stays in the right-click menu as the keyboard-reachable path.",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-ydo.3",
+        "title": "the selected tab and the note container share one continuous silhouette",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "feature",
+        "parent": "ccp-ydo",
+        "updated_at": "2026-09-05T00:31:05Z",
+        "created_at": "2026-09-05T00:09:20Z",
+        "deps": [],
+        "description": "",
+        "design": "The visual heart of ccp-ydo. The selected tab is elevated above the notes card,\nand its right border dissolves into the note container floating alongside \u2014 the\ntwo read as one object, two objects only when you look at the unselected tabs.\n\nDo not abut two RoundedRectangles: the join shows a hairline, and each piece\ncasts its own shadow into the other. Build the union as one Shape (a Path with\nthe outer corners rounded and the inner join carrying the small concave fillet\nthat makes it read as continuous \u2014 the same trick a browser tab bar uses), fill\nit once, and draw elevation once over the whole path.\n\nSelection must ANIMATE between tabs \u2014 the shape's join slides to the newly\nselected row rather than cutting. Per CLAUDE.md this is one of the places worth\nanimating: it shows the eye where the note came from.",
+        "notes": "",
+        "close_reason": "NoteJoinedShape unions the note's rounded rect with the selected tab (left corners rounded, running one radius past the rail so the union has overlap) into a single Path. Fill, stroke and shadow each drawn once over that outline \u2014 no hairline, no doubled shadow. tabTop is animatableData, so selecting another note slides the join. Verified in a live capture.",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-ydo.2",
+        "title": "Notes card: header with a Craft launch button, and a vertical tab list",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "feature",
+        "parent": "ccp-ydo",
+        "updated_at": "2026-09-05T00:31:04Z",
+        "created_at": "2026-09-05T00:09:19Z",
+        "deps": [],
+        "description": "",
+        "design": "The main container. Header is \"Notes [flex space] [\u2197]\"; the trailing button\nopens the Craft app on this machine (NSWorkspace, by bundle id \u2014 NOT the\ncraftdocs:// URL scheme, see ccp-2zi: every URL open activates Craft and steals\nfocus, which is exactly what this button WANTS, so the scheme is fine HERE where\nit is wrong for autosave; confirm which reads better once both are tried).\nAccessibility label required \u2014 it is icon-only.\n\nBelow it the tabs stack vertically. Each row: name, and an X on the right that\ncloses it. Right-click gives Rename and Delete. The horizontal ScrollView tab\nstrip in ScratchpadWidget.swift goes away with this.\n\nLane width is the constraint: a vertical tab column plus a note container side\nby side does not fit a normal lane. Check ccp-lh1 (flexible widget sizing) \u2014\nthis may want .screen sizing or a wider size step, and if so this bead depends\non ccp-lh1.2 rather than guessing a literal width.",
+        "notes": "",
+        "close_reason": "Notes card header is title + a Craft launch button (NSWorkspace on com.lukilabs.lukiapp, on the adapter so CCPUI does not name it); tabs are now a vertical rail, NoteTabRail.swift. Rail deliberately never scrolls \u2014 the note cap makes every tab fit beside the editor, which is what lets the join be computed from an index instead of a preference that arrives a frame late (ccp-518's trap).",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-ydo.1",
+        "title": "rename the scratchpad to Notes, without orphaning stored pads",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "task",
+        "parent": "ccp-ydo",
+        "updated_at": "2026-09-05T00:20:55Z",
+        "created_at": "2026-09-05T00:09:18Z",
+        "deps": [],
+        "description": "",
+        "design": "The user-facing name, the type names, and the file names become Notes. The one thing that must NOT change is the UserDefaults key the document is stored under \u2014 it is shared with Vorssaint's floating ScratchpadService, and changing it silently loses every note. Keep the key, rename around it, and say so in a comment (a rare comment that earns its place: a non-obvious constraint). Sources/Vorssaint stays untouched.",
+        "notes": "",
+        "close_reason": "Scratchpad renamed to Notes across the CCP layers: NotesAdapter/NotesDocument/Note/NotesSupport/NoteRetention in CCPKit, NotesWidget in CCPUI, files renamed to match. Two names deliberately did NOT change and now say why in a comment: the UserDefaults keys (scratchpadDocument/scratchpadRetention, shared with upstream's floating pad) and the widget descriptor id (\"scratchpad\", stored in every saved layout). Gate green.",
+        "owner": "bubbles@cortico.ai",
+        "children": []
+      },
+      {
+        "id": "ccp-32f",
+        "title": "standard edit shortcuts do nothing in the panel \u2014 no main menu under .accessory",
+        "status": "closed",
+        "ready": false,
+        "in_review": false,
+        "backlog": false,
+        "labels": [],
+        "priority": 1,
+        "type": "bug",
+        "parent": "",
+        "updated_at": "2026-09-05T00:18:15Z",
+        "created_at": "2026-09-05T00:08:29Z",
+        "deps": [],
+        "description": "",
+        "design": "\u2318C / \u2318V / \u2318X / \u2318A / \u2318Z do nothing anywhere in the panel, including the markdown\nnote editor. Reported by the user 2026-09-05.\n\nCause, near-certain and cheap to confirm: ControlCenterProApp sets\n`.setActivationPolicy(.accessory)` (ControlCenterProApp.swift:22) and the app\nnever installs an NSApp.mainMenu. Those shortcuts are not implemented by\nNSTextView \u2014 they are key EQUIVALENTS carried by the standard Edit menu items,\ndispatched by NSMenu before the responder chain sees them. No menu, no\ndispatch, so the keystrokes fall on the floor even though the panel is key\n(ControlPanelWindow.canBecomeKey is true) and the text view is first responder.\n\nFix, framework-first per CLAUDE.md: install a real application main menu with an\nEdit submenu whose items carry the standard selectors \u2014 undo:, redo:, cut:,\ncopy:, paste:, pasteAsPlainText:, delete:, selectAll: \u2014 plus an App menu\n(Services, Hide, Quit) which an .accessory app still benefits from. AppKit then\ndoes the dispatch, and Services, dictation and the emoji picker come along free.\nDo NOT hand-roll a performKeyEquivalent override on the panel: it is a switch\nstatement that has to grow one case per shortcut and gets the disabled/enabled\ns",
+        "notes": "",
+        "close_reason": "installed an application main menu (never drawn under .accessory) with the standard App and Edit submenus. Cause was as diagnosed: no NSApp.mainMenu meant nothing dispatched the standard key equivalents. Verified live \u2014 CGEvent-driven cmd+A/cmd+C in the running panel's note editor returned the pad's markdown on the pasteboard. CCPUITests asserts the selectors and the shift-Z split.",
         "owner": "bubbles@cortico.ai",
         "children": []
       },
@@ -3564,9 +3781,14 @@
         "ok": true
       }
     ],
-    "unverified": [],
-    "took": "9s",
-    "at": 1788566637.2233322
+    "unverified": [
+      {
+        "sha": "5e7ce1c",
+        "subject": "review: an unedited close no longer writes over unreadable notes (ccp-uqn)"
+      }
+    ],
+    "took": "14s",
+    "at": 1788568673.8434768
   },
   "runs": {
     "verify": {
@@ -3693,12 +3915,12 @@
           "tokens": 529
         },
         {
-          "id": "harness/handoffs/20260904-155403.md",
-          "name": "20260904-155403.md",
-          "path": "harness/handoffs/20260904-155403.md",
+          "id": "harness/handoffs/20260904-190453.md",
+          "name": "20260904-190453.md",
+          "path": "harness/handoffs/20260904-190453.md",
           "origin": "harness",
           "role": "the last session's closing note",
-          "tokens": 479
+          "tokens": 517
         },
         {
           "id": "CLAUDE.md",
@@ -3706,7 +3928,7 @@
           "path": "CLAUDE.md",
           "origin": "claude",
           "role": "project instructions, always loaded",
-          "tokens": 2580
+          "tokens": 2581
         },
         {
           "id": "/Users/bubbles/.claude/projects/-Users-bubbles-dev-control-center-pro/memory/MEMORY.md",
@@ -3742,7 +3964,7 @@
           "path": ".beads/issues.jsonl",
           "origin": "harness",
           "role": "the issue graph, exported for git",
-          "tokens": 52686
+          "tokens": 58852
         },
         {
           "id": ".claude/skills/beads/SKILL.md",
@@ -3879,18 +4101,18 @@
     "always": [
       {
         "name": "CLAUDE.md",
-        "tokens": 2580
+        "tokens": 2581
       },
       {
         "name": "session brief",
-        "tokens": 588
+        "tokens": 620
       },
       {
         "name": "skill descriptions",
         "tokens": 378
       }
     ],
-    "always_total": 3546,
+    "always_total": 3579,
     "on_demand": [
       {
         "name": "workflow",
@@ -3929,7 +4151,7 @@
         "tokens": 491
       }
     ],
-    "brief_tokens": 588,
+    "brief_tokens": 620,
     "prime_tokens": 1569
   }
 }

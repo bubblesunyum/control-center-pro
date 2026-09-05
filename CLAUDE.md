@@ -183,6 +183,14 @@ event monitors installed and removed, lifecycle calls, layout mutation — is
   Idle CPU with the panel shut is a feature, and it is ~0%.
 - Permissions are gated per widget and degrade to an inline "grant" state — a
   missing permission never blocks the panel.
+- **The user's data outranks the code that reads it.** A `Codable` type that is
+  persisted must pin `CodingKeys` to the on-disk names, because renaming a
+  property renames the stored key and every existing document stops decoding.
+  And a failed decode is bytes you do not understand, never bytes you may
+  replace: show an empty state, leave the stored value alone, and copy it aside
+  before any write the user actually asked for. Both halves of that cost real
+  notes on 2026-09-04 (ccp-uqn) — the rename was the bug, the write-on-failure
+  was why it was unrecoverable.
 - Spacing, radii, materials, and type come from the CCPUI design system, never
   from literals in a widget. See [STYLE.md](./STYLE.md).
 - GPL-3.0-or-later: SPDX headers on every new file, upstream's headers left
