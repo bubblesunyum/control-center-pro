@@ -6,8 +6,10 @@ import SwiftUI
 import XCTest
 @testable import CCPUI
 
-/// The resize grip's arithmetic: whole steps of the base size, clamped to
-/// 1x–3x, previewed in the editor and committed once on release.
+/// The resize grip's arithmetic: the finger tracked continuously in
+/// step-space (clamped to 1x–3x), the lane drawing the dragged size with a
+/// gentle magnetic pull near steps, the span staying whole for packing and
+/// the one commit on release.
 @MainActor
 final class PanelEditorResizeTests: XCTestCase {
     private let a: WidgetID = "a"
@@ -40,6 +42,7 @@ final class PanelEditorResizeTests: XCTestCase {
         editor.updateResize(translation: CGSize(width: 5000, height: -5000))
 
         XCTAssertEqual(editor.resizePreview?.span, WidgetSpan(width: 3, height: 1))
+        XCTAssertEqual(editor.resizePreview?.fraction, CGSize(width: 3, height: 1))
     }
 
     func testAnUpdateWithNoPreviewIsIgnored() {
@@ -160,6 +163,67 @@ final class PanelEditorResizeTests: XCTestCase {
             WidgetSpan(width: 2, height: 1), of: slot, in: 0,
             arrangement: arrangement, editor: editor
         ))
+    }
+
+    func testTheFractionFollowsTheFingerBetweenSteps() {
+        let editor = PanelEditor()
+        editor.beginResize(a, from: .unit, baseSize: baseSize)
+
+        // Half a lane-unit right, half a base-height down: between steps.
+        editor.updateResize(translation: CGSize(width: 150, height: 66))
+
+        XCTAssertEqual(editor.resizePreview?.fraction, CGSize(width: 1.5, height: 1.5))
+        // Packing still counts the rounded step, not the finger.
+        XCTAssertEqual(editor.resizePreview?.span, WidgetSpan(width: 2, height: 2))
+    }
+
+    func testBeginResizeSeedsTheFractionAtTheStartSpan() {
+        let editor = PanelEditor()
+        editor.beginResize(a, from: WidgetSpan(width: 2, height: 2), baseSize: baseSize)
+
+        XCTAssertEqual(editor.resizePreview?.fraction, CGSize(width: 2, height: 2))
+    }
+
+    func testDrawSizeIsNilOffTheGrip() {
+        let editor = PanelEditor()
+        XCTAssertNil(editor.drawSize(for: a))
+
+        editor.beginResize(a, from: .unit, baseSize: baseSize)
+        XCTAssertNil(editor.drawSize(for: "elsewhere"))
+    }
+
+    func testDrawSizeMapsStepsToPoints() {
+        let editor = PanelEditor()
+        editor.beginResize(a, from: .unit, baseSize: baseSize)
+
+        // At rest on the step: one lane unit wide, one base height tall.
+        XCTAssertEqual(editor.drawSize(for: a), CGSize(width: 300, height: 132))
+
+        // Midway to 2x2: linear between the grid widths, magnet out of reach.
+        editor.updateResize(translation: CGSize(width: 150, height: 66))
+        XCTAssertEqual(editor.drawSize(for: a), CGSize(width: 456, height: 198))
+    }
+
+    func testDrawSizeRestsOnAStepWhenClose() {
+        let editor = PanelEditor()
+        editor.beginResize(a, from: .unit, baseSize: baseSize)
+
+        // Five points short of the 2x width, two short of the 2x height.
+        editor.updateResize(translation: CGSize(width: 295, height: 130))
+
+        XCTAssertEqual(editor.drawSize(for: a)?.width ?? -1, 609.296, accuracy: 0.001)
+        XCTAssertEqual(editor.drawSize(for: a)?.height ?? -1, 263.6, accuracy: 0.001)
+    }
+
+    func testTheMagnetNeverPops() {
+        // At the edge of the zone and beyond: untouched.
+        XCTAssertEqual(magnetized(190, toward: 200, within: 10), 190)
+        XCTAssertEqual(magnetized(100, toward: 200, within: 10), 100)
+        // Halfway in: halfway pulled. On the step: exact.
+        XCTAssertEqual(magnetized(195, toward: 200, within: 10), 197.5)
+        XCTAssertEqual(magnetized(200, toward: 200, within: 10), 200)
+        // A dead zone pulls nothing.
+        XCTAssertEqual(magnetized(195, toward: 200, within: 0), 195)
     }
 }
 

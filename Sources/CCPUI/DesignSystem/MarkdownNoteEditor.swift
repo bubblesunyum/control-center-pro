@@ -23,10 +23,10 @@ struct MarkdownNoteEditor: View {
     var placeholder: String?
 
     /// Body size, and the base the heading multipliers scale from.
-    static let fontSize: CGFloat = 13
+    static let fontSize: CGFloat = 14
 
     /// A lane-width card gives a heading nowhere to be big. H1 at 1.35× is
-    /// still unmistakably a heading at 13pt, where the engine's own 2.0×
+    /// still unmistakably a heading at 14pt, where the engine's own 2.0×
     /// would spend four lines of the card on one word.
     private static let headingMultipliers: [CGFloat] = [1.35, 1.2, 1.1, 1.0, 0.95, 0.9]
 
@@ -46,8 +46,8 @@ struct MarkdownNoteEditor: View {
         configuration.headings = HeadingStyle(fontMultipliers: headingMultipliers)
         configuration.paragraph = ParagraphStyle(spacingFactor: 0.15,
                                                  lineHeightExtraSpacing: 1)
-        configuration.textInsets = TextInsets(horizontal: Space.one,
-                                              vertical: Space.half)
+        configuration.textInsets = TextInsets(horizontal: Space.oneHalf,
+                                              vertical: Space.one)
         return configuration
     }
 

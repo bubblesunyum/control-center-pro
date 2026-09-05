@@ -180,11 +180,13 @@ public final class PanelEditor {
 
     // MARK: - Resizing
     //
-    // A resize previews in here and commits to the layout once, on release —
-    // the same one-mutation shape as a drag. Mutating the layout per pixel
-    // would re-resolve the arrangement and re-schedule the autosave every
-    // frame; a preview is just a span the lane draws instead of the stored
-    // one until the finger comes up.
+    // A resize draws continuously and commits once, on release — the same
+    // one-mutation shape as a drag. Mutating the layout per pixel would
+    // re-resolve the arrangement and re-schedule the autosave every frame; a
+    // preview is just a size the lane draws instead of the stored one until
+    // the finger comes up. Row packing still counts whole steps (a grid that
+    // reflows per pixel thrashes), so the card under the grip glides while
+    // its neighbours move only when it crosses a step.
 
     /// The card under the grip and the span it would land at, or `nil` when
     /// no grip is being dragged.
@@ -201,32 +203,73 @@ public final class PanelEditor {
         /// The step the drag counts in: the widget's base size, so steps stay
         /// the same width wherever the drag starts.
         let baseSize: CGSize
+        /// Where the finger is in step-space: whole steps at the integers, the
+        /// drag's exact position between them. The lane draws this; packing
+        /// and the release commit read `span`.
+        var fraction: CGSize
     }
+
+    /// How close (in points) the dragged size must be to a step before the
+    /// magnet reaches for it. Small on purpose: the pull ramps to nothing at
+    /// the edge of the zone, so a wider net would only widen the already
+    /// exact middle, never grab harder.
+    static let magneticSnapThreshold: CGFloat = 10
 
     public func beginResize(_ id: WidgetID, from start: WidgetSpan, baseSize: CGSize) {
         // One grip at a time: a second finger never preempts the drag already
         // in flight, or the two releases wipe each other's preview out.
         guard resizePreview == nil else { return }
-        resizePreview = ResizePreview(id: id, span: start, start: start, baseSize: baseSize)
+        resizePreview = ResizePreview(
+            id: id, span: start, start: start, baseSize: baseSize,
+            fraction: CGSize(width: start.width, height: start.height)
+        )
     }
 
-    /// The drag's translation, counted in whole steps from the span it
-    /// started at: one lane-unit right is one width step, one base-height
-    /// down is one height step. The span clamps to 1x–3x on the way in, so a
-    /// wild drag parks at the end rather than somewhere meaningless.
+    /// The drag's translation in screen points, tracked continuously from the
+    /// span it started at: the fraction follows the finger per pixel (clamped
+    /// to 1x–3x, like the span), while the span stays the rounded step for
+    /// packing and the release commit. Only a changed fraction lands — the
+    /// window tracker re-fits on every one, and identical ticks must not
+    /// re-place the panel.
     public func updateResize(translation: CGSize) {
         guard let preview = resizePreview else { return }
-        let next = WidgetSpan(
-            width: preview.start.width + Int((translation.width / preview.baseSize.width).rounded()),
-            height: preview.start.height + Int((translation.height / preview.baseSize.height).rounded())
+        let fraction = CGSize(
+            width: min(max(CGFloat(preview.start.width) + translation.width / preview.baseSize.width, 1),
+                       CGFloat(WidgetSpan.maximum)),
+            height: min(max(CGFloat(preview.start.height) + translation.height / preview.baseSize.height, 1),
+                        CGFloat(WidgetSpan.maximum))
         )
-        // Assigning the same span still notifies observers, and the window
-        // tracker re-fits on every one — so only a changed step lands.
-        guard next != preview.span else { return }
-        resizePreview?.span = next
+        guard fraction != preview.fraction else { return }
+        resizePreview?.fraction = fraction
+        resizePreview?.span = WidgetSpan(
+            width: Int(fraction.width.rounded()),
+            height: Int(fraction.height.rounded())
+        )
     }
 
     public func endResize() { resizePreview = nil }
+
+    /// The size to draw the card under the grip at: its continuous drag size
+    /// with the magnet's pull applied, or `nil` for every other card. Width
+    /// interpolates between the grid widths the span would draw (one lane
+    /// unit plus the shell's gutter per step); height scales the base size.
+    public func drawSize(for id: WidgetID) -> CGSize? {
+        guard let preview = resizePreview, preview.id == id else { return nil }
+        let raw = CGSize(
+            width: preview.fraction.width * Layout.laneWidth
+                + (preview.fraction.width - 1) * Space.oneHalf,
+            height: preview.fraction.height * preview.baseSize.height
+        )
+        let step = CGSize(
+            width: CGFloat(preview.span.width) * Layout.laneWidth
+                + CGFloat(preview.span.width - 1) * Space.oneHalf,
+            height: CGFloat(preview.span.height) * preview.baseSize.height
+        )
+        return CGSize(
+            width: magnetized(raw.width, toward: step.width, within: Self.magneticSnapThreshold),
+            height: magnetized(raw.height, toward: step.height, within: Self.magneticSnapThreshold)
+        )
+    }
 
     /// The slot as drawn while a resize is in flight: the card under the grip
     /// wears its preview span, everything else its stored one.
@@ -332,6 +375,15 @@ public final class PanelEditor {
     public func canAddLane(beside laneWidths: [CGFloat]) -> Bool {
         Layout.fitsAnotherLane(beside: laneWidths, inWidth: displayWidth)
     }
+}
+
+/// Eases `value` toward `step` when it is within `threshold` of it: no pull
+/// at the edge of the zone, resting exactly on the step at its center, so
+/// the magnet never pops — the finger can always pull straight through.
+func magnetized(_ value: CGFloat, toward step: CGFloat, within threshold: CGFloat) -> CGFloat {
+    let distance = abs(value - step)
+    guard threshold > 0, distance < threshold else { return value }
+    return value + (step - value) * (1 - distance / threshold)
 }
 
 /// The panel's own coordinate space. Every frame edit mode reasons about — the

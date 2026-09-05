@@ -319,7 +319,16 @@ public final class ControlPanelController {
                 guard let self else { return }
                 self.trackResizeChanges()
                 guard self.isVisible else { return }
-                self.place(animated: true)
+                // In flight the window tracks the finger every frame: an
+                // animated re-place here would stack a 0.2s ease on each tick
+                // and smear behind the card. The settle — preview gone on
+                // release or cancel — is the one that animates, gliding the
+                // window onto the snapped size with the card.
+                if self.editor.resizePreview != nil {
+                    self.place()
+                } else {
+                    self.place(animated: true)
+                }
             }
         }
     }
