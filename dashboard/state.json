@@ -1,15 +1,15 @@
 {
-  "generated": "19:38:07",
+  "generated": "19:40:45",
   "project": "control-center-pro",
   "git": {
     "branch": "spike/markdown-engine",
     "upstream": "",
-    "dirty": 3,
-    "commits_today": 24,
+    "dirty": 0,
+    "commits_today": 26,
     "last": {
-      "sha": "5e7ce1c",
-      "subject": "review: an unedited close no longer writes over unreadable notes (ccp-uqn)",
-      "when": "12 seconds ago"
+      "sha": "1c4a659",
+      "subject": "laurel (ccp-ydo)",
+      "when": "13 seconds ago"
     },
     "unpushed": [],
     "unpushed_beads": [],
@@ -3744,29 +3744,7 @@
     ],
     "stale": 0
   },
-  "worktree": [
-    {
-      "path": ".beads/interactions.jsonl",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": ".beads/issues.jsonl",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    },
-    {
-      "path": "dashboard/state.json",
-      "staged": false,
-      "untracked": false,
-      "status": "M",
-      "old_path": null
-    }
-  ],
+  "worktree": [],
   "verify": {
     "status": "passed",
     "when": "just now",
@@ -3783,12 +3761,12 @@
     ],
     "unverified": [
       {
-        "sha": "5e7ce1c",
-        "subject": "review: an unedited close no longer writes over unreadable notes (ccp-uqn)"
+        "sha": "1c4a659",
+        "subject": "laurel (ccp-ydo)"
       }
     ],
-    "took": "14s",
-    "at": 1788568673.8434768
+    "took": "13s",
+    "at": 1788568820.2760587
   },
   "runs": {
     "verify": {
@@ -3912,15 +3890,15 @@
           "path": "harness/laurels.jsonl",
           "origin": "harness",
           "role": "praise, replayed one at a time",
-          "tokens": 529
+          "tokens": 569
         },
         {
-          "id": "harness/handoffs/20260904-190453.md",
-          "name": "20260904-190453.md",
-          "path": "harness/handoffs/20260904-190453.md",
+          "id": "harness/handoffs/20260904-194001.md",
+          "name": "20260904-194001.md",
+          "path": "harness/handoffs/20260904-194001.md",
           "origin": "harness",
           "role": "the last session's closing note",
-          "tokens": 517
+          "tokens": 845
         },
         {
           "id": "CLAUDE.md",
@@ -3928,7 +3906,7 @@
           "path": "CLAUDE.md",
           "origin": "claude",
           "role": "project instructions, always loaded",
-          "tokens": 2581
+          "tokens": 2725
         },
         {
           "id": "/Users/bubbles/.claude/projects/-Users-bubbles-dev-control-center-pro/memory/MEMORY.md",
@@ -4101,18 +4079,18 @@
     "always": [
       {
         "name": "CLAUDE.md",
-        "tokens": 2581
+        "tokens": 2725
       },
       {
         "name": "session brief",
-        "tokens": 620
+        "tokens": 635
       },
       {
         "name": "skill descriptions",
         "tokens": 378
       }
     ],
-    "always_total": 3579,
+    "always_total": 3738,
     "on_demand": [
       {
         "name": "workflow",
@@ -4151,7 +4129,7 @@
         "tokens": 491
       }
     ],
-    "brief_tokens": 620,
+    "brief_tokens": 635,
     "prime_tokens": 1569
   }
 }
