@@ -112,14 +112,15 @@ private struct CountBadge: View {
 /// A bare icon button that sits in a widget header without pushing the
 /// title's line height around.
 ///
-/// Deliberately chromeless — no fill, no stroke. Header buttons are a quiet
-/// toolbar, not controls calling for attention; a button that needs emphasis
-/// says so with `isActive`, which tints the glyph itself.
+/// Quiet until the pointer lands: no fill at rest, then the same hover chip
+/// the Notes plus wears — one step brighter, over a muted fill.
 public struct HeaderIconButton: View {
     private let systemImage: String
     private let label: String
     private let isActive: Bool
     private let action: () -> Void
+
+    @State private var isHovered = false
 
     public init(
         systemImage: String,
@@ -141,7 +142,12 @@ public struct HeaderIconButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(isActive ? Color.accentColor : .secondary)
+        .foregroundStyle(isActive ? Color.accentColor : isHovered ? Color.primary : .secondary)
+        .background {
+            RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
+                .fill(isHovered ? Color.controlFill : Color.clear)
+        }
+        .onHover { isHovered = $0 }
         .help(label)
         .accessibilityLabel(label)
     }

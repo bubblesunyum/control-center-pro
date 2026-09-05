@@ -62,11 +62,11 @@ private struct NoteToolbar: View {
 
     var body: some View {
         HStack(spacing: Space.half) {
-            button("trash", label: "Clear") { adapter.clear() }
+            NoteToolbarButton("trash", label: "Clear") { adapter.clear() }
             Spacer(minLength: 0)
-            button(didCopy ? "checkmark" : "doc.on.doc",
-                   label: didCopy ? "Copied" : "Copy",
-                   tint: didCopy ? .green : nil) {
+            NoteToolbarButton(didCopy ? "checkmark" : "doc.on.doc",
+                              label: didCopy ? "Copied" : "Copy",
+                              tint: didCopy ? .green : nil) {
                 adapter.copyAll()
                 withAnimation(.easeOut(duration: 0.15)) { didCopy = true }
                 Task { @MainActor in
@@ -74,24 +74,46 @@ private struct NoteToolbar: View {
                     withAnimation(.easeOut(duration: 0.2)) { didCopy = false }
                 }
             }
-            button("square.and.arrow.down", label: "Export") { adapter.exportText() }
+            NoteToolbarButton("square.and.arrow.down", label: "Export") { adapter.exportText() }
         }
         .padding(.horizontal, Space.one)
         .padding(.bottom, Space.one)
         .disabled(isEmpty)
         .opacity(isEmpty ? 0.5 : 1)
     }
+}
 
-    private func button(_ symbol: String, label: String, tint: Color? = nil,
-                        action: @escaping () -> Void) -> some View {
+/// One button in the note's bottom toolbar, wearing the same hover chip as
+/// the header's plus — one step brighter, over a muted fill.
+private struct NoteToolbarButton: View {
+    private let symbol: String
+    private let label: String
+    private let tint: Color?
+    private let action: () -> Void
+
+    @State private var isHovered = false
+
+    init(_ symbol: String, label: String, tint: Color? = nil, action: @escaping () -> Void) {
+        self.symbol = symbol
+        self.label = label
+        self.tint = tint
+        self.action = action
+    }
+
+    var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.caption)
-                .foregroundStyle(tint.map(AnyShapeStyle.init) ?? AnyShapeStyle(.secondary))
                 .frame(width: Layout.rowActionSize, height: Layout.rowActionSize)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .foregroundStyle(tint ?? (isHovered ? Color.primary : Color.secondary))
+        .background {
+            RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
+                .fill(isHovered ? Color.controlFill : Color.clear)
+        }
+        .onHover { isHovered = $0 }
         .help(label)
         .accessibilityLabel(label)
     }

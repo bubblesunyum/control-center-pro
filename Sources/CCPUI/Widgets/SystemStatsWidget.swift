@@ -657,26 +657,12 @@ private struct SystemStatsContent: View {
 // MARK: - Header accessory
 
 private struct ActivityMonitorButton: View {
-    @State private var isHovered = false
-
     var body: some View {
-        Button {
+        HeaderIconButton(systemImage: "arrow.up.forward", label: "Open Activity Monitor") {
             let fallback = URL(fileURLWithPath: "/System/Applications/Utilities/Activity Monitor.app")
             let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.ActivityMonitor") ?? fallback
             NSWorkspace.shared.open(url)
-        } label: {
-            Image(systemName: "arrow.up.forward.app")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 18, height: 18)
-                .background(Circle().fill(Color.primary.opacity(isHovered ? 0.1 : 0)))
-                .contentShape(Circle())
         }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-        .help("Open Activity Monitor")
-        .accessibilityLabel("Open Activity Monitor")
-        .animation(.easeOut(duration: 0.12), value: isHovered)
     }
 }
 

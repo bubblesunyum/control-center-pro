@@ -92,7 +92,7 @@ private struct NotesContent: View {
                 .accessibilityHidden(true)
             NoteTabStrip(adapter: adapter, onCloseRequest: requestClose)
             Spacer(minLength: 0)
-            HeaderIconButton(systemImage: "arrow.up.forward.app", label: "Open in Craft") {
+            HeaderIconButton(systemImage: "arrow.up.forward", label: "Open in Craft") {
                 adapter.openCraft()
             }
         }

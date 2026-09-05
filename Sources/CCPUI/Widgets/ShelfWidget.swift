@@ -200,7 +200,7 @@ private struct ShelfOverflowMenu: View {
                 .padding(.top, Space.half)
                 .padding(.bottom, Space.quarter)
             ShelfMenuRow(
-                systemImage: window.isVisible ? "xmark" : "arrow.up.forward.app",
+                systemImage: window.isVisible ? "xmark" : "arrow.up.forward",
                 title: window.isVisible ? "Hide shelf" : "Open shelf"
             ) {
                 window.toggle()
@@ -396,7 +396,7 @@ private struct RecentDownloadRow: View {
                     .multilineTextAlignment(.leading)
                 Spacer(minLength: Space.half)
                 if isHovered {
-                    Image(systemName: "arrow.up.forward.app")
+                    Image(systemName: "arrow.up.forward")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .accessibilityHidden(true)
