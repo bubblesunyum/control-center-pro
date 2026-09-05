@@ -41,7 +41,9 @@ struct NoteTabStrip: View {
         }
     }
 
-    /// The tabs under a scroll view, for when there are more than fit.
+    /// The tabs under a scroll view, for when there are more than fit. Pills
+    /// cap here so one long name doesn't eat the strip; in the hugging fit
+    /// above they stay uncapped and purely content-sized.
     @ViewBuilder
     private var scrollingTabs: some View {
         ScrollViewReader { proxy in
@@ -49,6 +51,7 @@ struct NoteTabStrip: View {
                 HStack(spacing: Space.quarter) {
                     ForEach(adapter.notes) { note in
                         tab(note)
+                            .frame(maxWidth: Layout.noteTabMaxWidth)
                             .id(note.id)
                     }
                 }
@@ -126,9 +129,13 @@ struct NoteTabStrip: View {
         // The hover chip is a 20pt square in a 24pt pill, so 2pt of air above
         // and below it — the trailing pad hugs tighter at a point, half the
         // top/bottom air, so the pill ends where the chip ends.
+        //
+        // No min or max width here: ViewThatFits picks this fit on the tabs'
+        // ideal size but lays it out with a concrete proposal, and a maxWidth
+        // frame would stretch every pill out to the cap. The scrolling fit
+        // below is where pills cap.
         .padding(.leading, Space.quarter)
         .padding(.trailing, Space.quarter / 2)
-        .frame(maxWidth: 92)
         .frame(height: Layout.noteTabHeight)
         .foregroundStyle(isSelected ? Color.primary : Color.secondary)
         .background {

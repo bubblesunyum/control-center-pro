@@ -62,6 +62,9 @@ public enum Layout {
     /// One tab in the Notes header strip. Twelve tabs never fit a lane, so
     /// the strip scrolls and follows the selection.
     static let noteTabHeight: CGFloat = 24
+    /// How wide one tab may grow before its name truncates. Fits a default
+    /// "Note 12" plus its close cell at headline size, with a little air.
+    static let noteTabMaxWidth: CGFloat = 92
 
     /// Size of a row's leading icon and trailing menu button.
     static let rowActionSize: CGFloat = 22
