@@ -78,6 +78,11 @@ public enum Layout {
     /// Thumbnail shown on the trailing edge of an image clipboard row.
     static let clipboardThumbnailWidth: CGFloat = 44
     static let clipboardThumbnailHeight: CGFloat = 32
+    /// Width range of the clipboard search pill: it hugs its text rather than
+    /// filling the card, so the count rides beside it.
+    static let clipboardSearchMinWidth: CGFloat = 96
+    static let clipboardSearchIdealWidth: CGFloat = 120
+    static let clipboardSearchMaxWidth: CGFloat = 160
     /// Larger preview used in the context menu for an image entry.
     static let clipboardPreviewWidth: CGFloat = 220
     static let clipboardPreviewHeight: CGFloat = 160
@@ -102,6 +107,9 @@ public enum Layout {
     public static let laneWidth: CGFloat = 300
     /// How wide an embedded app screen is. psymail's mail screen is laid out
     /// for this, and a card of controls' 300pt crowds its header and tab bar.
+    /// psymail's inner views pin this width themselves (its tab bar, feed,
+    /// search and compose all frame themselves to it), so widening the lane
+    /// here without a psymail-side change only adds dead glass.
     static let screenWidth: CGFloat = 432
     /// How far the panel sits from the screen's top-right corner.
     public static let panelInset: CGFloat = Space.one
@@ -170,6 +178,12 @@ public extension Layout {
     static let shelfChipWidth: CGFloat = 64
     static let shelfChipIconWidth: CGFloat = 52
     static let shelfChipIconHeight: CGFloat = 32
+    /// Thumbnail in the Files card's shelf and download rows.
+    static let shelfPreviewWidth: CGFloat = 42
+    static let shelfPreviewHeight: CGFloat = 56
+    /// The Files overflow menu: how wide the popover stands, how tall one row is.
+    static let shelfMenuWidth: CGFloat = 220
+    static let shelfMenuRowHeight: CGFloat = 32
     /// The round icon buttons that sit on a widget header's trailing edge.
     /// One size so two headers never disagree about how tall their line is.
     static let headerAccessorySize: CGFloat = 28

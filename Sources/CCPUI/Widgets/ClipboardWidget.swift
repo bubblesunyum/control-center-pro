@@ -55,26 +55,51 @@ private struct ClipboardContent: View {
 
     var body: some View {
         WidgetCard(ClipboardWidget.descriptor) {
-            HStack(spacing: Space.half) {
-                Text("\(adapter.entries.count) items")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .accessibilityLabel("\(adapter.entries.count) clipboard items")
-                if adapter.entries.contains(where: { !$0.isPinned }) {
-                    Button("Clear") { adapter.clearRecent() }
-                        .font(.caption2.weight(.medium))
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel("Clear recent clipboard items")
+            if adapter.entries.contains(where: { !$0.isPinned }) {
+                HeaderIconButton(
+                    systemImage: "trash",
+                    label: "Clear recent clipboard items",
+                    isActive: true
+                ) {
+                    adapter.clearRecent()
                 }
+                .accessibilityHint("Removes every unpinned clipboard item")
             }
         } content: {
             VStack(alignment: .leading, spacing: Space.one) {
-                searchField
+                searchRow
                 entriesList
             }
         }
+    }
+
+    private var searchRow: some View {
+        HStack(spacing: Space.half) {
+            searchField
+            Spacer(minLength: Space.half)
+            Text(countText)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .lineLimit(1)
+                .accessibilityLabel(countAccessibilityLabel)
+        }
+    }
+
+    /// The total beside the search pill, narrowing to a result count while
+    /// filtering so the number always describes the rows below it.
+    private var countText: String {
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return "\(adapter.entries.count) items"
+        }
+        return "\(filtered.count) of \(adapter.entries.count)"
+    }
+
+    private var countAccessibilityLabel: String {
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return "\(adapter.entries.count) clipboard items"
+        }
+        return "\(filtered.count) of \(adapter.entries.count) clipboard items match the search"
     }
 
     private var searchField: some View {
@@ -85,6 +110,11 @@ private struct ClipboardContent: View {
             TextField("Search", text: $query)
                 .font(.caption)
                 .textFieldStyle(.plain)
+                .frame(
+                    minWidth: Layout.clipboardSearchMinWidth,
+                    idealWidth: Layout.clipboardSearchIdealWidth,
+                    maxWidth: Layout.clipboardSearchMaxWidth
+                )
                 .accessibilityLabel("Search clipboard history")
             if !query.isEmpty {
                 Button {
@@ -97,8 +127,9 @@ private struct ClipboardContent: View {
                 .accessibilityLabel("Clear search")
             }
         }
+        .fixedSize(horizontal: true, vertical: false)
         .padding(.horizontal, Space.one)
-        .padding(.vertical, Space.half)
+        .padding(.vertical, Space.one)
         .background(Color.controlFill, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
     }
 
@@ -213,8 +244,8 @@ private struct ClipboardRow: View {
                     .compactMap { $0 }.joined(separator: " ")
             )
             .accessibilityHint("Copies and pastes into previous app. Right-click for more actions")
-            .padding(.horizontal, Space.one)
-            .padding(.vertical, Space.half)
+            .padding(.horizontal, Space.oneHalf)
+            .padding(.vertical, Space.one)
             .background(
                 RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
                     .fill(entry.isPinned ? Color.pinnedFill : Color.controlFill)

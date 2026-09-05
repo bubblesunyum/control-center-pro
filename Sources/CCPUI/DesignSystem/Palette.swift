@@ -61,6 +61,9 @@ public extension Color {
     static let pinnedFill = Color.accentColor.opacity(0.09)
     static let pinnedStroke = Color.accentColor.opacity(0.22)
 
+    /// Hover fill for a row in a custom menu popover, e.g. the Files overflow.
+    static let menuRowHover = Color.primary.opacity(0.1)
+
     /// Dashed placeholder shown where a dragged card would land.
     static let dropGapStroke = Color.accentColor.opacity(0.55)
     static let dropGapFill = Color.accentColor.opacity(0.08)
