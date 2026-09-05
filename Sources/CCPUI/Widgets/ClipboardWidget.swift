@@ -58,33 +58,41 @@ private struct ClipboardContent: View {
     private var hasUnpinned: Bool { adapter.entries.contains(where: { !$0.isPinned }) }
 
     var body: some View {
-        WidgetCard(ClipboardWidget.descriptor) {
-            HStack(spacing: Space.half) {
-                if hasUnpinned, !isSearching {
-                    HeaderIconButton(
-                        systemImage: "trash",
-                        label: "Clear recent clipboard items"
-                    ) {
-                        adapter.clearRecent()
+        GlassCard {
+            VStack(alignment: .leading, spacing: 0) {
+                WidgetHeader(
+                    ClipboardWidget.descriptor,
+                    isAccessoryExpanded: isSearching
+                ) {
+                    HStack(spacing: Space.half) {
+                        if hasUnpinned, !isSearching {
+                            HeaderIconButton(
+                                systemImage: "trash",
+                                label: "Clear recent clipboard items"
+                            ) {
+                                adapter.clearRecent()
+                            }
+                            .accessibilityHint("Removes every unpinned clipboard item")
+                            .transition(.scale(scale: 0.7).combined(with: .opacity))
+                        }
+                        if isSearching {
+                            expandingSearchField
+                                .transition(.scale(scale: 0.6, anchor: .trailing).combined(with: .opacity))
+                        } else {
+                            HeaderIconButton(
+                                systemImage: "magnifyingglass",
+                                label: "Search clipboard history"
+                            ) {
+                                withAnimation(.snappy) { isSearching = true }
+                            }
+                            .transition(.scale(scale: 0.7).combined(with: .opacity))
+                        }
                     }
-                    .accessibilityHint("Removes every unpinned clipboard item")
-                    .transition(.scale(scale: 0.7).combined(with: .opacity))
                 }
-                if isSearching {
-                    expandingSearchField
-                        .transition(.scale(scale: 0.7).combined(with: .opacity))
-                } else {
-                    HeaderIconButton(
-                        systemImage: "magnifyingglass",
-                        label: "Search clipboard history"
-                    ) {
-                        withAnimation(.snappy) { isSearching = true }
-                    }
-                    .transition(.scale(scale: 0.7).combined(with: .opacity))
-                }
+                .padding([.horizontal, .top], Space.oneHalf)
+                entriesList
             }
-        } content: {
-            entriesList
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .onChange(of: isSearching) { _, searching in
             if searching { searchFocused = true }
@@ -105,7 +113,7 @@ private struct ClipboardContent: View {
                 .font(.caption)
                 .textFieldStyle(.plain)
                 .focused($searchFocused)
-                .frame(width: Layout.clipboardSearchWidth)
+                .frame(maxWidth: .infinity)
                 .accessibilityLabel("Search clipboard history")
             Button {
                 if query.isEmpty {
@@ -167,7 +175,6 @@ private struct ClipboardContent: View {
                     }
                 }
                 .frame(maxHeight: Layout.clipboardListHeight)
-                .clipShape(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
                 .id("clipboard-\(adapter.hideGeneration)")
                 .onChange(of: adapter.hideGeneration) { _, _ in
                     proxy.scrollTo("ccp.clipboard.top", anchor: .top)
@@ -217,7 +224,7 @@ private struct ClipboardContent: View {
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.secondary)
             .tracking(0.5)
-            .padding(.horizontal, Space.half)
+            .padding(.horizontal, Space.oneHalf)
             .padding(.vertical, Space.half)
     }
 }

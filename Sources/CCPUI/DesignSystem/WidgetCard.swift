@@ -14,17 +14,20 @@ import SwiftUI
 public struct WidgetCard<Content: View, Accessory: View>: View {
     private let descriptor: WidgetDescriptor
     private let count: Int?
+    private let isAccessoryExpanded: Bool
     private let accessory: Accessory
     private let content: Content
 
     public init(
         _ descriptor: WidgetDescriptor,
         count: Int? = nil,
+        isAccessoryExpanded: Bool = false,
         @ViewBuilder accessory: () -> Accessory,
         @ViewBuilder content: () -> Content
     ) {
         self.descriptor = descriptor
         self.count = count
+        self.isAccessoryExpanded = isAccessoryExpanded
         self.accessory = accessory()
         self.content = content()
     }
@@ -32,7 +35,7 @@ public struct WidgetCard<Content: View, Accessory: View>: View {
     public var body: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: Space.one) {
-                WidgetHeader(descriptor, count: count) { accessory }
+                WidgetHeader(descriptor, count: count, isAccessoryExpanded: isAccessoryExpanded) { accessory }
                 content
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

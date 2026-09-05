@@ -12,18 +12,28 @@ import SwiftUI
 /// rather than drawing its own header a size and a colour away from everyone
 /// else's — the moment two headers disagree, the panel stops reading as one
 /// surface.
+///
+/// Occasionally the accessory needs the whole row — a search field taking over
+/// the header, say. `isAccessoryExpanded` gives it that: the title fades out
+/// but the leading symbol stays put, and the accessory stretches to fill what
+/// the title left behind. The hold-to-edit target stays the full row either
+/// way; only its button traits rest while expanded, so the field inside keeps
+/// its own accessibility identity.
 public struct WidgetHeader<Accessory: View>: View {
     private let descriptor: WidgetDescriptor
     private let count: Int?
+    private let isAccessoryExpanded: Bool
     private let accessory: Accessory
 
     public init(
         _ descriptor: WidgetDescriptor,
         count: Int? = nil,
+        isAccessoryExpanded: Bool = false,
         @ViewBuilder accessory: () -> Accessory
     ) {
         self.descriptor = descriptor
         self.count = count
+        self.isAccessoryExpanded = isAccessoryExpanded
         self.accessory = accessory()
     }
 
@@ -32,24 +42,30 @@ public struct WidgetHeader<Accessory: View>: View {
 
     public var body: some View {
         HStack(spacing: Space.half) {
-            holdableLabel
+            Label {
+                if !isAccessoryExpanded {
+                    HStack(spacing: Space.half) {
+                        Text(descriptor.title)
+                            .lineLimit(1)
+                        if let count {
+                            CountBadge(count: count, of: descriptor.title)
+                        }
+                    }
+                    .transition(.opacity)
+                }
+            } icon: {
+                Image(systemName: descriptor.symbolName)
+            }
+            .font(.headline)
+            .foregroundStyle(.primary)
+            .accessibilityHidden(isAccessoryExpanded)
+            if !isAccessoryExpanded {
+                Spacer(minLength: 0)
+            }
             accessory
+                .frame(maxWidth: isAccessoryExpanded ? .infinity : nil, alignment: .trailing)
         }
         .frame(minHeight: Layout.headerAccessorySize)
-    }
-
-    private var holdableLabel: some View {
-        HStack(spacing: Space.half) {
-            Label(descriptor.title, systemImage: descriptor.symbolName)
-                .font(.headline)
-                .labelStyle(.titleAndIcon)
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-            if let count {
-                CountBadge(count: count, of: descriptor.title)
-            }
-            Spacer(minLength: 0)
-        }
         .contentShape(Rectangle())
         .background {
             GeometryReader { proxy in
@@ -59,12 +75,13 @@ public struct WidgetHeader<Accessory: View>: View {
                 )
             }
         }
-        .accessibilityAddTraits(.isButton)
-        .accessibilityHint("Hold to edit widgets")
+        .accessibilityAddTraits(isAccessoryExpanded ? [] : .isButton)
+        .accessibilityHint(isAccessoryExpanded ? "" : "Hold to edit widgets")
         .accessibilityAction {
-            guard let editor = panelEditor, !editor.isEditing else { return }
+            guard !isAccessoryExpanded, let editor = panelEditor, !editor.isEditing else { return }
             withAnimation(.snappy) { editor.startEditing() }
         }
+        .animation(.snappy, value: isAccessoryExpanded)
     }
 }
 
