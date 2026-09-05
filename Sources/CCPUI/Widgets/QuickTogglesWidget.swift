@@ -24,11 +24,23 @@ public final class QuickTogglesWidget: CCPWidget {
         size: .compact
     )
 
-    public init() {}
+    private let rocket: RocketAdapter
+
+    public init() {
+        self.rocket = RocketAdapter()
+    }
+
+    /// Test seam: a widget backed by a fake source.
+    init(source: RocketSource) {
+        self.rocket = RocketAdapter(source: source)
+    }
 
     public func makeView() -> some View {
-        ToolsContent()
+        ToolsContent(rocket: rocket)
     }
+
+    public func activate() { rocket.activate() }
+    public func deactivate() { rocket.deactivate() }
 }
 
 /// Keep the historic name as an alias so existing registries and tests
@@ -38,13 +50,21 @@ public typealias ToolsWidget = QuickTogglesWidget
 // MARK: - Content
 
 private struct ToolsContent: View {
+    @Bindable var rocket: RocketAdapter
     @Environment(\.hidePanel) private var hidePanel
     @State private var isCapturing = false
+    @State private var isOpeningRocket = false
 
     var body: some View {
         WidgetCard(QuickTogglesWidget.descriptor) {
             HStack(spacing: Space.one) {
                 copyTextButton
+                // Rocket keeps working with its icon hidden, so the strip
+                // gives the hidden icon back its menu. Not installed means
+                // no button rather than a dead one.
+                if rocket.isInstalled {
+                    rocketButton
+                }
                 Spacer(minLength: 0)
             }
         }
@@ -60,6 +80,42 @@ private struct ToolsContent: View {
             help: "Select an area and copy the text in it"
         ) {
             startCapture()
+        }
+    }
+
+    private var rocketButton: some View {
+        ToolIconButton(
+            title: "Rocket",
+            subtitle: rocket.isRunning ? "Menu" : "Launch",
+            systemImage: "rocket",
+            isBusy: isOpeningRocket,
+            help: rocket.isRunning ? "Open Rocket's menu" : "Launch Rocket"
+        ) {
+            openRocketMenu()
+        }
+    }
+
+    /// Tap shows Rocket's whole status menu — Preferences, Browse & Search,
+    /// Fun Stats, all of it — rather than deep-linking one pane. The menu
+    /// opens in the menu bar, so the panel gets out of the way first.
+    private func openRocketMenu() {
+        guard !isOpeningRocket else { return }
+        isOpeningRocket = true
+        Task { @MainActor in
+            let outcome = await rocket.showMenu()
+            isOpeningRocket = false
+            switch outcome {
+            case .shown:
+                hidePanel?()
+            case .launched:
+                ToolHUD.show(icon: "rocket", message: "Rocket launched")
+            case .needsAccessibility:
+                ToolHUD.show(icon: "rocket", message: "Allow Accessibility to open Rocket's menu")
+            case .failed:
+                ToolHUD.show(icon: "rocket", message: "Couldn't open Rocket's menu")
+            case .notInstalled:
+                break // Unreachable: the button only draws when installed.
+            }
         }
     }
 
