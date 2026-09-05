@@ -47,9 +47,10 @@ struct MarkdownNoteEditor: View {
         configuration.paragraph = ParagraphStyle(spacingFactor: 0.15,
                                                  lineHeightExtraSpacing: 1)
         // The well reads as inset only if the text clears its edge by a
-        // visible margin on every side.
-        configuration.textInsets = TextInsets(horizontal: Space.two,
-                                              vertical: Space.oneHalf)
+        // visible margin on every side — roomy on purpose, roomier than card
+        // chrome ever is.
+        configuration.textInsets = TextInsets(horizontal: Space.two + Space.half,
+                                              vertical: Space.two)
         return configuration
     }
 

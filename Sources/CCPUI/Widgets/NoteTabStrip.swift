@@ -17,6 +17,7 @@ struct NoteTabStrip: View {
     @State private var renaming: UUID?
     @State private var renameDraft = ""
     @State private var hoveredNoteID: UUID?
+    @State private var hoveredCloseID: UUID?
     @FocusState private var isRenaming: Bool
 
     var body: some View {
@@ -87,7 +88,8 @@ struct NoteTabStrip: View {
         // The close control never leaves the layout — it only fades. Adding
         // and removing it resized the pill and the name jumped under the eye.
         let closeOpacity: CGFloat = (isSelected || isHovered) ? 1 : 0
-        HStack(spacing: Space.one) {
+        let isCloseHovered = hoveredCloseID == note.id
+        HStack(spacing: Space.oneHalf) {
             if renaming == note.id {
                 renameField(note)
             } else {
@@ -100,12 +102,20 @@ struct NoteTabStrip: View {
                         onCloseRequest(note)
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.caption2.weight(.semibold))
-                            .frame(width: Space.one, height: Space.one)
-                            .contentShape(Rectangle())
+                            .font(.caption.weight(.semibold))
+                            .frame(width: Space.oneHalf, height: Space.oneHalf)
+                            .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(isCloseHovered ? .secondary : .tertiary)
+                    .background {
+                        Circle()
+                            .fill(isCloseHovered ? Color.controlFill : Color.clear)
+                    }
+                    .onHover { hovering in
+                        if hovering { hoveredCloseID = note.id }
+                        else if hoveredCloseID == note.id { hoveredCloseID = nil }
+                    }
                     .opacity(closeOpacity)
                     .disabled(closeOpacity == 0)
                     .accessibilityHidden(closeOpacity == 0)
@@ -115,7 +125,7 @@ struct NoteTabStrip: View {
             }
         }
         .padding(.horizontal, Space.one)
-        .frame(minWidth: 36, maxWidth: 96)
+        .frame(minWidth: 32, maxWidth: 92)
         .frame(height: Layout.noteTabHeight)
         .foregroundStyle(isSelected ? Color.primary : Color.secondary)
         .background {
