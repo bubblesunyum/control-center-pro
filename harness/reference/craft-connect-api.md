@@ -6,8 +6,10 @@ checked in: it embeds the connection URL (which is the credential) and the full
 text of the five most recently edited documents in the space.
 
 **The URL is the credential.** There is no auth header. Base is
-`https://connect.craft.do/links/<token>/api/v1`. It belongs in the Keychain and
-must never be logged, committed, or written into a bead. Confirmed live.
+`https://connect.craft.do/links/<token>/api/v1`. It belongs in the app's
+owner-only credential file (Application Support, 0600 — the login Keychain
+re-prompts on every dev-signed rebuild) and must never be logged, committed,
+or written into a bead. Confirmed live.
 
 `api.craft.co` is a different company. Search results confidently offering an
 `x-craft-api-key` header are about them, not craft.do.

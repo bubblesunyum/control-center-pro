@@ -278,9 +278,8 @@ public final class NotesAdapter {
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var terminationObserver: NSObjectProtocol?
     @ObservationIgnored nonisolated(unsafe) private var credentialObserver: NSObjectProtocol?
-    // The Craft connection URL, read once per process. A Keychain read on
-    // every push is a prompt on every focus loss; the credential changes only
-    // through Settings, which posts craftCredentialDidChange.
+    // The Craft connection URL, read once per process. The credential changes
+    // only through Settings, which posts craftCredentialDidChange.
     @ObservationIgnored private var cachedCraftBaseURL: URL?
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let defaultName: String
@@ -310,7 +309,7 @@ public final class NotesAdapter {
     /// design token — the 12s focus-dim clock is a different thing (ccp-srw).
     private static let pushDebounce: TimeInterval = 3
     /// Test seams: scripted transport and a fixed URL, so pushes run without
-    /// the Keychain or the network.
+    /// disk or the network.
     @ObservationIgnored internal var craftTransport: (any CraftTransport)?
     @ObservationIgnored internal var craftBaseURLOverride: URL?
 
@@ -604,11 +603,10 @@ public final class NotesAdapter {
     }
 
     private func craftBaseURL() -> URL? {
-        // Cached: every push otherwise IPCs into the Keychain, which prompts
-        // on focus loss under a fresh dev signature. Cleared when the
-        // credential is saved or forgotten (see observeCraftCredentialChanges).
+        // Cached: the file read is cheap but pointless to repeat per push.
+        // Cleared when the credential is saved or forgotten (see observeCraftCredentialChanges).
         if let cached = cachedCraftBaseURL { return cached }
-        let loaded = craftBaseURLOverride ?? (try? KeychainCraftCredentialStore().loadConnectionURL())
+        let loaded = craftBaseURLOverride ?? (try? FileCraftCredentialStore().loadConnectionURL())
         cachedCraftBaseURL = loaded
         return loaded
     }

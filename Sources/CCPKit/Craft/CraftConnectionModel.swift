@@ -5,7 +5,7 @@ import Foundation
 import Observation
 
 /// Posted after the credential is saved or forgotten, so holders of a cached
-/// base URL (the push path) re-read the Keychain instead of trusting a stale
+/// base URL (the push path) re-read the store instead of trusting a stale
 /// one. The URL itself never travels in the notification.
 public extension Notification.Name {
     static let craftCredentialDidChange = Notification.Name("ccp.craftCredentialDidChange")
@@ -21,18 +21,18 @@ public enum CraftConnectionStatus: Equatable, Sendable {
     case unreachable
 }
 
-/// Owns the Craft connection URL in the Keychain and verifies it with
+/// Owns the Craft connection URL and verifies it with
 /// `GET /connection`. The one place that knows both the credential store and
 /// the client; the sync work later asks it for a verified base URL.
 @MainActor
 @Observable
 public final class CraftConnectionModel {
-    /// Entry only. Never refilled from the Keychain — once saved, the field
+    /// Entry only. Never refilled from the store — once saved, the field
     /// clears and the URL is not shown again.
     public var urlText: String = ""
     public private(set) var status: CraftConnectionStatus = .notConfigured
-    /// Cached so view bodies do not IPC into the Keychain on every
-    /// evaluation. Updated at the four sites that touch the store below.
+    /// Cached so view bodies do not touch disk on every evaluation.
+    /// Updated at the four sites that touch the store below.
     public private(set) var isConfigured = false
 
     @ObservationIgnored private let store: any CraftCredentialStore
@@ -40,7 +40,7 @@ public final class CraftConnectionModel {
     @ObservationIgnored private var checkTask: Task<Void, Never>?
 
     public convenience init() {
-        self.init(store: KeychainCraftCredentialStore(), transport: nil)
+        self.init(store: FileCraftCredentialStore(), transport: nil)
     }
 
     /// A nil transport asks `CraftClient` for its default session, which is
@@ -73,7 +73,7 @@ public final class CraftConnectionModel {
         }
     }
 
-    /// Validate the entered text, store it, and verify it. A Keychain failure
+    /// Validate the entered text, store it, and verify it. A store failure
     /// keeps the entered text in the field — the user should not have to
     /// fetch the URL from Craft a second time — and reports `.unreachable`,
     /// which the unconfigured branch of the UI reads as a save failure.
@@ -97,7 +97,7 @@ public final class CraftConnectionModel {
 
     /// Forgets the credential. Reports success only when the item is actually
     /// gone — the UI must never claim a credential is destroyed while it is
-    /// still in the Keychain.
+    /// still stored.
     public func forget() {
         checkTask?.cancel()
         do {
@@ -114,7 +114,7 @@ public final class CraftConnectionModel {
     /// One `GET /connection`, safe to call on appear: a single request in a
     /// window the user opened on purpose. The check runs to completion even
     /// if the window closes first, which is harmless — the model outlives the
-    /// window, and the status is current when it reopens. A Keychain read
+    /// window, and the status is current when it reopens. A store read
     /// failure keeps the configured state and reports `.unreachable`: only a
     /// confirmed absence resets to `.notConfigured`.
     public func verify() {

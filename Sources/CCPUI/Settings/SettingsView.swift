@@ -54,7 +54,7 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                     if craft.status == .unreachable {
-                        Text("Could not save to the Keychain — nothing was stored. Your text is still in the field.")
+                        Text("Could not save the connection — nothing was stored. Your text is still in the field.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -63,7 +63,7 @@ struct SettingsView: View {
                 Text("Craft Sync")
             } footer: {
                 Text("Create an API connection in Craft's Imagine tab and paste its URL here. "
-                    + "The URL is the credential: it lives in the Keychain and is never shown again.")
+                    + "The URL is the credential: it lives in an owner-only file and is never shown again.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

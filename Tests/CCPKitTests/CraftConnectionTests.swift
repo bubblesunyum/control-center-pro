@@ -7,7 +7,7 @@ import XCTest
 @testable import CCPKit
 
 /// The connection URL is the credential, so these are the tests that keep it
-/// in the Keychain and off the screen: validation, verification, and the one
+/// in an owner-only file and off the screen: validation, verification, and the one
 /// rule that matters — a failed check changes nothing stored.
 @MainActor
 final class CraftConnectionTests: XCTestCase {
@@ -217,6 +217,105 @@ final class CraftConnectionTests: XCTestCase {
         try store.saveConnectionURL(replacement)
         XCTAssertEqual(try store.loadConnectionURL(), replacement)
         try store.deleteConnectionURL()
+    }
+
+    // MARK: - File store
+
+    private func fileStore(keychain: KeychainCraftCredentialStore? = nil) -> (FileCraftCredentialStore, URL) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ccp.test.craft.\(UUID().uuidString)", isDirectory: true)
+        let store = FileCraftCredentialStore(
+            fileURL: dir.appendingPathComponent("craft-connection-url"),
+            keychain: keychain)
+        return (store, dir)
+    }
+
+    func testFileRoundTripsAndDeletes() throws {
+        let (store, dir) = fileStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        XCTAssertNil(try store.loadConnectionURL())
+        let url = URL(string: "https://connect.craft.do/links/x/api/v1")!
+        try store.saveConnectionURL(url)
+        XCTAssertEqual(try store.loadConnectionURL(), url)
+        try store.saveConnectionURL(url)
+        XCTAssertEqual(try store.loadConnectionURL(), url)
+        try store.deleteConnectionURL()
+        XCTAssertNil(try store.loadConnectionURL())
+        try store.deleteConnectionURL()
+    }
+
+    func testFileOverwriteWithADifferentURL() throws {
+        let (store, dir) = fileStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try store.saveConnectionURL(URL(string: "https://connect.craft.do/links/aaa/api/v1")!)
+        let replacement = URL(string: "https://connect.craft.do/links/bbb/api/v1")!
+        try store.saveConnectionURL(replacement)
+        XCTAssertEqual(try store.loadConnectionURL(), replacement)
+    }
+
+    func testFileIsOwnerOnly() throws {
+        let (store, dir) = fileStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try store.saveConnectionURL(URL(string: "https://connect.craft.do/links/x/api/v1")!)
+        let url = dir.appendingPathComponent("craft-connection-url")
+        let permissions = try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? Int
+        XCTAssertEqual(permissions, 0o600)
+    }
+
+    func testBlankFileReadsAsMissing() throws {
+        let (store, dir) = fileStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data("  \n".utf8).write(to: dir.appendingPathComponent("craft-connection-url"))
+        XCTAssertNil(try store.loadConnectionURL())
+    }
+
+    /// The one-time move off the Keychain: a stored item is filed, removed,
+    /// and served from the file from then on. The uniquely-named item keeps
+    /// this off the real credential.
+    func testMigratesAKeychainItemOnce() throws {
+        let keychain = KeychainCraftCredentialStore(service: "ccp.test.craft.\(UUID().uuidString)")
+        let url = URL(string: "https://connect.craft.do/links/x/api/v1")!
+        try keychain.saveConnectionURL(url)
+        let (store, dir) = fileStore(keychain: keychain)
+        defer {
+            try? FileManager.default.removeItem(at: dir)
+            try? keychain.deleteConnectionURL()
+        }
+        XCTAssertEqual(try store.loadConnectionURL(), url)
+        XCTAssertEqual(try store.loadConnectionURL(), url, "the second load serves the file")
+        XCTAssertNil(try keychain.loadConnectionURL(), "migration removes the item it moved")
+    }
+
+    func testFileWinsOverKeychainAndLeavesItAlone() throws {
+        let keychain = KeychainCraftCredentialStore(service: "ccp.test.craft.\(UUID().uuidString)")
+        let filed = URL(string: "https://connect.craft.do/links/filed/api/v1")!
+        let chained = URL(string: "https://connect.craft.do/links/chained/api/v1")!
+        try keychain.saveConnectionURL(chained)
+        let (store, dir) = fileStore(keychain: keychain)
+        defer {
+            try? FileManager.default.removeItem(at: dir)
+            try? keychain.deleteConnectionURL()
+        }
+        try store.saveConnectionURL(filed)
+        XCTAssertEqual(try store.loadConnectionURL(), filed)
+        XCTAssertEqual(try keychain.loadConnectionURL(), chained)
+    }
+
+    /// Forgetting must reach the orphan too, or the next launch re-migrates
+    /// a credential the user explicitly destroyed.
+    func testForgetClearsTheFileAndAnyOrphanedKeychainItem() throws {
+        let keychain = KeychainCraftCredentialStore(service: "ccp.test.craft.\(UUID().uuidString)")
+        try keychain.saveConnectionURL(URL(string: "https://connect.craft.do/links/old/api/v1")!)
+        let (store, dir) = fileStore(keychain: keychain)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try store.saveConnectionURL(URL(string: "https://connect.craft.do/links/current/api/v1")!)
+        try store.deleteConnectionURL()
+        XCTAssertNil(try keychain.loadConnectionURL())
+        let later = FileCraftCredentialStore(
+            fileURL: dir.appendingPathComponent("craft-connection-url"),
+            keychain: keychain)
+        XCTAssertNil(try later.loadConnectionURL(), "nothing left to resurrect")
     }
 
     // MARK: - Store failures
