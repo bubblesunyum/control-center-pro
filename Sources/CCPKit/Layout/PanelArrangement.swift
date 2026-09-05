@@ -54,7 +54,7 @@ public final class PanelArrangement {
     /// because "what exists" and "what is placed" are two different objects
     /// and the answer needs both.
     public var gallery: [GalleryEntry] {
-        let placed = Set(layout.lanes.joined())
+        let placed = Set(layout.ids.joined())
         return registry.descriptors.map {
             GalleryEntry(descriptor: $0, isPlaced: placed.contains($0.id))
         }
@@ -103,12 +103,12 @@ public final class PanelArrangement {
     /// The layout as slots, reusing the widgets already made and retiring the
     /// ones no longer placed.
     private func resolved() -> [[LaneSlot]] {
-        let placed = Set(layout.lanes.joined())
+        let placed = Set(layout.ids.joined())
         for (id, instance) in instances where !placed.contains(id) {
             if isActive { instance.deactivate() }
             instances[id] = nil
         }
-        return layout.lanes.map { $0.map(resolvedSlot(for:)) }
+        return layout.lanes.map { $0.map { resolvedSlot(for: $0) } }
     }
 
     /// The slot a widget currently occupies. Edit mode asks so it can draw the
@@ -117,14 +117,15 @@ public final class PanelArrangement {
         lanes.joined().first { $0.id == id }
     }
 
-    private func resolvedSlot(for id: WidgetID) -> LaneSlot {
-        if let placed = instances[id] { return .widget(placed) }
+    private func resolvedSlot(for placement: Placement) -> LaneSlot {
+        let id = placement.id
+        if let placed = instances[id] { return .widget(placed, placement.span) }
         guard let made = registry.makeInstance(of: id) else { return .unavailable(id) }
         instances[id] = made
         // A widget that arrives while the panel is open starts now; one placed
         // before it opened is started by `activate()` along with the rest.
         if isActive { made.activate() }
-        return .widget(made)
+        return .widget(made, placement.span)
     }
 
     /// Start sampling. The panel is on screen.

@@ -25,7 +25,7 @@ final class PanelLayoutTests: XCTestCase {
         let layout = try JSONDecoder().decode(PanelLayout.self, from: file)
 
         XCTAssertEqual(
-            layout.lanes,
+            layout.ids,
             [[StubWidget.descriptor.id, unknown]],
             "decoding reads the file, it does not judge it"
         )
@@ -48,20 +48,20 @@ final class PanelLayoutTests: XCTestCase {
         try store.save(reloaded)
 
         XCTAssertEqual(
-            store.load().lanes,
+            store.load().ids,
             [[StubWidget.descriptor.id, unknown]],
             "a round trip through a build without the widget must not lose it"
         )
     }
 
     func testEmptyLanesAreClosedUp() {
-        let layout = PanelLayout([[], [StubWidget.descriptor.id], []])
-        XCTAssertEqual(layout.normalized().lanes, [[StubWidget.descriptor.id]])
+        let layout = PanelLayout([[], [StubWidget.descriptor.id], []] as [[WidgetID]])
+        XCTAssertEqual(layout.normalized().ids, [[StubWidget.descriptor.id]])
     }
 
     func testRemovingTheLastWidgetLeavesOneEmptyLane() {
-        XCTAssertEqual(PanelLayout([[], []]).normalized(), .empty)
-        XCTAssertEqual(PanelLayout([]).normalized(), .empty)
+        XCTAssertEqual(PanelLayout([[], []] as [[WidgetID]]).normalized(), .empty)
+        XCTAssertEqual(PanelLayout([] as [[WidgetID]]).normalized(), .empty)
         XCTAssertEqual(PanelLayout.empty.normalized(), .empty)
     }
 
@@ -71,7 +71,7 @@ final class PanelLayoutTests: XCTestCase {
             [],
             [unknown, OtherStubWidget.descriptor.id],
         ])
-        XCTAssertEqual(layout.normalized().lanes, [
+        XCTAssertEqual(layout.normalized().ids, [
             [StubWidget.descriptor.id],
             [unknown, OtherStubWidget.descriptor.id],
         ])
@@ -82,7 +82,7 @@ final class PanelLayoutTests: XCTestCase {
             [StubWidget.descriptor.id, OtherStubWidget.descriptor.id, StubWidget.descriptor.id],
             [OtherStubWidget.descriptor.id],
         ])
-        XCTAssertEqual(layout.normalized().lanes, [
+        XCTAssertEqual(layout.normalized().ids, [
             [StubWidget.descriptor.id, OtherStubWidget.descriptor.id],
         ])
     }
@@ -92,7 +92,7 @@ final class PanelLayoutTests: XCTestCase {
             [StubWidget.descriptor.id],
             [StubWidget.descriptor.id],
         ])
-        XCTAssertEqual(layout.normalized().lanes, [[StubWidget.descriptor.id]])
+        XCTAssertEqual(layout.normalized().ids, [[StubWidget.descriptor.id]])
     }
 
     func testResolvedSlotIDsAreUniqueWithinALane() {

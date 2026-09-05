@@ -10,13 +10,22 @@
 /// way; this only says whether we could make something of it.
 @MainActor
 public enum LaneSlot: Identifiable {
-    case widget(WidgetInstance)
+    case widget(WidgetInstance, WidgetSpan)
     case unavailable(WidgetID)
 
     public var id: WidgetID {
         switch self {
-        case .widget(let widget): widget.id
+        case .widget(let widget, _): widget.id
         case .unavailable(let id): id
+        }
+    }
+
+    /// The placement's size override. An absent widget has nothing to resize,
+    /// so its slot is always the base size.
+    public var span: WidgetSpan {
+        switch self {
+        case .widget(_, let span): span
+        case .unavailable: .unit
         }
     }
 
@@ -25,18 +34,19 @@ public enum LaneSlot: Identifiable {
     /// stopping them — is done to these.
     public var instance: WidgetInstance? {
         switch self {
-        case .widget(let widget): widget
+        case .widget(let widget, _): widget
         case .unavailable: nil
         }
     }
 }
 
 public extension WidgetRegistry {
-    /// The layout as live widgets, one slot per stored id.
+    /// The layout as live widgets, one slot per stored placement.
     func resolve(_ layout: PanelLayout) -> [[LaneSlot]] {
         layout.lanes.map { lane in
-            lane.map { id in
-                makeInstance(of: id).map(LaneSlot.widget) ?? .unavailable(id)
+            lane.map { placement in
+                let id = placement.id
+                return makeInstance(of: id).map { LaneSlot.widget($0, placement.span) } ?? .unavailable(id)
             }
         }
     }

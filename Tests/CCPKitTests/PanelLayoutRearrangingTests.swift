@@ -15,7 +15,7 @@ final class PanelLayoutRearrangingTests: XCTestCase {
     func testMovingWithinALane() {
         let layout = PanelLayout([[a, b, c]])
 
-        XCTAssertEqual(layout.moving(a, toLane: 0, at: 2).lanes, [[b, c, a]])
+        XCTAssertEqual(layout.moving(a, toLane: 0, at: 2).ids, [[b, c, a]])
     }
 
     /// The index is read after the card is lifted out, so dragging one to the
@@ -23,26 +23,26 @@ final class PanelLayoutRearrangingTests: XCTestCase {
     func testMovingDownItsOwnLaneUsesThePostLiftIndex() {
         let layout = PanelLayout([[a, b, c]])
 
-        XCTAssertEqual(layout.moving(a, toLane: 0, at: 1).lanes, [[b, a, c]])
+        XCTAssertEqual(layout.moving(a, toLane: 0, at: 1).ids, [[b, a, c]])
     }
 
     func testMovingToAnotherLane() {
         let layout = PanelLayout([[a, b], [c]])
 
-        XCTAssertEqual(layout.moving(a, toLane: 1, at: 0).lanes, [[b], [a, c]])
+        XCTAssertEqual(layout.moving(a, toLane: 1, at: 0).ids, [[b], [a, c]])
     }
 
     func testMovingToTheLanePastTheEndMakesOne() {
         let layout = PanelLayout([[a, b]])
 
-        XCTAssertEqual(layout.moving(a, toLane: 1, at: 0).lanes, [[b], [a]])
+        XCTAssertEqual(layout.moving(a, toLane: 1, at: 0).ids, [[b], [a]])
     }
 
     func testEmptyingALaneClosesIt() {
         let layout = PanelLayout([[a], [b]])
 
         XCTAssertEqual(
-            layout.moving(a, toLane: 1, at: 0).lanes,
+            layout.moving(a, toLane: 1, at: 0).ids,
             [[a, b]],
             "the lane it left has nothing in it and stops existing"
         )
@@ -52,7 +52,7 @@ final class PanelLayoutRearrangingTests: XCTestCase {
         let layout = PanelLayout([[a]])
 
         XCTAssertEqual(
-            layout.moving(a, toLane: 1, at: 0).lanes,
+            layout.moving(a, toLane: 1, at: 0).ids,
             [[a]],
             "the lane it left closes up behind it, which is the lane it arrived in"
         )
@@ -61,7 +61,7 @@ final class PanelLayoutRearrangingTests: XCTestCase {
     func testAnIndexPastTheEndOfALaneLandsAtTheEnd() {
         let layout = PanelLayout([[a, b]])
 
-        XCTAssertEqual(layout.moving(a, toLane: 0, at: 99).lanes, [[b, a]])
+        XCTAssertEqual(layout.moving(a, toLane: 0, at: 99).ids, [[b, a]])
     }
 
     func testALaneThatIsNotThereIsNotADrop() {
@@ -82,7 +82,7 @@ final class PanelLayoutRearrangingTests: XCTestCase {
         let layout = PanelLayout([[a, absent, b]])
 
         XCTAssertEqual(
-            layout.moving(b, toLane: 0, at: 1).lanes,
+            layout.moving(b, toLane: 0, at: 1).ids,
             [[a, b, absent]],
             "an unresolvable id is still a position in the lane"
         )
@@ -91,7 +91,7 @@ final class PanelLayoutRearrangingTests: XCTestCase {
     func testRemoving() {
         let layout = PanelLayout([[a, b], [c]])
 
-        XCTAssertEqual(layout.removing(b).lanes, [[a], [c]])
+        XCTAssertEqual(layout.removing(b).ids, [[a], [c]])
     }
 
     func testRemovingTheLastWidgetLeavesOneEmptyLane() {
@@ -123,20 +123,20 @@ final class PanelLayoutNewLaneTests: XCTestCase {
     func testANewLeadingLane() {
         let layout = PanelLayout([[a, b], [c]])
 
-        XCTAssertEqual(layout.moving(c, toNewLaneAt: 0).lanes, [[c], [a, b]])
+        XCTAssertEqual(layout.moving(c, toNewLaneAt: 0).ids, [[c], [a, b]])
     }
 
     func testANewLaneAtTheEnd() {
         let layout = PanelLayout([[a, b]])
 
-        XCTAssertEqual(layout.moving(a, toNewLaneAt: 1).lanes, [[b], [a]])
+        XCTAssertEqual(layout.moving(a, toNewLaneAt: 1).ids, [[b], [a]])
     }
 
     func testTheLaneItLeftClosesUpBehindIt() {
         let layout = PanelLayout([[a], [b]])
 
         XCTAssertEqual(
-            layout.moving(a, toNewLaneAt: 0).lanes,
+            layout.moving(a, toNewLaneAt: 0).ids,
             [[a], [b]],
             "one lane opened, one emptied and closed — the count is unchanged"
         )
@@ -166,17 +166,17 @@ final class PanelLayoutAddingTests: XCTestCase {
     func testItLandsInTheLaneCarryingTheLeast() {
         let layout = PanelLayout([[a, b], [c]])
 
-        XCTAssertEqual(layout.adding("d").lanes, [[a, b], [c, "d"]])
+        XCTAssertEqual(layout.adding("d").ids, [[a, b], [c, "d"]])
     }
 
     func testTheFirstOfTwoEqualLanesWins() {
         let layout = PanelLayout([[a], [b]])
 
-        XCTAssertEqual(layout.adding(c).lanes, [[a, c], [b]])
+        XCTAssertEqual(layout.adding(c).ids, [[a, c], [b]])
     }
 
     func testAddingToAnEmptyPanel() {
-        XCTAssertEqual(PanelLayout.empty.adding(a).lanes, [[a]])
+        XCTAssertEqual(PanelLayout.empty.adding(a).ids, [[a]])
     }
 
     func testAWidgetAlreadyOnThePanelIsNotAddedTwice() {

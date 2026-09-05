@@ -49,6 +49,40 @@ public enum WidgetSize: String, Codable, Sendable, CaseIterable {
     case screen
 }
 
+public extension WidgetSize {
+    /// Whether a resize grip may change this widget's size. An app screen
+    /// brings its own dimensions — multiplying them would only add dead glass
+    /// around a fixed-size view — so only cards take part in resizing.
+    var isResizable: Bool {
+        self != .screen
+    }
+}
+
+/// A widget's size as multiples of its base size: 1x, 2x, 3x, never anything
+/// in between.
+///
+/// The base is the widget's own — height multiplies its descriptor's base
+/// height, width multiplies the lane's unit width — so a 2x widget is twice
+/// its base rather than an arbitrary rect. Countable by construction, which is
+/// what keeps the lane grid a grid once widgets can be resized. Only the
+/// override is stored, on the layout's placement; the intrinsic size stays
+/// here on the descriptor.
+public struct WidgetSpan: Codable, Hashable, Sendable {
+    /// The largest multiple a resize can reach, per axis.
+    public static let maximum = 3
+
+    /// No resize: the widget at its base size.
+    public static let unit = WidgetSpan(width: 1, height: 1)
+
+    public var width: Int
+    public var height: Int
+
+    public init(width: Int, height: Int) {
+        self.width = min(max(width, 1), Self.maximum)
+        self.height = min(max(height, 1), Self.maximum)
+    }
+}
+
 /// A system permission a widget cannot work without.
 ///
 /// A widget missing one degrades to an inline grant prompt; it never keeps the

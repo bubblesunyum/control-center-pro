@@ -100,7 +100,7 @@ final class PanelArrangementRearrangingTests: XCTestCase {
         panel.move(stub, toLane: 1, at: 0)
 
         XCTAssertIdentical(before, panel.slot(for: stub)?.instance)
-        XCTAssertEqual(panel.layout.lanes, [[stub, other]])
+        XCTAssertEqual(panel.layout.ids, [[stub, other]])
     }
 
     func testAMovedWidgetIsNotRestarted() {
@@ -148,7 +148,7 @@ final class PanelArrangementRearrangingTests: XCTestCase {
 
         panel.move(stub, toLane: 0, at: 0)
 
-        XCTAssertEqual(panel.layout.lanes, [[stub, other]])
+        XCTAssertEqual(panel.layout.ids, [[stub, other]])
     }
 
     func testRearrangingWritesTheLayoutOut() {
@@ -162,7 +162,7 @@ final class PanelArrangementRearrangingTests: XCTestCase {
         panel.move(stub, toLane: 1, at: 0)
         panel.flush()
 
-        XCTAssertEqual(store.load().lanes, [[stub, other]])
+        XCTAssertEqual(store.load().ids, [[stub, other]])
     }
 }
 
@@ -227,7 +227,7 @@ final class PanelArrangementGalleryTests: XCTestCase {
 
         panel.add("widget-from-a-newer-build")
 
-        XCTAssertEqual(panel.layout.lanes, [[stub, "widget-from-a-newer-build"]])
+        XCTAssertEqual(panel.layout.ids, [[stub, "widget-from-a-newer-build"]])
         XCTAssertNil(panel.slot(for: "widget-from-a-newer-build")?.instance)
     }
 }

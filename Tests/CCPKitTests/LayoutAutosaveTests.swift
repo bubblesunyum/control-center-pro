@@ -31,7 +31,7 @@ final class LayoutAutosaveTests: XCTestCase {
         autosave.schedule(PanelLayout([[a, b]]))
         autosave.flush()
 
-        XCTAssertEqual(store.load().lanes, [[a, b]])
+        XCTAssertEqual(store.load().ids, [[a, b]])
     }
 
     func testItWritesOnceTheChangesStop() async throws {
@@ -41,7 +41,7 @@ final class LayoutAutosaveTests: XCTestCase {
         autosave.schedule(PanelLayout([[a]]))
         try await Task.sleep(for: .milliseconds(300))
 
-        XCTAssertEqual(store.load().lanes, [[a]])
+        XCTAssertEqual(store.load().ids, [[a]])
     }
 
     func testFlushingWithNothingPendingIsFine() {
@@ -68,7 +68,7 @@ final class LayoutAutosaveTests: XCTestCase {
         autosave.schedule(PanelLayout([[a, b]]))
         autosave.flush()
 
-        XCTAssertEqual(store.load().lanes, [[a, b]], "the last arrangement is the one on disk")
+        XCTAssertEqual(store.load().ids, [[a, b]], "the last arrangement is the one on disk")
     }
 
     func testTheLastOfSeveralQueuedWritesWins() async throws {
@@ -81,7 +81,7 @@ final class LayoutAutosaveTests: XCTestCase {
         }
         autosave.flush()
 
-        XCTAssertEqual(store.load().lanes, [[a, b]])
+        XCTAssertEqual(store.load().ids, [[a, b]])
     }
 
     /// Quitting during the debounce must not lose the edit, and flushing must

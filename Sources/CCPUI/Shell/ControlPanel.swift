@@ -311,7 +311,7 @@ struct LaneSlotCard: View {
 
     var body: some View {
         switch slot {
-        case .widget(let widget): widget.view
+        case .widget(let widget, _): widget.view
         case .unavailable(let id): UnavailableWidgetCard(id: id)
         }
     }
@@ -319,9 +319,10 @@ struct LaneSlotCard: View {
 
 extension [LaneSlot] {
     /// How wide a lane holding these has to be: as wide as the widest thing in
-    /// it. A lane of cards is the default width; one holding an app screen
-    /// widens to fit it rather than cropping it, and the panel grows by that
-    /// much. An empty lane is a lane of cards until something says otherwise.
+    /// it. A lane of cards is the default width; a widened card or an app
+    /// screen widens its lane to fit rather than cropping, and the panel grows
+    /// by that much. An empty lane is a lane of cards until something says
+    /// otherwise.
     var width: CGFloat {
         map(\.width).max() ?? Layout.laneWidth
     }
@@ -339,18 +340,25 @@ extension LaneSlot {
     /// can be wrong by.
     var height: CGFloat {
         switch self {
-        case .widget(let widget): widget.descriptor.size.height
-        case .unavailable: WidgetSize.compact.height
+        case .widget(let widget, let span):
+            let base = widget.descriptor.size.height
+            // A resized card asks for multiples of its base height; an app
+            // screen keeps its own, which its view already draws.
+            return widget.descriptor.size.isResizable ? base * CGFloat(span.height) : base
+        case .unavailable: return WidgetSize.compact.height
         }
     }
 
-    /// How wide a lane this slot needs. A slot standing in for a widget this
-    /// build doesn't have takes the default width — the id is all it has, and
-    /// nothing in it says the absent widget was ever wider.
+    /// How wide a lane this slot needs: the lane unit times the width span. A
+    /// slot standing in for a widget this build doesn't have takes the default
+    /// width — the id is all it has, and nothing in it says the absent widget
+    /// was ever wider. An app screen keeps its own width either way.
     var width: CGFloat {
         switch self {
-        case .widget(let widget): widget.descriptor.size.width
-        case .unavailable: Layout.laneWidth
+        case .widget(let widget, let span):
+            guard widget.descriptor.size.isResizable else { return widget.descriptor.size.width }
+            return Layout.laneWidth * CGFloat(span.width)
+        case .unavailable: return Layout.laneWidth
         }
     }
 
@@ -358,7 +366,7 @@ extension LaneSlot {
     /// is all a slot standing in for an absent widget has.
     var title: String {
         switch self {
-        case .widget(let widget): widget.descriptor.title
+        case .widget(let widget, _): widget.descriptor.title
         case .unavailable(let id): id.rawValue
         }
     }

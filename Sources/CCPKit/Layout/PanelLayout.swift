@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Control Center Pro contributors
 
-/// Where the widgets sit: vertical lanes, each an ordered list of widget ids.
+/// Where the widgets sit: vertical lanes, each an ordered list of placements.
 ///
 /// Plain data, and deliberately ignorant of the registry — it stores names, and
 /// turning a name into a live widget is `WidgetRegistry.resolve(_:)`'s job.
@@ -9,7 +9,7 @@
 /// widget this build has never heard of decodes intact and is written back
 /// intact, so moving between builds with different widget sets costs nothing.
 public struct PanelLayout: Codable, Hashable, Sendable {
-    public typealias Lane = [WidgetID]
+    public typealias Lane = [Placement]
 
     public var lanes: [Lane]
 
@@ -17,9 +17,22 @@ public struct PanelLayout: Codable, Hashable, Sendable {
         self.lanes = lanes
     }
 
+    /// A layout written with bare ids — every placement at its base size. What
+    /// the default layout, the gallery, and a file from before resizes existed
+    /// all look like.
+    public init(_ ids: [[WidgetID]]) {
+        self.lanes = ids.map { $0.map { Placement(id: $0) } }
+    }
+
+    /// The same lanes as bare ids. Order and membership without the sizes —
+    /// what most comparisons want.
+    public var ids: [[WidgetID]] {
+        lanes.map { $0.map(\.id) }
+    }
+
     /// One lane, holding nothing. The floor `normalized()` keeps, and what an
     /// arrangement emptied of every widget collapses to.
-    public static let empty = PanelLayout([[]])
+    public static let empty = PanelLayout([[]] as [Lane])
 
     /// The layout with each widget placed at most once and its empty lanes
     /// closed up.
@@ -33,11 +46,12 @@ public struct PanelLayout: Codable, Hashable, Sendable {
     /// A widget is placed once because a panel holding two of the same card is
     /// a file that was hand-edited or half-written, not an arrangement anyone
     /// asked for — and the shell keys its lanes on the widget id, so the
-    /// duplicate would render undefined. The first placement is the one kept.
+    /// duplicate would render undefined. The first placement is the one kept,
+    /// span and all.
     public func normalized() -> PanelLayout {
         var placed: Set<WidgetID> = []
         let occupied = lanes
-            .map { $0.filter { placed.insert($0).inserted } }
+            .map { $0.filter { placed.insert($0.id).inserted } }
             .filter { !$0.isEmpty }
         return occupied.isEmpty ? .empty : PanelLayout(occupied)
     }
@@ -56,17 +70,20 @@ public struct PanelLayout: Codable, Hashable, Sendable {
     /// the trailing slot makes a column. Out of range in any other direction,
     /// or naming a widget this layout doesn't place, and nothing moves — a drag
     /// that ended somewhere meaningless should leave the panel as it was.
+    ///
+    /// The placement moves whole: a resized widget lands at its size, because
+    /// the span belongs to the widget rather than the slot it left.
     public func moving(_ id: WidgetID, toLane lane: Int, at index: Int) -> PanelLayout {
         guard let from = position(of: id), lane >= 0, lane <= lanes.count else { return self }
 
         var lifted = lanes
-        lifted[from.lane].remove(at: from.index)
+        let placement = lifted[from.lane].remove(at: from.index)
         if lane == lifted.count { lifted.append([]) }
 
         // Clamping rather than rejecting: the index comes from a finger, and
         // the end of the lane is what "below the last card" means.
         let destination = min(max(index, 0), lifted[lane].count)
-        lifted[lane].insert(id, at: destination)
+        lifted[lane].insert(placement, at: destination)
 
         return PanelLayout(lifted).normalized()
     }
@@ -78,10 +95,11 @@ public struct PanelLayout: Codable, Hashable, Sendable {
     /// place a column can appear without shoving every card already on screen
     /// sideways while the user is still holding one.
     public func moving(_ id: WidgetID, toNewLaneAt lane: Int) -> PanelLayout {
-        guard position(of: id) != nil, lane >= 0, lane <= lanes.count else { return self }
+        guard lane >= 0, lane <= lanes.count,
+              let placement = lanes.joined().first(where: { $0.id == id }) else { return self }
 
-        var opened = lanes.map { $0.filter { $0 != id } }
-        opened.insert([id], at: lane)
+        var opened = lanes.map { $0.filter { $0.id != id } }
+        opened.insert([placement], at: lane)
         return PanelLayout(opened).normalized()
     }
 
@@ -97,20 +115,28 @@ public struct PanelLayout: Codable, Hashable, Sendable {
         var grown = lanes
         let shortest = grown.indices.min { grown[$0].count < grown[$1].count } ?? 0
         guard grown.indices.contains(shortest) else { return PanelLayout([[id]]) }
-        grown[shortest].append(id)
+        grown[shortest].append(Placement(id: id))
         return PanelLayout(grown).normalized()
     }
 
     /// The layout without `id`. Removing the last widget leaves ``empty``
     /// rather than a panel with no width.
     public func removing(_ id: WidgetID) -> PanelLayout {
-        PanelLayout(lanes.map { $0.filter { $0 != id } }).normalized()
+        PanelLayout(lanes.map { $0.filter { $0.id != id } }).normalized()
+    }
+
+    /// The layout with `id` resized to `span`. Naming a widget this layout
+    /// doesn't place changes nothing — a resize grip only exists on a card
+    /// that is already on the panel.
+    public func resizing(_ id: WidgetID, to span: WidgetSpan) -> PanelLayout {
+        guard position(of: id) != nil else { return self }
+        return PanelLayout(lanes.map { $0.map { $0.id == id ? Placement(id: id, span: span) : $0 } })
     }
 
     /// Where a widget currently sits, or `nil` if this layout doesn't place it.
     public func position(of id: WidgetID) -> (lane: Int, index: Int)? {
         for (lane, widgets) in lanes.enumerated() {
-            if let index = widgets.firstIndex(of: id) { return (lane, index) }
+            if let index = widgets.firstIndex(where: { $0.id == id }) { return (lane, index) }
         }
         return nil
     }
