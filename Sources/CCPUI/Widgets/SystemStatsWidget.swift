@@ -220,7 +220,7 @@ private struct SystemStatsContent: View {
                 VStack(alignment: .leading, spacing: 5) {
                     // Pressure above swap per request
                     pressureExpandedRow
-                    memorySecondaryRow("Swap", adapter.snapshot.memorySwapUsed, noDecimal: true)
+                    memorySecondaryRow("Swap", adapter.snapshot.memorySwapUsed)
                     memorySecondaryRow("Compressed", adapter.snapshot.memoryCompressed)
                     memorySecondaryRow("Cached Files", adapter.snapshot.memoryCached)
                 }
@@ -234,7 +234,7 @@ private struct SystemStatsContent: View {
         let snapshot = adapter.snapshot
         let valueText: String = {
             if let used = snapshot.memoryUsed, let total = snapshot.memoryTotal {
-                return "\(Self.bytes(used)) / \(Self.bytes(total))"
+                return Self.bytesPair(used: used, total: total)
             }
             return "--"
         }()
@@ -398,14 +398,14 @@ private struct SystemStatsContent: View {
     }
 
     @ViewBuilder
-    private func memorySecondaryRow(_ title: String, _ bytes: UInt64?, noDecimal: Bool = false) -> some View {
+    private func memorySecondaryRow(_ title: String, _ bytes: UInt64?) -> some View {
         if let bytes {
             HStack(spacing: 8) {
                 Text(title)
                     .font(.system(size: 10.5))
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text(noDecimal ? Self.bytesWhole(bytes) : Self.bytes(bytes))
+                Text(Self.bytes(bytes))
                     .font(.system(size: 11, weight: .medium))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
@@ -580,24 +580,31 @@ private struct SystemStatsContent: View {
         "\(Int((max(0, min(1, fraction)) * 100).rounded()))%"
     }
 
-    private static let byteFormatter: ByteCountFormatter = {
-        let f = ByteCountFormatter()
-        f.countStyle = .memory
-        f.allowedUnits = [.useBytes, .useKB, .useMB, .useGB]
-        return f
-    }()
+    private static let byteDivisor = 1024.0
 
+    /// Memory bytes with exactly one decimal — "8.0 GB", "512.0 MB".
     static func bytes(_ value: UInt64) -> String {
-        byteFormatter.string(fromByteCount: Int64(value))
+        let (divisor, unit) = Self.byteUnit(for: value)
+        guard divisor > 1 else { return value == 1 ? "1 byte" : "\(value) bytes" }
+        return String(format: "%.1f %@", Double(value) / divisor, unit)
     }
 
-    /// Integer bytes with unit — e.g. "1.8 GB" → "2 GB", no decimals.
-    static func bytesWhole(_ value: UInt64) -> String {
-        let raw = byteFormatter.string(fromByteCount: Int64(value))
-        let parts = raw.split(separator: " ")
-        guard parts.count >= 2, let num = Double(parts[0]) else { return raw }
-        let unit = parts.dropFirst().joined(separator: " ")
-        return "\(Int(num.rounded())) \(unit)"
+    /// Used/total pair sharing the total's unit, named once on the right — "8.0 / 16.0 GB".
+    static func bytesPair(used: UInt64, total: UInt64) -> String {
+        let (divisor, unit) = Self.byteUnit(for: total)
+        guard divisor > 1 else { return "\(used) / \(total) bytes" }
+        return String(format: "%.1f / %.1f %@", Double(used) / divisor, Double(total) / divisor, unit)
+    }
+
+    private static func byteUnit(for value: UInt64) -> (Double, String) {
+        let kb = byteDivisor
+        switch Double(value) {
+        case (kb * kb * kb * kb)...: return (kb * kb * kb * kb, "TB")
+        case (kb * kb * kb)...: return (kb * kb * kb, "GB")
+        case (kb * kb)...: return (kb * kb, "MB")
+        case kb...: return (kb, "KB")
+        default: return (1, "bytes")
+        }
     }
 
     private func chargeTint(_ charge: Int) -> Color {
