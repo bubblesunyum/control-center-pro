@@ -172,6 +172,11 @@ public extension Layout {
     /// The Files overflow menu: how wide the popover stands, how tall one row is.
     static let shelfMenuWidth: CGFloat = 220
     static let shelfMenuRowHeight: CGFloat = 32
+    /// The Notes conflicts popover: a list pane beside a content pane, so it
+    /// stands roughly twice as wide as a single-column menu.
+    static let conflictsPopoverWidth: CGFloat = 420
+    static let conflictsListWidth: CGFloat = 150
+    static let conflictsPopoverHeight: CGFloat = 240
     /// The round icon buttons that sit on a widget header's trailing edge.
     /// One size so two headers never disagree about how tall their line is.
     static let headerAccessorySize: CGFloat = 28

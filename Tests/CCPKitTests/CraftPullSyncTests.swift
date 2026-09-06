@@ -251,6 +251,94 @@ final class CraftPullAdapterTests: XCTestCase {
         XCTAssertEqual(adapter.stashIDs(for: id), ["c1", "c2"])
         XCTAssertFalse(adapter.isPushDirty(id))
         XCTAssertNotNil(adapter.syncedAt(for: id))
+
+        let records = adapter.conflicts(for: id)
+        XCTAssertEqual(records.count, 1, "the landed stash is listed")
+        XCTAssertEqual(records[0].slices, ["mine edited"])
+        let clock = ISO8601DateFormatter().date(from: "2026-09-06T19:00:00Z")
+        XCTAssertEqual(records[0].date, clock, "dated by the server clock, never the Mac's")
+    }
+
+    func testFailedStashPostRecordsNothing() async throws {
+        let name = "ccp.pull.stashfail.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([connection, blocks("""
+            {"items":[{"id":"r1","markdown":"theirs"}]}
+            """), ScriptedTransport.Script(statusCode: 500, json: "{}")])
+        let adapter = adapter(store, transport)
+        let id = try await steadyPad(adapter, text: "mine", seeded: ["mine"])
+        adapter.storeSidecar(BlockSidecar(entries: [
+            BlockSidecarEntry(id: "r1", fingerprint: BlockSidecar.fingerprint("mine")),
+        ]), for: id)
+        adapter.text = "mine edited"
+
+        await adapter.pullAll()
+
+        XCTAssertEqual(adapter.conflicts(for: id), [], "a stash that never landed lists nothing")
+        XCTAssertEqual(adapter.text, "mine edited")
+    }
+
+    func testConflictRecordsCapDismissAndDropWithTheNote() async throws {
+        let name = "ccp.pull.records.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let adapter = NotesAdapter(defaults: store, defaultName: "Note")
+        let id = try XCTUnwrap(adapter.selectedNoteID)
+        XCTAssertEqual(adapter.conflictsVersion, 0)
+
+        for index in 0..<7 {
+            adapter.recordConflict(slices: ["v\(index)"], date: nil, for: id)
+        }
+        XCTAssertEqual(adapter.conflictsVersion, 7, "records publish for the toolbar")
+        XCTAssertEqual(adapter.conflicts(for: id).map(\.slices),
+                       [["v6"], ["v5"], ["v4"], ["v3"], ["v2"]],
+                       "newest first, capped at five")
+
+        let doomed = try XCTUnwrap(adapter.conflicts(for: id).first?.id)
+        adapter.dismissConflict(doomed, for: id)
+        XCTAssertEqual(adapter.conflictsVersion, 8)
+        XCTAssertEqual(adapter.conflicts(for: id).count, 4)
+        // Dismissing a stranger changes nothing.
+        adapter.dismissConflict(UUID(), for: id)
+        XCTAssertEqual(adapter.conflicts(for: id).count, 4)
+
+        adapter.createNote()
+        let doomedID = id
+        XCTAssertTrue(adapter.closeNote(doomedID), "two notes, so the close lands")
+        XCTAssertEqual(adapter.conflicts(for: doomedID), [], "records leave with the note")
+    }
+
+    func testCloseNoteDropsAllSyncState() async throws {
+        let name = "ccp.pull.close.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([connection, blocks("""
+            {"items":[{"id":"r1","markdown":"theirs"}]}
+            """), blocks("""
+            {"items":[{"id":"c1","markdown":"# Conflicted copy"},
+                       {"id":"c2","markdown":"mine edited"}]}
+            """)])
+        let adapter = adapter(store, transport)
+        let id = try await steadyPad(adapter, text: "mine", seeded: ["mine"])
+        adapter.storeSidecar(BlockSidecar(entries: [
+            BlockSidecarEntry(id: "r1", fingerprint: BlockSidecar.fingerprint("mine")),
+        ]), for: id)
+        adapter.text = "mine edited"
+
+        await adapter.pullAll()
+        XCTAssertFalse(adapter.conflicts(for: id).isEmpty, "a stash to drop")
+        XCTAssertFalse(adapter.stashIDs(for: id).isEmpty)
+        XCTAssertNotNil(adapter.syncedAt(for: id))
+
+        adapter.createNote()
+        XCTAssertTrue(adapter.closeNote(id))
+
+        XCTAssertEqual(adapter.conflicts(for: id), [])
+        XCTAssertEqual(adapter.stashIDs(for: id), [])
+        XCTAssertNil(adapter.syncedAt(for: id))
+        XCTAssertEqual(adapter.sidecar(for: id).entries, [])
+        XCTAssertNil(adapter.craftDocumentID(for: id))
     }
 
     func testFailedFetchLeavesPadSidecarAndDirtyBitAlone() async throws {

@@ -308,6 +308,9 @@ public final class NotesAdapter {
     // state to migrate: the pull never ran before this bead, so no sidecar
     // in the wild carries conflict pins yet.
     @ObservationIgnored private let stashKey = "scratchpadCraftStash"
+    // Conflict records for the popover (ccp-omt1): what each stash preserved
+    // and when, per pad, newest first. The pins stay the sync's business.
+    @ObservationIgnored private let conflictsKey = "scratchpadCraftConflicts"
     // Push bookkeeping (ccp-2zi.5). The pad-to-document mapping is config,
     // like retention and selection — never note text.
     @ObservationIgnored private let craftDocumentsKey = "scratchpadCraftDocuments"
@@ -548,6 +551,9 @@ public final class NotesAdapter {
         guard let document, let next = document.removing(id), persist(next) else { return false }
         dropSidecar(for: id)
         dropCraftDocumentID(for: id)
+        dropConflicts(for: id)
+        dropStashIDs(for: id)
+        dropSyncedAt(for: id)
         dirtyPadIDs.remove(id)
         apply(next)
         return true
@@ -882,6 +888,63 @@ public final class NotesAdapter {
         DefaultsMap(defaults: defaults, key: stashKey)
     }
 
+    /// Test seam: closing a note must leave no per-pad sync state behind.
+    /// UUIDs never reuse and pulls only visit mapped pads, so anything kept
+    /// leaks forever — and its Craft copies surface nowhere once the mapping
+    /// and records are gone.
+    func dropStashIDs(for id: UUID) {
+        stashMap().set(nil, for: id.uuidString)
+    }
+
+    func dropSyncedAt(for id: UUID) {
+        syncedAtMap().set(nil, for: id.uuidString)
+    }
+
+    // MARK: - Craft conflict records
+
+    /// Bumped on every record/dismiss/drop. The records live in UserDefaults,
+    /// which observation cannot see — views read it through `conflicts(for:)`
+    /// so they refresh when the set changes (a background pull recording, a
+    /// dismiss emptying the list).
+    private(set) var conflictsVersion = 0
+
+    /// Conflicts stashed for a pad, newest first. Empty when none ever
+    /// stashed — pins from before records existed list nothing.
+    public func conflicts(for id: UUID) -> [ConflictRecord] {
+        _ = conflictsVersion
+        return conflictsMap().load()[id.uuidString] ?? []
+    }
+
+    /// Forgets one conflict record. The Craft-side copy and its sidecar pins
+    /// stay: forgetting must never re-echo the copy into the pad.
+    public func dismissConflict(_ recordID: UUID, for id: UUID) {
+        let kept = conflicts(for: id).filter { $0.id != recordID }
+        conflictsMap().set(kept.isEmpty ? nil : kept, for: id.uuidString)
+        conflictsVersion += 1
+    }
+
+    public func dropConflicts(for id: UUID) {
+        conflictsMap().set(nil, for: id.uuidString)
+        conflictsVersion += 1
+    }
+
+    /// Conflicts kept per pad. More than a handful of lost versions stops
+    /// informing and starts hoarding; Craft holds the full history anyway.
+    private static let maximumConflictsPerPad = 5
+
+    /// Test seam: the pull spends this on a landed stash.
+    func recordConflict(slices: [String], date: Date?, for id: UUID) {
+        let record = ConflictRecord(date: date, slices: slices)
+        conflictsMap().set(
+            Array(([record] + conflicts(for: id)).prefix(Self.maximumConflictsPerPad)),
+            for: id.uuidString)
+        conflictsVersion += 1
+    }
+
+    private func conflictsMap() -> DefaultsMap<[ConflictRecord]> {
+        DefaultsMap(defaults: defaults, key: conflictsKey)
+    }
+
     /// Pull every mapped pad: one clock read, then one block fetch each. A
     /// failed clock still pulls — decisions never need it — and one pad's
     /// failure never skips the rest. Observable for tests; the activate path
@@ -933,6 +996,9 @@ public final class NotesAdapter {
             // already know to keep it out of the pad.
             let stashed = stashIDs(for: padID).intersection(remoteIDs).union(echo.map(\.id))
             storeStashIDs(stashed, for: padID)
+            // The popover lists what was preserved and when; recorded only
+            // for the copy that actually landed.
+            recordConflict(slices: stash, date: serverTime, for: padID)
             // Re-read after the POST: adopting now would overwrite keystrokes
             // newer than the stash and clear their dirty bit. Leave everything
             // — the stash just posted is their safety copy, and the next pull

@@ -192,14 +192,9 @@ private struct ShelfOverflowMenu: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Actions".uppercased())
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .tracking(0.5)
-                .padding(.horizontal, Space.one)
+            PopoverMenuSectionLabel("Actions")
                 .padding(.top, Space.half)
-                .padding(.bottom, Space.quarter)
-            ShelfMenuRow(
+            PopoverMenuRow(
                 systemImage: window.isVisible ? "xmark" : "arrow.up.forward",
                 title: window.isVisible ? "Hide shelf" : "Open shelf"
             ) {
@@ -208,7 +203,7 @@ private struct ShelfOverflowMenu: View {
             }
             .accessibilityHint(window.isVisible ? "Hides the floating Files window" : "Shows the floating Files window")
             if store.selection.isEmpty {
-                ShelfMenuRow(systemImage: "trash", title: "Clear all", isDestructive: true) {
+                PopoverMenuRow(systemImage: "trash", title: "Clear all", isDestructive: true) {
                     store.clear()
                     dismiss()
                 }
@@ -216,7 +211,7 @@ private struct ShelfOverflowMenu: View {
                 .help("Removes every unpinned item from Files")
                 .accessibilityHint("Removes every unpinned item from Files")
             } else {
-                ShelfMenuRow(
+                PopoverMenuRow(
                     systemImage: "trash.fill",
                     title: "Remove selected (\(store.selection.count))",
                     isDestructive: true
@@ -227,12 +222,7 @@ private struct ShelfOverflowMenu: View {
                 .help("Removes selected items from Files")
             }
             Divider().padding(.vertical, Space.half)
-            Text("Tools".uppercased())
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .tracking(0.5)
-                .padding(.horizontal, Space.one)
-                .padding(.bottom, Space.quarter)
+            PopoverMenuSectionLabel("Tools")
             hiddenFilesRow
         }
         .padding(.vertical, Space.half)
@@ -273,57 +263,12 @@ private struct ShelfOverflowMenu: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(ShelfMenuRowStyle())
+        .buttonStyle(PopoverMenuRowStyle())
         .disabled(isBusy)
         .help(isOn ? "Hide hidden files — Finder will restart" : "Show hidden files — Finder will restart")
         .accessibilityLabel("Show hidden files")
         .accessibilityValue(isOn ? "On" : "Off")
         .accessibilityHint("Toggles Finder hidden files. Finder restarts to apply.")
-    }
-}
-
-/// One row in the overflow menu: a leading symbol in a fixed column and a
-/// title, with the row's hover fill. psymail's `MenuRow` is not exported by
-/// `PsymailKit`, so this is CCP's own in that shape, in CCP tokens.
-private struct ShelfMenuRow: View {
-    let systemImage: String
-    let title: String
-    var isDestructive = false
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: Space.one) {
-                Image(systemName: systemImage)
-                    .fontWeight(.medium)
-                    .frame(width: Layout.rowActionSize)
-                Text(title)
-                Spacer(minLength: Space.one)
-            }
-            .font(.caption)
-            .foregroundStyle(isDestructive ? Color.red : Color.primary)
-            .padding(.horizontal, Space.one)
-            .padding(.vertical, Space.half)
-            .frame(maxWidth: .infinity, minHeight: Layout.shelfMenuRowHeight)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(ShelfMenuRowStyle())
-        .accessibilityLabel(title)
-    }
-}
-
-private struct ShelfMenuRowStyle: ButtonStyle {
-    @State private var hovered = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background(
-                hovered || configuration.isPressed
-                    ? Color.menuRowHover
-                    : Color.clear,
-                in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
-            )
-            .onHover { hovered = $0 }
     }
 }
 
