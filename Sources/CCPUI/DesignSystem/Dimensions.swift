@@ -170,7 +170,7 @@ public extension Layout {
     static let shelfPreviewWidth: CGFloat = 42
     static let shelfPreviewHeight: CGFloat = 56
     /// Thumbnail in the Files card's minimized strip: one horizontal row of
-    /// pinned items. Square and small — a glanceable summary, not a preview.
+    /// pinned and download items. Square and small — a glanceable summary, not a preview.
     static let shelfMinimizedThumbnailSize: CGFloat = 32
     /// Fallback icon sizes inside those thumbnails: the full row's 42×56
     /// preview centers a 24pt icon, the minimized 32pt square a 20pt one.

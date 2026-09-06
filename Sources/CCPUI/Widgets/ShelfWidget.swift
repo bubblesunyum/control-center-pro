@@ -18,8 +18,9 @@ import UniformTypeIdentifiers
 /// its header.
 ///
 /// Minimized, it is just the header plus one horizontally paging row of small
-/// pinned thumbnails; unpinned items and downloads hide entirely until the
-/// caret expands it again. With no pins it is just its header.
+/// thumbnails: pins first, a divider, then recent downloads. Unpinned shelf
+/// items hide entirely until the caret expands it again. With no pins and no
+/// downloads it is just its header.
 @MainActor
 public final class ShelfWidget: CCPWidget {
     public static let descriptor = WidgetDescriptor(
@@ -99,10 +100,10 @@ private struct ShelfWidgetContent: View {
             }
         } content: {
             if isMinimized {
-                // Pinned thumbnails only — unpinned items and downloads hide
-                // entirely. No pins, no row: just the header.
-                if !pinned.isEmpty {
-                    minimizedStrip(pinned: pinned)
+                // Pins then downloads in one paging row — unpinned shelf items
+                // hide entirely. No pins and no downloads, no row: just the header.
+                if !pinned.isEmpty || !downloads.files.isEmpty {
+                    minimizedStrip(pinned: pinned, downloads: downloads.files)
                 }
             } else if !store.items.isEmpty || !downloads.files.isEmpty {
                 // Nothing below the header until something is anywhere: an empty
@@ -165,14 +166,22 @@ private struct ShelfWidgetContent: View {
             }
     }
 
-    /// The minimized form: one horizontally paging row of small pinned
-    /// thumbnails. Every pin stays reachable — the row pages a viewport at a
-    /// time rather than capping with "+N more".
-    private func minimizedStrip(pinned: [ShelfItem]) -> some View {
+    /// The minimized form: one horizontally paging row — pins first, a small
+    /// divider, then recent downloads. Everything stays reachable: the row
+    /// pages a viewport at a time rather than capping with "+N more".
+    private func minimizedStrip(pinned: [ShelfItem], downloads: [RecentFile]) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             LazyHStack(spacing: Space.half) {
                 ForEach(pinned) { item in
                     MinimizedShelfThumbnail(item: item)
+                }
+                if !pinned.isEmpty, !downloads.isEmpty {
+                    Divider()
+                        .frame(width: 1, height: Layout.shelfMinimizedThumbnailSize)
+                        .accessibilityHidden(true)
+                }
+                ForEach(downloads) { file in
+                    MinimizedDownloadThumbnail(file: file)
                 }
             }
             .padding(.top, Space.half)
@@ -705,6 +714,83 @@ private struct MinimizedShelfThumbnail: View {
     }
 }
 
+/// One download in the Files card's minimized strip: a small thumbnail that
+/// opens on tap and drags out like an expanded download row. Mirrors
+/// MinimizedShelfThumbnail's hover title so the two halves of the strip agree.
+private struct MinimizedDownloadThumbnail: View {
+    let file: RecentFile
+    @Environment(\.isPanelEditing) private var isPanelEditing
+    @State private var showTitleTip = false
+    @State private var hoverTask: Task<Void, Never>?
+
+    var body: some View {
+        Button {
+            if !isPanelEditing {
+                NSWorkspace.shared.open(file.url)
+            }
+        } label: {
+            thumbnail
+        }
+        .buttonStyle(.plain)
+        .disabled(isPanelEditing)
+        .accessibilityLabel(file.name)
+        .accessibilityHint("Opens in its default app")
+        .popover(isPresented: $showTitleTip, arrowEdge: .bottom) {
+            Text(file.name)
+                .font(.caption)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .padding(.horizontal, Space.one)
+                .padding(.vertical, Space.half)
+                .frame(maxWidth: Layout.shelfMinimizedTipMaxWidth)
+        }
+        .onHover(perform: trackHover)
+        .onDisappear { hoverTask?.cancel() }
+        .contextMenu {
+            Button("Open") { NSWorkspace.shared.open(file.url) }
+            Button("Show in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([file.url])
+            }
+        }
+        .modifier(RecentDownloadDragModifier(url: file.url))
+    }
+
+    @ViewBuilder
+    private var thumbnail: some View {
+        let edge = Layout.shelfMinimizedThumbnailSize
+        let size = CGSize(width: edge, height: edge)
+        if file.isDirectory {
+            Image(systemName: "folder.fill")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+                .frame(width: size.width, height: size.height)
+        } else {
+            FileThumbnailView(
+                url: file.url,
+                size: size,
+                fallbackIcon: NSWorkspace.shared.icon(forFile: file.url.path),
+                symbolName: "doc.fill",
+                fallbackPointSize: Layout.shelfMinimizedThumbnailIconSize
+            )
+            .frame(width: size.width, height: size.height)
+        }
+    }
+
+    private func trackHover(_ hovering: Bool) {
+        hoverTask?.cancel()
+        hoverTask = nil
+        guard hovering, !isPanelEditing else {
+            showTitleTip = false
+            return
+        }
+        hoverTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            showTitleTip = true
+        }
+    }
+}
+
 /// One shelf item's image, at any size: a stored preview, a QuickLook
 /// thumbnail, the workspace icon, or the kind's symbol — derived in the view,
 /// never stored. The full rows and the minimized strip draw through this one
@@ -728,7 +814,8 @@ private struct ShelfItemPreview: View {
                     url: URL(fileURLWithPath: path),
                     size: size,
                     fallbackIcon: shelfFileTypeIcon(for: item),
-                    symbolName: shelfSymbol(for: item)
+                    symbolName: shelfSymbol(for: item),
+                    fallbackPointSize: fallbackPointSize
                 )
             } else if let icon = shelfFileTypeIcon(for: item) {
                 Image(nsImage: icon)
@@ -816,6 +903,7 @@ private struct FileThumbnailView: View {
     let size: CGSize
     let fallbackIcon: NSImage?
     let symbolName: String
+    var fallbackPointSize: CGFloat = Layout.shelfPreviewIconSize
     @State private var thumb: NSImage?
     @State private var attempted = false
 
@@ -834,7 +922,7 @@ private struct FileThumbnailView: View {
                         Image(nsImage: icon)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .frame(width: 24, height: 24)
+                            .frame(width: fallbackPointSize, height: fallbackPointSize)
                     } else {
                         Image(systemName: symbolName)
                             .font(.title3)
