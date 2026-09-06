@@ -686,7 +686,7 @@ private struct MinimizedShelfThumbnail: View {
         }
     }
 
-    /// The title arrives a beat after the pointer lands — one second, so
+    /// The title arrives a beat after the pointer lands — half a second, so
     /// sweeping across the strip stays quiet and only a resting pointer asks.
     /// A popover rather than `.help`: the system tooltip's delay is not
     /// ours to set, and an overlay would clip at the scroll view's edge.
@@ -698,7 +698,7 @@ private struct MinimizedShelfThumbnail: View {
             return
         }
         hoverTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1))
+            try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
             showTitleTip = true
         }
