@@ -49,6 +49,10 @@ struct PopoverMenuRow: View {
                     .fontWeight(.medium)
                     .frame(width: Layout.rowActionSize)
                 Text(title)
+                    // One line always: a long note name wraps to two and breaks
+                    // the row rhythm — short fixed verbs never stressed this.
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                 Spacer(minLength: Space.one)
             }
             .font(.caption)

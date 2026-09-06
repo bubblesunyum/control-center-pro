@@ -269,8 +269,14 @@ public final class NotesAdapter {
 
     /// The tabs the strip draws, in document order.
     public var openNotes: [Note] { notes.filter { !closedNoteIDs.contains($0.id) } }
-    /// The docs the X hid, for the header menu, in document order.
+    /// The docs the X hid, in document order — the raw hidden set. The header
+    /// menu reads the restorable subset below, never this directly.
     public var closedNotes: [Note] { notes.filter { closedNoteIDs.contains($0.id) } }
+    /// The hidden docs worth listing: closed notes with text. An empty note
+    /// was never edited, so it never saved to Craft — reopening it restores
+    /// nothing. Non-empty is the check (not the Craft mapping) so a just-typed
+    /// note lists before its first push lands.
+    public var restorableClosedNotes: [Note] { closedNotes.filter { !$0.text.isEmpty } }
 
     public var selectedNoteName: String {
         notes.first(where: { $0.id == selectedNoteID })?.name ?? defaultName
@@ -279,8 +285,6 @@ public final class NotesAdapter {
     public var canCreateNote: Bool { notes.count < NotesDocument.maximumNoteCount }
     /// Deleting needs a note left over: the document must hold at least one.
     public var canDeleteNote: Bool { notes.count > 1 }
-    /// Hiding needs a tab left open: the strip must show at least one.
-    public var canCloseTab: Bool { openNotes.count > 1 }
 
     @ObservationIgnored private var document: NotesDocument?
     @ObservationIgnored private var lastSavedDocument: NotesDocument?
@@ -604,13 +608,27 @@ public final class NotesAdapter {
         apply(next)
     }
 
+    /// Whether the X may hide this tab: never the last open one — the strip
+    /// must show one — and never an empty one, which holds nothing to restore
+    /// while the menu lists restorable notes only. The strip's X and
+    /// `closeTab` both read this, so the control never promises what the verb
+    /// refuses.
+    public func canCloseTab(_ id: UUID) -> Bool {
+        guard let note = openNotes.first(where: { $0.id == id }),
+              !note.text.isEmpty
+        else { return false }
+        return openNotes.count > 1
+    }
+
     /// Hide a tab. The doc is untouched — text, sync mapping and sidecar all
     /// stay, and the push and pull keep visiting it — so nothing is lost and
-    /// nothing asks first. Refuses the last open tab; the strip must show one.
+    /// nothing asks first. Deletion is the way out for the tabs the X
+    /// refuses, and needs no confirmation while empty.
     @discardableResult
     public func closeTab(_ id: UUID) -> Bool {
+        guard canCloseTab(id) else { return false }
         let opens = openNotes
-        guard let index = opens.firstIndex(where: { $0.id == id }), opens.count > 1 else { return false }
+        guard let index = opens.firstIndex(where: { $0.id == id }) else { return false }
         if selectedNoteID == id {
             // Selection first, hide second: a torn pair then leaves a visible
             // ghost tab, never a selected tab with nowhere to be seen. An
@@ -654,12 +672,18 @@ public final class NotesAdapter {
     /// Closed ids for docs that no longer exist prune on every apply: without
     /// this a replaced document leaks them forever. The selected tab unhides
     /// with them — selection is always visible, so a stuck hidden-selected
-    /// tab heals on the next load instead of lingering.
+    /// tab heals on the next load instead of lingering. Hidden empties unhide
+    /// too: hiding one is refused, so the state is stale by definition — a
+    /// foreign edit of the shared keys, or an older build — and unhiding
+    /// keeps it reachable.
     private func pruneClosedNoteIDs() {
         guard let document else { return }
         let live = Set(document.notes.map(\.id))
         if !closedNoteIDs.isSubset(of: live) {
             closedNoteIDs = closedNoteIDs.intersection(live)
+        }
+        for note in document.notes where note.text.isEmpty {
+            unhide(note.id)
         }
         unhide(document.selectedID)
     }
@@ -1217,6 +1241,12 @@ public final class NotesAdapter {
             isReplacingText = false
         }
         storeSidecar(sidecar, for: padID)
+        // An adopted empty leaves nothing to restore: the menu lists
+        // restorable notes only and the strip never drew a hidden tab, so a
+        // hidden pad adopted empty would strand with no way back. Unhide it.
+        if text.isEmpty {
+            unhide(padID)
+        }
         _ = persist(document)
     }
 

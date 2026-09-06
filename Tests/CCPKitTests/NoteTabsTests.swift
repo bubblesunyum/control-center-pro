@@ -166,6 +166,44 @@ final class NoteTabsTests: XCTestCase {
         XCTAssertEqual(second.openNotes.map(\.id), [ids[1], ids[2]])
     }
 
+    func testCloseTabRefusesEmptyNotes() throws {
+        // An empty note holds nothing to restore and the menu lists
+        // restorable notes only, so hiding one would strand it with no way
+        // back. Deletion stays the way out, without asking while empty.
+        let (defaults, name) = try store()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let adapter = adapter(defaults)
+        let ids = try three(adapter)
+
+        adapter.createNote()
+        let empty = try XCTUnwrap(adapter.selectedNoteID)
+        XCTAssertFalse(adapter.closeTab(empty))
+        XCTAssertEqual(adapter.openNotes.map(\.id), ids + [empty])
+        XCTAssertTrue(adapter.closedNotes.isEmpty)
+        XCTAssertTrue(adapter.deleteNote(empty))
+    }
+
+    func testHiddenEmptyNoteHealsOnLoad() throws {
+        // Hidden before the X refused empties, or by a foreign edit of the
+        // shared keys: either way the state is stale, so loading unhides it
+        // instead of stranding it outside the restorable menu.
+        let (defaults, name) = try store()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let ids = try three(adapter(defaults))
+
+        let seeded = NotesDocument(
+            notes: [Note(id: ids[0], name: "N0", text: "kept"),
+                    Note(id: ids[1], name: "N1", text: ""),
+                    Note(id: ids[2], name: "N2", text: "also kept")],
+            selectedID: ids[0])
+        defaults.set(try JSONEncoder().encode(seeded), forKey: "scratchpadDocument")
+        defaults.set(try JSONEncoder().encode(Set([ids[1], ids[2]])), forKey: "scratchpadClosedTabs")
+
+        let healed = adapter(defaults)
+        XCTAssertEqual(healed.restorableClosedNotes.map(\.id), [ids[2]])
+        XCTAssertEqual(healed.openNotes.map(\.id), [ids[0], ids[1]])
+    }
+
     func testCraftDocumentURLMatchesTheVendorTemplate() {
         let url = NotesAdapter.craftDocumentURL(spaceID: "space-1", blockID: "doc-2")
         XCTAssertEqual(url?.absoluteString, "craftdocs://open?spaceId=space-1&blockId=doc-2")

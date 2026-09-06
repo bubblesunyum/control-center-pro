@@ -155,39 +155,55 @@ private struct NotesContent: View {
     }
 }
 
-/// The header's trailing edge: tabs the X hid, listed by name. Choosing one
-/// brings its tab back and shows it. Empty and dimmed while nothing is
-/// hidden — a menu that opens onto nothing explains itself worse.
+/// The header's trailing edge: tabs the X hid that hold text, listed by name.
+/// Choosing one brings its tab back and shows it. Empty notes never saved to
+/// Craft, so they are not listed — reopening one restores nothing. Dimmed and
+/// disabled while nothing restorable is hidden — a menu that opens onto
+/// nothing explains itself worse.
 ///
-/// Wears the header icon-button chrome (see ``HeaderIconButton``): quiet
-/// until the pointer lands, then the hover chip.
+/// The Files card's overflow behind its own three dots: the same
+/// ``HeaderIconButton`` trigger and the same popover language
+/// (``PopoverMenuSectionLabel``/``PopoverMenuRow``), so the two menus read as
+/// one family.
 private struct ClosedNotesMenu: View {
     @Bindable var adapter: NotesAdapter
-    @State private var isHovered = false
+    @State private var isMenuPresented = false
 
-    private var isEmpty: Bool { adapter.closedNotes.isEmpty }
+    private var isEmpty: Bool { adapter.restorableClosedNotes.isEmpty }
 
     var body: some View {
-        Menu {
-            ForEach(adapter.closedNotes) { note in
-                Button(note.name) { _ = adapter.reopenTab(note.id) }
-            }
-        } label: {
-            Image(systemName: "ellipsis")
-                .font(.caption.weight(.semibold))
-                .frame(width: Layout.headerAccessorySize, height: Layout.headerAccessorySize)
-                .contentShape(Rectangle())
+        HeaderIconButton(
+            systemImage: "ellipsis",
+            label: isEmpty ? "No closed notes" : "Closed notes"
+        ) {
+            isMenuPresented = true
         }
-        .menuIndicator(.hidden)
-        .foregroundStyle(isHovered && !isEmpty ? Color.primary : Color.secondary)
-        .opacity(isEmpty ? 0.45 : 1)
-        .background {
-            RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
-                .fill(isHovered && !isEmpty ? Color.controlFill : Color.clear)
-        }
-        .onHover { isHovered = $0 }
         .disabled(isEmpty)
-        .help(isEmpty ? "No closed notes" : "Closed notes")
-        .accessibilityLabel(isEmpty ? "No closed notes" : "Closed notes")
+        .opacity(isEmpty ? 0.45 : 1)
+        .popover(isPresented: $isMenuPresented, arrowEdge: .top) {
+            ClosedNotesPopover(adapter: adapter, dismiss: { isMenuPresented = false })
+        }
+    }
+}
+
+/// The restorable tabs, one icon-led row each. Dismisses on choose, like the
+/// Files overflow.
+private struct ClosedNotesPopover: View {
+    @Bindable var adapter: NotesAdapter
+    let dismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            PopoverMenuSectionLabel("Closed notes")
+                .padding(.top, Space.half)
+            ForEach(adapter.restorableClosedNotes) { note in
+                PopoverMenuRow(systemImage: "note.text", title: note.name) {
+                    _ = adapter.reopenTab(note.id)
+                    dismiss()
+                }
+            }
+        }
+        .padding(.vertical, Space.half)
+        .frame(minWidth: Layout.shelfMenuWidth)
     }
 }

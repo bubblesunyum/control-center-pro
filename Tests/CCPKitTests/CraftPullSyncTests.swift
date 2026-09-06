@@ -186,6 +186,31 @@ final class CraftPullAdapterTests: XCTestCase {
         XCTAssertFalse(adapter.isPushDirty(id), "adopted text must not re-push")
     }
 
+    func testPullAdoptingEmptyUnhidesThePad() async throws {
+        // A pull that empties a hidden pad would strand it: the strip never
+        // drew it and the restorable menu filters empties. Adopting empty
+        // unhides instead.
+        let name = "ccp.pull.unhide.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([connection, blocks("""
+            {"items":[]}
+            """)])
+        let adapter = adapter(store, transport)
+        // Steady the first pad BEFORE creating the second: the steadying
+        // flush visits every dirty pad, and a dirty sibling would spend the
+        // scripted connection reply on a provisioning POST.
+        let id = try await steadyPad(adapter, text: "one")
+        adapter.createNote()
+        XCTAssertTrue(adapter.closeTab(id))
+
+        await adapter.pullAll()
+
+        XCTAssertEqual(adapter.notes.first(where: { $0.id == id })?.text, "")
+        XCTAssertTrue(adapter.openNotes.contains(where: { $0.id == id }), "adopting empty unhides")
+        XCTAssertTrue(adapter.restorableClosedNotes.isEmpty)
+    }
+
     func testDirtyPadSkipsWhenRemoteDidNotMove() async throws {
         let name = "ccp.pull.skip.\(UUID().uuidString)"
         let store = try defaults(name)

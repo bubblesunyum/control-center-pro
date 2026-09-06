@@ -112,7 +112,10 @@ struct NoteTabStrip: View {
                     .font(.headline)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                if adapter.canCloseTab {
+                // No X where closeTab refuses: the last open tab, or an empty
+                // one with nothing to restore. The trash and this tab's own
+                // menu delete it, without asking while empty.
+                if adapter.canCloseTab(note.id) {
                     Button {
                         onCloseTab(note)
                     } label: {
