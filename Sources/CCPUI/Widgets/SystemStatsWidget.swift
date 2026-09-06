@@ -420,7 +420,7 @@ private struct SystemStatsContent: View {
     private func breakdownValue(_ row: BreakdownRow, for kind: SectionKind) -> String {
         switch kind {
         case .memory: return Self.bytes(UInt64(row.value))
-        case .cpu, .gpu, .battery: return String(format: "%.1f%%", row.value)
+        case .cpu, .gpu, .battery: return String(format: "%.0f%%", row.value)
         }
     }
 
