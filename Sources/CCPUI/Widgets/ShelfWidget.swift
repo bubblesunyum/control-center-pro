@@ -16,6 +16,10 @@ import UniformTypeIdentifiers
 /// menu with the same Open/Clear actions the floating window's own bottom bar
 /// offers. With nothing anywhere — empty shelf, empty downloads — it is just
 /// its header.
+///
+/// Minimized, it is just the header plus one horizontally paging row of small
+/// pinned thumbnails; unpinned items and downloads hide entirely until the
+/// caret expands it again. With no pins it is just its header.
 @MainActor
 public final class ShelfWidget: CCPWidget {
     public static let descriptor = WidgetDescriptor(
@@ -25,7 +29,8 @@ public final class ShelfWidget: CCPWidget {
         // An empty shelf is a header and nothing else. The card grows to fit
         // its chips the moment something lands on it, so the declared size is
         // the floor for the empty case rather than a shape to fill.
-        size: .compact
+        size: .compact,
+        isMinimizable: true
     )
 
     private let hiddenFilesAdapter: QuickTogglesAdapter
@@ -61,12 +66,26 @@ private struct ShelfWidgetContent: View {
     @State private var isPinnedCollapsed = false
     @State private var isDownloadsCollapsed = false
     @State private var downloads = RecentDownloadsStore()
+    @Environment(\.panelArrangement) private var arrangement
+    @Environment(\.currentWidgetID) private var currentWidgetID
 
     private var pinned: [ShelfItem] { store.items.filter(\.isPinned) }
     private var unpinned: [ShelfItem] { store.items.filter { !$0.isPinned } }
 
+    /// Persisted on the layout's placement, so a minimized Files stays
+    /// minimized across launches and travels with the widget between lanes.
+    private var isMinimized: Bool {
+        guard let arrangement, let id = currentWidgetID else { return false }
+        return arrangement.layout.lanes.joined().first { $0.id == id }?.isMinimized ?? false
+    }
+
+    private func toggleMinimized() {
+        guard let arrangement, let id = currentWidgetID else { return }
+        arrangement.setMinimized(id, to: !isMinimized)
+    }
+
     var body: some View {
-        WidgetCard(ShelfWidget.descriptor) {
+        WidgetCard(ShelfWidget.descriptor, isMinimized: isMinimized, onToggleMinimized: toggleMinimized) {
             HeaderIconButton(systemImage: "ellipsis", label: "Files actions") {
                 isMenuPresented = true
             }
@@ -79,10 +98,16 @@ private struct ShelfWidgetContent: View {
                 .environment(store)
             }
         } content: {
-            // Nothing below the header until something is anywhere: an empty
-            // box explaining where to drop is the floating shelf's job, not a
-            // second one here.
-            if !store.items.isEmpty || !downloads.files.isEmpty {
+            if isMinimized {
+                // Pinned thumbnails only — unpinned items and downloads hide
+                // entirely. No pins, no row: just the header.
+                if !pinned.isEmpty {
+                    minimizedStrip(pinned: pinned)
+                }
+            } else if !store.items.isEmpty || !downloads.files.isEmpty {
+                // Nothing below the header until something is anywhere: an empty
+                // box explaining where to drop is the floating shelf's job, not a
+                // second one here.
                 VStack(alignment: .leading, spacing: Space.half) {
                     if !pinned.isEmpty {
                         shelfSectionHeader(title: "Pinned", isCollapsed: isPinnedCollapsed) {
@@ -123,6 +148,7 @@ private struct ShelfWidgetContent: View {
             }
         }
         .animation(.smooth(duration: 0.2), value: store.items.isEmpty)
+        .animation(.smooth(duration: 0.2), value: isMinimized)
         .animation(.easeInOut(duration: 0.2), value: hiddenFiles.hiddenFilesShown)
         .animation(.easeInOut(duration: 0.2), value: hiddenFiles.isToggling)
         .task { await downloads.reload() }
@@ -137,6 +163,22 @@ private struct ShelfWidgetContent: View {
                 Button(item.isPinned ? "Unpin" : "Pin") { store.togglePin(item.id) }
                 Button("Remove", role: .destructive) { store.remove(item.id) }
             }
+    }
+
+    /// The minimized form: one horizontally paging row of small pinned
+    /// thumbnails. Every pin stays reachable — the row pages a viewport at a
+    /// time rather than capping with "+N more".
+    private func minimizedStrip(pinned: [ShelfItem]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: Space.half) {
+                ForEach(pinned) { item in
+                    MinimizedShelfThumbnail(item: item)
+                }
+            }
+            .padding(.top, Space.half)
+        }
+        .scrollTargetBehavior(.paging)
+        .transition(.blurReplace)
     }
 
     @ViewBuilder
@@ -483,36 +525,11 @@ private struct WidgetFileRow: View {
 
     @ViewBuilder
     private var iconPreview: some View {
-        let previewSize = CGSize(width: Layout.shelfPreviewWidth, height: Layout.shelfPreviewHeight)
-        Group {
-            if let preview = previewImage {
-                Image(nsImage: preview)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: previewSize.width, height: previewSize.height)
-                    .clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            } else if item.kind == .file, let path = item.filePath {
-                FileThumbnailView(
-                    url: URL(fileURLWithPath: path),
-                    size: previewSize,
-                    fallbackIcon: fileTypeIcon,
-                    symbolName: symbol
-                )
-            } else if let icon = fileTypeIcon {
-                Image(nsImage: icon)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 24, height: 24)
-                    .frame(width: previewSize.width, height: previewSize.height)
-            } else {
-                Image(systemName: symbol)
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                    .frame(width: previewSize.width, height: previewSize.height)
-            }
-        }
-        .frame(width: previewSize.width, height: previewSize.height)
+        ShelfItemPreview(
+            item: item,
+            size: CGSize(width: Layout.shelfPreviewWidth, height: Layout.shelfPreviewHeight),
+            fallbackPointSize: Layout.shelfPreviewIconSize
+        )
     }
 
     private var subtitle: String {
@@ -541,45 +558,6 @@ private struct WidgetFileRow: View {
         case .text:
             return "Text"
         }
-    }
-
-    private var symbol: String {
-        switch item.kind {
-        case .file:
-            if let path = item.filePath {
-                let ext = (path as NSString).pathExtension.lowercased()
-                if let type = UTType(filenameExtension: ext) {
-                    if type.conforms(to: .image) { return "photo.fill" }
-                    if type.conforms(to: .movie) { return "film.fill" }
-                    if type.conforms(to: .audio) { return "music.note" }
-                    if type.conforms(to: .pdf) { return "doc.richtext.fill" }
-                    if type.conforms(to: .zip) || ext == "zip" { return "doc.zipper" }
-                }
-            }
-            return "doc.fill"
-        case .text: return "note.text"
-        case .link: return "link"
-        case .image: return "photo"
-        }
-    }
-
-    private var previewImage: NSImage? {
-        if item.kind == .image, let name = item.imageFileName {
-            let url = ShelfStore.storeDirectory.appendingPathComponent(name)
-            if let img = NSImage(contentsOf: url) { return img }
-        }
-        if item.kind == .file, let path = item.filePath {
-            let url = URL(fileURLWithPath: path)
-            if let type = UTType(filenameExtension: url.pathExtension.lowercased()), type.conforms(to: .image) {
-                if let img = NSImage(contentsOf: url) { return img }
-            }
-        }
-        return nil
-    }
-
-    private var fileTypeIcon: NSImage? {
-        guard item.kind == .file, let path = item.filePath else { return nil }
-        return NSWorkspace.shared.icon(forFile: path)
     }
 }
 
@@ -636,6 +614,173 @@ private struct WidgetFileRowDragModifier: ViewModifier {
     }
 }
 
+/// One pin in the Files card's minimized strip: a small thumbnail that opens
+/// on tap and drags out like a full row. The caret is the only way back to
+/// the full card — tapping here never expands, it opens.
+private struct MinimizedShelfThumbnail: View {
+    let item: ShelfItem
+    @Environment(ShelfStore.self) private var store
+    @Environment(\.isPanelEditing) private var isPanelEditing
+
+    var body: some View {
+        Button {
+            if !isPanelEditing {
+                openShelfItem(item)
+            }
+        } label: {
+            thumbnail
+        }
+        .buttonStyle(.plain)
+        .disabled(isPanelEditing)
+        .help(item.title)
+        .accessibilityLabel(item.title)
+        .accessibilityHint(openHint)
+        .contextMenu {
+            if item.kind == .file, let path = item.filePath {
+                Button("Open") { openShelfItem(item) }
+                Button("Show in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+                }
+                Divider()
+            } else if item.kind == .image {
+                Button("Open") { openShelfItem(item) }
+                Divider()
+            } else if item.kind == .link {
+                Button("Open") { openShelfItem(item) }
+                Divider()
+            } else if item.kind == .text {
+                Button("Copy") { openShelfItem(item) }
+                Divider()
+            }
+            Button(item.isPinned ? "Unpin" : "Pin") { store.togglePin(item.id) }
+            Button("Remove", role: .destructive) { store.remove(item.id) }
+        }
+        .modifier(WidgetFileRowDragModifier(item: item))
+    }
+
+    private var thumbnail: some View {
+        let edge = Layout.shelfMinimizedThumbnailSize
+        return ShelfItemPreview(
+            item: item,
+            size: CGSize(width: edge, height: edge),
+            fallbackPointSize: Layout.shelfMinimizedThumbnailIconSize
+        )
+    }
+
+    private var openHint: String {
+        switch item.kind {
+        case .file, .image, .link: "Opens in its default app"
+        case .text: "Copies to the clipboard"
+        }
+    }
+}
+
+/// One shelf item's image, at any size: a stored preview, a QuickLook
+/// thumbnail, the workspace icon, or the kind's symbol — derived in the view,
+/// never stored. The full rows and the minimized strip draw through this one
+/// view so the two never disagree about what an item looks like.
+private struct ShelfItemPreview: View {
+    let item: ShelfItem
+    let size: CGSize
+    let fallbackPointSize: CGFloat
+
+    var body: some View {
+        Group {
+            if let preview = shelfPreviewImage(for: item) {
+                Image(nsImage: preview)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: size.width, height: size.height)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
+            } else if item.kind == .file, let path = item.filePath {
+                FileThumbnailView(
+                    url: URL(fileURLWithPath: path),
+                    size: size,
+                    fallbackIcon: shelfFileTypeIcon(for: item),
+                    symbolName: shelfSymbol(for: item)
+                )
+            } else if let icon = shelfFileTypeIcon(for: item) {
+                Image(nsImage: icon)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: fallbackPointSize, height: fallbackPointSize)
+                    .frame(width: size.width, height: size.height)
+            } else {
+                Image(systemName: shelfSymbol(for: item))
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .frame(width: size.width, height: size.height)
+            }
+        }
+        .frame(width: size.width, height: size.height)
+    }
+}
+
+private func shelfSymbol(for item: ShelfItem) -> String {
+    switch item.kind {
+    case .file:
+        if let path = item.filePath {
+            let ext = (path as NSString).pathExtension.lowercased()
+            if let type = UTType(filenameExtension: ext) {
+                if type.conforms(to: .image) { return "photo.fill" }
+                if type.conforms(to: .movie) { return "film.fill" }
+                if type.conforms(to: .audio) { return "music.note" }
+                if type.conforms(to: .pdf) { return "doc.richtext.fill" }
+                if type.conforms(to: .zip) || ext == "zip" { return "doc.zipper" }
+            }
+        }
+        return "doc.fill"
+    case .text: return "note.text"
+    case .link: return "link"
+    case .image: return "photo"
+    }
+}
+
+@MainActor
+private func shelfPreviewImage(for item: ShelfItem) -> NSImage? {    if item.kind == .image, let name = item.imageFileName {
+        let url = ShelfStore.storeDirectory.appendingPathComponent(name)
+        if let img = NSImage(contentsOf: url) { return img }
+    }
+    if item.kind == .file, let path = item.filePath {
+        let url = URL(fileURLWithPath: path)
+        if let type = UTType(filenameExtension: url.pathExtension.lowercased()), type.conforms(to: .image) {
+            if let img = NSImage(contentsOf: url) { return img }
+        }
+    }
+    return nil
+}
+
+private func shelfFileTypeIcon(for item: ShelfItem) -> NSImage? {
+    guard item.kind == .file, let path = item.filePath else { return nil }
+    return NSWorkspace.shared.icon(forFile: path)
+}
+
+/// Opens a shelf item the way the floating shelf's own rows do: files and
+/// images in their default app, links in the browser, text onto the clipboard.
+@MainActor
+private func openShelfItem(_ item: ShelfItem) {
+    switch item.kind {
+    case .file:
+        if let path = item.filePath {
+            NSWorkspace.shared.open(URL(fileURLWithPath: path))
+        }
+    case .image:
+        if let name = item.imageFileName {
+            NSWorkspace.shared.open(ShelfStore.storeDirectory.appendingPathComponent(name))
+        }
+    case .link:
+        if let s = item.urlString, let url = URL(string: s) {
+            NSWorkspace.shared.open(url)
+        }
+    case .text:
+        if let text = item.text {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+        }
+    }
+}
+
 private struct FileThumbnailView: View {
     let url: URL
     let size: CGSize
@@ -652,7 +797,7 @@ private struct FileThumbnailView: View {
                     .aspectRatio(contentMode: .fill)
                     .frame(width: size.width, height: size.height)
                     .clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
             } else if attempted {
                 Group {
                     if let icon = fallbackIcon {

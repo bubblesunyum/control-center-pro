@@ -131,7 +131,15 @@ public struct PanelLayout: Codable, Hashable, Sendable {
     /// that is already on the panel.
     public func resizing(_ id: WidgetID, to span: WidgetSpan) -> PanelLayout {
         guard position(of: id) != nil else { return self }
-        return PanelLayout(lanes.map { $0.map { $0.id == id ? Placement(id: id, span: span) : $0 } })
+        return PanelLayout(lanes.map { $0.map { $0.id == id ? Placement(id: id, span: span, isMinimized: $0.isMinimized) : $0 } })
+    }
+
+    /// The layout with `id` minimized or expanded. Naming a widget this layout
+    /// doesn't place changes nothing — a caret only exists on a card that is
+    /// already on the panel.
+    public func settingMinimized(_ id: WidgetID, to isMinimized: Bool) -> PanelLayout {
+        guard position(of: id) != nil else { return self }
+        return PanelLayout(lanes.map { $0.map { $0.id == id ? Placement(id: id, span: $0.span, isMinimized: isMinimized) : $0 } })
     }
 
     /// Where a widget currently sits, or `nil` if this layout doesn't place it.

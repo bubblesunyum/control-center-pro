@@ -23,17 +23,23 @@ public struct WidgetHeader<Accessory: View>: View {
     private let descriptor: WidgetDescriptor
     private let count: Int?
     private let isAccessoryExpanded: Bool
+    private let isMinimized: Bool?
+    private let onToggleMinimized: (() -> Void)?
     private let accessory: Accessory
 
     public init(
         _ descriptor: WidgetDescriptor,
         count: Int? = nil,
         isAccessoryExpanded: Bool = false,
+        isMinimized: Bool? = nil,
+        onToggleMinimized: (() -> Void)? = nil,
         @ViewBuilder accessory: () -> Accessory
     ) {
         self.descriptor = descriptor
         self.count = count
         self.isAccessoryExpanded = isAccessoryExpanded
+        self.isMinimized = isMinimized
+        self.onToggleMinimized = onToggleMinimized
         self.accessory = accessory()
     }
 
@@ -47,6 +53,13 @@ public struct WidgetHeader<Accessory: View>: View {
                     HStack(spacing: Space.half) {
                         Text(descriptor.title)
                             .lineLimit(1)
+                        if descriptor.isMinimizable, let isMinimized, let onToggleMinimized {
+                            MinimizeCaret(
+                                title: descriptor.title,
+                                isMinimized: isMinimized,
+                                toggle: onToggleMinimized
+                            )
+                        }
                         if let count {
                             CountBadge(count: count, of: descriptor.title)
                         }
@@ -86,8 +99,33 @@ public struct WidgetHeader<Accessory: View>: View {
 }
 
 public extension WidgetHeader where Accessory == EmptyView {
-    init(_ descriptor: WidgetDescriptor, count: Int? = nil) {
-        self.init(descriptor, count: count) { EmptyView() }
+    init(_ descriptor: WidgetDescriptor, count: Int? = nil, isMinimized: Bool? = nil, onToggleMinimized: (() -> Void)? = nil) {
+        self.init(descriptor, count: count, isMinimized: isMinimized, onToggleMinimized: onToggleMinimized) { EmptyView() }
+    }
+}
+
+/// The caret that minimizes a widget to its summary form and back.
+///
+/// It rides immediately after the title — the thing it collapses — rather than
+/// in the trailing accessory, so the eye reads it as part of the name. Same
+/// chevron language as the section headers inside the cards.
+private struct MinimizeCaret: View {
+    let title: String
+    let isMinimized: Bool
+    let toggle: () -> Void
+
+    var body: some View {
+        Button(action: toggle) {
+            Image(systemName: isMinimized ? "chevron.right" : "chevron.down")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(isMinimized ? "Expand \(title)" : "Minimize \(title)")
+        .accessibilityLabel(isMinimized ? "Expand \(title)" : "Minimize \(title)")
+        .accessibilityValue(isMinimized ? "Minimized" : "Expanded")
+        .accessibilityHint(isMinimized ? "Shows the full \(title) widget" : "Collapses \(title) to its summary")
     }
 }
 

@@ -276,6 +276,11 @@ public struct ControlPanel: View {
         if let lifted = editor.lifted, let slot = arrangement.slot(for: lifted.id) {
             let offset = lifted.offset(at: editor.fingerAt)
             LaneSlotCard(slot: slot, isRaised: true)
+                // The card reads its own id for header frames and minimized
+                // state; the ghost is outside the lane that sets it, so hand
+                // it over — otherwise a minimized card lifts as its expanded
+                // self clipped to the minimized frame.
+                .environment(\.currentWidgetID, lifted.id)
                 .frame(width: lifted.size.width, height: lifted.size.height)
                 .scaleEffect(PanelEditor.Lifted.scale)
                 .offset(x: offset.width, y: offset.height)

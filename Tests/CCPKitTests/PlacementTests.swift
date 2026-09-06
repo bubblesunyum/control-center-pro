@@ -108,6 +108,113 @@ final class PlacementTests: XCTestCase {
         XCTAssertEqual(PanelLayout([[a]]).adding(b).lanes, [[Placement(id: a), Placement(id: b)]])
     }
 
+    func testMinimizedDefaultsToFalse() {
+        XCTAssertFalse(Placement(id: a).isMinimized)
+    }
+
+    func testABareIDDecodesToAnExpandedPlacement() throws {
+        let file = Data(#"{"lanes":[["a"]]}"#.utf8)
+        let layout = try JSONDecoder().decode(PanelLayout.self, from: file)
+
+        XCTAssertEqual(layout.lanes, [[Placement(id: a, isMinimized: false)]])
+    }
+
+    func testAMinimizedPlacementWithoutASpanDecodes() throws {
+        let file = Data(#"{"lanes":[[{"id":"a","isMinimized":true}]]}"#.utf8)
+        let layout = try JSONDecoder().decode(PanelLayout.self, from: file)
+
+        XCTAssertEqual(layout.lanes, [[Placement(id: a, isMinimized: true)]])
+    }
+
+    /// A build from before minimizes existed reads what we write: expanded
+    /// placements encode as the bare strings it already understands.
+    func testExpandedPlacementsEncodeAsBareIDs() throws {
+        struct OldLayout: Decodable {
+            var lanes: [[WidgetID]]
+        }
+        let data = try JSONEncoder().encode(PanelLayout([[a, b]]))
+
+        XCTAssertEqual(try JSONDecoder().decode(OldLayout.self, from: data).lanes, [[a, b]])
+    }
+
+    func testAMinimizedPlacementRoundTrips() throws {
+        let layout = PanelLayout([[Placement(id: a, isMinimized: true), Placement(id: b)]])
+        let decoded = try JSONDecoder().decode(
+            PanelLayout.self,
+            from: JSONEncoder().encode(layout)
+        )
+
+        XCTAssertEqual(decoded, layout)
+    }
+
+    func testAMinimizedAndSpannedPlacementRoundTrips() throws {
+        let layout = PanelLayout([[Placement(id: a, span: WidgetSpan(width: 2, height: 2), isMinimized: true)]])
+        let decoded = try JSONDecoder().decode(
+            PanelLayout.self,
+            from: JSONEncoder().encode(layout)
+        )
+
+        XCTAssertEqual(decoded, layout)
+    }
+
+    func testSettingMinimizedSetsTheFlagAndNothingElse() {
+        let layout = PanelLayout([[Placement(id: a, span: WidgetSpan(width: 2, height: 1))]])
+
+        XCTAssertEqual(
+            layout.settingMinimized(a, to: true).lanes,
+            [[Placement(id: a, span: WidgetSpan(width: 2, height: 1), isMinimized: true)]]
+        )
+        XCTAssertEqual(
+            layout.settingMinimized(a, to: true).settingMinimized(a, to: false).lanes,
+            [[Placement(id: a, span: WidgetSpan(width: 2, height: 1), isMinimized: false)]]
+        )
+    }
+
+    func testSettingMinimizedOnAWidgetTheLayoutDoesNotPlaceChangesNothing() {
+        let layout = PanelLayout([[a]])
+
+        XCTAssertEqual(layout.settingMinimized(b, to: true), layout)
+    }
+
+    func testResizingPreservesMinimized() {
+        let layout = PanelLayout([[Placement(id: a, isMinimized: true)]])
+
+        XCTAssertEqual(
+            layout.resizing(a, to: WidgetSpan(width: 2, height: 2)).lanes,
+            [[Placement(id: a, span: WidgetSpan(width: 2, height: 2), isMinimized: true)]]
+        )
+    }
+
+    func testMovingCarriesMinimizedAlong() {
+        let layout = PanelLayout([[Placement(id: a, isMinimized: true), Placement(id: b)]])
+
+        XCTAssertEqual(
+            layout.moving(a, toLane: 0, at: 1).lanes,
+            [[Placement(id: b), Placement(id: a, isMinimized: true)]]
+        )
+    }
+
+    func testANewLaneCarriesMinimized() {
+        let layout = PanelLayout([[Placement(id: a, isMinimized: true), Placement(id: b)]])
+
+        XCTAssertEqual(
+            layout.moving(a, toNewLaneAt: 0).lanes,
+            [[Placement(id: a, isMinimized: true)], [Placement(id: b)]]
+        )
+    }
+
+    func testNormalizedKeepsTheFirstPlacementMinimizedAndAll() {
+        let layout = PanelLayout([[
+            Placement(id: a, isMinimized: true),
+            Placement(id: a),
+        ]])
+
+        XCTAssertEqual(
+            layout.normalized().lanes,
+            [[Placement(id: a, isMinimized: true)]]
+        )
+    }
+
     func testResolveAttachesEachPlacementSpan() {
         let slots = stubRegistry().resolve(PanelLayout([[
             Placement(id: StubWidget.descriptor.id, span: WidgetSpan(width: 2, height: 3)),

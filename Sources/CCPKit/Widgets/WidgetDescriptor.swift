@@ -14,19 +14,26 @@ public struct WidgetDescriptor: Identifiable, Hashable, Sendable {
     public let symbolName: String
     public let size: WidgetSize
     public let permissions: Set<WidgetPermission>
+    /// Whether the widget offers a minimized form behind a header caret.
+    /// Intrinsic to the widget kind — a compact summary it knows how to draw —
+    /// so it lives here; which widgets are currently minimized lives on the
+    /// layout's placements.
+    public let isMinimizable: Bool
 
     public init(
         id: WidgetID,
         title: String,
         symbolName: String,
         size: WidgetSize = .regular,
-        permissions: Set<WidgetPermission> = []
+        permissions: Set<WidgetPermission> = [],
+        isMinimizable: Bool = false
     ) {
         self.id = id
         self.title = title
         self.symbolName = symbolName
         self.size = size
         self.permissions = permissions
+        self.isMinimizable = isMinimizable
     }
 }
 

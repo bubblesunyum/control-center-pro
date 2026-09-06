@@ -15,6 +15,8 @@ public struct WidgetCard<Content: View, Accessory: View>: View {
     private let descriptor: WidgetDescriptor
     private let count: Int?
     private let isAccessoryExpanded: Bool
+    private let isMinimized: Bool?
+    private let onToggleMinimized: (() -> Void)?
     private let accessory: Accessory
     private let content: Content
 
@@ -22,12 +24,16 @@ public struct WidgetCard<Content: View, Accessory: View>: View {
         _ descriptor: WidgetDescriptor,
         count: Int? = nil,
         isAccessoryExpanded: Bool = false,
+        isMinimized: Bool? = nil,
+        onToggleMinimized: (() -> Void)? = nil,
         @ViewBuilder accessory: () -> Accessory,
         @ViewBuilder content: () -> Content
     ) {
         self.descriptor = descriptor
         self.count = count
         self.isAccessoryExpanded = isAccessoryExpanded
+        self.isMinimized = isMinimized
+        self.onToggleMinimized = onToggleMinimized
         self.accessory = accessory()
         self.content = content()
     }
@@ -35,7 +41,7 @@ public struct WidgetCard<Content: View, Accessory: View>: View {
     public var body: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: Space.one) {
-                WidgetHeader(descriptor, count: count, isAccessoryExpanded: isAccessoryExpanded) { accessory }
+                WidgetHeader(descriptor, count: count, isAccessoryExpanded: isAccessoryExpanded, isMinimized: isMinimized, onToggleMinimized: onToggleMinimized) { accessory }
                 content
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -48,8 +54,10 @@ public extension WidgetCard where Accessory == EmptyView {
     init(
         _ descriptor: WidgetDescriptor,
         count: Int? = nil,
+        isMinimized: Bool? = nil,
+        onToggleMinimized: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) {
-        self.init(descriptor, count: count, accessory: { EmptyView() }, content: content)
+        self.init(descriptor, count: count, isMinimized: isMinimized, onToggleMinimized: onToggleMinimized, accessory: { EmptyView() }, content: content)
     }
 }

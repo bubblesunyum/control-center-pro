@@ -169,6 +169,13 @@ public extension Layout {
     /// Thumbnail in the Files card's shelf and download rows.
     static let shelfPreviewWidth: CGFloat = 42
     static let shelfPreviewHeight: CGFloat = 56
+    /// Thumbnail in the Files card's minimized strip: one horizontal row of
+    /// pinned items. Square and small — a glanceable summary, not a preview.
+    static let shelfMinimizedThumbnailSize: CGFloat = 32
+    /// Fallback icon sizes inside those thumbnails: the full row's 42×56
+    /// preview centers a 24pt icon, the minimized 32pt square a 20pt one.
+    static let shelfPreviewIconSize: CGFloat = 24
+    static let shelfMinimizedThumbnailIconSize: CGFloat = 20
     /// The Files overflow menu: how wide the popover stands, how tall one row is.
     static let shelfMenuWidth: CGFloat = 220
     static let shelfMenuRowHeight: CGFloat = 32

@@ -94,6 +94,13 @@ public final class PanelArrangement {
         apply(layout.resizing(id, to: span))
     }
 
+    /// Set `id`'s minimized state. The widget stays the same live object — a
+    /// minimize is not a replacement, so whatever it was showing survives it —
+    /// and the write goes out like any other edit.
+    public func setMinimized(_ id: WidgetID, to isMinimized: Bool) {
+        apply(layout.settingMinimized(id, to: isMinimized))
+    }
+
     private func apply(_ rearranged: PanelLayout) {
         guard rearranged != layout else { return }
         layout = rearranged
