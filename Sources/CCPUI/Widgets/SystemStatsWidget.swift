@@ -231,28 +231,39 @@ private struct SystemStatsContent: View {
     }
 
     private var pressureExpandedRow: some View {
-        let pressure = adapter.snapshot.memoryPressure
+        let snapshot = adapter.snapshot
+        let valueText: String = {
+            if let used = snapshot.memoryUsed, let total = snapshot.memoryTotal {
+                return "\(Self.bytes(used)) / \(Self.bytes(total))"
+            }
+            return "--"
+        }()
         return HStack(spacing: 8) {
             Text("Pressure")
                 .font(.system(size: 10.5))
                 .foregroundStyle(.secondary)
             Spacer()
-            Circle()
-                .fill(memoryPressureColor(pressure))
-                .frame(width: 7, height: 7)
-                .shadow(color: memoryPressureColor(pressure).opacity(0.6), radius: 1.5)
-            Text(pressureLabel(pressure))
+            if let pill = pressurePill {
+                Text(pill.text)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(pill.tint)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(pill.tint.opacity(0.13)))
+            }
+            Text(valueText)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(memoryPressureColor(pressure))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
         }
     }
 
-    private func pressureLabel(_ pressure: SystemMemoryPressure) -> String {
-        switch pressure {
-        case .normal: return "Normal"
-        case .warning: return "Caution"
-        case .critical: return "Critical"
-        case .unknown: return "-"
+    /// (text, tint) for the pressure pill — only warning states earn one.
+    private var pressurePill: (text: String, tint: Color)? {
+        switch adapter.snapshot.memoryPressure {
+        case .warning: return ("Warning", energyYellow)
+        case .critical: return ("Critical", energyRed)
+        case .normal, .unknown: return nil
         }
     }
 
@@ -595,22 +606,12 @@ private struct SystemStatsContent: View {
         return batteryColor
     }
 
-    private func memoryPressureColor(_ pressure: SystemMemoryPressure) -> Color {
-        switch pressure {
-        case .normal: return energyGreen
-        case .warning: return energyYellow
-        case .critical: return energyRed
-        case .unknown: return .secondary
-        }
-    }
-
     // (12) distinct color per section
     private var cpuColor: Color { sectionColor(.cpu) }
     private var gpuColor: Color { sectionColor(.gpu) }
     private var memoryColor: Color { sectionColor(.memory) }
     private var batteryColor: Color { sectionColor(.battery) }
 
-    private var energyGreen: Color { sectionColor(.memory) }
     private var energyYellow: Color { colorScheme == .light ? Color(red: 0.56, green: 0.36, blue: 0) : .yellow }
     private var energyRed: Color { colorScheme == .light ? Color(red: 0.68, green: 0.08, blue: 0.10) : .red }
 
@@ -621,7 +622,7 @@ private struct SystemStatsContent: View {
         case .gpu:
             return colorScheme == .light ? Color(red: 0.00, green: 0.43, blue: 0.54) : .cyan
         case .memory:
-            return colorScheme == .light ? Color(red: 0.00, green: 0.44, blue: 0.40) : .mint
+            return colorScheme == .light ? Color(red: 0.42, green: 0.25, blue: 0.63) : .purple
         case .battery:
             return colorScheme == .light ? Color(red: 0.00, green: 0.44, blue: 0.18) : .green
         }
