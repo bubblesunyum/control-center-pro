@@ -130,6 +130,13 @@ public enum CraftBlockSplitter {
     private static func appendSlice(ns: NSString, range: NSRange, to slices: inout [CraftBlockSlice]) {
         var markdown = ns.substring(with: range)
         while markdown.last?.isNewline == true { markdown.removeLast() }
+        // Trailing spaces at a slice's end are always a boundary marker —
+        // the monitor's hard break or the pull's join — never content: in
+        // CommonMark they carry no other meaning. Stripping them keeps the
+        // marker from shipping to Craft and fingerprinting, whichever block
+        // kind the slice is. Interior lines are untouched, so fenced code
+        // keeps its bytes.
+        while markdown.last == " " || markdown.last == "\t" { markdown.removeLast() }
         guard !markdown.isEmpty else { return }
         slices.append(CraftBlockSlice(markdown: markdown, range: range))
     }

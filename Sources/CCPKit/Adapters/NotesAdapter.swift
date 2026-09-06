@@ -295,6 +295,19 @@ public final class NotesAdapter {
     @ObservationIgnored private let sidecarKey = "scratchpadCraftSidecars"
     @ObservationIgnored private let sidecarsRescueKey = "scratchpadCraftSidecars.unreadable"
     @ObservationIgnored private var isStoredSidecarsUnreadable = false
+    // Pull bookkeeping (ccp-2zi.6): the last server moment each pad agreed
+    // with Craft. Advisory — moved detection is an exact signature compare,
+    // never the clock — and feed for the sync-status widget. A failed decode
+    // reads as never-synced, never as a reason to touch the pad.
+    @ObservationIgnored private let syncedAtKey = "scratchpadCraftSyncedAt"
+    @ObservationIgnored private var pullTask: Task<Void, Never>?
+    // Conflict copies a pad posted (ccp-2zi.6): Craft block ids that pin the
+    // sidecar and stay out of the pad. Apart from the sidecar's policy flags
+    // on purpose — a policy-unwritable block the user fixes in Craft must
+    // rejoin the pad, while a stash copy must never come back. No legacy
+    // state to migrate: the pull never ran before this bead, so no sidecar
+    // in the wild carries conflict pins yet.
+    @ObservationIgnored private let stashKey = "scratchpadCraftStash"
     // Push bookkeeping (ccp-2zi.5). The pad-to-document mapping is config,
     // like retention and selection — never note text.
     @ObservationIgnored private let craftDocumentsKey = "scratchpadCraftDocuments"
@@ -384,9 +397,16 @@ public final class NotesAdapter {
 
     public func activate() {
         loadApplyingRetention()
+        // The panel was shut: Craft may have moved under us. Pull now; a
+        // failed read changes nothing, and an adopt never lands on unpushed
+        // edits without stashing them in Craft first.
+        pullTask?.cancel()
+        pullTask = Task { [weak self] in await self?.pullAll() }
     }
 
     public func deactivate() {
+        pullTask?.cancel()
+        pullTask = nil
         flushSave()
         // A debounce that only fires while the panel is open loses the last
         // three seconds of every session: push now instead.
@@ -831,6 +851,142 @@ public final class NotesAdapter {
             groups[member.insert.afterID, default: []].append(member)
         }
         return order.compactMap { groups[$0] }
+    }
+
+    // MARK: - Craft pull
+
+    /// The last server moment a pad agreed with Craft, if one was recorded.
+    public func syncedAt(for id: UUID) -> Date? {
+        syncedAtMap().load()[id.uuidString]
+    }
+
+    private func storeSyncedAt(_ date: Date?, for id: UUID) {
+        guard let date else { return }
+        syncedAtMap().set(date, for: id.uuidString)
+    }
+
+    private func syncedAtMap() -> DefaultsMap<Date> {
+        DefaultsMap(defaults: defaults, key: syncedAtKey)
+    }
+
+    /// Conflict-copy ids for a pad, pruned to blocks Craft still holds.
+    func stashIDs(for id: UUID) -> Set<String> {
+        Set(stashMap().load()[id.uuidString] ?? [])
+    }
+
+    private func storeStashIDs(_ ids: Set<String>, for id: UUID) {
+        stashMap().set(ids.isEmpty ? nil : Array(ids), for: id.uuidString)
+    }
+
+    private func stashMap() -> DefaultsMap<[String]> {
+        DefaultsMap(defaults: defaults, key: stashKey)
+    }
+
+    /// Pull every mapped pad: one clock read, then one block fetch each. A
+    /// failed clock still pulls — decisions never need it — and one pad's
+    /// failure never skips the rest. Observable for tests; the activate path
+    /// fires it as a task.
+    func pullAll() async {
+        guard let baseURL = craftBaseURL() else { return }
+        let client = CraftClient(baseURL: baseURL, transport: craftTransport)
+        let serverTime = (try? await client.checkConnection())?.serverTime
+        for padID in storedCraftDocuments().keys.compactMap(UUID.init(uuidString:)) {
+            guard !Task.isCancelled else { return }
+            // A throw is one pad's "store unreachable", never the loop's.
+            try? await pullOnePad(padID, client: client, serverTime: serverTime)
+        }
+    }
+
+    private func pullOnePad(_ padID: UUID, client: CraftClient, serverTime: Date?) async throws {
+        guard let docID = craftDocumentID(for: padID) else { return }
+        let remote = try await client.fetchBlocks(documentID: docID)
+        guard !Task.isCancelled else { return }
+        // Re-read after the fetch: keystrokes interleave with the await, and
+        // deciding on pre-fetch text strands them between the stash and the
+        // adopt — in neither the pad nor the Craft copy.
+        guard let document,
+              let pad = document.notes.first(where: { $0.id == padID })
+        else { return }
+        let remoteIDs = Set(remote.map(\.id))
+        switch CraftPull.decide(local: pad.text, sidecar: sidecar(for: padID),
+                                remote: remote, stashIDs: stashIDs(for: padID)) {
+        case .converged:
+            storeSyncedAt(serverTime, for: padID)
+            dirtyPadIDs.remove(padID)
+        case .adopt(let text, let newSidecar):
+            adoptRemote(padID: padID, text: text, sidecar: newSidecar)
+            storeStashIDs(stashIDs(for: padID).intersection(remoteIDs), for: padID)
+            storeSyncedAt(serverTime, for: padID)
+            dirtyPadIDs.remove(padID)
+        case .conflict(let heading, let stash, let text, let seeded):
+            // The stash appends at the document's end: every insert shares
+            // the last remote id as its anchor, so the batch lands in array
+            // order behind it (the same batching the push relies on). Into
+            // an empty document the anchorless batch takes start+pageId,
+            // where there is no head block to merge into.
+            let inserts = [Self.conflictHeading(heading, at: serverTime)] + stash
+            let echo = try await client.postBlocks(
+                inserts.map { BlockInsert(afterID: remote.last?.id, markdown: $0) },
+                documentID: docID)
+            // Recorded before the re-read below: the copy exists in Craft
+            // whatever the user typed meanwhile, and the next pull must
+            // already know to keep it out of the pad.
+            let stashed = stashIDs(for: padID).intersection(remoteIDs).union(echo.map(\.id))
+            storeStashIDs(stashed, for: padID)
+            // Re-read after the POST: adopting now would overwrite keystrokes
+            // newer than the stash and clear their dirty bit. Leave everything
+            // — the stash just posted is their safety copy, and the next pull
+            // stashes the fresh text the same way. (`document` above is the
+            // pre-POST snapshot; the live state is re-read here.)
+            guard self.document?.notes.first(where: { $0.id == padID })?.text == pad.text
+            else { return }
+            // The stash pins unwritable: it lives in Craft, never in the
+            // pad, so the next push must route around it rather than
+            // delete what it cannot see.
+            var sidecar = seeded
+            for item in echo {
+                sidecar.entries.append(BlockSidecarEntry(
+                    id: item.id, fingerprint: BlockSidecar.fingerprint(item.markdown),
+                    isWritable: false))
+            }
+            adoptRemote(padID: padID, text: text, sidecar: sidecar)
+            storeSyncedAt(serverTime, for: padID)
+            dirtyPadIDs.remove(padID)
+        case .skip:
+            break
+        }
+    }
+
+    /// Replace a pad's text and sidecar from a pull. Silent: the replacing
+    /// flag keeps the widget from re-dirtying and re-pushing what just
+    /// arrived, and the persist lands now rather than on the save debounce.
+    private func adoptRemote(padID: UUID, text: String, sidecar: BlockSidecar) {
+        guard var document,
+              let index = document.notes.firstIndex(where: { $0.id == padID })
+        else { return }
+        document.notes[index].text = text
+        document.notes[index].modifiedAt = Date()
+        self.document = document
+        notes = document.notes
+        if padID == selectedNoteID {
+            isReplacingText = true
+            self.text = text
+            isReplacingText = false
+        }
+        storeSidecar(sidecar, for: padID)
+        _ = persist(document)
+    }
+
+    /// The stash heading, dated by the server clock when the pull brought
+    /// one. The date is a label, never a comparison — an unknown clock dates
+    /// nothing rather than stamping Mac time Craft never saw.
+    static func conflictHeading(_ base: String, at serverTime: Date?) -> String {
+        guard let serverTime else { return base }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm 'UTC'"
+        return "\(base) — \(formatter.string(from: serverTime))"
     }
 
     // MARK: - Actions

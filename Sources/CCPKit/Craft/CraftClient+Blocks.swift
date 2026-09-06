@@ -17,7 +17,89 @@ public struct CraftBlock: Codable, Equatable, Sendable {
     }
 }
 
+/// One block as a pull sees it: the id pins the sidecar and the markdown
+/// feeds the pad. `markdown` is nil when Craft carries no markdown form for
+/// the block — it pins position only, and the push routes around it.
+public struct FetchedBlock: Equatable, Sendable {
+    public var id: String
+    public var markdown: String?
+
+    public init(id: String, markdown: String?) {
+        self.id = id
+        self.markdown = markdown
+    }
+}
+
 extension CraftClient {
+    // MARK: - Block reads
+
+    private struct FetchedNode: Decodable {
+        var id: String?
+        var markdown: String?
+        var content: [FetchedNode]?
+    }
+
+    private struct FetchedItemsEnvelope: Decodable {
+        var items: [FetchedNode]?
+    }
+
+    private struct FetchedBlocksEnvelope: Decodable {
+        var blocks: [FetchedNode]?
+    }
+
+    /// Decode a GET /blocks tree tolerantly: an `items` envelope, a `blocks`
+    /// envelope, or a bare array — the same tolerance the write echo gets.
+    /// Nodes without an id are skipped, never guessed at.
+    private static func decodeNodes(from data: Data) -> [FetchedNode]? {        let decoder = JSONDecoder()
+        if let envelope = try? decoder.decode(FetchedItemsEnvelope.self, from: data),
+           let items = envelope.items {
+            return items
+        }
+        if let envelope = try? decoder.decode(FetchedBlocksEnvelope.self, from: data),
+           let blocks = envelope.blocks {
+            return blocks
+        }
+        return try? decoder.decode([FetchedNode].self, from: data)
+    }
+
+    /// `GET /blocks?id=&maxDepth=-1` — the document's blocks in document
+    /// order, flattened depth-first. The root page node carries no markdown
+    /// and flattens away to its children; any descendant without markdown
+    /// stays in the list (markdown nil) so the sidecar can pin its position
+    /// and the push routes around it.
+    public func fetchBlocks(documentID: String) async throws(CraftClientError) -> [FetchedBlock] {
+        var components = URLComponents(url: baseURL.appending(path: "blocks"),
+                                       resolvingAgainstBaseURL: false)
+        components?.queryItems = [
+            URLQueryItem(name: "id", value: documentID),
+            URLQueryItem(name: "maxDepth", value: "-1"),
+        ]
+        guard let url = components?.url else {
+            throw CraftClientError.unreachable(statusCode: nil)
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        let (data, http) = try await send(request)
+        guard let nodes = Self.decodeNodes(from: data) else {
+            throw CraftClientError.unreachable(statusCode: http.statusCode)
+        }
+        return nodes.flatMap(Self.flatten(node:))
+    }
+
+    private static func flatten(node: FetchedNode) -> [FetchedBlock] {
+        var out: [FetchedBlock] = []
+        // A container (the page root, a sub-page) with children is position,
+        // not text: pin it only when it has no markdown of its own. A nil id
+        // never pins — without an address there is nothing to route around.
+        if let id = node.id, node.markdown != nil || node.content == nil {
+            out.append(FetchedBlock(id: id, markdown: node.markdown))
+        }
+        for child in node.content ?? [] {
+            out.append(contentsOf: flatten(node: child))
+        }
+        return out
+    }
+
     // MARK: - Block writes
 
     private struct PutBody: Encodable {
@@ -114,6 +196,12 @@ extension CraftClient {
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try? JSONEncoder().encode(body)
+        return try await send(request)
+    }
+
+    /// One pipeline for every request: the GET read rides the same
+    /// transport-error / 429 / status-code mapping the writes do.
+    private func send(_ request: URLRequest) async throws(CraftClientError) -> (Data, HTTPURLResponse) {
         let data: Data
         let response: URLResponse
         do {
