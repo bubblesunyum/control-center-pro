@@ -176,6 +176,9 @@ public extension Layout {
     /// preview centers a 24pt icon, the minimized 32pt square a 20pt one.
     static let shelfPreviewIconSize: CGFloat = 24
     static let shelfMinimizedThumbnailIconSize: CGFloat = 20
+    /// How wide a minimized thumbnail's hover title may grow before its name
+    /// truncates from the middle.
+    static let shelfMinimizedTipMaxWidth: CGFloat = 220
     /// The Files overflow menu: how wide the popover stands, how tall one row is.
     static let shelfMenuWidth: CGFloat = 220
     static let shelfMenuRowHeight: CGFloat = 32

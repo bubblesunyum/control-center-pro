@@ -621,6 +621,8 @@ private struct MinimizedShelfThumbnail: View {
     let item: ShelfItem
     @Environment(ShelfStore.self) private var store
     @Environment(\.isPanelEditing) private var isPanelEditing
+    @State private var showTitleTip = false
+    @State private var hoverTask: Task<Void, Never>?
 
     var body: some View {
         Button {
@@ -632,9 +634,19 @@ private struct MinimizedShelfThumbnail: View {
         }
         .buttonStyle(.plain)
         .disabled(isPanelEditing)
-        .help(item.title)
         .accessibilityLabel(item.title)
         .accessibilityHint(openHint)
+        .popover(isPresented: $showTitleTip, arrowEdge: .bottom) {
+            Text(item.title)
+                .font(.caption)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .padding(.horizontal, Space.one)
+                .padding(.vertical, Space.half)
+                .frame(maxWidth: Layout.shelfMinimizedTipMaxWidth)
+        }
+        .onHover(perform: trackHover)
+        .onDisappear { hoverTask?.cancel() }
         .contextMenu {
             if item.kind == .file, let path = item.filePath {
                 Button("Open") { openShelfItem(item) }
@@ -671,6 +683,24 @@ private struct MinimizedShelfThumbnail: View {
         switch item.kind {
         case .file, .image, .link: "Opens in its default app"
         case .text: "Copies to the clipboard"
+        }
+    }
+
+    /// The title arrives a beat after the pointer lands — one second, so
+    /// sweeping across the strip stays quiet and only a resting pointer asks.
+    /// A popover rather than `.help`: the system tooltip's delay is not
+    /// ours to set, and an overlay would clip at the scroll view's edge.
+    private func trackHover(_ hovering: Bool) {
+        hoverTask?.cancel()
+        hoverTask = nil
+        guard hovering, !isPanelEditing else {
+            showTitleTip = false
+            return
+        }
+        hoverTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            showTitleTip = true
         }
     }
 }
