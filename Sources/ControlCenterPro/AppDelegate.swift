@@ -103,5 +103,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dropOverlay?.stop()
         arrangement?.flush()
         ShelfStore.shared.flush()
+        StickyStore.shared.flush()
     }
 }

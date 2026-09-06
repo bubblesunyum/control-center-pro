@@ -148,25 +148,6 @@ public final class PanelEditor {
         )
     }
 
-    /// Window grew/shrank while dragging (new-lane target appeared). The
-    /// frozen snapshot is in the old panel coordinate space, but the finger
-    /// and the live zones are now in the new one — shift the snapshot so
-    /// hit-testing stays aligned with what the eye sees. Only the lanes at
-    /// and right of the opening move inside the panel (the ones left of it
-    /// keep their x), so only those shift: a uniform shift holds the gap
-    /// under the ghost at the instant of growth but leaves the snapshot a
-    /// lane-width right of every lane left of a middle or trailing gap on
-    /// every frame after. The gap's own index needs no shift — the preview
-    /// was computed from the old snapshot, but the gap is drawn from
-    /// `previewLanding` alone, which is lane/index based.
-    public func shiftSnapshot(dx: CGFloat, newLaneAt lane: Int) {
-        guard !snapshotZones.isEmpty else { return }
-        snapshotZones = snapshotZones.map {
-            guard $0.lane >= lane else { return $0 }
-            return PanelEditor.DropZone(id: $0.id, lane: $0.lane, frame: $0.frame.offsetBy(dx: dx, dy: 0))
-        }
-    }
-
     public func drag(to location: CGPoint) {
         fingerAt = location
     }
@@ -483,5 +464,15 @@ struct HeaderFramePreference: PreferenceKey {
     static var defaultValue: [HeaderFrame] = []
     static func reduce(value: inout [HeaderFrame], nextValue: () -> [HeaderFrame]) {
         value += nextValue()
+    }
+}
+
+/// The lanes' box in panel space. The window is screen-sized and lets clicks
+/// through outside the panel's own content, so the controller hit-tests the
+/// pointer against this to decide what falls through.
+struct LanesFramePreference: PreferenceKey {
+    static var defaultValue: CGRect?
+    static func reduce(value: inout CGRect?, nextValue: () -> CGRect?) {
+        value = nextValue() ?? value
     }
 }

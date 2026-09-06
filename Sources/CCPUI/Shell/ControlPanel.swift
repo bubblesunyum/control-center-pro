@@ -27,6 +27,7 @@ extension EnvironmentValues {
 public struct ControlPanel: View {
     private let arrangement: PanelArrangement
     private let editor: PanelEditor
+    private let onLanesFrame: (CGRect) -> Void
 
     @GestureState private var isGestureActive = false
     @State private var headerFrames: [HeaderFrame] = []
@@ -38,9 +39,10 @@ public struct ControlPanel: View {
     /// (see `resizeTranslation(for:)`).
     @State private var resizeScreenAnchor: CGPoint?
 
-    init(arrangement: PanelArrangement, editor: PanelEditor) {
+    init(arrangement: PanelArrangement, editor: PanelEditor, onLanesFrame: @escaping (CGRect) -> Void = { _ in }) {
         self.arrangement = arrangement
         self.editor = editor
+        self.onLanesFrame = onLanesFrame
     }
 
     public var body: some View {
@@ -48,6 +50,15 @@ public struct ControlPanel: View {
             lanes
         }
         .padding(Space.oneHalf)
+        // The lanes keep their old distance from the corner: the content
+        // inset plus the window's old screen inset, now both inside. One
+        // visual gutter, not two — everything between the lanes and the
+        // screen edge is transparent window.
+        .padding([.top, .trailing], Layout.panelInset)
+        // The window is cut to the screen, not to the lanes — stickies live
+        // anywhere in it — so the panel space is the whole window with the
+        // lanes pinned top-right.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         .coordinateSpace(.panel)
         .contentShape(Rectangle())
         .environment(\.isPanelEditing, editor.isEditing)
@@ -62,7 +73,14 @@ public struct ControlPanel: View {
         .onPreferenceChange(GripFramePreference.self) { frames in
             gripFrames = frames
         }
+        .onPreferenceChange(LanesFramePreference.self) { frame in
+            if let frame { onLanesFrame(frame) }
+        }
         .overlay(alignment: .topLeading) { cardInTheAir }
+        // Above the lanes, below the gallery. Hidden while editing: stickies
+        // are always movable, so edit mode has nothing to offer them and
+        // they would only cover the wiggle.
+        .overlay(alignment: .topLeading) { if !editor.isEditing { StickyDesk() } }
         .overlay { if editor.isShowingGallery { galleryOverlay } }
         .animation(editor.isDragging ? nil : .snappy(duration: 0.28), value: arrangement.layout)
         .animation(.snappy(duration: 0.28), value: editor.isEditing)
@@ -109,6 +127,8 @@ public struct ControlPanel: View {
     private var galleryOverlay: some View {
         ZStack {
             // Dim behind the gallery — separate from cardShadow (which is for cards).
+            // Screen-wide, deliberately: the window is the screen now, the
+            // gallery is modal, and a tap anywhere closes it.
             Color.black.opacity(0.28)
                 .ignoresSafeArea()
                 .onTapGesture { withAnimation(.snappy) { editor.isShowingGallery = false } }
@@ -117,7 +137,10 @@ public struct ControlPanel: View {
             }
             .frame(width: Layout.laneWidth)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Over the lanes, not the screen's middle: the window is screen-sized
+        // now, and a lane-wide card centered on a display reads as lost.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .padding([.top, .trailing], Space.oneHalf + Layout.panelInset)
         .transition(.opacity.combined(with: .scale(scale: 0.96)))
     }
 
@@ -135,6 +158,15 @@ public struct ControlPanel: View {
                 // Gallery is a modal overlay — drags on the dim should not
                 // mutate the layout behind it.
                 guard !editor.isShowingGallery else { return }
+                // A press starting on a sticky belongs to the sticky's own
+                // header drag — never lift, resize, or arm a hold from it.
+                // Read off the store, not a preference: preferences trail by
+                // a layout pass, and a press in that gap would arm both the
+                // sticky drag and the lane hold at once.
+                guard !StickyStore.shared.visible.contains(where: {
+                    StickyCard.frame(center: CGPoint(x: $0.x, y: $0.y))
+                        .contains(value.startLocation)
+                }) else { return }
                 if editor.isEditing {
                     // A resize in flight steers by translation; a press
                     // starting on a grip begins one. Both return before the
@@ -257,6 +289,17 @@ public struct ControlPanel: View {
             ForEach(arrangement.lanes.indices, id: \.self) { index in
                 WidgetLane(lane: index, slots: arrangement.lanes[index], arrangement: arrangement, editor: editor)
                 newLaneTarget(at: index + 1)
+            }
+        }
+        // Where the lanes sit in panel space. The window is screen-sized and
+        // lets clicks through everywhere else, so the controller needs this
+        // box to know which points are the panel's and which fall through.
+        .background {
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: LanesFramePreference.self,
+                    value: proxy.frame(in: .panel)
+                )
             }
         }
     }

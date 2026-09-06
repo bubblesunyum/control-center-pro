@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Control Center Pro contributors
 
+import CCPKit
 import SwiftUI
 
 /// The only place in the app a colour literal appears.
@@ -79,4 +80,23 @@ public extension Color {
     /// Dashed new-lane column, highlighted when the finger is over it.
     static let newLaneStrokeTargeted = Color.accentColor.opacity(0.65)
     static let newLaneFillTargeted = Color.accentColor.opacity(0.10)
+
+    /// A sticky's paper. Opaque pastels rather than glass: a note is read,
+    /// not seen through, and white-alpha lightening over an unknown
+    /// wallpaper would wash the ink out in one appearance or the other.
+    static func stickyPaper(for color: StickyColor) -> Color {
+        switch color {
+        case .yellow: Color(red: 0.99, green: 0.93, blue: 0.68)
+        case .pink: Color(red: 0.98, green: 0.80, blue: 0.83)
+        case .blue: Color(red: 0.76, green: 0.88, blue: 0.98)
+        case .green: Color(red: 0.78, green: 0.93, blue: 0.78)
+        case .purple: Color(red: 0.87, green: 0.80, blue: 0.96)
+        case .orange: Color(red: 0.99, green: 0.84, blue: 0.66)
+        }
+    }
+
+    /// The hairline around a sticky. The glass hairline is white-alpha for
+    /// lightening blur; on opaque paper it vanishes, so paper gets its own
+    /// black-alpha line — and the header rule with it.
+    static let stickyStroke = Ink.black12
 }

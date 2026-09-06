@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Control Center Pro contributors
 
 import AppKit
+import CCPKit
 import CCPUI
 import Observation
 
@@ -53,6 +54,26 @@ final class StatusItemController {
             let editItem = NSMenuItem(title: "Edit Widgets", action: #selector(editWidgets), keyEquivalent: "")
             editItem.target = self
             menu.addItem(editItem)
+        }
+        let stickyItem = NSMenuItem(title: "New Sticky", action: #selector(newSticky), keyEquivalent: "")
+        stickyItem.target = self
+        menu.addItem(stickyItem)
+        let archived = StickyStore.shared.archived
+        if !archived.isEmpty {
+            let restoreItem = NSMenuItem(title: "Restore Sticky", action: nil, keyEquivalent: "")
+            let restoreMenu = NSMenu()
+            for sticky in archived {
+                let item = NSMenuItem(
+                    title: sticky.displayTitle,
+                    action: #selector(restoreSticky(_:)),
+                    keyEquivalent: ""
+                )
+                item.target = self
+                item.representedObject = sticky.id.uuidString
+                restoreMenu.addItem(item)
+            }
+            restoreItem.submenu = restoreMenu
+            menu.addItem(restoreItem)
         }
         let settingsItem = NSMenuItem(title: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
         settingsItem.target = self
@@ -124,6 +145,22 @@ final class StatusItemController {
 
     @objc private func addWidget() {
         panel.showGallery()
+    }
+
+    @objc private func newSticky() {
+        panel.newSticky()
+    }
+
+    @objc private func restoreSticky(_ sender: NSMenuItem) {
+        guard let idString = sender.representedObject as? String,
+              let id = UUID(uuidString: idString)
+        else { return }
+        // A restored note nobody can see is a note nobody wrote — same rule
+        // as a new one.
+        if !panel.isVisible, let button = item.button {
+            panel.show(from: button)
+        }
+        StickyStore.shared.unarchive(id)
     }
 
     @objc private func showSettings() {

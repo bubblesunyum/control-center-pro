@@ -186,41 +186,6 @@ final class PanelEditorTests: XCTestCase {
         XCTAssertNil(landing(at: CGPoint(x: 400, y: 60)))
     }
 
-    /// The window grows left by one lane to preview the column; the snapshot
-    /// follows per lane so later frames hit-test against what the eye sees.
-    /// Trailing gap: no lane moves inside the panel, so none of the snapshot
-    /// shifts — the ghost over lane 1 still lands in lane 1.
-    func testSnapshotShiftAfterTrailingOffer() {
-        let editor = editor(zones: twoLanes)
-        editor.displayWidth = Self.displayWidth(fitting: 4)
-        editor.startEditing()
-        let zone = twoLanes.first(where: { $0.id == a })!
-        editor.lift(a, at: CGPoint(x: zone.frame.minX + 8, y: zone.frame.minY + 8))
-        editor.drag(to: Self.fingerFor(center: CGPoint(x: 560, y: 60), zone: zone), laneWidths: Self.twoDefaultLanes)
-        XCTAssertEqual(editor.previewLanding, .newLane(at: 2))
-
-        editor.shiftSnapshot(dx: Layout.laneWidth + Space.oneHalf, newLaneAt: 2)
-        editor.drag(to: Self.fingerFor(center: CGPoint(x: 384, y: 60), zone: zone), laneWidths: Self.twoDefaultLanes)
-
-        XCTAssertEqual(editor.landing(laneWidths: Self.twoDefaultLanes), .into(lane: 1, index: 0))
-    }
-
-    /// Middle gap: only the lanes right of the opening shift.
-    func testSnapshotShiftAfterMiddleOffer() {
-        let editor = editor(zones: twoLanes)
-        editor.displayWidth = Self.displayWidth(fitting: 4)
-        editor.startEditing()
-        let zone = twoLanes.first(where: { $0.id == a })!
-        editor.lift(a, at: CGPoint(x: zone.frame.minX + 8, y: zone.frame.minY + 8))
-        editor.drag(to: Self.fingerFor(center: CGPoint(x: 258, y: 60), zone: zone), laneWidths: Self.twoDefaultLanes)
-        XCTAssertEqual(editor.previewLanding, .newLane(at: 1))
-
-        editor.shiftSnapshot(dx: Layout.laneWidth + Space.oneHalf, newLaneAt: 1)
-        editor.drag(to: Self.fingerFor(center: CGPoint(x: 132, y: 60), zone: zone), laneWidths: Self.twoDefaultLanes)
-
-        XCTAssertEqual(editor.landing(laneWidths: Self.twoDefaultLanes), .into(lane: 0, index: 0))
-    }
-
     /// ccp-p6g: the panel is anchored top-right and doesn't scroll, so a lane
     /// the display can't show is one the user would lose things in.
     func testNoNewLaneWhenTheDisplayIsFull() {
