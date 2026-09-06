@@ -35,6 +35,7 @@ public final class ShelfWidget: CCPWidget {
     )
 
     private let hiddenFilesAdapter: QuickTogglesAdapter
+    private let tipState = StripTipState()
 
     public init() {
         self.hiddenFilesAdapter = QuickTogglesAdapter()
@@ -46,12 +47,15 @@ public final class ShelfWidget: CCPWidget {
     }
 
     public func makeView() -> some View {
-        ShelfWidgetContent(hiddenFiles: hiddenFilesAdapter)
+        ShelfWidgetContent(hiddenFiles: hiddenFilesAdapter, tipState: tipState)
             .environment(ShelfStore.shared)
     }
 
     public func activate() { hiddenFilesAdapter.activate() }
-    public func deactivate() { hiddenFilesAdapter.deactivate() }
+    public func deactivate() {
+        hiddenFilesAdapter.deactivate()
+        tipState.reset()
+    }
 }
 
 private struct ShelfWidgetContent: View {
@@ -63,12 +67,14 @@ private struct ShelfWidgetContent: View {
     @Environment(ShelfStore.self) private var store
     @State private var window = ShelfWindowController.shared
     @Bindable var hiddenFiles: QuickTogglesAdapter
+    @Bindable var tipState: StripTipState
     @State private var isMenuPresented = false
     @State private var isPinnedCollapsed = false
     @State private var isDownloadsCollapsed = false
     @State private var downloads = RecentDownloadsStore()
     @Environment(\.panelArrangement) private var arrangement
     @Environment(\.currentWidgetID) private var currentWidgetID
+    @Environment(\.isPanelEditing) private var isPanelEditing
 
     private var pinned: [ShelfItem] { store.items.filter(\.isPinned) }
     private var unpinned: [ShelfItem] { store.items.filter { !$0.isPinned } }
@@ -173,7 +179,12 @@ private struct ShelfWidgetContent: View {
         ScrollView(.horizontal, showsIndicators: false) {
             LazyHStack(spacing: Space.half) {
                 ForEach(pinned) { item in
-                    MinimizedShelfThumbnail(item: item)
+                    MinimizedShelfThumbnail(
+                        item: item,
+                        isTipPresented: tipState.binding(for: .pin(item.id))
+                    ) { hovering in
+                        tipState.hoverChanged(owner: .pin(item.id), hovering: hovering, isEditing: isPanelEditing)
+                    }
                 }
                 if !pinned.isEmpty, !downloads.isEmpty {
                     Divider()
@@ -181,13 +192,22 @@ private struct ShelfWidgetContent: View {
                         .accessibilityHidden(true)
                 }
                 ForEach(downloads) { file in
-                    MinimizedDownloadThumbnail(file: file)
+                    MinimizedDownloadThumbnail(
+                        file: file,
+                        isTipPresented: tipState.binding(for: .download(file.id))
+                    ) { hovering in
+                        tipState.hoverChanged(owner: .download(file.id), hovering: hovering, isEditing: isPanelEditing)
+                    }
                 }
             }
             .padding(.top, Space.half)
         }
         .scrollTargetBehavior(.paging)
         .transition(.blurReplace)
+        .onDisappear { tipState.reset() }
+        .onChange(of: isPanelEditing) { _, editing in
+            if editing { tipState.reset() }
+        }
     }
 
     @ViewBuilder
@@ -325,7 +345,8 @@ private struct ShelfOverflowMenu: View {
 
 /// The latest files in ~/Downloads, re-read every time the card appears.
 /// Enumeration runs off the main thread so a crowded folder never blocks the
-/// panel opening; thumbnails stay derived in the row, never stored.
+/// panel opening; the workspace icons resolve here too, never in `body`.
+/// QuickLook thumbnails stay derived in the row, never stored.
 @MainActor
 @Observable
 private final class RecentDownloadsStore {
@@ -359,13 +380,26 @@ private final class RecentDownloadsStore {
         return dated
             .sorted { $0.1 > $1.1 }
             .prefix(maxCount)
-            .map { RecentFile(url: $0.0, isDirectory: $0.2) }
+            .map { url, _, isDirectory in
+                RecentFile(
+                    url: url,
+                    isDirectory: isDirectory,
+                    icon: isDirectory ? nil : NSWorkspace.shared.icon(forFile: url.path)
+                )
+            }
     }
 }
 
 private struct RecentFile: Identifiable {
     let url: URL
     let isDirectory: Bool
+    /// Resolved once in `RecentDownloadsStore.load()`, off the main thread:
+    /// `NSWorkspace.icon(forFile:)` can block on a document lector (hundreds
+    /// of ms for the large videos people keep in Downloads), and calling it
+    /// in `body` pays that on every render — each QuickLook completion
+    /// re-renders every thumbnail. Directories keep the folder symbol and
+    /// never resolve this.
+    let icon: NSImage?
 
     var id: String { url.path }
     var name: String { url.lastPathComponent }
@@ -430,7 +464,7 @@ private struct RecentDownloadRow: View {
                 FileThumbnailView(
                     url: file.url,
                     size: previewSize,
-                    fallbackIcon: NSWorkspace.shared.icon(forFile: file.url.path),
+                    fallbackIcon: file.icon,
                     symbolName: "doc.fill"
                 )
             }
@@ -623,15 +657,82 @@ private struct WidgetFileRowDragModifier: ViewModifier {
     }
 }
 
+/// Which minimized-strip thumbnail owns the hover title right now.
+private enum StripTipOwner: Equatable {
+    case pin(UUID)
+    case download(String)
+}
+
+/// Owns the minimized strip's hover title (ccp-xuy8). Pointer tracking
+/// transitions coalesce away during brisk moves — a swept-over thumb's exit
+/// never arrives — so per-item timers would all fire and the first-presented
+/// popover would stick. Last-enter-wins plus a generation guard keeps sweeps
+/// quiet and always titles the thumb under the pointer.
+///
+/// Owned by `ShelfWidget` rather than held in `@State`: the panel hides with
+/// `orderOut`, which never fires `onDisappear`, so view-held state would
+/// greet on reopen — `deactivate()` resets this instead.
+@MainActor
+@Observable
+private final class StripTipState {
+    private(set) var owner: StripTipOwner?
+    private var claimant: StripTipOwner?
+    private var generation = 0
+    private var task: Task<Void, Never>?
+
+    func binding(for owner: StripTipOwner) -> Binding<Bool> {
+        Binding(
+            get: { self.owner == owner },
+            set: { presenting in
+                if !presenting, self.owner == owner { self.owner = nil }
+            }
+        )
+    }
+
+    /// The title arrives a beat after the pointer lands — half a second, so
+    /// sweeping across the strip stays quiet and only a resting pointer asks.
+    /// A popover rather than `.help`: the system tooltip's delay is not
+    /// ours to set, and an overlay would clip at the scroll view's edge.
+    func hoverChanged(owner: StripTipOwner, hovering: Bool, isEditing: Bool) {
+        guard hovering, !isEditing else {
+            if claimant == owner {
+                task?.cancel()
+                task = nil
+                generation += 1
+                claimant = nil
+            }
+            if self.owner == owner { self.owner = nil }
+            return
+        }
+        generation += 1
+        let generation = generation
+        task?.cancel()
+        claimant = owner
+        task = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled, generation == self.generation else { return }
+            self.owner = owner
+        }
+    }
+
+    func reset() {
+        task?.cancel()
+        task = nil
+        generation += 1
+        claimant = nil
+        owner = nil
+    }
+}
+
 /// One pin in the Files card's minimized strip: a small thumbnail that opens
 /// on tap and drags out like a full row. The caret is the only way back to
 /// the full card — tapping here never expands, it opens.
 private struct MinimizedShelfThumbnail: View {
     let item: ShelfItem
+    let isTipPresented: Binding<Bool>
+    let onHoverChanged: (Bool) -> Void
     @Environment(ShelfStore.self) private var store
     @Environment(\.isPanelEditing) private var isPanelEditing
-    @State private var showTitleTip = false
-    @State private var hoverTask: Task<Void, Never>?
 
     var body: some View {
         Button {
@@ -645,7 +746,7 @@ private struct MinimizedShelfThumbnail: View {
         .disabled(isPanelEditing)
         .accessibilityLabel(item.title)
         .accessibilityHint(openHint)
-        .popover(isPresented: $showTitleTip, arrowEdge: .bottom) {
+        .popover(isPresented: isTipPresented, arrowEdge: .bottom) {
             Text(item.title)
                 .font(.caption)
                 .lineLimit(1)
@@ -654,8 +755,7 @@ private struct MinimizedShelfThumbnail: View {
                 .padding(.vertical, Space.half)
                 .frame(maxWidth: Layout.shelfMinimizedTipMaxWidth)
         }
-        .onHover(perform: trackHover)
-        .onDisappear { hoverTask?.cancel() }
+        .onHover(perform: onHoverChanged)
         .contextMenu {
             if item.kind == .file, let path = item.filePath {
                 Button("Open") { openShelfItem(item) }
@@ -694,24 +794,6 @@ private struct MinimizedShelfThumbnail: View {
         case .text: "Copies to the clipboard"
         }
     }
-
-    /// The title arrives a beat after the pointer lands — half a second, so
-    /// sweeping across the strip stays quiet and only a resting pointer asks.
-    /// A popover rather than `.help`: the system tooltip's delay is not
-    /// ours to set, and an overlay would clip at the scroll view's edge.
-    private func trackHover(_ hovering: Bool) {
-        hoverTask?.cancel()
-        hoverTask = nil
-        guard hovering, !isPanelEditing else {
-            showTitleTip = false
-            return
-        }
-        hoverTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(500))
-            guard !Task.isCancelled else { return }
-            showTitleTip = true
-        }
-    }
 }
 
 /// One download in the Files card's minimized strip: a small thumbnail that
@@ -719,9 +801,9 @@ private struct MinimizedShelfThumbnail: View {
 /// MinimizedShelfThumbnail's hover title so the two halves of the strip agree.
 private struct MinimizedDownloadThumbnail: View {
     let file: RecentFile
+    let isTipPresented: Binding<Bool>
+    let onHoverChanged: (Bool) -> Void
     @Environment(\.isPanelEditing) private var isPanelEditing
-    @State private var showTitleTip = false
-    @State private var hoverTask: Task<Void, Never>?
 
     var body: some View {
         Button {
@@ -735,7 +817,7 @@ private struct MinimizedDownloadThumbnail: View {
         .disabled(isPanelEditing)
         .accessibilityLabel(file.name)
         .accessibilityHint("Opens in its default app")
-        .popover(isPresented: $showTitleTip, arrowEdge: .bottom) {
+        .popover(isPresented: isTipPresented, arrowEdge: .bottom) {
             Text(file.name)
                 .font(.caption)
                 .lineLimit(1)
@@ -744,8 +826,7 @@ private struct MinimizedDownloadThumbnail: View {
                 .padding(.vertical, Space.half)
                 .frame(maxWidth: Layout.shelfMinimizedTipMaxWidth)
         }
-        .onHover(perform: trackHover)
-        .onDisappear { hoverTask?.cancel() }
+        .onHover(perform: onHoverChanged)
         .contextMenu {
             Button("Open") { NSWorkspace.shared.open(file.url) }
             Button("Show in Finder") {
@@ -768,25 +849,11 @@ private struct MinimizedDownloadThumbnail: View {
             FileThumbnailView(
                 url: file.url,
                 size: size,
-                fallbackIcon: NSWorkspace.shared.icon(forFile: file.url.path),
+                fallbackIcon: file.icon,
                 symbolName: "doc.fill",
                 fallbackPointSize: Layout.shelfMinimizedThumbnailIconSize
             )
             .frame(width: size.width, height: size.height)
-        }
-    }
-
-    private func trackHover(_ hovering: Bool) {
-        hoverTask?.cancel()
-        hoverTask = nil
-        guard hovering, !isPanelEditing else {
-            showTitleTip = false
-            return
-        }
-        hoverTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(500))
-            guard !Task.isCancelled else { return }
-            showTitleTip = true
         }
     }
 }
