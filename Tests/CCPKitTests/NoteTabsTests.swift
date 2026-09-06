@@ -69,7 +69,7 @@ final class NoteTabsTests: XCTestCase {
         XCTAssertEqual(adapter.selectedNoteID, ids[1])
     }
 
-    func testCloseTabRefusesTheLastOpenTab() throws {
+    func testClosingLastOpenTabMintsFreshNote() throws {
         let (defaults, name) = try store()
         defer { defaults.removePersistentDomain(forName: name) }
         let adapter = adapter(defaults)
@@ -77,8 +77,15 @@ final class NoteTabsTests: XCTestCase {
 
         XCTAssertTrue(adapter.closeTab(ids[0]))
         XCTAssertTrue(adapter.closeTab(ids[1]))
-        XCTAssertFalse(adapter.closeTab(ids[2]))
-        XCTAssertEqual(adapter.openNotes.map(\.id), [ids[2]])
+        // One tab left open: hiding it mints a fresh blank note first, so the
+        // strip never empties and nothing hidden resurrects.
+        XCTAssertTrue(adapter.closeTab(ids[2]))
+        let fresh = try XCTUnwrap(adapter.selectedNoteID)
+        XCTAssertFalse(ids.contains(fresh))
+        XCTAssertEqual(adapter.openNotes.map(\.id), [fresh])
+        XCTAssertEqual(adapter.notes.first(where: { $0.id == fresh })?.text, "")
+        XCTAssertEqual(adapter.closedNotes.map(\.id), ids)
+        XCTAssertEqual(adapter.restorableClosedNotes.map(\.id), ids)
         XCTAssertFalse(adapter.closeTab(UUID()), "unknown ids close nothing")
     }
 
@@ -140,7 +147,7 @@ final class NoteTabsTests: XCTestCase {
         XCTAssertTrue(adapter.closedNotes.isEmpty)
     }
 
-    func testDeleteSelectedReopensTheFallback() throws {
+    func testDeleteSelectedFallsBackToOpenNeighbour() throws {
         let (defaults, name) = try store()
         defer { defaults.removePersistentDomain(forName: name) }
         let adapter = adapter(defaults)
@@ -148,10 +155,34 @@ final class NoteTabsTests: XCTestCase {
         adapter.selectNote(ids[1])
 
         XCTAssertTrue(adapter.closeTab(ids[2]))
+        // The document-order fallback hid: selection yields to the nearest
+        // open neighbour instead of resurrecting the hidden tab.
         XCTAssertTrue(adapter.deleteNote(ids[1]))
-        XCTAssertEqual(adapter.selectedNoteID, ids[2])
-        XCTAssertEqual(adapter.openNotes.map(\.id), [ids[0], ids[2]],
-                       "the fallback rejoins the strip even hidden")
+        XCTAssertEqual(adapter.selectedNoteID, ids[0])
+        XCTAssertEqual(adapter.openNotes.map(\.id), [ids[0]])
+        XCTAssertEqual(adapter.closedNotes.map(\.id), [ids[2]])
+    }
+
+    func testDeleteLastOpenTabMintsFreshNote() throws {
+        // The reported bug: type in A, close A, delete the selected empty B —
+        // B died but hidden A reopened in its place. Now a fresh blank note
+        // opens and A stays hidden.
+        let (defaults, name) = try store()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let adapter = adapter(defaults)
+        let typed = try XCTUnwrap(adapter.selectedNoteID)
+        adapter.text = "typed words"
+        adapter.createNote()
+        let empty = try XCTUnwrap(adapter.selectedNoteID)
+
+        XCTAssertTrue(adapter.closeTab(typed))
+        XCTAssertTrue(adapter.deleteNote(empty))
+        let fresh = try XCTUnwrap(adapter.selectedNoteID)
+        XCTAssertNotEqual(fresh, typed)
+        XCTAssertEqual(adapter.notes.map(\.id), [typed, fresh])
+        XCTAssertEqual(adapter.notes.first(where: { $0.id == fresh })?.text, "")
+        XCTAssertEqual(adapter.openNotes.map(\.id), [fresh])
+        XCTAssertEqual(adapter.closedNotes.map(\.id), [typed])
     }
 
     func testClosedTabsPersistAcrossLaunches() throws {
@@ -166,10 +197,10 @@ final class NoteTabsTests: XCTestCase {
         XCTAssertEqual(second.openNotes.map(\.id), [ids[1], ids[2]])
     }
 
-    func testCloseTabRefusesEmptyNotes() throws {
-        // An empty note holds nothing to restore and the menu lists
-        // restorable notes only, so hiding one would strand it with no way
-        // back. Deletion stays the way out, without asking while empty.
+    func testCloseTabDeletesEmptyNotes() throws {
+        // Hiding an empty tab would strand it outside the restorable menu
+        // while leaking a slot, so the X deletes it instead — identical from
+        // the user's side, confirmation-free while empty.
         let (defaults, name) = try store()
         defer { defaults.removePersistentDomain(forName: name) }
         let adapter = adapter(defaults)
@@ -177,31 +208,60 @@ final class NoteTabsTests: XCTestCase {
 
         adapter.createNote()
         let empty = try XCTUnwrap(adapter.selectedNoteID)
-        XCTAssertFalse(adapter.closeTab(empty))
-        XCTAssertEqual(adapter.openNotes.map(\.id), ids + [empty])
+        XCTAssertTrue(adapter.closeTab(empty))
+        XCTAssertEqual(adapter.notes.map(\.id), ids)
+        XCTAssertEqual(adapter.selectedNoteID, ids[2])
         XCTAssertTrue(adapter.closedNotes.isEmpty)
-        XCTAssertTrue(adapter.deleteNote(empty))
     }
 
-    func testHiddenEmptyNoteHealsOnLoad() throws {
-        // Hidden before the X refused empties, or by a foreign edit of the
-        // shared keys: either way the state is stale, so loading unhides it
-        // instead of stranding it outside the restorable menu.
+    func testCloseSoleEmptyTabResetsBlank() throws {
+        // The only tab, and blank: deletion refuses the last doc, so closing
+        // resets — fresh blank in place of the dismissed one.
         let (defaults, name) = try store()
         defer { defaults.removePersistentDomain(forName: name) }
-        let ids = try three(adapter(defaults))
+        let adapter = adapter(defaults)
+        let sole = try XCTUnwrap(adapter.selectedNoteID)
 
-        let seeded = NotesDocument(
-            notes: [Note(id: ids[0], name: "N0", text: "kept"),
-                    Note(id: ids[1], name: "N1", text: ""),
-                    Note(id: ids[2], name: "N2", text: "also kept")],
-            selectedID: ids[0])
-        defaults.set(try JSONEncoder().encode(seeded), forKey: "scratchpadDocument")
-        defaults.set(try JSONEncoder().encode(Set([ids[1], ids[2]])), forKey: "scratchpadClosedTabs")
+        XCTAssertTrue(adapter.closeTab(sole))
+        let fresh = try XCTUnwrap(adapter.selectedNoteID)
+        XCTAssertNotEqual(fresh, sole)
+        XCTAssertEqual(adapter.notes.map(\.id), [fresh])
+        XCTAssertEqual(adapter.openNotes.map(\.id), [fresh])
+    }
 
-        let healed = adapter(defaults)
-        XCTAssertEqual(healed.restorableClosedNotes.map(\.id), [ids[2]])
-        XCTAssertEqual(healed.openNotes.map(\.id), [ids[0], ids[1]])
+    func testCloseLastTabRefusedAtFullHouse() throws {
+        // Twelve notes, eleven hidden, one open: minting the replacement is
+        // impossible, so the close refuses — the X dims, the trash is the way
+        // out.
+        let (defaults, name) = try store()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let adapter = adapter(defaults)
+        var ids = [try XCTUnwrap(adapter.selectedNoteID)]
+        adapter.text = "filler"
+        for number in 1..<NotesDocument.maximumNoteCount {
+            adapter.createNote()
+            let id = try XCTUnwrap(adapter.selectedNoteID)
+            adapter.text = "filler \(number)"
+            ids.append(id)
+        }
+        XCTAssertEqual(adapter.notes.count, NotesDocument.maximumNoteCount)
+        for id in ids.dropLast() {
+            XCTAssertTrue(adapter.closeTab(id))
+        }
+
+        let last = try XCTUnwrap(ids.last)
+        XCTAssertFalse(adapter.canCloseTab(last))
+        XCTAssertFalse(adapter.closeTab(last))
+        XCTAssertEqual(adapter.openNotes.map(\.id), [last])
+
+        // An empty sole tab still closes: deletion frees its slot, so no
+        // mint is needed and the X stays live.
+        adapter.text = ""
+        XCTAssertTrue(adapter.canCloseTab(last))
+        XCTAssertTrue(adapter.closeTab(last))
+        let replacement = try XCTUnwrap(adapter.selectedNoteID)
+        XCTAssertNotEqual(replacement, last)
+        XCTAssertEqual(adapter.openNotes.map(\.id), [replacement])
     }
 
     func testCraftDocumentURLMatchesTheVendorTemplate() {

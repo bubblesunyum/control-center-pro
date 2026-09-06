@@ -112,33 +112,28 @@ struct NoteTabStrip: View {
                     .font(.headline)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                // No X where closeTab refuses: the last open tab, or an empty
-                // one with nothing to restore. The trash and this tab's own
-                // menu delete it, without asking while empty.
-                if adapter.canCloseTab(note.id) {
-                    Button {
-                        onCloseTab(note)
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.caption.weight(.semibold))
-                            .padding(Space.half)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(isCloseHovered ? .secondary : .tertiary)
-                    .background {
-                        RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
-                            .fill(isCloseHovered ? Color.controlFill : Color.clear)
-                    }
-                    .onHover { hovering in
-                        if hovering { hoveredCloseID = note.id }
-                        else if hoveredCloseID == note.id { hoveredCloseID = nil }
-                    }
-                    .opacity(closeOpacity)
-                    .disabled(closeOpacity == 0)
-                    .accessibilityHidden(closeOpacity == 0)
-                    .help("Close tab")
-                    .accessibilityLabel("Close \(note.name)")
+                Button {
+                    onCloseTab(note)
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.semibold))
+                        .padding(Space.half)
                 }
+                .buttonStyle(.plain)
+                .foregroundStyle(isCloseHovered ? .secondary : .tertiary)
+                .background {
+                    RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
+                        .fill(isCloseHovered ? Color.controlFill : Color.clear)
+                }
+                .onHover { hovering in
+                    if hovering { hoveredCloseID = note.id }
+                    else if hoveredCloseID == note.id { hoveredCloseID = nil }
+                }
+                .opacity(closeOpacity)
+                .disabled(closeOpacity == 0 || !adapter.canCloseTab(note.id))
+                .accessibilityHidden(closeOpacity == 0)
+                .help(adapter.canCloseTab(note.id) ? "Close tab" : "Note limit reached (\(NotesDocument.maximumNoteCount))")
+                .accessibilityLabel("Close \(note.name)")
             }
         }
         // The hover chip is a 20pt square in a 24pt pill, so 2pt of air above

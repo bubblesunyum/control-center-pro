@@ -283,6 +283,15 @@ public final class NotesAdapter {
     }
 
     public var canCreateNote: Bool { notes.count < NotesDocument.maximumNoteCount }
+    /// Whether the strip's X is live for this tab. Almost always true: an
+    /// empty tab deletes (freeing its slot) and hiding a non-last tab needs
+    /// none — only hiding the last open non-empty tab mints a replacement,
+    /// which full house forbids. The strip dims the X there, never hides it,
+    /// with the trash as the way out.
+    public func canCloseTab(_ id: UUID) -> Bool {
+        if notes.first(where: { $0.id == id })?.text.isEmpty == true { return true }
+        return openNotes.count != 1 || canCreateNote
+    }
     /// Deleting needs a note left over: the document must hold at least one.
     public var canDeleteNote: Bool { notes.count > 1 }
 
@@ -608,26 +617,32 @@ public final class NotesAdapter {
         apply(next)
     }
 
-    /// Whether the X may hide this tab: never the last open one — the strip
-    /// must show one — and never an empty one, which holds nothing to restore
-    /// while the menu lists restorable notes only. The strip's X and
-    /// `closeTab` both read this, so the control never promises what the verb
-    /// refuses.
-    public func canCloseTab(_ id: UUID) -> Bool {
-        guard let note = openNotes.first(where: { $0.id == id }),
-              !note.text.isEmpty
-        else { return false }
-        return openNotes.count > 1
-    }
-
     /// Hide a tab. The doc is untouched — text, sync mapping and sidecar all
     /// stay, and the push and pull keep visiting it — so nothing is lost and
-    /// nothing asks first. Deletion is the way out for the tabs the X
-    /// refuses, and needs no confirmation while empty.
+    /// nothing asks first. An empty tab deletes instead: hiding it would
+    /// strand it outside the restorable menu while leaking a slot, and
+    /// deletion is identical from the user's side (nothing to reopen),
+    /// confirmation-free while empty. Hiding the last open tab mints a fresh
+    /// blank note first, so the strip never empties. Everything lives on in
+    /// Craft either way.
     @discardableResult
     public func closeTab(_ id: UUID) -> Bool {
-        guard canCloseTab(id) else { return false }
-        let opens = openNotes
+        if notes.first(where: { $0.id == id })?.text.isEmpty == true {
+            if notes.count == 1 {
+                // Sole blank tab: deletion refuses the last doc, so reset —
+                // fresh blank in place of the dismissed one. Count 1 mints.
+                createNote()
+            }
+            return deleteNote(id)
+        }
+        var opens = openNotes
+        if opens.count == 1, opens.first?.id == id {
+            // Last open tab: mint the replacement first — selection is
+            // already on the new tab, and the path below hides the old one.
+            guard canCreateNote else { return false }
+            createNote()
+            opens = openNotes
+        }
         guard let index = opens.firstIndex(where: { $0.id == id }) else { return false }
         if selectedNoteID == id {
             // Selection first, hide second: a torn pair then leaves a visible
@@ -652,12 +667,25 @@ public final class NotesAdapter {
         return selectedNoteID == id
     }
 
-    /// Delete a doc: the note, its text, and every per-pad sync trace. Needs
-    /// a note left over. When the deleted note was selected, whatever is
-    /// shown next rejoins the strip even if the X hid it earlier.
+    /// Delete a doc: the note, its text, and every per-pad sync trace. Mints a
+    /// fresh note when none would stay open. Nothing hidden ever resurrects:
+    /// deleting the last open tab opens a fresh blank note instead, and a
+    /// fallback that landed on a hidden tab yields to the nearest open
+    /// neighbour.
     @discardableResult
     public func deleteNote(_ id: UUID) -> Bool {
-        guard let document, let next = document.removing(id), persist(next) else { return false }
+        guard let document,
+              let deletedIndex = document.notes.firstIndex(where: { $0.id == id }),
+              var next = document.removing(id)
+        else { return false }
+        if next.notes.allSatisfy({ closedNoteIDs.contains($0.id) }) {
+            guard let fresh = next.addingNote(defaultName: defaultName) else { return false }
+            next = fresh
+        } else if closedNoteIDs.contains(next.selectedID),
+                  let neighbour = nearestOpenNote(toDeletedIndex: deletedIndex, in: next.notes) {
+            next = next.selecting(neighbour.id) ?? next
+        }
+        guard persist(next) else { return false }
         dropSidecar(for: id)
         dropCraftDocumentID(for: id)
         dropConflicts(for: id)
@@ -669,21 +697,31 @@ public final class NotesAdapter {
         return true
     }
 
+    /// Nearest open note to a deletion. `toDeletedIndex` is pre-delete, but
+    /// the same integer in the post-delete array points at the old successor —
+    /// which is why the forward side checks first. Nil only when nothing is
+    /// open, which the caller mints away first.
+    private func nearestOpenNote(toDeletedIndex index: Int, in notes: [Note]) -> Note? {
+        for distance in 0..<notes.count {
+            for candidate in [index + distance, index - distance] {
+                guard notes.indices.contains(candidate),
+                      !closedNoteIDs.contains(notes[candidate].id)
+                else { continue }
+                return notes[candidate]
+            }
+        }
+        return nil
+    }
+
     /// Closed ids for docs that no longer exist prune on every apply: without
     /// this a replaced document leaks them forever. The selected tab unhides
     /// with them — selection is always visible, so a stuck hidden-selected
-    /// tab heals on the next load instead of lingering. Hidden empties unhide
-    /// too: hiding one is refused, so the state is stale by definition — a
-    /// foreign edit of the shared keys, or an older build — and unhiding
-    /// keeps it reachable.
+    /// tab heals on the next load instead of lingering.
     private func pruneClosedNoteIDs() {
         guard let document else { return }
         let live = Set(document.notes.map(\.id))
         if !closedNoteIDs.isSubset(of: live) {
             closedNoteIDs = closedNoteIDs.intersection(live)
-        }
-        for note in document.notes where note.text.isEmpty {
-            unhide(note.id)
         }
         unhide(document.selectedID)
     }
@@ -1241,12 +1279,6 @@ public final class NotesAdapter {
             isReplacingText = false
         }
         storeSidecar(sidecar, for: padID)
-        // An adopted empty leaves nothing to restore: the menu lists
-        // restorable notes only and the strip never drew a hidden tab, so a
-        // hidden pad adopted empty would strand with no way back. Unhide it.
-        if text.isEmpty {
-            unhide(padID)
-        }
         _ = persist(document)
     }
 
