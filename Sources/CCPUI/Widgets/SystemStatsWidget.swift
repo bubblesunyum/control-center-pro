@@ -21,8 +21,8 @@ import SwiftUI
 /// (6) "Swap" not "Swap used"
 /// (7) graphs a bit taller
 /// (8) Memory owns the chevron; its expansion shows what Pressure used to show
-/// (9) Memory has a horizontal usage bar next to its title
-/// (10) Pressure badge is dot-only, text on hover
+/// (9) Memory has a horizontal usage bar next to its title, with a percent
+///     readout like CPU/GPU
 /// (11) Battery graph only when charging
 /// (12) distinct color per section, reused for every colored element in it
 /// (13) no separate temperature section — each gauge lives inside its section
@@ -204,7 +204,7 @@ private struct SystemStatsContent: View {
         .accessibilityLabel("GPU \(adapter.snapshot.gpuUsage.map { percent($0) } ?? "unknown")")
     }
 
-    // MARK: - Memory (8)(9)(10) + new tweaks
+    // MARK: - Memory (8)(9) + new tweaks
 
     private var memorySection: some View {
         sectionContainer(kind: .memory, color: memoryColor) {
@@ -258,21 +258,12 @@ private struct SystemStatsContent: View {
 
     // (8) chevron now belongs to Memory itself
     // (9) horizontal bar next to Memory title, showing total physical usage
-    // (10) pressure badge is dot-only with hover text, hidden when expanded
     private var memoryHeader: some View {
         let snapshot = adapter.snapshot
         let used = snapshot.memoryUsed
         let total = snapshot.memoryTotal
-        let fraction = (used != nil && total != nil && total! > 0) ? Double(used!) / Double(total!) : 0
-        // Header: no decimals on left, keep unit only on right — "8 / 16 GB"
-        let valueText: String = {
-            if let u = used, let t = total {
-                let left = Self.bytesHeaderLeft(u)
-                return "\(left) / \(Self.bytes(t))"
-            }
-            return "--"
-        }()
-        let isExpanded = expanded.contains(.memory)
+        let fraction: Double? = (used != nil && total != nil && total! > 0) ? Double(used!) / Double(total!) : nil
+        let valueText: String = fraction.map { percent($0) } ?? "--"
         return Button {
             toggle(.memory)
         } label: {
@@ -281,21 +272,14 @@ private struct SystemStatsContent: View {
                 Text("Memory")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.primary)
-                // (10) dot-only pressure indicator — hidden when expanded (new tweak 4)
-                if !isExpanded {
-                    PressureDot(pressure: snapshot.memoryPressure, color: memoryPressureColor(snapshot.memoryPressure))
-                }
                 Spacer()
                 // (9) usage bar beside title — with pressure gradient (new tweak 8)
-                UsageBar(fraction: fraction, tint: memoryColor, warningTint: memoryPressureWarningTint)
+                UsageBar(fraction: fraction ?? 0, tint: memoryColor, warningTint: memoryPressureWarningTint)
                     .frame(width: 86)
                 Text(valueText)
                     .font(.caption.weight(.semibold))
                     .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                    .foregroundStyle(.primary)
-                    .frame(minWidth: 56, alignment: .trailing)
+                    .frame(width: 36, alignment: .trailing)
             }
             .contentShape(Rectangle())
         }
@@ -605,16 +589,6 @@ private struct SystemStatsContent: View {
         return "\(Int(num.rounded())) \(unit)"
     }
 
-    /// Header left side: integer without decimals, no unit — e.g. "8" from "8 GB" or "1.5 GB" → "2"
-    static func bytesHeaderLeft(_ value: UInt64) -> String {
-        let raw = byteFormatter.string(fromByteCount: Int64(value))
-        let parts = raw.split(separator: " ")
-        guard let numStr = parts.first, let num = Double(numStr) else {
-            return raw.split(separator: " ").first.map(String.init) ?? raw
-        }
-        return String(Int(num.rounded()))
-    }
-
     private func chargeTint(_ charge: Int) -> Color {
         if charge < 20 { return energyRed }
         if charge < 40 { return energyYellow }
@@ -667,30 +641,6 @@ private struct ActivityMonitorButton: View {
 }
 
 // MARK: - Small views
-
-/// (10) dot-only memory pressure indicator — text shows on hover.
-private struct PressureDot: View {
-    let pressure: SystemMemoryPressure
-    let color: Color
-
-    var body: some View {
-        Circle()
-            .fill(color)
-            .frame(width: 7, height: 7)
-            .shadow(color: color.opacity(0.6), radius: 1.5)
-            .help(label)
-            .accessibilityLabel(label)
-    }
-
-    private var label: String {
-        switch pressure {
-        case .normal: return "Memory pressure: Normal"
-        case .warning: return "Memory pressure: Caution"
-        case .critical: return "Memory pressure: Critical"
-        case .unknown: return "Memory pressure: Unknown"
-        }
-    }
-}
 
 /// Temperature readout — number only, colored when hot.
 private struct TemperatureGauge: View {
