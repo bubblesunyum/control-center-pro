@@ -51,3 +51,6 @@ __pycache__/
 
 # The live dashboard port, rewritten on every bind — machine-local.
 .claude/launch.json
+
+# The dashboard snapshot, regenerated on every poll — machine-local.
+dashboard/state.json
