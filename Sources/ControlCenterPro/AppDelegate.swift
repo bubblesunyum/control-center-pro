@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var craft: CraftConnectionModel?
     private var hotkey: GlobalHotkey?
     private var settingsWindow: SettingsWindowController?
+    private var dropOverlay: DropOverlayController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         BridgedDefaults.register()
@@ -53,6 +54,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                                         hotkey: hotkey)
         self.settingsWindow = settingsWindow
         statusItem = StatusItemController(panel: panel, settingsWindow: settingsWindow)
+
+        // The drop-catcher pill: a drag of something the shelf can keep hangs
+        // a target below the menu-bar item. Suppressed while the panel or the
+        // shelf is open — the user can drop directly on those instead.
+        dropOverlay = DropOverlayController(
+            statusFrame: { [weak self] in self?.statusItem?.button?.window?.frame },
+            isSuppressed: { panel.isVisible || ShelfWindowController.shared.isVisible }
+        )
 
         // An agent can't click a menu bar item, and a screenshot of a panel
         // nobody opened is a screenshot of the desktop. This is how the smoke
@@ -91,6 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The autosave is deliberately lazy, so quitting is the one moment it has
     /// to stop being.
     func applicationWillTerminate(_ notification: Notification) {
+        dropOverlay?.stop()
         arrangement?.flush()
         ShelfStore.shared.flush()
     }

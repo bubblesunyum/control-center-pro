@@ -54,6 +54,8 @@ public extension Color {
     /// rather than for the system accent, which is where a different answer
     /// would go if one is ever needed.
     static let widgetAccent = Color.accentColor
+    /// What a completed action reads as — the drop-catcher's tick.
+    static let success = Color.green
     static let labelMuted = Color.secondary
     /// Baseline drawn behind a sparkline so its zero is readable.
     static let sparklineBaseline = Color.secondary.opacity(0.28)

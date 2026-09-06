@@ -9,10 +9,12 @@ import UniformTypeIdentifiers
 /// Holds the shelf: accepts drops, persists them, hands pasteboard writers back
 /// for dragging out, and tells the floating window when to refit.
 ///
-/// This is a lightweight port of `ShelfService`'s item lifecycle minus its
-/// triggers: no global hotkey, no shake detector, no docked pill, no edge
-/// peek. The floating window is summoned by the dashboard widget instead, and
-/// everything else — pinning, dropping, selecting — stays.
+/// This is a lightweight port of `ShelfService`'s item lifecycle minus most
+/// of its triggers: no global hotkey, no shake detector, no edge peek. The
+/// floating window is summoned by the dashboard widget, and the drop-catcher
+/// pill (`DropOverlayController` in CCPUI) is the one global trigger back —
+/// it only borrows `accept`/`canAcceptPasteboard`, never the lifecycle.
+/// Everything else — pinning, dropping, selecting — stays.
 @MainActor
 @Observable
 public final class ShelfStore {
@@ -181,6 +183,11 @@ public final class ShelfStore {
     }
 
     // MARK: - Providers
+
+    /// The content the shelf accepts, read by the shelf view and the
+    /// drop-catcher pill alike. It lives on the model so the two targets can
+    /// never offer different types.
+    public static let dropTypes: [UTType] = [.fileURL, .image, .url, .plainText, .text]
 
     /// Resolve `NSItemProvider`s as the drop target does: file first, then image
     /// data, then plain URL, then text — matching upstream's `resolveItem`

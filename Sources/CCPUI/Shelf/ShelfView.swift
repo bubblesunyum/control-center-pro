@@ -24,7 +24,6 @@ struct ShelfView: View {
     @State private var keepOpenHovered = false
     @State private var clearHovered = false
 
-    private static let dropTypes: [UTType] = [.fileURL, .image, .url, .plainText, .text]
     static let panelWidth: CGFloat = 304
     static let tileAreaHeight: CGFloat = 188
 
@@ -74,7 +73,7 @@ struct ShelfView: View {
                 .frame(width: Self.panelWidth - 96, height: 55)
         }
         .animation(.easeOut(duration: 0.15), value: isDropTargeted)
-        .onDrop(of: Self.dropTypes, isTargeted: $isDropTargeted) { providers in
+        .onDrop(of: ShelfStore.dropTypes, isTargeted: $isDropTargeted) { providers in
             shelf.accept(providers: providers)
         }
     }
