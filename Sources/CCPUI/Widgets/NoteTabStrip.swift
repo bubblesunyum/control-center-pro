@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Control Center Pro contributors
 
+import AppKit
 import CCPKit
 import SwiftUI
 
@@ -23,6 +24,10 @@ struct NoteTabStrip: View {
     @State private var hoveredNoteID: UUID?
     @State private var hoveredCloseID: UUID?
     @State private var isPlusHovered = false
+    // Double-tap detection for rename (see handleTabTap): the last tapped tab
+    // and when, so a second tap inside the system interval renames instead.
+    @State private var lastTapNoteID: UUID?
+    @State private var lastTapAt = Date.distantPast
     @FocusState private var isRenaming: Bool
 
     var body: some View {
@@ -153,8 +158,12 @@ struct NoteTabStrip: View {
                 .fill(isSelected ? Color.controlFill : isHovered ? Color.controlFill.opacity(0.5) : Color.clear)
         }
         .contentShape(RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous))
-        .onTapGesture(count: 2) { beginRename(note) }
-        .onTapGesture { adapter.selectNote(note.id) }
+        // One immediate tap does both jobs. A competing count-2 recognizer
+        // would hold every single tap for the double-click interval while it
+        // waits to rule double-tap out — that wait was the tab-switch lag. So
+        // the tap selects now, and a second tap on the same tab inside the
+        // system interval renames instead.
+        .onTapGesture { handleTabTap(note) }
         .onHover { hovering in
             if hovering { hoveredNoteID = note.id } else if hoveredNoteID == note.id { hoveredNoteID = nil }
         }
@@ -182,6 +191,22 @@ struct NoteTabStrip: View {
     }
 
     // MARK: Renaming
+
+    /// Select now; a second tap on the same tab inside the system
+    /// double-click interval renames instead of selecting again. Selecting
+    /// first is harmless either way — the rename lands on the shown tab.
+    private func handleTabTap(_ note: Note) {
+        let now = Date()
+        if lastTapNoteID == note.id, now.timeIntervalSince(lastTapAt) < NSEvent.doubleClickInterval {
+            lastTapNoteID = nil
+            lastTapAt = .distantPast
+            beginRename(note)
+        } else {
+            lastTapNoteID = note.id
+            lastTapAt = now
+            adapter.selectNote(note.id)
+        }
+    }
 
     private func beginRename(_ note: Note) {
         // One draft and one focus flag serve every tab, so moving straight
