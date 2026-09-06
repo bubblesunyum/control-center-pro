@@ -34,21 +34,27 @@ public final class NotesWidget: CCPWidget {
     /// `orderOut`, which never fires `onDisappear`, so view-bound start/stop
     /// would leave the monitor watching with the panel shut.
     private let paragraphReturn: ParagraphReturnMonitor
+    /// Delete skips hidden markdown markers (ccp-e8df). Same lifetime for
+    /// the same reason.
+    private let markdownDelete: MarkdownDeleteMonitor
 
     public init() {
         self.adapter = NotesAdapter()
         self.paragraphReturn = ParagraphReturnMonitor()
+        self.markdownDelete = MarkdownDeleteMonitor()
     }
 
     /// Test seam: widget backed by an in-memory document.
     init(document: NotesDocument) {
         self.adapter = NotesAdapter(document: document)
         self.paragraphReturn = ParagraphReturnMonitor()
+        self.markdownDelete = MarkdownDeleteMonitor()
     }
 
     init(adapter: NotesAdapter, monitors: EventMonitors = .system) {
         self.adapter = adapter
         self.paragraphReturn = ParagraphReturnMonitor(monitors: monitors)
+        self.markdownDelete = MarkdownDeleteMonitor(monitors: monitors)
     }
 
     public func makeView() -> some View {
@@ -58,9 +64,11 @@ public final class NotesWidget: CCPWidget {
     public func activate() {
         adapter.activate()
         paragraphReturn.start()
+        markdownDelete.start()
     }
 
     public func deactivate() {
+        markdownDelete.stop()
         paragraphReturn.stop()
         adapter.deactivate()
     }

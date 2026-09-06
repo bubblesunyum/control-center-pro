@@ -5,12 +5,14 @@ import MarkdownEngine
 import SwiftUI
 
 /// A note edited as live-styled Markdown: the text *is* the document, and the
-/// markers hide themselves until the caret lands on one.
+/// markers stay hidden — markdown here is a shortcut for formatting, and the
+/// coming format UI is how styles get edited (ccp-e8df).
 ///
 /// The one view file that names `MarkdownEngine`, so the widgets above it see
 /// a CCP view and an upstream change lands here — the same rule the engine
-/// adapters follow in `CCPKit`. (`CCPKit`'s sync splitter names it too, for
-/// the block AST only, never a view.)
+/// adapters follow in `CCPKit`. (`CCPKit`'s sync splitter names its block AST
+/// for cutting Craft blocks, and the delete monitor reads its inline AST to
+/// skip hidden markers — never a view.)
 ///
 /// A ~148pt card is not the full-window notes app the engine was written for,
 /// so its defaults are retuned rather than accepted: the heading ramp is
@@ -44,6 +46,9 @@ struct MarkdownNoteEditor: View {
     private static var configuration: MarkdownEditorConfiguration {
         var configuration = MarkdownEditorConfiguration.default
         configuration.theme = theme
+        // Markdown is a shortcut for formatting here, not the visible text:
+        // markers stay hidden even with the caret inside them (ccp-e8df).
+        configuration.markers.revealMarkersOnCaret = false
         configuration.headings = HeadingStyle(fontMultipliers: headingMultipliers)
         configuration.paragraph = ParagraphStyle(spacingFactor: 0.15,
                                                  lineHeightExtraSpacing: 1)

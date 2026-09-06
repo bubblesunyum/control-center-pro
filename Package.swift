@@ -57,7 +57,7 @@ let package = Package(
         //
         // Apache-2.0, which is one-way compatible with our GPL-3.0-or-later.
         .package(url: "https://github.com/bubblesunyum/swift-markdown-engine",
-                 exact: "0.12.0-ccp.1"),
+                 exact: "0.12.0-ccp.2"),
     ],
 
     targets: [
