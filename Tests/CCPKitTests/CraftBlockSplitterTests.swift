@@ -41,6 +41,61 @@ final class CraftBlockSplitterTests: XCTestCase {
                        ["line one\nline two"])
     }
 
+    // MARK: - Hard breaks (ccp-qzzt)
+
+    /// A bare return mints two trailing spaces; that line step is a block
+    /// boundary, while a plain single newline stays a soft break. The marker
+    /// never ships: slices keep the text, never the spaces.
+    func testHardBreakSplitsParagraphWithoutShippingTheMarker() {
+        let slices = CraftBlockSplitter.slices(in: "one  \ntwo\n")
+        XCTAssertEqual(slices.map(\.markdown), ["one", "two"])
+    }
+
+    func testSoftBreaksBesideHardBreaksStayJoined() {
+        XCTAssertEqual(CraftBlockSplitter.slices(in: "a\nb  \nc\n").map(\.markdown),
+                       ["a\nb", "c"])
+    }
+
+    func testThreeSpacesAreStillAHardBreakOneSpaceIsNot() {
+        XCTAssertEqual(CraftBlockSplitter.slices(in: "one   \ntwo\n").map(\.markdown),
+                       ["one", "two"])
+        XCTAssertEqual(CraftBlockSplitter.slices(in: "one \ntwo\n").map(\.markdown),
+                       ["one \ntwo"])
+    }
+
+    func testWhitespaceOnlyLineIsABlankSeparatorNotAHardBreak() {
+        XCTAssertEqual(CraftBlockSplitter.slices(in: "one\n  \ntwo\n").map(\.markdown),
+                       ["one", "two"])
+    }
+
+    func testBackslashNewlineStaysSoft() {
+        // Only the monitor mints boundaries and it mints spaces, so a path
+        // like `C:\` at a line end must never split.
+        XCTAssertEqual(CraftBlockSplitter.slices(in: "one\\\ntwo\n").map(\.markdown),
+                       ["one\\\ntwo"])
+    }
+
+    func testTrailingHardBreakAtEndOfDocumentLeavesOneBlock() {
+        XCTAssertEqual(CraftBlockSplitter.slices(in: "one  \n").map(\.markdown), ["one"])
+    }
+
+    func testHardBreakInsideACodeFenceDoesNotSplit() {
+        let text = "```\none  \ntwo\n```\n"
+        XCTAssertEqual(CraftBlockSplitter.slices(in: text).map(\.markdown), ["```\none  \ntwo\n```"])
+    }
+
+    func testHardBreakPiecesTileInOrder() {
+        let text = "a\nb  \nc  \n\nd\n"
+        let ns = text as NSString
+        let slices = CraftBlockSplitter.slices(in: text)
+        XCTAssertEqual(slices.map(\.markdown), ["a\nb", "c", "d"])
+        var cursor = 0
+        for slice in slices {
+            XCTAssertGreaterThanOrEqual(slice.range.location, cursor, "slices must run in order")
+            cursor = NSMaxRange(slice.range)
+        }
+    }
+
     func testBlankLinesAreSeparatorsNotBlocks() {        XCTAssertEqual(CraftBlockSplitter.slices(in: "\n\n\n").count, 0)
         XCTAssertEqual(CraftBlockSplitter.slices(in: "").count, 0)
         let slices = CraftBlockSplitter.slices(in: "one\n\n\ntwo\n")

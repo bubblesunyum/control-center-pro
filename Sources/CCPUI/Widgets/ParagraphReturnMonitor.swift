@@ -4,13 +4,16 @@
 import AppKit
 
 /// A bare return in the pad starts a new block; shift+return stays a newline
-/// inside the same one — Craft's rule, not Markdown's (ccp-inoq).
+/// inside the same one — Craft's rule, not Markdown's (ccp-inoq, ccp-qzzt).
 ///
-/// The distinction lives in the TEXT, never the splitter: the monitor turns a
-/// bare return into a paragraph break (`\n\n`) at the caret, so the block AST
-/// the sync diffs against keeps reading blank lines as the only boundary. If
-/// the splitter cut on single newlines instead, every Craft block holding a
-/// soft break would churn on every sync and the loop would never quiet.
+/// The distinction lives in the TEXT, never the splitter's block grammar:
+/// the monitor turns a bare return into a hard break (two spaces plus `\n`)
+/// at the caret, so the pad holds one paragraph with no paragraph-spacing
+/// gap where Craft shows one tight block step. The sync diffs hard breaks
+/// as block boundaries and plain lone newlines as soft breaks inside one
+/// block. If the splitter cut on ALL single newlines instead, every Craft
+/// block holding a soft break would churn on every sync and the loop would
+/// never quiet.
 ///
 /// Upstream is untouched — its text view keeps default AppKit behaviour, and
 /// this watches from outside it. Shift+return still routes to
@@ -51,11 +54,10 @@ final class ParagraphReturnMonitor {
     }
 
     /// The monitor's decision. A swallowed return inserts through the text
-    /// view itself, so undo behaves as if the break had always been two
-    /// newlines. A return at a line start additionally steps the caret back
-    /// onto the new empty line — without it the caret would ride down with
-    /// the pushed text and typing would prepend to that line instead of
-    /// filling the break.
+    /// view itself, so undo behaves as if the break had always been there.
+    /// A return at a line start hardens the line above (the spaces belong to
+    /// it) and the caret lands on the new empty line with nothing to step
+    /// back over.
     private func handle(_ event: NSEvent) -> NSEvent? {
         guard Self.isBareReturn(event),
               let textView = editor(),
@@ -78,14 +80,7 @@ final class ParagraphReturnMonitor {
         switch Self.lineReturn(line: line as NSString,
                                caret: range.location - lineRange.location) {
         case .plain:
-            let atLineStart = range.length == 0
-                && (range.location == 0 || string
-                    .substring(with: NSRange(location: range.location - 1, length: 1)) == "\n")
-            textView.insertText("\n\n", replacementRange: range)
-            if atLineStart {
-                textView.setSelectedRange(NSRange(location: textView.selectedRange().location - 1,
-                                                  length: 0))
-            }
+            Self.insertHardBreak(in: textView, range: range, string: string)
         case .insert(let suffix):
             textView.insertText(suffix, replacementRange: range)
         case .replace(let lineRelative, let text, let caretOffset):
@@ -114,6 +109,42 @@ final class ParagraphReturnMonitor {
             && event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty
     }
 
+    /// A bare return is a hard break: two spaces plus a newline, inserted
+    /// through the text view. At a line start the spaces belong to the line
+    /// above — inserting at the caret would strand them on the new line,
+    /// where the first typed character turns them into a leading indent
+    /// instead of a boundary. Above a blank line there is nothing to
+    /// harden and the boundary already exists, so a plain newline opens the
+    /// new line (minting spaces there would land the caret on the NEXT
+    /// block, prepending to it).
+    private static func insertHardBreak(in textView: NSTextView, range: NSRange, string: NSString) {
+        if range.length == 0, isLineStart(string, at: range.location), range.location > 0 {
+            if previousLineHasContent(string, caret: range.location) {
+                textView.insertText("  \n", replacementRange: NSRange(location: range.location - 1,
+                                                                      length: 0))
+            } else {
+                textView.insertText("\n", replacementRange: range)
+                // The caret rides down with the pushed text; step it back
+                // onto the new empty line or typing prepends to the block
+                // below.
+                textView.setSelectedRange(NSRange(location: range.location, length: 0))
+            }
+        } else {
+            textView.insertText("  \n", replacementRange: range)
+        }
+    }
+
+    private static func isLineStart(_ string: NSString, at location: Int) -> Bool {
+        location == 0
+            || string.substring(with: NSRange(location: location - 1, length: 1)) == "\n"
+    }
+
+    /// The line above the caret holds non-whitespace content.
+    private static func previousLineHasContent(_ string: NSString, caret: Int) -> Bool {
+        let line = string.paragraphRange(for: NSRange(location: caret - 1, length: 0))
+        return !string.substring(with: line).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     /// Virtual keycodes, layout-independent like the dismissal monitor's Esc —
     /// `characters` is not.
     private static let returnKeyCode: UInt16 = 36
@@ -122,7 +153,7 @@ final class ParagraphReturnMonitor {
     /// What a bare return does on one `\n`-delimited line. `caret` is the
     /// UTF-16 offset within `line`, like everything AppKit hands out.
     enum LineReturn: Equatable {
-        /// Not a list line — the paragraph-break path.
+        /// Not a list line — the hard-break path.
         case plain
         /// Insert this at the caret (the newline included). Text after the
         /// caret becomes the new item's content, so a mid-line return splits

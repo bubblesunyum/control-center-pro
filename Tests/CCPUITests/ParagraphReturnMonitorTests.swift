@@ -26,7 +26,7 @@ final class ParagraphReturnMonitorTests: XCTestCase {
         XCTAssertFalse(monitor.isWatching)
     }
 
-    func testBareReturnBecomesABlankLineAtTheCaret() {
+    func testBareReturnBecomesAHardBreakAtTheCaret() {
         let events = FakeKeyMonitors()
         let textView = RecordingTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
         textView.string = "ab\ncd"
@@ -36,10 +36,11 @@ final class ParagraphReturnMonitorTests: XCTestCase {
         monitor.start()
         XCTAssertNil(events.send(keyCode: 36, modifiers: []), "a bare return is consumed")
 
-        XCTAssertEqual(textView.insertions, [.init(text: "\n\n", range: NSRange(location: 3, length: 0))])
-        XCTAssertEqual(textView.string, "ab\n\n\ncd")
-        XCTAssertEqual(textView.selectedRange(), NSRange(location: 4, length: 0),
-                       "at a line start the caret waits on the new empty line, not the pushed text")
+        // At a line start the spaces harden the line above; the caret lands
+        // on the new empty line, not the pushed text.
+        XCTAssertEqual(textView.insertions, [.init(text: "  \n", range: NSRange(location: 2, length: 0))])
+        XCTAssertEqual(textView.string, "ab  \n\ncd")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 5, length: 0))
     }
 
     func testReturnAtLineEndLeavesTheCaretInTheNewBlock() {
@@ -52,8 +53,8 @@ final class ParagraphReturnMonitorTests: XCTestCase {
         monitor.start()
         XCTAssertNil(events.send(keyCode: 36, modifiers: []))
 
-        XCTAssertEqual(textView.string, "ab\n\n")
-        XCTAssertEqual(textView.selectedRange(), NSRange(location: 4, length: 0))
+        XCTAssertEqual(textView.string, "ab  \n")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 5, length: 0))
     }
 
     func testReturnMidLineSplitsAndFollowsTheText() {
@@ -66,9 +67,42 @@ final class ParagraphReturnMonitorTests: XCTestCase {
         monitor.start()
         XCTAssertNil(events.send(keyCode: 36, modifiers: []))
 
-        XCTAssertEqual(textView.string, "a\n\nb")
-        XCTAssertEqual(textView.selectedRange(), NSRange(location: 3, length: 0),
+        XCTAssertEqual(textView.string, "a  \nb")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 4, length: 0),
                        "a mid-line split follows the pushed text, like every line editor")
+    }
+
+    func testReturnAboveABlankLineOpensANewLine() {
+        // The boundary already exists: minting spaces would land the caret
+        // on the next block, prepending to it.
+        let events = FakeKeyMonitors()
+        let textView = RecordingTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        textView.string = "ab\n\ncd"
+        textView.setSelectedRange(NSRange(location: 4, length: 0))
+        let monitor = ParagraphReturnMonitor(monitors: events.interface) { textView }
+
+        monitor.start()
+        XCTAssertNil(events.send(keyCode: 36, modifiers: []))
+
+        XCTAssertEqual(textView.insertions, [.init(text: "\n", range: NSRange(location: 4, length: 0))])
+        XCTAssertEqual(textView.string, "ab\n\n\ncd")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 4, length: 0),
+                       "the caret waits on the new empty line, not the pushed text")
+    }
+
+    func testReturnOnAnEmptyLineHardensTheLineAbove() {
+        let events = FakeKeyMonitors()
+        let textView = RecordingTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        textView.string = "ab\n\ncd"
+        textView.setSelectedRange(NSRange(location: 3, length: 0))
+        let monitor = ParagraphReturnMonitor(monitors: events.interface) { textView }
+
+        monitor.start()
+        XCTAssertNil(events.send(keyCode: 36, modifiers: []))
+
+        XCTAssertEqual(textView.insertions, [.init(text: "  \n", range: NSRange(location: 2, length: 0))])
+        XCTAssertEqual(textView.string, "ab  \n\n\ncd")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 5, length: 0))
     }
 
     func testReturnInAnEmptyPadLeavesATypableLine() {
@@ -81,8 +115,8 @@ final class ParagraphReturnMonitorTests: XCTestCase {
         monitor.start()
         XCTAssertNil(events.send(keyCode: 36, modifiers: []))
 
-        XCTAssertEqual(textView.string, "\n\n")
-        XCTAssertEqual(textView.selectedRange(), NSRange(location: 1, length: 0))
+        XCTAssertEqual(textView.string, "  \n")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 3, length: 0))
     }
 
     func testBareReturnReplacesASelection() {
@@ -95,7 +129,7 @@ final class ParagraphReturnMonitorTests: XCTestCase {
         monitor.start()
         XCTAssertNil(events.send(keyCode: 36, modifiers: []))
 
-        XCTAssertEqual(textView.string, "a\n\nd")
+        XCTAssertEqual(textView.string, "a  \nd")
     }
 
     func testKeypadEnterExpandsToo() {
@@ -109,7 +143,7 @@ final class ParagraphReturnMonitorTests: XCTestCase {
         // Real keypad hardware carries the numeric-pad flag; that must not
         // read as a combination.
         XCTAssertNil(events.send(keyCode: 76, modifiers: .numericPad))
-        XCTAssertEqual(textView.string, "ab\n\n")
+        XCTAssertEqual(textView.string, "ab  \n")
     }
 
     func testCapsLockDoesNotVetoTheBreak() {
@@ -121,7 +155,7 @@ final class ParagraphReturnMonitorTests: XCTestCase {
 
         monitor.start()
         XCTAssertNil(events.send(keyCode: 36, modifiers: .capsLock))
-        XCTAssertEqual(textView.string, "ab\n\n")
+        XCTAssertEqual(textView.string, "ab  \n")
     }
 
     func testFieldEditorKeepsItsReturn() {
@@ -316,8 +350,8 @@ final class ParagraphReturnMonitorTests: XCTestCase {
         for text in ["2026", "1.", "1.2 X", "-x", "> quote", "## H", "```"] {
             let (events, textView) = listMonitor(text: text, caret: text.count)
 
-            XCTAssertNil(events.send(keyCode: 36, modifiers: []), "still a paragraph break: \(text)")
-            XCTAssertEqual(textView.string, "\(text)\n\n", "kept verbatim: \(text)")
+            XCTAssertNil(events.send(keyCode: 36, modifiers: []), "still a hard break: \(text)")
+            XCTAssertEqual(textView.string, "\(text)  \n", "kept verbatim: \(text)")
         }
     }
 }
