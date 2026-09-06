@@ -9,9 +9,10 @@ import SwiftUI
 ///
 /// The tabs live in the header as a horizontal strip, in place of a title:
 /// the selected tab wears a muted fill, a plain plus beside it makes a new
-/// note, and the way out to Craft stays on the trailing edge. Under the
-/// header the note sits as a single inset well. ``NoteSurface`` owns that
-/// well.
+/// note, and a menu of hidden tabs sits on the trailing edge. The X on a tab
+/// only hides it — the doc stays, and the toolbar trash is what deletes.
+/// Under the header the note sits as a single inset well whose toolbar ends
+/// in the way out to Craft. ``NoteSurface`` owns that well.
 ///
 /// Document mechanics (tabs, retention, debounced UserDefaults persistence) are
 /// the values Vorssaint's floating pad uses, via `NotesAdapter`, so a note
@@ -69,7 +70,7 @@ public final class NotesWidget: CCPWidget {
 
 private struct NotesContent: View {
     @Bindable var adapter: NotesAdapter
-    @State private var noteToClose: Note?
+    @State private var noteToDelete: Note?
 
     @Environment(\.panelEditor) private var panelEditor
     @Environment(\.currentWidgetID) private var currentWidgetID
@@ -78,16 +79,16 @@ private struct NotesContent: View {
         GlassCard {
             VStack(alignment: .leading, spacing: Space.one) {
                 header
-                NoteSurface(adapter: adapter)
+                NoteSurface(adapter: adapter, onDeleteSelected: requestDeleteSelected)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(Space.oneHalf)
         }
-        .alert("Delete Note", isPresented: isConfirmingClose, presenting: noteToClose) { note in
-            Button("Cancel", role: .cancel) { noteToClose = nil }
+        .alert("Delete Note", isPresented: isConfirmingDelete, presenting: noteToDelete) { note in
+            Button("Cancel", role: .cancel) { noteToDelete = nil }
             Button("Delete", role: .destructive) {
-                _ = adapter.closeNote(note.id)
-                noteToClose = nil
+                _ = adapter.deleteNote(note.id)
+                noteToDelete = nil
             }
         } message: { note in
             Text("Delete “\(note.name)”? Its text will be lost.")
@@ -95,7 +96,7 @@ private struct NotesContent: View {
     }
 
     /// The header is the tab strip, not a title: the widget's icon, its tabs
-    /// with the plus hugging the last one, then the way out to Craft. It
+    /// with the plus hugging the last one, then the hidden-tabs menu. It
     /// still publishes the header frame the panel's hold-to-edit hit-tests
     /// against, and it keeps the hold accessibility action — a custom header
     /// that drops either silently leaves the widget undraggable.
@@ -105,11 +106,11 @@ private struct NotesContent: View {
                 .font(.headline)
                 .foregroundStyle(.primary)
                 .accessibilityHidden(true)
-            NoteTabStrip(adapter: adapter, onCloseRequest: requestClose)
+            NoteTabStrip(adapter: adapter,
+                         onCloseTab: { _ = adapter.closeTab($0.id) },
+                         onDeleteRequest: requestDelete)
             Spacer(minLength: 0)
-            HeaderIconButton(systemImage: "arrow.up.forward", label: "Open in Craft") {
-                adapter.openCraft()
-            }
+            ClosedNotesMenu(adapter: adapter)
         }
         .frame(minHeight: Layout.headerAccessorySize)
         .contentShape(Rectangle())
@@ -131,17 +132,52 @@ private struct NotesContent: View {
     }
 
     /// An empty note goes without asking; only text that would be lost is worth
-    /// a dialog.
-    private func requestClose(_ note: Note) {
-        guard adapter.canCloseNote else { return }
-        if NotesSupport.requiresCloseConfirmation(note) {
-            noteToClose = note
+    /// a dialog. The trash and the tab menu share this: both delete the doc.
+    private func requestDelete(_ note: Note) {
+        guard adapter.canDeleteNote else { return }
+        if NotesSupport.requiresDeleteConfirmation(note) {
+            noteToDelete = note
         } else {
-            _ = adapter.closeNote(note.id)
+            _ = adapter.deleteNote(note.id)
         }
     }
 
-    private var isConfirmingClose: Binding<Bool> {
-        Binding(get: { noteToClose != nil }, set: { if !$0 { noteToClose = nil } })
+    /// The toolbar trash deletes whatever is shown.
+    private func requestDeleteSelected() {
+        guard let id = adapter.selectedNoteID,
+              let note = adapter.notes.first(where: { $0.id == id })
+        else { return }
+        requestDelete(note)
+    }
+
+    private var isConfirmingDelete: Binding<Bool> {
+        Binding(get: { noteToDelete != nil }, set: { if !$0 { noteToDelete = nil } })
+    }
+}
+
+/// The header's trailing edge: tabs the X hid, listed by name. Choosing one
+/// brings its tab back and shows it. Empty and dimmed while nothing is
+/// hidden — a menu that opens onto nothing explains itself worse.
+private struct ClosedNotesMenu: View {
+    @Bindable var adapter: NotesAdapter
+
+    var body: some View {
+        Menu {
+            ForEach(adapter.closedNotes) { note in
+                Button(note.name) { _ = adapter.reopenTab(note.id) }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.caption.weight(.semibold))
+                .frame(width: Layout.headerAccessorySize, height: Layout.headerAccessorySize)
+                .contentShape(Rectangle())
+        }
+        // One pattern, like the Files header: a bare … hosting the menu.
+        // Without this the Menu hangs its own chevron beside the glyph.
+        .menuIndicator(.hidden)
+        .foregroundStyle(adapter.closedNotes.isEmpty ? .tertiary : .secondary)
+        .disabled(adapter.closedNotes.isEmpty)
+        .help(adapter.closedNotes.isEmpty ? "No closed notes" : "Closed notes")
+        .accessibilityLabel(adapter.closedNotes.isEmpty ? "No closed notes" : "Closed notes")
     }
 }

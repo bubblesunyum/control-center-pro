@@ -220,7 +220,7 @@ final class BlockSidecarStorageTests: XCTestCase {
 
         adapter.storeSidecar(BlockSidecar(entries: [BlockSidecarEntry(id: "b1", fingerprint: "f")]),
                              for: doomed)
-        XCTAssertTrue(adapter.closeNote(doomed))
+        XCTAssertTrue(adapter.deleteNote(doomed))
         XCTAssertTrue(adapter.sidecar(for: doomed).entries.isEmpty)
     }
 

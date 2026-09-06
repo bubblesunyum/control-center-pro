@@ -4,15 +4,19 @@
 import CCPKit
 import SwiftUI
 
-/// The notes' tabs as a horizontal strip living in the widget header.
+/// The notes' open tabs as a horizontal strip living in the widget header.
 ///
 /// The selected tab wears a muted fill — the header's answer to "where am I"
 /// now that there is no title beside it — and a plain plus hugs the last tab.
+/// Tabs the X hid are not here; the header menu lists those.
 /// Twelve tabs never fit a lane, so past what fits the strip scrolls under a
 /// pinned plus instead of pushing it off the edge, and follows the selection.
 struct NoteTabStrip: View {
     @Bindable var adapter: NotesAdapter
-    let onCloseRequest: (Note) -> Void
+    /// Hide the tab, keep the doc. Never destructive, so never confirmed.
+    let onCloseTab: (Note) -> Void
+    /// Delete the doc. Routes to the widget's confirmation, like before.
+    let onDeleteRequest: (Note) -> Void
 
     @State private var renaming: UUID?
     @State private var renameDraft = ""
@@ -37,7 +41,7 @@ struct NoteTabStrip: View {
     /// The tabs at their natural width, for the fit the strip prefers.
     @ViewBuilder
     private var tabViews: some View {
-        ForEach(adapter.notes) { note in
+        ForEach(adapter.openNotes) { note in
             tab(note)
         }
     }
@@ -50,7 +54,7 @@ struct NoteTabStrip: View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: Space.half) {
-                    ForEach(adapter.notes) { note in
+                    ForEach(adapter.openNotes) { note in
                         tab(note)
                             .frame(maxWidth: Layout.noteTabMaxWidth)
                             .id(note.id)
@@ -108,9 +112,9 @@ struct NoteTabStrip: View {
                     .font(.headline)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                if adapter.canCloseNote {
+                if adapter.canCloseTab {
                     Button {
-                        onCloseRequest(note)
+                        onCloseTab(note)
                     } label: {
                         Image(systemName: "xmark")
                             .font(.caption.weight(.semibold))
@@ -129,7 +133,7 @@ struct NoteTabStrip: View {
                     .opacity(closeOpacity)
                     .disabled(closeOpacity == 0)
                     .accessibilityHidden(closeOpacity == 0)
-                    .help("Close note")
+                    .help("Close tab")
                     .accessibilityLabel("Close \(note.name)")
                 }
             }
@@ -158,8 +162,8 @@ struct NoteTabStrip: View {
         }
         .contextMenu {
             Button("Rename") { beginRename(note) }
-            Button("Delete", role: .destructive) { onCloseRequest(note) }
-                .disabled(!adapter.canCloseNote)
+            Button("Delete", role: .destructive) { onDeleteRequest(note) }
+                .disabled(!adapter.canDeleteNote)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(note.name)

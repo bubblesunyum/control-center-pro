@@ -212,7 +212,7 @@ public enum NotesSupport {
         return document
     }
 
-    public static func requiresCloseConfirmation(_ note: Note) -> Bool {
+    public static func requiresDeleteConfirmation(_ note: Note) -> Bool {
         !note.text.isEmpty
     }
 
@@ -260,13 +260,27 @@ public final class NotesAdapter {
 
     public private(set) var notes: [Note] = []
     public private(set) var selectedNoteID: UUID?
+    /// Tabs the X hid. The docs are untouched — text, mapping, sidecar and
+    /// sync all stay — so this is CCP UI state under its own key, never the
+    /// upstream-shared document. A failed decode reads as nothing hidden.
+    public private(set) var closedNoteIDs: Set<UUID> = [] {
+        didSet { persistClosedNoteIDs() }
+    }
+
+    /// The tabs the strip draws, in document order.
+    public var openNotes: [Note] { notes.filter { !closedNoteIDs.contains($0.id) } }
+    /// The docs the X hid, for the header menu, in document order.
+    public var closedNotes: [Note] { notes.filter { closedNoteIDs.contains($0.id) } }
 
     public var selectedNoteName: String {
         notes.first(where: { $0.id == selectedNoteID })?.name ?? defaultName
     }
 
     public var canCreateNote: Bool { notes.count < NotesDocument.maximumNoteCount }
-    public var canCloseNote: Bool { notes.count > 1 }
+    /// Deleting needs a note left over: the document must hold at least one.
+    public var canDeleteNote: Bool { notes.count > 1 }
+    /// Hiding needs a tab left open: the strip must show at least one.
+    public var canCloseTab: Bool { openNotes.count > 1 }
 
     @ObservationIgnored private var document: NotesDocument?
     @ObservationIgnored private var lastSavedDocument: NotesDocument?
@@ -314,6 +328,12 @@ public final class NotesAdapter {
     // Push bookkeeping (ccp-2zi.5). The pad-to-document mapping is config,
     // like retention and selection — never note text.
     @ObservationIgnored private let craftDocumentsKey = "scratchpadCraftDocuments"
+    // Which tabs the X hid (ccp-xc2j). UI state under its own key for the
+    // same reason: the document bytes are upstream's, this set is ours.
+    @ObservationIgnored private let closedTabsKey = "scratchpadClosedTabs"
+    // The space id GET /connection reports (ccp-xc2j). What the per-document
+    // deep link is addressed with. Refreshed on every pull's clock read.
+    @ObservationIgnored private let craftSpaceIDKey = "scratchpadCraftSpaceID"
     @ObservationIgnored private var pushTask: Task<Void, Never>?
     @ObservationIgnored private var pushRetryTask: Task<Void, Never>?
     @ObservationIgnored private var isPushInFlight = false
@@ -340,6 +360,7 @@ public final class NotesAdapter {
     public init(defaults: UserDefaults, defaultName: String) {
         self.defaults = defaults
         self.defaultName = defaultName
+        closedNoteIDs = Self.decodedClosedNoteIDs(defaults.data(forKey: closedTabsKey))
         loadApplyingRetention()
         observeTermination()
     }
@@ -398,8 +419,13 @@ public final class NotesAdapter {
             queue: nil
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.cachedCraftBaseURL = nil
-                self?.dirtyUnmappedNonEmptyPads()
+                guard let self else { return }
+                self.cachedCraftBaseURL = nil
+                // The deep link's address dies with the credential: opening
+                // the old space's doc after forget is a stale launch, and the
+                // next pull re-caches after save.
+                self.defaults.removeObject(forKey: self.craftSpaceIDKey)
+                self.dirtyUnmappedNonEmptyPads()
             }
         }
     }
@@ -547,6 +573,7 @@ public final class NotesAdapter {
     private func apply(_ document: NotesDocument) {
         self.document = document
         notes = document.notes
+        pruneClosedNoteIDs()
         selectedNoteID = document.selectedID
         let selectedText = document.notes.first(where: { $0.id == document.selectedID })?.text ?? ""
         isReplacingText = true
@@ -563,6 +590,11 @@ public final class NotesAdapter {
     }
 
     public func selectNote(_ id: UUID) {
+        // Selecting shows: a hidden tab chosen from the menu rejoins the
+        // strip. Unhiding first fails toward a harmless ghost tab — hiding
+        // first would strand the new selection hidden when the persist lands
+        // and the unhide never does.
+        unhide(id)
         guard id != selectedNoteID, let document, let next = document.selecting(id), persist(next) else { return }
         apply(next)
     }
@@ -572,8 +604,41 @@ public final class NotesAdapter {
         apply(next)
     }
 
+    /// Hide a tab. The doc is untouched — text, sync mapping and sidecar all
+    /// stay, and the push and pull keep visiting it — so nothing is lost and
+    /// nothing asks first. Refuses the last open tab; the strip must show one.
     @discardableResult
-    public func closeNote(_ id: UUID) -> Bool {
+    public func closeTab(_ id: UUID) -> Bool {
+        let opens = openNotes
+        guard let index = opens.firstIndex(where: { $0.id == id }), opens.count > 1 else { return false }
+        if selectedNoteID == id {
+            // Selection first, hide second: a torn pair then leaves a visible
+            // ghost tab, never a selected tab with nowhere to be seen. An
+            // unpersisted move hides nothing at all.
+            let neighbour = index + 1 < opens.count ? opens[index + 1] : opens[index - 1]
+            guard let document, let next = document.selecting(neighbour.id), persist(next) else { return false }
+            apply(next)
+        }
+        closedNoteIDs.insert(id)
+        return true
+    }
+
+    /// Bring a hidden tab back and show it. Heals outright: whatever hid the
+    /// selected tab — a torn write, a foreign edit of the shared document —
+    /// the menu row unhides first and asks questions later.
+    @discardableResult
+    public func reopenTab(_ id: UUID) -> Bool {
+        guard let document, document.notes.contains(where: { $0.id == id }) else { return false }
+        unhide(id)
+        selectNote(id)
+        return selectedNoteID == id
+    }
+
+    /// Delete a doc: the note, its text, and every per-pad sync trace. Needs
+    /// a note left over. When the deleted note was selected, whatever is
+    /// shown next rejoins the strip even if the X hid it earlier.
+    @discardableResult
+    public func deleteNote(_ id: UUID) -> Bool {
         guard let document, let next = document.removing(id), persist(next) else { return false }
         dropSidecar(for: id)
         dropCraftDocumentID(for: id)
@@ -581,8 +646,42 @@ public final class NotesAdapter {
         dropStashIDs(for: id)
         dropSyncedAt(for: id)
         dirtyPadIDs.remove(id)
+        unhide(id)
         apply(next)
         return true
+    }
+
+    /// Closed ids for docs that no longer exist prune on every apply: without
+    /// this a replaced document leaks them forever. The selected tab unhides
+    /// with them — selection is always visible, so a stuck hidden-selected
+    /// tab heals on the next load instead of lingering.
+    private func pruneClosedNoteIDs() {
+        guard let document else { return }
+        let live = Set(document.notes.map(\.id))
+        if !closedNoteIDs.isSubset(of: live) {
+            closedNoteIDs = closedNoteIDs.intersection(live)
+        }
+        unhide(document.selectedID)
+    }
+
+    /// Unhide without the spurious persist a bare remove would spend on every
+    /// select: the set only writes when an id actually leaves it.
+    private func unhide(_ id: UUID) {
+        if closedNoteIDs.contains(id) {
+            closedNoteIDs.remove(id)
+        }
+    }
+
+    private static func decodedClosedNoteIDs(_ data: Data?) -> Set<UUID> {
+        guard let data,
+              let ids = try? JSONDecoder().decode(Set<UUID>.self, from: data)
+        else { return [] }
+        return ids
+    }
+
+    private func persistClosedNoteIDs() {
+        guard let data = try? JSONEncoder().encode(closedNoteIDs) else { return }
+        defaults.set(data, forKey: closedTabsKey)
     }
 
     // MARK: - Craft block-id sidecar
@@ -809,7 +908,7 @@ public final class NotesAdapter {
             let newID = try await provisionCraftDocument(name: pad.name, client: client)
             // The create awaited: a pad closed meanwhile must not resurrect.
             // Re-read the live document, not the pre-await snapshot — its
-            // mapping, sidecar, and drops already ran in closeNote. Store
+            // mapping, sidecar, and drops already ran in deleteNote. Store
             // nothing and push nowhere: the orphaned empty doc is trash
             // noise, but deleted text reaching Craft would be data loss.
             guard self.document?.notes.contains(where: { $0.id == padID }) == true else { return true }
@@ -1026,7 +1125,11 @@ public final class NotesAdapter {
     func pullAll() async {
         guard let baseURL = craftBaseURL() else { return }
         let client = CraftClient(baseURL: baseURL, transport: craftTransport)
-        let serverTime = (try? await client.checkConnection())?.serverTime
+        let space = try? await client.checkConnection()
+        // The deep link's address refreshes with the clock read the pull
+        // already pays for — no extra request when the button is pressed.
+        storeCraftSpaceID(space?.spaceID)
+        let serverTime = space?.serverTime
         for padID in storedCraftDocuments().keys.compactMap(UUID.init(uuidString:)) {
             guard !Task.isCancelled else { return }
             // A throw is one pad's "store unreachable", never the loop's.
@@ -1138,12 +1241,6 @@ public final class NotesAdapter {
         pasteboard.setString(text, forType: .string)
     }
 
-    public func clear() {
-        guard !text.isEmpty else { return }
-        text = ""
-        flushSave()
-    }
-
     public var isEmpty: Bool { text.isEmpty }
 
     /// The bundle Notes syncs towards. Craft ships under its maker's old name,
@@ -1162,6 +1259,54 @@ public final class NotesAdapter {
         else { return }
         NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
     }
+
+    /// The deep link onto one document, in the shape `GET /connection`
+    /// reports under `urlTemplates.app`. Pure for tests; the app opens it.
+    public static func craftDocumentURL(spaceID: String, blockID: String) -> URL? {
+        var components = URLComponents()
+        components.scheme = "craftdocs"
+        components.host = "open"
+        components.queryItems = [
+            URLQueryItem(name: "spaceId", value: spaceID),
+            URLQueryItem(name: "blockId", value: blockID),
+        ]
+        return components.url
+    }
+
+    /// Open the selected pad's own Craft doc. A pad with no doc yet, or a
+    /// space never verified, falls back to bringing Craft forward.
+    public func openCraftDocument() {
+        if let selectedNoteID,
+           let docID = craftDocumentID(for: selectedNoteID),
+           let spaceID = storedCraftSpaceID(),
+           let url = Self.craftDocumentURL(spaceID: spaceID, blockID: docID) {
+            NSWorkspace.shared.open(url)
+        } else {
+            openCraft()
+        }
+    }
+
+    private func storedCraftSpaceID() -> String? {
+        guard let data = defaults.data(forKey: craftSpaceIDKey),
+              let id = try? JSONDecoder().decode(String.self, from: data),
+              !id.isEmpty
+        else { return nil }
+        return id
+    }
+
+    private func storeCraftSpaceID(_ id: String?) {
+        guard let id, !id.isEmpty,
+              let data = try? JSONEncoder().encode(id)
+        else {
+            defaults.removeObject(forKey: craftSpaceIDKey)
+            return
+        }
+        defaults.set(data, forKey: craftSpaceIDKey)
+    }
+
+    /// Observable for tests: the address the toolbar deep link uses, if a
+    /// pull has verified the space.
+    var craftSpaceID: String? { storedCraftSpaceID() }
 
     public func exportFileName(date: Date = Date()) -> String {
         NotesSupport.exportFileName(title: selectedNoteName, date: date)

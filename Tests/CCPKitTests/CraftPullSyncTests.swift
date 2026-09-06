@@ -305,7 +305,7 @@ final class CraftPullAdapterTests: XCTestCase {
 
         adapter.createNote()
         let doomedID = id
-        XCTAssertTrue(adapter.closeNote(doomedID), "two notes, so the close lands")
+        XCTAssertTrue(adapter.deleteNote(doomedID), "two notes, so the delete lands")
         XCTAssertEqual(adapter.conflicts(for: doomedID), [], "records leave with the note")
     }
 
@@ -332,7 +332,7 @@ final class CraftPullAdapterTests: XCTestCase {
         XCTAssertNotNil(adapter.syncedAt(for: id))
 
         adapter.createNote()
-        XCTAssertTrue(adapter.closeNote(id))
+        XCTAssertTrue(adapter.deleteNote(id))
 
         XCTAssertEqual(adapter.conflicts(for: id), [])
         XCTAssertEqual(adapter.stashIDs(for: id), [])

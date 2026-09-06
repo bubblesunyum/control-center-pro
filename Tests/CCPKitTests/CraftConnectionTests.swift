@@ -86,6 +86,11 @@ final class CraftConnectionTests: XCTestCase {
         XCTAssertNotNil(space?.serverTime)
     }
 
+    func testDecodesTheSpaceIDForDeepLinks() {
+        let space = CraftClient.decodeSpace(from: Data(Self.connectionJSON.utf8))
+        XCTAssertEqual(space?.spaceID, "a1")
+    }
+
     func testDecodesAFractionalSecondClock() {
         let json = #"{"space":{"name":"S"},"utc":{"time":"2026-09-05T10:00:00.123Z"}}"#
         XCTAssertNotNil(CraftClient.decodeSpace(from: Data(json.utf8))?.serverTime)

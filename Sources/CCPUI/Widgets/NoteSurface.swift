@@ -12,6 +12,8 @@ import SwiftUI
 /// own.
 struct NoteSurface: View {
     @Bindable var adapter: NotesAdapter
+    /// Delete whatever is shown, through the widget's confirmation.
+    let onDeleteSelected: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -28,7 +30,7 @@ struct NoteSurface: View {
             .accessibilityLabel("Note text")
             .accessibilityHint("Editable Markdown")
 
-            NoteToolbar(adapter: adapter)
+            NoteToolbar(adapter: adapter, onDeleteSelected: onDeleteSelected)
         }
         .frame(maxWidth: .infinity)
         .noteInsetChrome()
@@ -56,6 +58,7 @@ private extension View {
 /// The note's own toolbar, along its bottom edge.
 private struct NoteToolbar: View {
     @Bindable var adapter: NotesAdapter
+    let onDeleteSelected: () -> Void
     @State private var didCopy = false
     @State private var isConflictsPresented = false
 
@@ -67,8 +70,8 @@ private struct NoteToolbar: View {
 
     var body: some View {
         HStack(spacing: Space.half) {
-            NoteToolbarButton("trash", label: "Clear") { adapter.clear() }
-                .disabled(isEmpty)
+            NoteToolbarButton("trash", label: "Delete") { onDeleteSelected() }
+                .disabled(!adapter.canDeleteNote)
             Spacer(minLength: 0)
             if !conflicts.isEmpty {
                 NoteToolbarButton("exclamationmark.triangle.fill", label: "Conflicts",
@@ -95,6 +98,9 @@ private struct NoteToolbar: View {
             .disabled(isEmpty)
             NoteToolbarButton("square.and.arrow.down", label: "Export") { adapter.exportText() }
                 .disabled(isEmpty)
+            NoteToolbarButton("arrow.up.forward", label: "Open in Craft") {
+                adapter.openCraftDocument()
+            }
         }
         .padding(.horizontal, Space.one)
         .padding(.bottom, Space.one)

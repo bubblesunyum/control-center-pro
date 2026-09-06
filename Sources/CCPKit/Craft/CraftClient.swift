@@ -10,10 +10,15 @@ import Foundation
 public struct CraftSpace: Equatable, Sendable {
     public var name: String
     public var serverTime: Date?
+    /// The space id `GET /connection` carries beside the name. What the
+    /// per-document deep link is addressed with — cached by the sync work,
+    /// never shown.
+    public var spaceID: String?
 
-    public init(name: String, serverTime: Date? = nil) {
+    public init(name: String, serverTime: Date? = nil, spaceID: String? = nil) {
         self.name = name
         self.serverTime = serverTime
+        self.spaceID = spaceID
     }
 }
 
@@ -97,6 +102,7 @@ public struct CraftClient: Sendable {
 
     private struct ConnectionPayload: Decodable {
         struct Space: Decodable {
+            var id: String?
             var name: String?
         }
         struct Clock: Decodable {
@@ -111,7 +117,7 @@ public struct CraftClient: Sendable {
               let name = payload.space?.name, !name.isEmpty
         else { return nil }
         let time = payload.utc?.time.flatMap(Self.parseServerTime)
-        return CraftSpace(name: name, serverTime: time)
+        return CraftSpace(name: name, serverTime: time, spaceID: payload.space?.id)
     }
 
     private static let serverTimeFormats: [ISO8601DateFormatter] = {

@@ -788,7 +788,7 @@ final class CraftPushAdapterTests: XCTestCase {
 
         adapter.text = "doomed words"
         transport.onRequest = {
-            await MainActor.run { _ = adapter.closeNote(first) }
+            await MainActor.run { _ = adapter.deleteNote(first) }
         }
         await adapter.flushCraftPush()
 
@@ -1144,7 +1144,7 @@ final class CraftPushAdapterTests: XCTestCase {
         let doomed = adapter.notes[0].id
 
         adapter.setCraftDocumentID("doc9", for: doomed)
-        XCTAssertTrue(adapter.closeNote(doomed))
+        XCTAssertTrue(adapter.deleteNote(doomed))
         XCTAssertNil(adapter.craftDocumentID(for: doomed))
     }
 }
