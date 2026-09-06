@@ -670,18 +670,263 @@ final class CraftPushAdapterTests: XCTestCase {
         XCTAssertEqual(adapter.text, "one\n\nTWO\n")
     }
 
-    func testNoMappingMeansNoRequests() async throws {
-        let name = "ccp.push.nomap.\(UUID().uuidString)"
+    func testNoCredentialMeansNoRequestsAndStaysDirty() async throws {
+        let name = "ccp.push.nocred.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([])
         let adapter = adapter(store, transport)
+        adapter.craftBaseURLOverride = nil
+        adapter.craftCredentialUnavailable = true
 
         adapter.text = "unmapped words"
         await adapter.flushCraftPush()
 
         XCTAssertTrue(transport.requests.isEmpty,
-                      "a pad with no document has nowhere to push")
+                      "with no credential the pad stays local-only and silent")
+        XCTAssertTrue(adapter.isPushDirty(try XCTUnwrap(adapter.selectedNoteID)),
+                      "offline edits wait for a credential instead of clearing")
+    }
+
+    /// Lazy provisioning (ccp-0gek): the first push of a non-empty unmapped
+    /// pad creates its document (title = pad name), then posts the content
+    /// as the empty-doc first sync in the same round.
+    func testFirstEditProvisionsDocumentThenPushes() async throws {
+        let name = "ccp.push.provision.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([
+            .init(statusCode: 200, json: """
+                {"items":[{"id":"doc-new","title":"Note 1","clickableLink":"craftdocs://open?x=y"}]}
+                """),
+            .init(statusCode: 200, json: """
+                {"items":[{"id":"b1","markdown":"hello"}]}
+                """),
+        ])
+        let adapter = adapter(store, transport)
+        let id = try XCTUnwrap(adapter.selectedNoteID)
+
+        adapter.text = "hello"
+        await adapter.flushCraftPush()
+
+        XCTAssertEqual(adapter.craftDocumentID(for: id), "doc-new")
+        XCTAssertEqual(transport.requests.count, 2)
+        XCTAssertEqual(transport.requests[0].httpMethod, "POST")
+        XCTAssertTrue(transport.requests[0].url?.absoluteString.hasSuffix("/documents") ?? false)
+        let createBody = try transport.jsonBody(of: 0)
+        XCTAssertEqual((createBody["documents"] as? [[String: String]])?.first?["title"], "Note 1")
+        let postBody = try transport.jsonBody(of: 1)
+        XCTAssertEqual((postBody["position"] as? [String: String])?["position"], "start")
+        XCTAssertEqual((postBody["position"] as? [String: String])?["pageId"], "doc-new")
+        XCTAssertFalse(adapter.isPushDirty(id))
+        XCTAssertEqual(adapter.sidecar(for: id).entries.map(\.id), ["b1"])
+    }
+
+    func testProvisionFailureKeepsDirtyAndUnmapped() async throws {
+        let name = "ccp.push.provisionfail.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([.init(statusCode: 500, json: "{}")])
+        let adapter = adapter(store, transport)
+        let id = try XCTUnwrap(adapter.selectedNoteID)
+
+        adapter.text = "hello"
+        await adapter.flushCraftPush()
+
+        XCTAssertNil(adapter.craftDocumentID(for: id),
+                     "the mapping lands only on a confirmed create")
+        XCTAssertTrue(adapter.isPushDirty(id))
+    }
+
+    func testEmptyPadNeverProvisions() async throws {
+        let name = "ccp.push.provisionempty.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([])
+        let adapter = adapter(store, transport)
+        let id = try XCTUnwrap(adapter.selectedNoteID)
+
+        adapter.text = ""
+        await adapter.flushCraftPush()
+
+        XCTAssertTrue(transport.requests.isEmpty,
+                      "a document does not exist until the first edit")
+        XCTAssertNil(adapter.craftDocumentID(for: id))
+        XCTAssertFalse(adapter.isPushDirty(id))
+    }
+
+    func testWhitespaceOnlyPadNeverProvisions() async throws {
+        let name = "ccp.push.provisionblank.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([])
+        let adapter = adapter(store, transport)
+        let id = try XCTUnwrap(adapter.selectedNoteID)
+
+        adapter.text = "   \n  "
+        await adapter.flushCraftPush()
+
+        XCTAssertTrue(transport.requests.isEmpty,
+                      "blank text has no slices, so there is nothing to sync")
+        XCTAssertNil(adapter.craftDocumentID(for: id))
+        XCTAssertFalse(adapter.isPushDirty(id))
+    }
+
+    /// Closing a pad while its create is in flight must not resurrect it:
+    /// no mapping, no sidecar, and the deleted text never reaches Craft.
+    func testCloseDuringProvisionPushesNothing() async throws {
+        let name = "ccp.push.provisionclose.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([.init(statusCode: 200, json: """
+            {"items":[{"id":"doc-new","title":"Note 1"}]}
+            """)])
+        let adapter = adapter(store, transport)
+        let first = try XCTUnwrap(adapter.selectedNoteID)
+        adapter.createNote()
+        adapter.selectNote(first)
+
+        adapter.text = "doomed words"
+        transport.onRequest = {
+            await MainActor.run { _ = adapter.closeNote(first) }
+        }
+        await adapter.flushCraftPush()
+
+        XCTAssertEqual(transport.requests.count, 1, "the create fired; nothing followed it")
+        XCTAssertNil(adapter.craftDocumentID(for: first))
+        XCTAssertTrue(adapter.sidecar(for: first).entries.isEmpty)
+        XCTAssertFalse(adapter.notes.contains(where: { $0.id == first }))
+    }
+
+    /// Backpressure stops the round: pads after a 429 are never attempted.
+    func testRateLimitBreaksTheRound() async throws {
+        let name = "ccp.push.provision429.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([.init(statusCode: 429, json: "{}",
+                                                 headers: ["Retry-After": "45"])])
+        let adapter = adapter(store, transport)
+        let first = try XCTUnwrap(adapter.selectedNoteID)
+        adapter.createNote()
+        let second = try XCTUnwrap(adapter.selectedNoteID)
+        adapter.selectNote(first)
+        adapter.text = "one"
+        adapter.selectNote(second)
+        adapter.text = "two"
+
+        await adapter.flushCraftPush()
+
+        XCTAssertEqual(transport.requests.count, 1,
+                       "the second pad never spends into the throttled window")
+        XCTAssertTrue(adapter.isPushDirty(first))
+        XCTAssertTrue(adapter.isPushDirty(second))
+        XCTAssertTrue(adapter.hasScheduledRetry)
+    }
+
+    /// A credential saved mid-round invalidates what the round cleared:
+    /// every attempted pad goes again against the new space.
+    func testCredentialSwitchRedirtiesTheRound() async throws {
+        let name = "ccp.push.switchcred.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([
+            .init(statusCode: 200, json: """
+                {"items":[{"id":"doc-new","title":"Note 1"}]}
+                """),
+            .init(statusCode: 200, json: """
+                {"items":[{"id":"b1","markdown":"hello"}]}
+                """),
+        ])
+        let adapter = adapter(store, transport)
+        let id = try XCTUnwrap(adapter.selectedNoteID)
+
+        adapter.text = "hello"
+        let other = URL(string: "https://connect.craft.do/links/other/api/v1")!
+        transport.onRequest = {
+            // Once, while the blocks POST is away: the credential switches
+            // spaces through the real notification path.
+            guard transport.requests.count == 2 else { return }
+            await MainActor.run {
+                adapter.craftBaseURLOverride = other
+                NotificationCenter.default.post(name: .craftCredentialDidChange, object: nil)
+            }
+        }
+        await adapter.flushCraftPush()
+
+        XCTAssertTrue(adapter.isPushDirty(id),
+                      "the round wrote to the old space; the new one retries")
+    }
+
+    /// Upgrade path: pads written before provisioning existed converge on
+    /// the next panel open, without needing an edit in each one.
+    func testActivateProvisionsUnmappedNonEmptyPads() async throws {
+        let name = "ccp.push.upgrade.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let first = NotesAdapter(defaults: store, defaultName: "Note")
+        first.craftCredentialUnavailable = true
+        first.text = "hello"
+        // Let the 800ms save debounce land so the relaunch reads real bytes.
+        try await Task.sleep(for: .seconds(1))
+
+        let transport = ScriptedTransport([])
+        transport.respond = { request in
+            let path = request.url?.path ?? ""
+            if path.hasSuffix("/connection") {
+                return .init(statusCode: 200, json: """
+                    {"space":{"name":"S"},"utc":{"time":"2026-09-05T12:00:00Z"}}
+                    """)
+            }
+            if path.hasSuffix("/documents") {
+                return .init(statusCode: 200, json: """
+                    {"items":[{"id":"doc-new","title":"Note 1"}]}
+                    """)
+            }
+            return .init(statusCode: 200, json: """
+                {"items":[{"id":"b1","markdown":"hello"}]}
+                """)
+        }
+        let relaunched = NotesAdapter(defaults: store, defaultName: "Note")
+        relaunched.craftTransport = transport
+        relaunched.craftBaseURLOverride = base
+        let id = try XCTUnwrap(relaunched.selectedNoteID)
+
+        relaunched.activate()
+        await relaunched.flushCraftPush()
+
+        XCTAssertEqual(relaunched.craftDocumentID(for: id), "doc-new")
+        XCTAssertFalse(relaunched.isPushDirty(id))
+    }
+    func testCredentialSaveDirtiesUnmappedNonEmptyPads() async throws {
+        let name = "ccp.push.credsave.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([
+            .init(statusCode: 200, json: """
+                {"items":[{"id":"doc-new","title":"Note 1"}]}
+                """),
+            .init(statusCode: 200, json: """
+                {"items":[{"id":"b1","markdown":"hello"}]}
+                """),
+        ])
+        let adapter = adapter(store, transport)
+        adapter.craftBaseURLOverride = nil
+        adapter.craftCredentialUnavailable = true
+        let id = try XCTUnwrap(adapter.selectedNoteID)
+
+        adapter.text = "hello"
+        await adapter.flushCraftPush()
+        XCTAssertTrue(transport.requests.isEmpty)
+        XCTAssertTrue(adapter.isPushDirty(id))
+
+        adapter.craftBaseURLOverride = base
+        adapter.craftCredentialUnavailable = false
+        NotificationCenter.default.post(name: .craftCredentialDidChange, object: nil)
+        await adapter.flushCraftPush()
+
+        XCTAssertEqual(adapter.craftDocumentID(for: id), "doc-new")
+        XCTAssertEqual(transport.requests.count, 2)
+        XCTAssertFalse(adapter.isPushDirty(id))
     }
 
     func testPartialFailureStoresConfirmedUnits() async throws {

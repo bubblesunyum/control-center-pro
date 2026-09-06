@@ -205,7 +205,8 @@ extension CraftClient {
         return try? decoder.decode([CraftBlock].self, from: data)
     }
 
-    private func send(_ path: String, method: String, body: some Encodable) async throws(CraftClientError) -> (Data, HTTPURLResponse) {
+    /// Shared with the documents endpoints (ccp-0gek) rather than duplicated.
+    func send(_ path: String, method: String, body: some Encodable) async throws(CraftClientError) -> (Data, HTTPURLResponse) {
         var request = URLRequest(url: baseURL.appending(path: path))
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -214,8 +215,10 @@ extension CraftClient {
     }
 
     /// One pipeline for every request: the GET read rides the same
-    /// transport-error / 429 / status-code mapping the writes do.
-    private func send(_ request: URLRequest) async throws(CraftClientError) -> (Data, HTTPURLResponse) {
+    /// transport-error / 429 / status-code mapping the writes do. Internal
+    /// so the documents endpoints share it rather than duplicating the
+    /// mapping.
+    func send(_ request: URLRequest) async throws(CraftClientError) -> (Data, HTTPURLResponse) {
         let data: Data
         let response: URLResponse
         do {

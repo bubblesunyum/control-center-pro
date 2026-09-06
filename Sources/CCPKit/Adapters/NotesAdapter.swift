@@ -328,6 +328,10 @@ public final class NotesAdapter {
     /// disk or the network.
     @ObservationIgnored internal var craftTransport: (any CraftTransport)?
     @ObservationIgnored internal var craftBaseURLOverride: URL?
+    /// Test seam: reads as unconfigured without touching the real store — the
+    /// app-support path is a fixed bundle id, so a plain nil override still
+    /// finds the developer's credential on their own machine.
+    @ObservationIgnored internal var craftCredentialUnavailable = false
 
     public convenience init() {
         self.init(defaults: .standard, defaultName: "Note")
@@ -383,7 +387,10 @@ public final class NotesAdapter {
     /// Clear the cached Craft URL when Settings saves or forgets it.
     /// Synchronous delivery (queue nil): an async clear leaves a window where
     /// a push lands on the stale URL and clears the dirty bit for text the
-    /// new space never sees.
+    /// new space never sees. A fresh credential also enables sync for pads
+    /// that already hold text: they provision on the next push like any
+    /// first edit, so connecting with existing notes converges without
+    /// touching anything.
     private func observeCraftCredentialChanges() {
         credentialObserver = NotificationCenter.default.addObserver(
             forName: .craftCredentialDidChange,
@@ -392,14 +399,33 @@ public final class NotesAdapter {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.cachedCraftBaseURL = nil
+                self?.dirtyUnmappedNonEmptyPads()
             }
         }
+    }
+
+    /// Pads with text but no document are one push away from provisioned.
+    /// Empty pads stay local: a document does not exist until the first edit.
+    /// Nothing is scheduled without a credential — an unconfigured launch
+    /// must not burn a push round on every panel open.
+    private func dirtyUnmappedNonEmptyPads() {
+        guard craftBaseURL() != nil, let document else { return }
+        let fresh = document.notes
+            .filter { !$0.text.isEmpty && craftDocumentID(for: $0.id) == nil }
+            .map(\.id)
+        guard !fresh.isEmpty else { return }
+        dirtyPadIDs.formUnion(fresh)
+        scheduleCraftPush()
     }
 
     // MARK: - Lifecycle
 
     public func activate() {
         loadApplyingRetention()
+        // Pads written before provisioning existed (or before a credential
+        // was saved) converge like any first edit — otherwise they sit
+        // unmapped and clean until the user happens to type in each one.
+        dirtyUnmappedNonEmptyPads()
         // The panel was shut: Craft may have moved under us. Pull now; a
         // failed read changes nothing, and an adopt never lands on unpushed
         // edits without stashing them in Craft first.
@@ -600,9 +626,10 @@ public final class NotesAdapter {
 
     // MARK: - Craft push
 
-    /// The Craft document a pad syncs to, if one was mapped. Set today by
-    /// hand (`defaults write`); choosing and provisioning documents gets its
-    /// own UI once the create shape is confirmed live.
+    /// The Craft document a pad syncs to, if one was provisioned. Mapped
+    /// automatically on first push of a non-empty pad (ccp-0gek) — never by
+    /// hand — so an unmapped pad is simply one whose document does not exist
+    /// yet. Like retention and selection this is config, never note text.
     public func craftDocumentID(for id: UUID) -> String? {
         storedCraftDocuments()[id.uuidString]
     }
@@ -620,6 +647,16 @@ public final class NotesAdapter {
         map.set(nil, for: id.uuidString)
     }
 
+    /// Create the pad's Craft document. The doc is born EMPTY in `unsorted`
+    /// (title = pad name at creation, never renamed after) and the content
+    /// follows as the empty-doc first sync in the same round. The mapping
+    /// itself lands in pushOnePad, after a liveness re-check — a throw, or a
+    /// pad closed mid-create, stores nothing, so a retry never orphans a
+    /// document the sidecar does not know and deleted text is never pushed.
+    private func provisionCraftDocument(name: String, client: CraftClient) async throws -> String {
+        try await client.createDocument(title: name).id
+    }
+
     private func craftDocumentMap() -> DefaultsMap<String> {
         DefaultsMap(defaults: defaults, key: craftDocumentsKey)
     }
@@ -631,6 +668,7 @@ public final class NotesAdapter {
     private func craftBaseURL() -> URL? {
         // Cached: the file read is cheap but pointless to repeat per push.
         // Cleared when the credential is saved or forgotten (see observeCraftCredentialChanges).
+        if craftCredentialUnavailable { return nil }
         if let cached = cachedCraftBaseURL { return cached }
         let loaded = craftBaseURLOverride ?? (try? FileCraftCredentialStore().loadConnectionURL())
         cachedCraftBaseURL = loaded
@@ -700,7 +738,8 @@ public final class NotesAdapter {
         let client = CraftClient(baseURL: baseURL, transport: craftTransport)
         var failure: Error?
         // Snapshot: pads clear or fail below, which mutates the set.
-        for padID in Array(dirtyPadIDs) {
+        let attempted = Array(dirtyPadIDs)
+        for padID in attempted {
             do {
                 // False is not failure (throw is): the pad was edited
                 // mid-flight, so it stays dirty for the follow-up round.
@@ -710,7 +749,21 @@ public final class NotesAdapter {
                 }
             } catch {
                 failure = failure ?? error
+                // Backpressure stops the round, not just the pad: unvisited
+                // pads would each spend their own creates into the throttled
+                // window before the backoff below lands.
+                if let clientError = error as? CraftClientError,
+                   case .rateLimited = clientError {
+                    break
+                }
             }
+        }
+        if craftBaseURL() != baseURL {
+            // The credential changed mid-round and this round wrote to the
+            // old space. Nothing it cleared can be trusted — every attempted
+            // pad goes again against the new one, where the diff either
+            // converges quiet (same space re-saved) or retries loud.
+            dirtyPadIDs.formUnion(attempted)
         }
         if let failure {
             consecutivePushFailures += 1
@@ -730,7 +783,7 @@ public final class NotesAdapter {
     /// Push one dirty pad. Progress is stored even on the way out: every leg
     /// records what the server confirmed, so a retry diffs from the last
     /// confirmed state — replaying a confirmed POST is what duplicates
-    /// blocks. Skips (no mapping, pad gone, empty plan) clear the dirty bit
+    /// blocks. Skips (no credential, pad gone, empty plan) clear the dirty bit
     /// silently; edits re-dirty if the pad comes back. A throw keeps the pad
     /// dirty and every later round retries it.
     ///
@@ -739,11 +792,32 @@ public final class NotesAdapter {
     /// dirty and the already-scheduled follow-up pushes the new text.
     private func pushOnePad(_ padID: UUID, client: CraftClient) async throws -> Bool {
         guard let document,
-              let padText = document.notes.first(where: { $0.id == padID })?.text,
-              let docID = craftDocumentID(for: padID)
+              let pad = document.notes.first(where: { $0.id == padID })
         else { return true }
-        let sidecar = sidecar(for: padID)
+        let padText = pad.text
         let slices = CraftBlockSplitter.slices(in: padText)
+        var docID = craftDocumentID(for: padID)
+        if docID == nil {
+            // Lazy provisioning (ccp-0gek): no local pad without a Craft doc.
+            // The doc is created EMPTY on first push and the content follows
+            // as the empty-doc first sync below, so the head problem never
+            // arises. Nothing syncable, no document — the splitter skipping
+            // blank text is what decides, not the string being empty, so a
+            // whitespace-only pad provisions nothing. (No credential never
+            // reaches here: pushNow returns before visiting any pad.)
+            guard !slices.isEmpty else { return true }
+            let newID = try await provisionCraftDocument(name: pad.name, client: client)
+            // The create awaited: a pad closed meanwhile must not resurrect.
+            // Re-read the live document, not the pre-await snapshot — its
+            // mapping, sidecar, and drops already ran in closeNote. Store
+            // nothing and push nowhere: the orphaned empty doc is trash
+            // noise, but deleted text reaching Craft would be data loss.
+            guard self.document?.notes.contains(where: { $0.id == padID }) == true else { return true }
+            setCraftDocumentID(newID, for: padID)
+            docID = newID
+        }
+        guard let docID else { return true }
+        let sidecar = sidecar(for: padID)
         let plan = sidecar.pushPlan(for: slices)
         guard !plan.isEmpty else { return true }
 
