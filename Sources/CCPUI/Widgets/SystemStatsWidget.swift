@@ -691,7 +691,8 @@ private struct BreakdownProcessRow: View {
                     .frame(width: 14, height: 14)
             } else {
                 Image(systemName: "app.fill")
-                    .font(.system(size: 10))
+                    .resizable()
+                    .scaledToFit()
                     .foregroundStyle(.secondary)
                     .frame(width: 14, height: 14)
             }
