@@ -24,6 +24,10 @@ struct MarkdownNoteEditor: View {
     /// it, so pads must not share one.
     let documentId: String
     var placeholder: String?
+    /// False while the pad is unverified (ccp-5fom): the engine renders
+    /// read-only with no caret, still selectable. Pass-through — the fork
+    /// already owns this behaviour.
+    var isEditable = true
 
     /// Body size, and the base the heading multipliers scale from.
     static let fontSize: CGFloat = 14
@@ -39,6 +43,7 @@ struct MarkdownNoteEditor: View {
             configuration: Self.configuration,
             fontSize: Self.fontSize,
             documentId: documentId,
+            isEditable: isEditable,
             placeholder: placeholder.map(Self.placeholderText)
         )
     }

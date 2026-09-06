@@ -64,11 +64,17 @@ final class CraftTitleSyncTests: XCTestCase {
             """)
     }
 
+    /// The trash listing every pull reads between the clock and the fetch.
+    /// Empty here; deletion tests live with the pull suite.
+    private func trash() -> ScriptedTransport.Script {
+        ScriptedTransport.Script(statusCode: 200, json: "{\"items\":[]}")
+    }
+
     func testRenamePushesTitleAlone() async throws {
         let name = "ccp.title.push.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([titleEcho("Renamed")])
+        let transport = ScriptedTransport([trash(), titleEcho("Renamed")])
         let adapter = adapter(store, transport)
         let id = try await steadyPad(adapter, text: "one")
 
@@ -76,10 +82,10 @@ final class CraftTitleSyncTests: XCTestCase {
         XCTAssertTrue(adapter.isPushDirty(id), "a rename dirties like an edit")
         await adapter.flushCraftPush()
 
-        XCTAssertEqual(transport.requests.count, 1, "one title PUT, no block writes")
-        XCTAssertEqual(transport.requests[0].httpMethod, "PUT")
-        XCTAssertTrue(transport.requests[0].url?.absoluteString.hasSuffix("/blocks") ?? false)
-        let body = try transport.jsonBody(of: 0)
+        XCTAssertEqual(transport.requests.count, 2, "sweep plus one title PUT, no block writes")
+        XCTAssertEqual(transport.requests[1].httpMethod, "PUT")
+        XCTAssertTrue(transport.requests[1].url?.absoluteString.hasSuffix("/blocks") ?? false)
+        let body = try transport.jsonBody(of: 1)
         XCTAssertEqual(body["blocks"] as? [[String: String]],
                        [["id": "doc1", "markdown": "Renamed"]])
         XCTAssertEqual(adapter.syncedTitle(for: id), "Renamed")
@@ -137,13 +143,13 @@ final class CraftTitleSyncTests: XCTestCase {
         let name = "ccp.title.adopt.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([connection, page("Taken", "one")])
+        let transport = ScriptedTransport([connection, trash(), page("Taken", "one")])
         let adapter = adapter(store, transport)
         let id = try await steadyPad(adapter, text: "one")
 
         await adapter.pullAll()
 
-        XCTAssertEqual(transport.requests.count, 2, "clock plus fetch, no writes")
+        XCTAssertEqual(transport.requests.count, 3, "clock, trash plus fetch, no writes")
         XCTAssertEqual(adapter.selectedNoteName, "Taken")
         XCTAssertEqual(adapter.syncedTitle(for: id), "Taken")
         XCTAssertFalse(adapter.isPushDirty(id), "an adoption must not echo back")
@@ -154,7 +160,7 @@ final class CraftTitleSyncTests: XCTestCase {
         let name = "ccp.title.localwins.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([connection, page("Note 1", "one"), titleEcho("Mine")])
+        let transport = ScriptedTransport([connection, trash(), page("Note 1", "one"), trash(), titleEcho("Mine")])
         let adapter = adapter(store, transport)
         let id = try await steadyPad(adapter, text: "one")
         adapter.renameNote(id, to: "Mine")
@@ -167,8 +173,8 @@ final class CraftTitleSyncTests: XCTestCase {
 
         await adapter.flushCraftPush()
 
-        XCTAssertEqual(transport.requests.count, 3, "clock, fetch, title PUT")
-        let body = try transport.jsonBody(of: 2)
+        XCTAssertEqual(transport.requests.count, 5, "clock, trash, fetch, sweep, title PUT")
+        let body = try transport.jsonBody(of: 4)
         XCTAssertEqual(body["blocks"] as? [[String: String]],
                        [["id": "doc1", "markdown": "Mine"]])
         XCTAssertEqual(adapter.syncedTitle(for: id), "Mine")
@@ -179,7 +185,7 @@ final class CraftTitleSyncTests: XCTestCase {
         let name = "ccp.title.lwwremote.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([connection, page("Theirs", "one")])
+        let transport = ScriptedTransport([connection, trash(), page("Theirs", "one")])
         let adapter = adapter(store, transport)
         let id = try await steadyPad(adapter, text: "one")
         adapter.renameNote(id, to: "Mine")
@@ -198,7 +204,9 @@ final class CraftTitleSyncTests: XCTestCase {
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([
             connection,
+            trash(),
             page("Theirs", "one", mtime: "2020-01-01T00:00:00Z"),
+            trash(),
             titleEcho("Mine"),
         ])
         let adapter = adapter(store, transport)
@@ -220,7 +228,7 @@ final class CraftTitleSyncTests: XCTestCase {
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let moment = "2026-09-06T19:00:00Z"
-        let transport = ScriptedTransport([connection, page("Theirs", "one", mtime: moment)])
+        let transport = ScriptedTransport([connection, trash(), page("Theirs", "one", mtime: moment)])
         let adapter = adapter(store, transport)
         let id = try await steadyPad(adapter, text: "one")
         adapter.renameNote(id, to: "Mine")
@@ -239,7 +247,7 @@ final class CraftTitleSyncTests: XCTestCase {
         let name = "ccp.title.legacy.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([connection, page("Craft Title", "mine"), titleEcho("Note 1")])
+        let transport = ScriptedTransport([connection, trash(), page("Craft Title", "mine"), trash(), titleEcho("Note 1")])
         let adapter = adapter(store, transport)
         let id = try XCTUnwrap(adapter.selectedNoteID)
         adapter.text = "mine"
@@ -258,8 +266,8 @@ final class CraftTitleSyncTests: XCTestCase {
 
         await adapter.flushCraftPush()
 
-        XCTAssertEqual(transport.requests.count, 3, "clock, fetch, title PUT")
-        let body = try transport.jsonBody(of: 2)
+        XCTAssertEqual(transport.requests.count, 5, "clock, trash, fetch, sweep, title PUT")
+        let body = try transport.jsonBody(of: 4)
         XCTAssertEqual(body["blocks"] as? [[String: String]],
                        [["id": "doc1", "markdown": "Note 1"]])
         XCTAssertEqual(adapter.syncedTitle(for: id), "Note 1")
@@ -270,7 +278,7 @@ final class CraftTitleSyncTests: XCTestCase {
         let name = "ccp.title.empty.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([connection, page("", "one")])
+        let transport = ScriptedTransport([connection, trash(), page("", "one")])
         let adapter = adapter(store, transport)
         let id = try await steadyPad(adapter, text: "one")
 
@@ -302,6 +310,7 @@ final class CraftTitleSyncTests: XCTestCase {
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([
+            trash(),
             ScriptedTransport.Script(statusCode: 500, json: "{}"),
             .init(statusCode: 200, json: """
                 {"items":[{"id":"block-0","markdown":"TWO!"}]}
@@ -314,7 +323,7 @@ final class CraftTitleSyncTests: XCTestCase {
 
         await adapter.flushCraftPush()
 
-        XCTAssertEqual(transport.requests.count, 2, "title PUT fails, content PUT still attempts")
+        XCTAssertEqual(transport.requests.count, 3, "sweep, failed title PUT, content PUT still attempts")
         XCTAssertEqual(adapter.sidecar(for: id).entries[0].fingerprint,
                        BlockSidecar.fingerprint("TWO!"), "the content leg lands")
         XCTAssertEqual(adapter.syncedTitle(for: id), "Note 1", "the failed title records nothing")
@@ -325,7 +334,7 @@ final class CraftTitleSyncTests: XCTestCase {
         let name = "ccp.title.middelete.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([titleEcho("Renamed")])
+        let transport = ScriptedTransport([trash(), titleEcho("Renamed")])
         let adapter = adapter(store, transport)
         let id = try await steadyPad(adapter, text: "one")
         adapter.createNote()
@@ -347,9 +356,9 @@ final class CraftTitleSyncTests: XCTestCase {
         let name = "ccp.title.envelope.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([connection, .init(statusCode: 200, json: """
+        let transport = ScriptedTransport([connection, trash(), .init(statusCode: 200, json: """
             {"items":[{"id":"block-0","markdown":"one"}]}
-            """), titleEcho("Mine")])
+            """), trash(), titleEcho("Mine")])
         let adapter = adapter(store, transport)
         let id = try await steadyPad(adapter, text: "one")
         adapter.renameNote(id, to: "Mine")
@@ -361,7 +370,7 @@ final class CraftTitleSyncTests: XCTestCase {
 
         await adapter.flushCraftPush()
 
-        XCTAssertEqual(transport.requests.count, 3, "clock, fetch, title PUT")
+        XCTAssertEqual(transport.requests.count, 5, "clock, trash, fetch, sweep, title PUT")
         XCTAssertEqual(adapter.syncedTitle(for: id), "Mine")
         XCTAssertFalse(adapter.isPushDirty(id))
     }

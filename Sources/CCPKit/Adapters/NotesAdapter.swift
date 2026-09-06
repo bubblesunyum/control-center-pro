@@ -316,6 +316,62 @@ public final class NotesAdapter {
     /// Deleting needs a note left over: the document must hold at least one.
     public var canDeleteNote: Bool { notes.count > 1 }
 
+    /// Whether this activate's pull has proven Craft reachable. False from
+    /// init until the first pull lands, and on every activate until its pull
+    /// finishes — keystrokes typed meanwhile could interleave with the fetch
+    /// that decides adopts, conflicts, and remote deletes (ccp-5fom).
+    public private(set) var isSyncVerified = false
+    /// The last verification failed: a credential is saved but Craft never
+    /// answered. Sticky until the next pull succeeds, so a failing retry
+    /// never flickers the gate open between attempts.
+    public private(set) var isSyncCheckFailed = false
+
+    /// A saved connection exists. Without one the pads are local-only notes
+    /// and stay editable; a credential that exists but never verified is not
+    /// this — those pads may have a Craft counterpart, so they wait.
+    ///
+    /// The file itself is read on events (init, activate, credential
+    /// changes), never here: a read can run the one-time Keychain migration
+    /// as a side effect, which has no business inside view rendering.
+    public var hasCraftCredential: Bool {
+        if craftCredentialUnavailable { return false }
+        if craftBaseURLOverride != nil { return true }
+        return cachedCredentialFilePresence
+    }
+    @ObservationIgnored private var cachedCredentialFilePresence = false
+
+    private func refreshCredentialPresence() {
+        cachedCredentialFilePresence =
+            (try? FileCraftCredentialStore().loadConnectionURL()) != nil
+    }
+
+    /// Typing is allowed for local-only pads and for verified pads. An
+    /// unverified pad may be deleted out from under the caret by the landing
+    /// pull, so the editor holds until the pull is in.
+    public var isEditable: Bool { !hasCraftCredential || isSyncVerified }
+
+    /// What the toolbar's status corner shows for the selected pad.
+    public enum SyncStatus: Equatable, Sendable {
+        case localOnly
+        case syncing
+        case offline
+        case unsavedChanges
+        case saved
+    }
+
+    public var syncStatus: SyncStatus {
+        guard hasCraftCredential else { return .localOnly }
+        guard isSyncVerified else { return isSyncCheckFailed ? .offline : .syncing }
+        if let selectedNoteID {
+            if dirtyPadIDs.contains(selectedNoteID) { return .unsavedChanges }
+            // Verified and clean but never provisioned — an empty pad, or
+            // text the trash sent back to local-only — exists nowhere in
+            // Craft, so it must not read as saved there.
+            if craftDocumentID(for: selectedNoteID) == nil { return .localOnly }
+        }
+        return .saved
+    }
+
     @ObservationIgnored private var document: NotesDocument?
     @ObservationIgnored private var lastSavedDocument: NotesDocument?
     @ObservationIgnored private var hasLoaded = false
@@ -349,6 +405,13 @@ public final class NotesAdapter {
     // reads as never-synced, never as a reason to touch the pad.
     @ObservationIgnored private let syncedAtKey = "scratchpadCraftSyncedAt"
     @ObservationIgnored private var pullTask: Task<Void, Never>?
+    @ObservationIgnored private var pullRetryTask: Task<Void, Never>?
+    /// Seconds between clock-failure retries while the panel stays up.
+    private static let pullRetryDelay: TimeInterval = 30
+    /// Whether the panel is up. The credential observer re-verifies only
+    /// then — a save made while shut must not arm network work nobody
+    /// watches; the next activate pulls anyway.
+    @ObservationIgnored private var isPanelOpen = false
     // Conflict copies a pad posted (ccp-2zi.6): Craft block ids that pin the
     // sidecar and stay out of the pad. Apart from the sidecar's policy flags
     // on purpose — a policy-unwritable block the user fixes in Craft must
@@ -402,6 +465,7 @@ public final class NotesAdapter {
         self.defaults = defaults
         self.defaultName = defaultName
         closedNoteIDs = Self.decodedClosedNoteIDs(defaults.data(forKey: closedTabsKey))
+        refreshCredentialPresence()
         loadApplyingRetention()
         observeTermination()
     }
@@ -462,11 +526,28 @@ public final class NotesAdapter {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.cachedCraftBaseURL = nil
+                self.refreshCredentialPresence()
+                // A new credential is unverified until a pull proves it —
+                // the pads it maps may already be trashed on the other side.
+                // Re-verify now rather than on the next open: the panel may
+                // already be up, and the editor holds until the pull lands.
+                self.isSyncVerified = false
+                self.isSyncCheckFailed = false
+                self.pullTask?.cancel()
+                self.pullTask = nil
+                self.pullRetryTask?.cancel()
+                self.pullRetryTask = nil
                 // The deep link's address dies with the credential: opening
                 // the old space's doc after forget is a stale launch, and the
                 // next pull re-caches after save.
                 self.defaults.removeObject(forKey: self.craftSpaceIDKey)
                 self.dirtyUnmappedNonEmptyPads()
+                // Re-verify now when the panel is up — the editor holds until
+                // the pull lands. While shut the next activate pulls, so no
+                // round starts that nobody watches.
+                if self.isPanelOpen {
+                    self.pullTask = Task { [weak self] in await self?.pullAll() }
+                }
             }
         }
     }
@@ -488,6 +569,10 @@ public final class NotesAdapter {
     // MARK: - Lifecycle
 
     public func activate() {
+        refreshCredentialPresence()
+        isPanelOpen = true
+        pullRetryTask?.cancel()
+        pullRetryTask = nil
         loadApplyingRetention()
         // Pads written before provisioning existed (or before a credential
         // was saved) converge like any first edit — otherwise they sit
@@ -501,8 +586,14 @@ public final class NotesAdapter {
     }
 
     public func deactivate() {
+        isPanelOpen = false
         pullTask?.cancel()
         pullTask = nil
+        pullRetryTask?.cancel()
+        pullRetryTask = nil
+        // The next activate re-verifies before unlocking: what Craft did
+        // while the panel was shut is unknown again.
+        isSyncVerified = false
         flushSave()
         // A debounce that only fires while the panel is open loses the last
         // three seconds of every session: push now instead.
@@ -726,6 +817,15 @@ public final class NotesAdapter {
             next = next.selecting(neighbour.id) ?? next
         }
         guard persist(next) else { return false }
+        dropSyncState(for: id)
+        unhide(id)
+        apply(next)
+        return true
+    }
+
+    /// Every per-pad sync trace, in one place: deleteNote and unmapPad share
+    /// it, so the next key never updates one and misses the other.
+    private func dropSyncState(for id: UUID) {
         dropSidecar(for: id)
         dropCraftDocumentID(for: id)
         dropSyncedTitle(for: id)
@@ -734,9 +834,68 @@ public final class NotesAdapter {
         dropStashIDs(for: id)
         dropSyncedAt(for: id)
         dirtyPadIDs.remove(id)
-        unhide(id)
-        apply(next)
-        return true
+    }
+
+    /// Settle one pad whose Craft doc is trashed (ccp-5fom). A converged pad
+    /// deletes — remote deletes win — but a pad holding text Craft never
+    /// confirmed keeps its text and goes local-only instead: deleting that
+    /// would destroy the only copy in either place. A sole pad mints its
+    /// replacement first, since deleteNote refuses the last doc.
+    private func settleTrashedPad(_ padID: UUID) {
+        guard craftDocumentID(for: padID) != nil,
+              document?.notes.contains(where: { $0.id == padID }) == true
+        else { return }
+        guard !hasUnconfirmedEdits(padID) else {
+            unmapPad(padID)
+            return
+        }
+        if document?.notes.count == 1 {
+            createNote()
+        }
+        deleteNote(padID)
+    }
+
+    /// Whether the pad holds changes Craft never confirmed: the in-memory
+    /// dirty bit, a block diff against the last confirmed sidecar (the bit
+    /// is forgotten on relaunch, the plan is not — same rule the pull
+    /// decides by), or a title the baseline never recorded. Unknown
+    /// baselines read as unconfirmed: a legacy mapping's first trash-hit
+    /// keeps its text rather than deleting on a maybe.
+    private func hasUnconfirmedEdits(_ padID: UUID) -> Bool {
+        if dirtyPadIDs.contains(padID) { return true }
+        guard let document,
+              let pad = document.notes.first(where: { $0.id == padID })
+        else { return false }
+        let slices = CraftBlockSplitter.slices(in: pad.text)
+        if !sidecar(for: padID).pushPlan(for: slices).isEmpty { return true }
+        guard let baseline = syncedTitle(for: padID) else {
+            // No baseline — a legacy mapping or never converged: keep the
+            // text on a maybe rather than deleting.
+            return true
+        }
+        return pad.name != baseline
+    }
+
+    /// Whether a push round would spend any request on this pad — the trash
+    /// sweep's gate, so no-op rounds cost nothing (and no scripts). Mirrors
+    /// pushOnePad's own checks without provisioning: an unmapped pad with
+    /// syncable slices would create, a mapped pad writes when its title or
+    /// its blocks differ.
+    private func padNeedsPush(_ padID: UUID) -> Bool {
+        guard let document,
+              let pad = document.notes.first(where: { $0.id == padID })
+        else { return false }
+        let slices = CraftBlockSplitter.slices(in: pad.text)
+        guard craftDocumentID(for: padID) != nil else { return !slices.isEmpty }
+        if pad.name != syncedTitle(for: padID) { return true }
+        return !sidecar(for: padID).pushPlan(for: slices).isEmpty
+    }
+
+    /// Drop every per-pad sync trace and keep the note: text, tab and
+    /// selection stand, local-only. The next edit provisions a fresh Craft
+    /// doc like any first edit.
+    private func unmapPad(_ padID: UUID) {
+        dropSyncState(for: padID)
     }
 
     /// Nearest open note to a deletion. `toDeletedIndex` is pre-delete, but
@@ -940,9 +1099,47 @@ public final class NotesAdapter {
         }
         let client = CraftClient(baseURL: baseURL, transport: craftTransport)
         var failure: Error?
-        // Snapshot: pads clear or fail below, which mutates the set.
-        let attempted = Array(dirtyPadIDs)
+        // Mid-session deletes (ccp-5fom): the trash may have taken a doc
+        // while the panel sat open, and a trashed doc still answers writes
+        // with 200 — pushing would strand local text inside Craft's trash.
+        // Settle those pads before writing; settled pads leave the dirty
+        // set, so the snapshot below never resurrects them. Gated on mapped
+        // pads this round would actually write to — unmapped pads have no
+        // doc to be trashed, and no-op rounds still cost nothing at all.
+        // Unknown trash blocks the round rather than green-lighting it: a
+        // blind write is exactly what strands the text.
+        let mappedWriters = dirtyPadIDs.filter {
+            craftDocumentID(for: $0) != nil && padNeedsPush($0)
+        }
+        let attempted: [UUID]
+        if mappedWriters.isEmpty {
+            attempted = Array(dirtyPadIDs)
+        } else if let trashed = try? await client.trashedDocumentIDs(),
+                  craftBaseURL() == baseURL {
+            for padID in Array(dirtyPadIDs) where craftBaseURL() == baseURL {
+                if let docID = craftDocumentID(for: padID), trashed.contains(docID) {
+                    settleTrashedPad(padID)
+                }
+            }
+            // Snapshot: pads clear or fail below, which mutates the set.
+            attempted = Array(dirtyPadIDs)
+        } else if craftBaseURL() == baseURL {
+            // The trash listing failed with the credential steady: writing
+            // blind risks stranding text in a trashed doc, so the round
+            // backs off like any failed round with the dirty bits standing.
+            failure = CraftClientError.unreachable(statusCode: nil)
+            attempted = []
+        } else {
+            // The credential switched mid-sweep: nothing settled can be
+            // trusted, and the end-of-round accounting starts the new space
+            // with fresh chances rather than the old round's failure.
+            attempted = []
+        }
         for padID in attempted {
+            // The credential may have switched after the sweep: remaining
+            // pads stop rather than writing into the old space, and the
+            // end-of-round re-dirty below retries them against the new one.
+            guard craftBaseURL() == baseURL else { break }
             do {
                 // False is not failure (throw is): the pad was edited
                 // mid-flight, so it stays dirty for the follow-up round.
@@ -1302,22 +1499,81 @@ public final class NotesAdapter {
         DefaultsMap(defaults: defaults, key: conflictsKey)
     }
 
-    /// Pull every mapped pad: one clock read, then one block fetch each. A
-    /// failed clock still pulls — decisions never need it — and one pad's
-    /// failure never skips the rest. Observable for tests; the activate path
-    /// fires it as a task.
-    func pullAll() async {
+    /// Pull every mapped pad: one clock read, one trash listing, then one
+    /// block fetch each. A failed clock verifies nothing — the pads stay
+    /// exactly as they are, locked, until a retry proves Craft reachable —
+    /// and one pad's failure never skips the rest. Observable for tests; the
+    /// activate path fires it as a task.
+    func pullAll(fromRetry: Bool = false) async {
+        // A retry round must stay cancellable while it runs, so entry only
+        // clears the handle it did not arrive on: a fresh round cancels a
+        // pending retry, while the retry itself keeps its handle so a later
+        // deactivate can still stand it down. (fromRetry earns its keep —
+        // the two entries have different cancellation semantics.)
+        if fromRetry {
+            guard pullRetryTask != nil else { return }
+        } else {
+            pullRetryTask?.cancel()
+            pullRetryTask = nil
+        }
         guard let baseURL = craftBaseURL() else { return }
+        isSyncVerified = false
+        isSyncCheckFailed = false
         let client = CraftClient(baseURL: baseURL, transport: craftTransport)
         let space = try? await client.checkConnection()
+        // Stale or cancelled rounds touch nothing — not even the deep-link
+        // cache a cancelled clock would otherwise clear below.
+        guard craftBaseURL() == baseURL, !Task.isCancelled else { return }
         // The deep link's address refreshes with the clock read the pull
         // already pays for — no extra request when the button is pressed.
         storeCraftSpaceID(space?.spaceID)
         let serverTime = space?.serverTime
+        guard space != nil else {
+            isSyncCheckFailed = true
+            // One transient 500 at open must not lock the whole session:
+            // retry while the panel is up. A later activate or credential
+            // change cancels this and starts its own round.
+            schedulePullRetry()
+            return
+        }
+        // The credential changed mid-flight: the observer already started a
+        // fresh pull for the new space, so this round stands down rather
+        // than attesting — or deleting for — a URL it never used.
+        guard craftBaseURL() == baseURL, !Task.isCancelled else { return }
+        let mappedPadIDs = storedCraftDocuments().keys.compactMap(UUID.init(uuidString:))
+        // Remote deletes win (ccp-5fom): a doc Craft trashed settles its pad
+        // here — deleted when converged, kept local-only when it holds text
+        // Craft never confirmed — through the same drop set as the toolbar
+        // trash, so the strip and the overflow menu follow with no view
+        // changes. Membership only: a failed trash read skips the pass
+        // rather than deleting, and a fetch 404 on a doc the trash does not
+        // name is a scope problem, never a delete.
+        if let trashed = try? await client.trashedDocumentIDs() {
+            for padID in mappedPadIDs {
+                guard craftBaseURL() == baseURL, !Task.isCancelled else { return }
+                if let docID = craftDocumentID(for: padID), trashed.contains(docID) {
+                    settleTrashedPad(padID)
+                }
+            }
+        }
         for padID in storedCraftDocuments().keys.compactMap(UUID.init(uuidString:)) {
-            guard !Task.isCancelled else { return }
+            guard craftBaseURL() == baseURL, !Task.isCancelled else { return }
             // A throw is one pad's "store unreachable", never the loop's.
             try? await pullOnePad(padID, client: client, serverTime: serverTime)
+        }
+        guard craftBaseURL() == baseURL, !Task.isCancelled else { return }
+        isSyncVerified = true
+    }
+
+    /// One more chance after a failed clock read. Fixed and short: success
+    /// verifies, another failure reschedules, and anything that starts its
+    /// own round (activate, credential change, deactivate) cancels this.
+    private func schedulePullRetry() {
+        pullRetryTask?.cancel()
+        pullRetryTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Self.pullRetryDelay))
+            guard !Task.isCancelled else { return }
+            await self?.pullAll(fromRetry: true)
         }
     }
 

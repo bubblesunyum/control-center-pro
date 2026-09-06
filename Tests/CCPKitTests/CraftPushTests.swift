@@ -604,11 +604,17 @@ final class CraftPushAdapterTests: XCTestCase {
         return id
     }
 
+    /// Empty trash listing, spent by the pre-write sweep (ccp-5fom) in every
+    /// round that pushes mapped pads.
+    private func emptyTrash() -> ScriptedTransport.Script {
+        .init(statusCode: 200, json: "{\"items\":[]}")
+    }
+
     func testFlushPutsTheEditAndStoresTheEcho() async throws {
         let name = "ccp.push.flush.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([.init(statusCode: 200, json: """
+        let transport = ScriptedTransport([emptyTrash(), .init(statusCode: 200, json: """
             {"items":[{"id":"block-1","markdown":"TWO!"}]}
             """)])
         let adapter = adapter(store, transport)
@@ -617,7 +623,7 @@ final class CraftPushAdapterTests: XCTestCase {
         adapter.text = "one\n\nTWO\n"
         await adapter.flushCraftPush()
 
-        XCTAssertEqual(transport.requests.count, 1, "one PUT, nothing else")
+        XCTAssertEqual(transport.requests.count, 2, "trash sweep plus one PUT")
         XCTAssertEqual(adapter.sidecar(for: id).entries[1].fingerprint,
                        BlockSidecar.fingerprint("TWO!"))
         XCTAssertEqual(adapter.text, "one\n\nTWO\n",
@@ -629,9 +635,11 @@ final class CraftPushAdapterTests: XCTestCase {
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([
+            emptyTrash(),
             .init(statusCode: 200, json: """
                 {"items":[{"id":"block-1","markdown":"TWO!"}]}
                 """),
+            emptyTrash(),
             .init(statusCode: 200, json: """
                 {"items":[{"id":"block-1","markdown":"TW0!"}]}
                 """),
@@ -642,7 +650,11 @@ final class CraftPushAdapterTests: XCTestCase {
         adapter.text = "one\n\nTWO\n"
         transport.onRequest = {
             // The user retyped the pushed block while the PUT was away.
-            await MainActor.run { adapter.text = "one\n\nTW0\n" }
+            await MainActor.run {
+                if transport.requests.last?.httpMethod == "PUT" {
+                    adapter.text = "one\n\nTW0\n"
+                }
+            }
         }
         await adapter.flushCraftPush()
 
@@ -880,6 +892,12 @@ final class CraftPushAdapterTests: XCTestCase {
                     {"space":{"name":"S"},"utc":{"time":"2026-09-05T12:00:00Z"}}
                     """)
             }
+            // The trash listing names nothing: without this branch the
+            // create echo below would read as trash membership and the
+            // settling pull would delete the pad it just provisioned.
+            if request.httpMethod == "GET", (request.url?.query ?? "").contains("location=trash") {
+                return .init(statusCode: 200, json: "{\"items\":[]}")
+            }
             if path.hasSuffix("/documents") {
                 return .init(statusCode: 200, json: """
                     {"items":[{"id":"doc-new","title":"Note 1"}]}
@@ -904,7 +922,11 @@ final class CraftPushAdapterTests: XCTestCase {
         let name = "ccp.push.credsave.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
+        let clock = ScriptedTransport.Script(statusCode: 200, json: """
+            {"space":{"name":"S"},"utc":{"time":"2026-09-06T19:00:00Z"}}
+            """)
         let transport = ScriptedTransport([
+            clock, emptyTrash(), clock, emptyTrash(),
             .init(statusCode: 200, json: """
                 {"items":[{"id":"doc-new","title":"Note 1"}]}
                 """),
@@ -924,12 +946,24 @@ final class CraftPushAdapterTests: XCTestCase {
 
         adapter.craftBaseURLOverride = base
         adapter.craftCredentialUnavailable = false
+        adapter.activate()
+        for _ in 0..<100 where !adapter.isSyncVerified {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertTrue(adapter.isSyncVerified, "the panel open verifies")
         NotificationCenter.default.post(name: .craftCredentialDidChange, object: nil)
+        // The observer re-verifies on its own task: let that round land
+        // before flushing, or the two rounds race the script queue.
+        for _ in 0..<100 where !adapter.isSyncVerified {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertTrue(adapter.isSyncVerified, "the save re-verifies while open")
         await adapter.flushCraftPush()
 
         XCTAssertEqual(adapter.craftDocumentID(for: id), "doc-new")
-        XCTAssertEqual(transport.requests.count, 2)
+        XCTAssertEqual(transport.requests.count, 6, "two clocks, two trash reads, create, post")
         XCTAssertFalse(adapter.isPushDirty(id))
+        adapter.deactivate()
     }
 
     func testPartialFailureStoresConfirmedUnits() async throws {
@@ -938,10 +972,12 @@ final class CraftPushAdapterTests: XCTestCase {
         defer { store.removePersistentDomain(forName: name) }
         // PUT ok, DELETE 500s. Then everything ok.
         let transport = ScriptedTransport([
+            emptyTrash(),
             .init(statusCode: 200, json: """
                 {"items":[{"id":"block-1","markdown":"TWO!"}]}
                 """),
             .init(statusCode: 500, json: "{}"),
+            emptyTrash(),
             .init(statusCode: 200, json: """
                 {"items":[{"id":"block-1","markdown":"TWO!"}]}
                 """),
@@ -963,7 +999,7 @@ final class CraftPushAdapterTests: XCTestCase {
         await adapter.flushCraftPush()
         XCTAssertEqual(adapter.sidecar(for: id).entries.map(\.id), ["block-0", "block-1"],
                        "retry drops the delete without re-posting anything")
-        XCTAssertEqual(transport.requests.count, 4, "PUT, DELETE-fail, PUT, DELETE-ok")
+        XCTAssertEqual(transport.requests.count, 6, "sweep, PUT, DELETE-fail, sweep, PUT, DELETE-ok")
     }
 
     func testMixedAnchorsPostOneBatchEach() async throws {
@@ -971,6 +1007,7 @@ final class CraftPushAdapterTests: XCTestCase {
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([
+            emptyTrash(),
             .init(statusCode: 200, json: """
                 {"items":[{"id":"block-0","markdown":"A"}]}
                 """),
@@ -988,7 +1025,7 @@ final class CraftPushAdapterTests: XCTestCase {
         await adapter.flushCraftPush()
 
         let methods = transport.requests.map { $0.httpMethod }
-        XCTAssertEqual(methods, ["PUT", "POST", "POST"])
+        XCTAssertEqual(methods, ["GET", "PUT", "POST", "POST"])
         XCTAssertEqual(adapter.sidecar(for: id).entries.map(\.id),
                        ["block-0", "nx", "block-1", "block-2", "ny"],
                        "new ids land in pad order")
@@ -999,6 +1036,7 @@ final class CraftPushAdapterTests: XCTestCase {
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([
+            emptyTrash(),
             .init(statusCode: 200, json: """
                 {"items":[{"id":"na","markdown":"A"}]}
                 """),
@@ -1016,14 +1054,14 @@ final class CraftPushAdapterTests: XCTestCase {
         adapter.text = "A\n\nB\n\nc\n"
         await adapter.flushCraftPush()
 
-        XCTAssertEqual(transport.requests.count, 3, "head group posts and moves, anchored group posts")
+        XCTAssertEqual(transport.requests.count, 4, "sweep plus head group posts and moves, anchored group posts")
         let postPosition = try XCTUnwrap(
-            (try transport.jsonBody(of: 0)["position"] as? [String: String]))
+            (try transport.jsonBody(of: 1)["position"] as? [String: String]))
         XCTAssertEqual(postPosition["position"], "end",
                        "the anchorless group lands at the end, where appends stay separate")
         XCTAssertEqual(postPosition["pageId"], "doc1")
-        XCTAssertEqual(transport.requests[1].httpMethod, "PUT")
-        let moveBody = try transport.jsonBody(of: 1)
+        XCTAssertEqual(transport.requests[2].httpMethod, "PUT")
+        let moveBody = try transport.jsonBody(of: 2)
         XCTAssertEqual(moveBody["blockIds"] as? [String], ["na"])
         let movePosition = try XCTUnwrap(moveBody["position"] as? [String: String])
         XCTAssertEqual(movePosition["position"], "before")
@@ -1057,10 +1095,14 @@ final class CraftPushAdapterTests: XCTestCase {
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([])
         // Echo each PUT back with its own id, canonically spelled, whatever
-        // order the dirty set pushes in.
+        // order the dirty set pushes in. The pre-write sweep's trash read
+        // carries no body and names nothing trashed.
         transport.respond = { request in
-            let body = (try? JSONSerialization.jsonObject(with: request.httpBody!) as? [String: Any])
-                ?? [:]
+            guard let bodyData = request.httpBody,
+                  let body = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+            else {
+                return ScriptedTransport.Script(statusCode: 200, json: "{\"items\":[]}")
+            }
             let blocks = (body["blocks"] as? [[String: String]]) ?? []
             let echo = blocks.map { "{\"id\":\"\($0["id"]!)\",\"markdown\":\"\($0["markdown"]!)!\"}" }
                 .joined(separator: ",")
@@ -1084,9 +1126,11 @@ final class CraftPushAdapterTests: XCTestCase {
         adapter.text = "BBB"
         await adapter.flushCraftPush()
 
-        XCTAssertEqual(transport.requests.count, 2, "both dirty pads push, not just the selected one")
+        XCTAssertEqual(transport.requests.count, 3, "sweep plus both dirty pads pushing")
         let putIDs = Set(transport.requests.flatMap { request -> [String] in
-            let body = (try? JSONSerialization.jsonObject(with: request.httpBody!) as? [String: Any]) ?? [:]
+            guard let httpBody = request.httpBody,
+                  let body = try? JSONSerialization.jsonObject(with: httpBody) as? [String: Any]
+            else { return [] }
             return ((body["blocks"] as? [[String: String]]) ?? []).compactMap { $0["id"] }
         })
         XCTAssertEqual(putIDs, ["aaa-0", "bbb-0"])
@@ -1100,7 +1144,7 @@ final class CraftPushAdapterTests: XCTestCase {
         let name = "ccp.push.background.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([.init(statusCode: 200, json: """
+        let transport = ScriptedTransport([emptyTrash(), .init(statusCode: 200, json: """
             {"items":[{"id":"a0","markdown":"AAA!"}]}
             """)])
         let adapter = adapter(store, transport)

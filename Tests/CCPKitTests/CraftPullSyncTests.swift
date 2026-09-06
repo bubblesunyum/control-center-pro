@@ -222,11 +222,18 @@ final class CraftPullAdapterTests: XCTestCase {
         ScriptedTransport.Script(statusCode: 200, json: json)
     }
 
+    /// The trash listing every pull reads between the clock and the fetches.
+    /// Empty here; tests needing a remote delete name doc ids.
+    private func trash(_ ids: String...) -> ScriptedTransport.Script {
+        let items = ids.map { "{\"id\":\"\($0)\"}" }.joined(separator: ",")
+        return ScriptedTransport.Script(statusCode: 200, json: "{\"items\":[\(items)]}")
+    }
+
     func testCleanPadAdoptsRemoteEditsAndReseeds() async throws {
         let name = "ccp.pull.adopt.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([connection, blocks("""
+        let transport = ScriptedTransport([connection, trash(), blocks("""
             {"items":[{"id":"block-0","markdown":"ONE"}]}
             """)])
         let adapter = adapter(store, transport)
@@ -234,7 +241,7 @@ final class CraftPullAdapterTests: XCTestCase {
 
         await adapter.pullAll()
 
-        XCTAssertEqual(transport.requests.count, 2, "clock plus one fetch, no writes")
+        XCTAssertEqual(transport.requests.count, 3, "clock, trash plus one fetch, no writes")
         XCTAssertEqual(adapter.text, "ONE")
         XCTAssertEqual(adapter.sidecar(for: id).entries.map(\.id), ["block-0"])
         XCTAssertEqual(adapter.sidecar(for: id).entries[0].fingerprint,
@@ -247,7 +254,7 @@ final class CraftPullAdapterTests: XCTestCase {
         let name = "ccp.pull.skip.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([connection, blocks("""
+        let transport = ScriptedTransport([connection, trash(), blocks("""
             {"items":[{"id":"block-0","markdown":"one"}]}
             """)])
         let adapter = adapter(store, transport)
@@ -267,7 +274,7 @@ final class CraftPullAdapterTests: XCTestCase {
         let name = "ccp.pull.conflict.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([connection, blocks("""
+        let transport = ScriptedTransport([connection, trash(), blocks("""
             {"items":[{"id":"r1","markdown":"theirs"}]}
             """), blocks("""
             {"items":[{"id":"c1","markdown":"# Conflicted copy"},
@@ -284,10 +291,10 @@ final class CraftPullAdapterTests: XCTestCase {
 
         await adapter.pullAll()
 
-        XCTAssertEqual(transport.requests.count, 3, "clock, fetch, stash — no PUT, no DELETE")
-        let post = transport.requests[2]
+        XCTAssertEqual(transport.requests.count, 4, "clock, trash, fetch, stash — no PUT, no DELETE")
+        let post = transport.requests[3]
         XCTAssertEqual(post.httpMethod, "POST")
-        let body = try transport.jsonBody(of: 2)
+        let body = try transport.jsonBody(of: 3)
         let posted = try XCTUnwrap(body["blocks"] as? [[String: String]])
         XCTAssertEqual(posted.count, 2, "heading plus the local blocks")
         XCTAssertTrue(try XCTUnwrap(posted[0]["markdown"]).hasPrefix("# Conflicted copy"),
@@ -320,7 +327,7 @@ final class CraftPullAdapterTests: XCTestCase {
         let name = "ccp.pull.stashfail.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([connection, blocks("""
+        let transport = ScriptedTransport([connection, trash(), blocks("""
             {"items":[{"id":"r1","markdown":"theirs"}]}
             """), ScriptedTransport.Script(statusCode: 500, json: "{}")])
         let adapter = adapter(store, transport)
@@ -370,7 +377,7 @@ final class CraftPullAdapterTests: XCTestCase {
         let name = "ccp.pull.close.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([connection, blocks("""
+        let transport = ScriptedTransport([connection, trash(), blocks("""
             {"items":[{"id":"r1","markdown":"theirs"}]}
             """), blocks("""
             {"items":[{"id":"c1","markdown":"# Conflicted copy"},
@@ -404,7 +411,7 @@ final class CraftPullAdapterTests: XCTestCase {
         let name = "ccp.pull.failure.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([connection,
+        let transport = ScriptedTransport([connection, trash(),
                                            ScriptedTransport.Script(statusCode: 500, json: "{}")])
         let adapter = adapter(store, transport)
         let id = try await steadyPad(adapter, text: "one")
@@ -424,7 +431,7 @@ final class CraftPullAdapterTests: XCTestCase {
         let name = "ccp.pull.handmap.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([connection, blocks("""
+        let transport = ScriptedTransport([connection, trash(), blocks("""
             {"items":[{"id":"r1","markdown":"theirs"}]}
             """), blocks("""
             {"items":[{"id":"c1","markdown":"# Conflicted copy"},
@@ -437,7 +444,7 @@ final class CraftPullAdapterTests: XCTestCase {
 
         await adapter.pullAll()
 
-        XCTAssertEqual(transport.requests.count, 3, "clock, fetch, stash")
+        XCTAssertEqual(transport.requests.count, 4, "clock, trash, fetch, stash")
         XCTAssertEqual(adapter.text, "theirs")
         let entries = adapter.sidecar(for: id).entries
         XCTAssertEqual(entries.map(\.id), ["r1", "c1", "c2"])
@@ -451,7 +458,7 @@ final class CraftPullAdapterTests: XCTestCase {
         let name = "ccp.pull.race.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([connection, blocks("""
+        let transport = ScriptedTransport([connection, trash(), blocks("""
             {"items":[{"id":"block-0","markdown":"THEIRS"}]}
             """), blocks("""
             {"items":[{"id":"c1","markdown":"# Conflicted copy"},
@@ -463,14 +470,14 @@ final class CraftPullAdapterTests: XCTestCase {
             // The clock read (request one) passes untouched; the keystrokes
             // land while the block fetch (request two) is away.
             await MainActor.run {
-                if transport.requests.count == 2 { adapter.text = "one plus my edit" }
+                if transport.requests.count == 3 { adapter.text = "one plus my edit" }
             }
         }
 
         await adapter.pullAll()
 
         XCTAssertEqual(adapter.text, "THEIRS")
-        let posted = try transport.jsonBody(of: 2)
+        let posted = try transport.jsonBody(of: 3)
         let stashed = try XCTUnwrap(posted["blocks"] as? [[String: String]])
         XCTAssertEqual(stashed.last?["markdown"], "one plus my edit",
                        "the stash carries the fresh text, not the pre-fetch snapshot")
@@ -488,12 +495,12 @@ final class CraftPullAdapterTests: XCTestCase {
                        {"id":"c1","markdown":"# Conflicted copy — 2026-09-06 19:00 UTC"},
                        {"id":"c2","markdown":"mine edited"}]}
             """)
-        let transport = ScriptedTransport([connection, blocks("""
+        let transport = ScriptedTransport([connection, trash(), blocks("""
             {"items":[{"id":"r1","markdown":"theirs"}]}
             """), blocks("""
             {"items":[{"id":"c1","markdown":"# Conflicted copy — 2026-09-06 19:00 UTC"},
                        {"id":"c2","markdown":"mine edited"}]}
-            """), connection, fetch])
+            """), connection, trash(), fetch])
         let adapter = adapter(store, transport)
         let id = try await steadyPad(adapter, text: "mine", seeded: ["mine"])
         adapter.storeSidecar(BlockSidecar(entries: [
@@ -503,20 +510,20 @@ final class CraftPullAdapterTests: XCTestCase {
 
         await adapter.pullAll()
         XCTAssertEqual(adapter.text, "theirs")
-        XCTAssertEqual(transport.requests.count, 3)
+        XCTAssertEqual(transport.requests.count, 4)
 
         await adapter.pullAll()
         XCTAssertEqual(adapter.text, "theirs", "the stash stays in Craft, out of the pad")
         XCTAssertEqual(adapter.sidecar(for: id).entries.map(\.id), ["r1", "c1", "c2"])
         XCTAssertEqual(adapter.sidecar(for: id).entries.filter { !$0.isWritable }.count, 2)
-        XCTAssertEqual(transport.requests.count, 5, "clock plus fetch, no writes")
+        XCTAssertEqual(transport.requests.count, 7, "clock, trash plus fetch, no writes")
     }
 
     func testConvergedClearsDirtyWithoutTouchingText() async throws {
         let name = "ccp.pull.converged.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([connection, blocks("""
+        let transport = ScriptedTransport([connection, trash(), blocks("""
             {"items":[{"id":"block-0","markdown":"one"}]}
             """)])
         let adapter = adapter(store, transport)
@@ -540,7 +547,7 @@ final class CraftPullAdapterTests: XCTestCase {
         let name = "ccp.pull.postrace.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([connection, blocks("""
+        let transport = ScriptedTransport([connection, trash(), blocks("""
             {"items":[{"id":"r1","markdown":"theirs"}]}
             """), blocks("""
             {"items":[{"id":"c1","markdown":"# Conflicted copy"},
@@ -555,7 +562,7 @@ final class CraftPullAdapterTests: XCTestCase {
         transport.onRequest = {
             // The stash POST (request three) is away: keep typing.
             await MainActor.run {
-                if transport.requests.count == 3 { adapter.text = "mine edited!" }
+                if transport.requests.count == 4 { adapter.text = "mine edited!" }
             }
         }
 
@@ -572,11 +579,11 @@ final class CraftPullAdapterTests: XCTestCase {
     func testUnmappedPadMakesNoBlockRequests() async throws {        let name = "ccp.pull.unmapped.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([connection])
+        let transport = ScriptedTransport([connection, trash()])
         let adapter = adapter(store, transport)
 
         await adapter.pullAll()
 
-        XCTAssertEqual(transport.requests.count, 1, "the clock read only")
+        XCTAssertEqual(transport.requests.count, 2, "the clock read plus the trash listing")
     }
 }

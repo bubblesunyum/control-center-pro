@@ -58,6 +58,32 @@ extension CraftClient {
         return first
     }
 
+    /// `GET /documents?location=trash` — the ids of soft-deleted documents.
+    /// The pull's gone-signal: a trashed doc still answers `GET /blocks`
+    /// with 200 and its full content (probed live 2026-09-06, ccp-5fom), so
+    /// the fetch can never tell a deleted doc from a live one — only trash
+    /// membership can. Transport failures throw so callers skip the pass;
+    /// an undecodable body reads as naming nothing. Either way nothing
+    /// deletes without positive membership.
+    public func trashedDocumentIDs() async throws(CraftClientError) -> Set<String> {
+        var components = URLComponents(url: baseURL.appending(path: "documents"),
+                                       resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "location", value: "trash")]
+        guard let url = components?.url else {
+            throw CraftClientError.unreachable(statusCode: nil)
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        let (data, http) = try await send(request)
+        // Undecodable reads as failure, never as empty: an empty trash and
+        // an unreadable one must not conflate, or deletes silently stop
+        // working while pushes green-light blind writes.
+        guard let documents = Self.decodeDocuments(from: data) else {
+            throw CraftClientError.unreachable(statusCode: http.statusCode)
+        }
+        return Set(documents.map(\.id))
+    }
+
     private struct DocumentItemsEnvelope: Decodable {
         var items: [CraftDocument]?
     }

@@ -21,15 +21,19 @@ struct NoteSurface: View {
             MarkdownNoteEditor(
                 text: Binding(get: { adapter.text }, set: { adapter.text = $0 }),
                 documentId: adapter.selectedNoteID?.uuidString ?? "notes",
-                placeholder: "Write something…"
+                placeholder: "Write something…",
+                isEditable: adapter.isEditable
             )
+            // Unverified pads hold keystrokes until the pull is in
+            // (ccp-5fom): dimmed, readable, no caret.
+            .opacity(adapter.isEditable ? 1 : 0.55)
             // The card takes whatever height its lane gives it, and the editor
             // takes all of that: pinned to its floor instead, the note grows a
             // strip of container below the text that looks editable and
             // swallows the click.
             .frame(minHeight: Layout.noteEditorHeight, maxHeight: .infinity)
             .accessibilityLabel("Note text")
-            .accessibilityHint("Editable Markdown")
+            .accessibilityHint(adapter.isEditable ? "Editable Markdown" : notesSyncDisplay(adapter.syncStatus).text)
 
             NoteToolbar(adapter: adapter, onDeleteSelected: onDeleteSelected)
         }
@@ -42,9 +46,11 @@ struct NoteSurface: View {
             }
         }
         // Clipboard rows, Finder files and browser text all land here; images
-        // have no text form and spring back unaccepted.
+        // have no text form and spring back unaccepted. Drops hold while the
+        // pad is unverified, like keystrokes.
         .onDrop(of: [.plainText, .text, .rtf, .html, .fileURL, .url], isTargeted: $isDropTargeted) { providers in
-            adapter.acceptDrop(providers: providers)
+            guard adapter.isEditable else { return false }
+            return adapter.acceptDrop(providers: providers)
         }
     }
 }
@@ -67,6 +73,18 @@ private extension View {
     }
 }
 
+/// The toolbar status and the editor hint share one mapping, so the symbol
+/// and the words cannot drift apart.
+fileprivate func notesSyncDisplay(_ status: NotesAdapter.SyncStatus) -> (symbol: String, text: String) {
+    switch status {
+    case .localOnly: ("tray", "Local only")
+    case .syncing: ("arrow.triangle.2.circlepath", "Syncing…")
+    case .offline: ("wifi.slash", "Couldn't reach Craft")
+    case .unsavedChanges: ("clock", "Unsaved changes")
+    case .saved: ("checkmark.circle", "Saved to Craft")
+    }
+}
+
 /// The note's own toolbar, along its bottom edge.
 private struct NoteToolbar: View {
     @Bindable var adapter: NotesAdapter
@@ -82,8 +100,7 @@ private struct NoteToolbar: View {
 
     var body: some View {
         HStack(spacing: Space.half) {
-            NoteToolbarButton("trash", label: "Delete") { onDeleteSelected() }
-                .disabled(!adapter.canDeleteNote)
+            syncStatus
             Spacer(minLength: 0)
             if !conflicts.isEmpty {
                 NoteToolbarButton("exclamationmark.triangle.fill", label: "Conflicts",
@@ -97,6 +114,8 @@ private struct NoteToolbar: View {
                     ConflictsPopover(adapter: adapter, isPresented: $isConflictsPresented)
                 }
             }
+            NoteToolbarButton("trash", label: "Delete") { onDeleteSelected() }
+                .disabled(!adapter.canDeleteNote)
             NoteToolbarButton(didCopy ? "checkmark" : "doc.on.doc",
                               label: didCopy ? "Copied" : "Copy",
                               tint: didCopy ? .green : nil) {
@@ -120,6 +139,17 @@ private struct NoteToolbar: View {
         // Tabbing away tears the button (and its popover) down with a stale
         // true — the next conflict would otherwise open uninvited.
         .onChange(of: adapter.selectedNoteID) { isConflictsPresented = false }
+    }
+
+    /// Connection/saved state for the selected doc (ccp-5fom), on the
+    /// toolbar's leading edge where the trash used to sit. Small by design:
+    /// an icon and a few words, secondary all the way.
+    private var syncStatus: some View {
+        let display = notesSyncDisplay(adapter.syncStatus)
+        return Label(display.text, systemImage: display.symbol)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .help(display.text)
     }
 }
 
