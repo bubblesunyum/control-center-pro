@@ -60,6 +60,11 @@ public final class SystemStatsWidget: CCPWidget {
 
 private enum SectionKind: Hashable { case cpu, gpu, memory, battery }
 
+private let chevronWidth: CGFloat = 8
+/// Title x-offset (chevron + the header HStack's 6pt spacing); breakdown
+/// rows hang here so process icons align with the title's left edge.
+private let titleIndent: CGFloat = chevronWidth + 6
+
 private struct BreakdownRow: Identifiable {
     let id: Int32
     let pid: pid_t
@@ -361,6 +366,7 @@ private struct SystemStatsContent: View {
         Image(systemName: "chevron.right")
             .font(.system(size: 8, weight: .semibold))
             .foregroundStyle(.secondary)
+            .frame(width: chevronWidth)
             .rotationEffect(.degrees(expanded.contains(kind) ? 90 : 0))
     }
 
@@ -386,7 +392,7 @@ private struct SystemStatsContent: View {
                     Text(isLoading ? "Measuring…" : emptyBreakdownText(for: kind))
                         .font(.system(size: 10.5))
                         .foregroundStyle(.tertiary)
-                        .padding(.leading, 20)
+                        .padding(.leading, titleIndent)
                 } else {
                     ForEach(rows) { row in
                         BreakdownProcessRow(row: row, value: breakdownValue(row, for: kind))
@@ -708,7 +714,7 @@ private struct BreakdownProcessRow: View {
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
         }
-        .padding(.leading, 20)
+        .padding(.leading, titleIndent)
         .contentShape(Rectangle())
     }
 }
