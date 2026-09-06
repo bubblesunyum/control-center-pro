@@ -48,8 +48,8 @@ extension CraftClient {
     }
 
     /// Decode a GET /blocks tree tolerantly: an `items` envelope, a `blocks`
-    /// envelope, or a bare array — the same tolerance the write echo gets.
-    /// Nodes without an id are skipped, never guessed at.
+    /// envelope, a bare array — or, as the live endpoint returns, the single
+    /// page object itself. Nodes without an id are skipped, never guessed at.
     private static func decodeNodes(from data: Data) -> [FetchedNode]? {        let decoder = JSONDecoder()
         if let envelope = try? decoder.decode(FetchedItemsEnvelope.self, from: data),
            let items = envelope.items {
@@ -59,7 +59,19 @@ extension CraftClient {
            let blocks = envelope.blocks {
             return blocks
         }
-        return try? decoder.decode([FetchedNode].self, from: data)
+        if let nodes = try? decoder.decode([FetchedNode].self, from: data) {
+            return nodes
+        }
+        // The live shape: one page object carrying its blocks under
+        // `content`. Only the children come back — the root is position,
+        // not text, even though it carries the document title as markdown.
+        // A missing key reads as an empty page; a missing id is not a page
+        // at all, so error payloads still throw.
+        if let page = try? decoder.decode(FetchedNode.self, from: data),
+           page.id != nil {
+            return page.content ?? []
+        }
+        return nil
     }
 
     /// `GET /blocks?id=&maxDepth=-1` — the document's blocks in document
@@ -89,9 +101,11 @@ extension CraftClient {
     private static func flatten(node: FetchedNode) -> [FetchedBlock] {
         var out: [FetchedBlock] = []
         // A container (the page root, a sub-page) with children is position,
-        // not text: pin it only when it has no markdown of its own. A nil id
-        // never pins — without an address there is nothing to route around.
-        if let id = node.id, node.markdown != nil || node.content == nil {
+        // not text — no text block ever carries both markdown and children,
+        // so children always win. A nil id never pins — without an address
+        // there is nothing to route around. An empty `content` array pins
+        // like a missing key: server serialisation must not change sync.
+        if let id = node.id, (node.content ?? []).isEmpty {
             out.append(FetchedBlock(id: id, markdown: node.markdown))
         }
         for child in node.content ?? [] {

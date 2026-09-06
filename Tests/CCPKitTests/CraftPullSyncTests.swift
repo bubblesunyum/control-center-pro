@@ -49,6 +49,67 @@ final class CraftPullWireTests: XCTestCase {
         }
     }
 
+    func testFetchParsesSinglePageObjectSkippingTheTitle() async throws {
+        // The live shape (ccp-pn8g): GET /blocks returns the page itself,
+        // whose markdown is the document title — position, not text.
+        let transport = ScriptedTransport([.init(statusCode: 200, json: """
+            {"id":"doc1","type":"page","markdown":"playground","content":[
+              {"id":"a","markdown":"one","type":"text"},
+              {"id":"img","type":"image"},
+              {"id":"sub","content":[
+                {"id":"b","markdown":"two","type":"text"}]}
+            ]}
+            """)])
+        let blocks = try await client(transport).fetchBlocks(documentID: "doc1")
+
+        XCTAssertEqual(blocks.map(\.id), ["a", "img", "b"])
+        XCTAssertEqual(blocks.map(\.markdown), ["one", nil, "two"])
+    }
+
+    func testFetchEmptyPageIsEmptyRatherThanUnreachable() async throws {
+        let transport = ScriptedTransport([.init(statusCode: 200, json: """
+            {"id":"doc1","type":"page","markdown":"empty","content":[]}
+            """)])
+        let blocks = try await client(transport).fetchBlocks(documentID: "doc1")
+
+        XCTAssertEqual(blocks, [])
+    }
+
+    func testFetchWrappedPageWithTitleSkipsTheTitleToo() async throws {
+        for json in ["{\"items\":[{\"id\":\"doc1\",\"type\":\"page\",\"markdown\":\"playground\",\"content\":[{\"id\":\"a\",\"markdown\":\"one\"}]}]}",
+                     "[{\"id\":\"doc1\",\"type\":\"page\",\"markdown\":\"playground\",\"content\":[{\"id\":\"a\",\"markdown\":\"one\"}]}]"] {
+            let transport = ScriptedTransport([.init(statusCode: 200, json: json)])
+            let blocks = try await client(transport).fetchBlocks(documentID: "doc1")
+            XCTAssertEqual(blocks, [FetchedBlock(id: "a", markdown: "one")], "for \(json)")
+        }
+    }
+
+    func testFetchContentLessPageIsEmptyAndErrorPayloadStillThrows() async throws {
+        let empty = ScriptedTransport([.init(statusCode: 200, json: """
+            {"id":"doc1","type":"page","markdown":"empty"}
+            """)])
+        let emptyBlocks = try await client(empty).fetchBlocks(documentID: "doc1")
+        XCTAssertEqual(emptyBlocks, [])
+
+        let error = ScriptedTransport([.init(statusCode: 200, json: "{}")])
+        do {
+            _ = try await client(error).fetchBlocks(documentID: "doc1")
+            XCTFail("an id-less object must throw")
+        } catch let clientError as CraftClientError {
+            XCTAssertEqual(clientError, .unreachable(statusCode: 200))
+        }
+    }
+
+    func testFetchEmptyContentArrayStillPinsPosition() async throws {
+        let transport = ScriptedTransport([.init(statusCode: 200, json: """
+            {"items":[{"id":"a","markdown":"one"},{"id":"img","type":"image","content":[]}]}
+            """)])
+        let blocks = try await client(transport).fetchBlocks(documentID: "doc1")
+
+        XCTAssertEqual(blocks, [FetchedBlock(id: "a", markdown: "one"),
+                                FetchedBlock(id: "img", markdown: nil)])
+    }
+
     func testFetchFailureIsUnreachable() async throws {
         let transport = ScriptedTransport([.init(statusCode: 500, json: "{}")])
         do {
