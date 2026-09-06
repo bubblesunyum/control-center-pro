@@ -53,6 +53,20 @@ public struct ClipboardEntry: Sendable, Equatable, Identifiable {
 
     public var isPinned: Bool { pinnedAt != nil }
 
+    /// The entry as plain text, for drag-out and drops into notes: text
+    /// itself, file entries as one path per line, and nil for images, which
+    /// have no text form and travel as PNG instead.
+    public var plainText: String? {
+        switch kind {
+        case .text:
+            return text
+        case .files:
+            return filePaths.isEmpty ? nil : filePaths.joined(separator: "\n")
+        case .image:
+            return nil
+        }
+    }
+
     public var preview: String {
         switch kind {
         case .text:
@@ -236,6 +250,13 @@ public final class ClipboardAdapter {
     public func clearAll() {
         source.clearAll()
         entries = source.snapshot
+    }
+
+    /// Full PNG bytes for an image entry, for drag-out. Thumbnails stay
+    /// previews; a drag promises the real image.
+    public func imageData(for entry: ClipboardEntry) -> Data? {
+        guard entry.kind == .image, let name = entry.imageFile else { return nil }
+        return BridgedClipboardImages.imageData(named: name)
     }
 
     /// Thumbnail for an image entry or a single image-file entry, otherwise nil.

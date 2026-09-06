@@ -448,7 +448,12 @@ private struct RecentDownloadRow: View {
         .accessibilityLabel(file.name)
         .accessibilityHint("Opens in its default app")
         .help(file.name)
-        .modifier(RecentDownloadDragModifier(url: file.url))
+        .dragOut {
+            let provider = NSItemProvider()
+            provider.registerObject(file.url as NSURL, visibility: .all)
+            provider.suggestedName = file.url.lastPathComponent
+            return provider
+        }
     }
 
     @ViewBuilder
@@ -470,24 +475,6 @@ private struct RecentDownloadRow: View {
             }
         }
         .frame(width: previewSize.width, height: previewSize.height)
-    }
-}
-
-private struct RecentDownloadDragModifier: ViewModifier {
-    let url: URL
-    @Environment(\.isPanelEditing) private var isPanelEditing
-
-    func body(content: Content) -> some View {
-        if isPanelEditing {
-            content
-        } else {
-            content.onDrag {
-                let provider = NSItemProvider()
-                provider.registerObject(url as NSURL, visibility: .all)
-                provider.suggestedName = url.lastPathComponent
-                return provider
-            }
-        }
     }
 }
 
@@ -607,52 +594,46 @@ private struct WidgetFileRow: View {
 private struct WidgetFileRowDragModifier: ViewModifier {
     let item: ShelfItem
     @Environment(ShelfStore.self) private var store
-    @Environment(\.isPanelEditing) private var isPanelEditing
 
     func body(content: Content) -> some View {
-        if isPanelEditing {
-            content
-        } else {
-            content
-                .onDrag {
-                    let provider = NSItemProvider()
-                    // Prefer fileURLs so Finder receives a concrete file even for text/link
-                    let urls = store.fileURLs(for: [item.id])
-                    if let url = urls.first, FileManager.default.fileExists(atPath: url.path) {
-                        provider.registerObject(url as NSURL, visibility: .all)
-                        // Also vend a string/URL representation so drops into text fields work
-                        if let text = item.text {
-                            provider.registerObject(text as NSString, visibility: .all)
-                        } else if let link = item.urlString {
-                            provider.registerObject(link as NSString, visibility: .all)
-                            if let u = URL(string: link) {
-                                provider.registerObject(u as NSURL, visibility: .all)
-                            }
-                        }
-                        provider.suggestedName = url.lastPathComponent
+        content.dragOut {
+            let provider = NSItemProvider()
+            // Prefer fileURLs so Finder receives a concrete file even for text/link
+            let urls = store.fileURLs(for: [item.id])
+            if let url = urls.first, FileManager.default.fileExists(atPath: url.path) {
+                provider.registerObject(url as NSURL, visibility: .all)
+                // Also vend a string/URL representation so drops into text fields work
+                if let text = item.text {
+                    provider.registerObject(text as NSString, visibility: .all)
+                } else if let link = item.urlString {
+                    provider.registerObject(link as NSString, visibility: .all)
+                    if let u = URL(string: link) {
+                        provider.registerObject(u as NSURL, visibility: .all)
+                    }
+                }
+                provider.suggestedName = url.lastPathComponent
+                return provider
+            }
+            // Ghost or failed write: vend only non-file representations to avoid
+            // handing Finder a dead file URL.
+            let writer = store.pasteboardWriter(for: item)
+            if let url = writer as? NSURL {
+                if url.isFileURL {
+                    guard let path = url.path, FileManager.default.fileExists(atPath: path) else {
+                        let fallback = item.text ?? item.urlString ?? item.title
+                        provider.registerObject(fallback as NSString, visibility: .all)
+                        provider.suggestedName = item.title
                         return provider
                     }
-                    // Ghost or failed write: vend only non-file representations to avoid
-                    // handing Finder a dead file URL.
-                    let writer = store.pasteboardWriter(for: item)
-                    if let url = writer as? NSURL {
-                        if url.isFileURL {
-                            guard let path = url.path, FileManager.default.fileExists(atPath: path) else {
-                                let fallback = item.text ?? item.urlString ?? item.title
-                                provider.registerObject(fallback as NSString, visibility: .all)
-                                provider.suggestedName = item.title
-                                return provider
-                            }
-                        }
-                        provider.registerObject(url, visibility: .all)
-                    } else if let str = writer as? NSString {
-                        provider.registerObject(str, visibility: .all)
-                    } else if let fallback = item.text ?? item.urlString {
-                        provider.registerObject(fallback as NSString, visibility: .all)
-                    }
-                    provider.suggestedName = item.title
-                    return provider
                 }
+                provider.registerObject(url, visibility: .all)
+            } else if let str = writer as? NSString {
+                provider.registerObject(str, visibility: .all)
+            } else if let fallback = item.text ?? item.urlString {
+                provider.registerObject(fallback as NSString, visibility: .all)
+            }
+            provider.suggestedName = item.title
+            return provider
         }
     }
 }
@@ -833,7 +814,12 @@ private struct MinimizedDownloadThumbnail: View {
                 NSWorkspace.shared.activateFileViewerSelecting([file.url])
             }
         }
-        .modifier(RecentDownloadDragModifier(url: file.url))
+        .dragOut {
+            let provider = NSItemProvider()
+            provider.registerObject(file.url as NSURL, visibility: .all)
+            provider.suggestedName = file.url.lastPathComponent
+            return provider
+        }
     }
 
     @ViewBuilder

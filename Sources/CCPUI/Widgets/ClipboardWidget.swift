@@ -3,6 +3,7 @@
 
 import CCPKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Clipboard history — the first widget that keeps sampling while the panel is
 /// shut so entries are warm when the panel opens.
@@ -266,6 +267,7 @@ private struct ClipboardRow: View {
             .accessibilityAction(named: "Copy") { copyAndPaste() }
             .accessibilityAction(named: "Delete") { adapter.remove(entry) }
             .accessibilityElement(children: .contain)
+            .dragOut { dragProvider(for: entry) }
             .overlay(alignment: .topTrailing) {
                 if didCopy {
                     Text("Copied")
@@ -362,5 +364,37 @@ private struct ClipboardRow: View {
                 withAnimation(.easeOut(duration: 0.2)) { didCopy = false }
             }
         }
+    }
+
+    /// Drags this row out — onto the Notes well, the shelf, or any app.
+    /// Gated by `dragOut` while editing, where drags reorder widgets.
+    private func dragProvider(for entry: ClipboardEntry) -> NSItemProvider {
+        let provider = NSItemProvider()
+        provider.suggestedName = entry.preview
+        switch entry.kind {
+        case .text:
+            provider.registerObject(entry.text as NSString, visibility: .all)
+        case .files:
+            // One live file drags as the file itself; anything else drags
+            // as paths, so a deleted file lands as text instead of an
+            // accept-with-no-effect drop, and every line still lands whole.
+            if entry.filePaths.count == 1,
+               let path = entry.filePaths.first,
+               FileManager.default.fileExists(atPath: path) {
+                provider.registerObject(URL(fileURLWithPath: path) as NSURL, visibility: .all)
+                provider.registerObject(path as NSString, visibility: .all)
+            } else if let plainText = entry.plainText {
+                provider.registerObject(plainText as NSString, visibility: .all)
+            }
+        case .image:
+            if let data = adapter.imageData(for: entry) {
+                provider.registerDataRepresentation(forTypeIdentifier: UTType.png.identifier,
+                                                    visibility: .all) { completion in
+                    completion(data, nil)
+                    return nil
+                }
+            }
+        }
+        return provider
     }
 }

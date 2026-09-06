@@ -138,6 +138,12 @@ public enum BridgedClipboardImages {
         ClipboardImageStore.thumbnail(named: name)
     }
 
+    /// Full PNG bytes for a drag-out. Thumbnails stay previews; a drag
+    /// promises the real image.
+    public static func imageData(named name: String) -> Data? {
+        ClipboardImageStore.imageData(named: name)
+    }
+
     public static func fileThumbnail(atPath path: String) -> NSImage? {
         ClipboardImageStore.fileThumbnail(atPath: path)
     }

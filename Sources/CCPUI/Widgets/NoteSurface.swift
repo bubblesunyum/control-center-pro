@@ -14,6 +14,7 @@ struct NoteSurface: View {
     @Bindable var adapter: NotesAdapter
     /// Delete whatever is shown, through the widget's confirmation.
     let onDeleteSelected: () -> Void
+    @State private var isDropTargeted = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,6 +35,17 @@ struct NoteSurface: View {
         }
         .frame(maxWidth: .infinity)
         .noteInsetChrome()
+        .overlay {
+            if isDropTargeted {
+                RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                    .stroke(Color.accentColor, lineWidth: Stroke.hairline)
+            }
+        }
+        // Clipboard rows, Finder files and browser text all land here; images
+        // have no text form and spring back unaccepted.
+        .onDrop(of: [.plainText, .text, .fileURL, .url], isTargeted: $isDropTargeted) { providers in
+            adapter.acceptDrop(providers: providers)
+        }
     }
 }
 

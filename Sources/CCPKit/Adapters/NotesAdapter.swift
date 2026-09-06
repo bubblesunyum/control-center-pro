@@ -171,6 +171,27 @@ public struct NotesDocument: Codable, Equatable, Sendable {
         notes[index].modifiedAt = text.isEmpty ? nil : modifiedAt
     }
 
+    /// Append a fragment behind a blank line on the named note, leaving
+    /// selection alone. A slow-resolving drop lands where it was dropped,
+    /// not on whatever tab is selected when the loads finish.
+    public mutating func appendText(_ fragment: String, to id: UUID, modifiedAt: Date) {
+        guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
+        let base = notes[index].text
+        let combined: String
+        if base.isEmpty {
+            combined = fragment
+        } else if base.hasSuffix("\n\n") {
+            combined = base + fragment
+        } else if base.hasSuffix("\n") {
+            combined = base + "\n" + fragment
+        } else {
+            combined = base + "\n\n" + fragment
+        }
+        guard combined != base else { return }
+        notes[index].text = combined
+        notes[index].modifiedAt = modifiedAt
+    }
+
     public mutating func applyRetention(_ retention: NoteRetention, now: Date) {
         for index in notes.indices where NotesSupport.shouldClear(
             lastEdited: notes[index].modifiedAt, now: now, retention: retention
@@ -1483,6 +1504,110 @@ public final class NotesAdapter {
         pasteboard.setString(text, forType: .string)
     }
 
+    /// Append a dropped fragment to the selected note, separated from
+    /// existing text by a blank line. The clipboard-to-notes drag lands
+    /// here, and so does any Finder or browser drop on the note well.
+    public func appendDroppedText(_ dropped: String) {
+        appendDroppedText(dropped, to: selectedNoteID)
+    }
+
+    /// Append to the note selected at drop time, not at resolve time: a
+    /// slow-resolving drop must land where it was dropped, without yanking
+    /// a tab the user has since moved away from.
+    func appendDroppedText(_ dropped: String, to noteID: UUID?) {
+        let fragment = dropped.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !fragment.isEmpty, hasLoaded, !isReplacingText,
+              let noteID, var document else { return }
+        let before = document
+        document.appendText(fragment, to: noteID, modifiedAt: Date())
+        guard document != before else { return }
+        self.document = document
+        notes = document.notes
+        if noteID == selectedNoteID {
+            isReplacingText = true
+            text = document.notes.first(where: { $0.id == noteID })?.text ?? text
+            isReplacingText = false
+        }
+        scheduleSave()
+        dirtyPadIDs.insert(noteID)
+        scheduleCraftPush()
+    }
+
+    /// Resolve dropped providers into note text: files contribute paths,
+    /// links their address, text itself. Images have no text form and are
+    /// declined, so an image drag springs back instead of appending nothing.
+    /// True when at least one provider is viable, with the appends landing
+    /// async as each load finishes, in provider order.
+    @discardableResult
+    public func acceptDrop(providers: [NSItemProvider]) -> Bool {
+        let viable = providers.filter(Self.canResolveDrop)
+        guard !viable.isEmpty, let target = selectedNoteID else { return false }
+        Task { @MainActor [weak self] in
+            for provider in viable {
+                guard let fragment = await Self.droppedText(from: provider) else { continue }
+                self?.appendDroppedText(fragment, to: target)
+            }
+        }
+        return true
+    }
+
+    private static func canResolveDrop(_ provider: NSItemProvider) -> Bool {
+        provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+            || provider.hasItemConformingToTypeIdentifier(UTType.url.identifier)
+            || provider.canLoadObject(ofClass: NSString.self)
+    }
+
+    private static func droppedText(from provider: NSItemProvider) async -> String? {
+        if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier),
+           let url = await loadDropURL(from: provider), url.isFileURL,
+           !isDragShim(url, provider: provider) {
+            return url.path
+        }
+        // A file URL also satisfies `.url`, so these stay declined here: a
+        // file that fell out of the branch above is a shim, and its content
+        // waits in the text branch — a `file://` address string is never
+        // what the note should hold.
+        if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier),
+           let url = await loadDropURL(from: provider), !url.isFileURL {
+            return url.absoluteString
+        }
+        // Explicit only: every file-URL provider implicitly vends its
+        // `file://` address as a string, which must never land in a note.
+        if provider.vendsExplicitText,
+           let string = await loadDropString(from: provider) {
+            return string as String
+        }
+        return nil
+    }
+
+    /// Shelf text/link rows dual-register a temp-file URL alongside their
+    /// real text, so the file branch would file a rotting /tmp path instead
+    /// of the content. A temp-dir file that explicitly vends text is that
+    /// shim: real /tmp drops from Finder vend no text, and our own
+    /// single-file drags vend the path itself as text, so preferring text
+    /// changes nothing there.
+    private static func isDragShim(_ url: URL, provider: NSItemProvider) -> Bool {
+        let temp = FileManager.default.temporaryDirectory.standardizedFileURL
+        return url.standardizedFileURL.path.hasPrefix(temp.path + "/")
+            && provider.vendsExplicitText
+    }
+
+    private static func loadDropURL(from provider: NSItemProvider) async -> URL? {
+        await withCheckedContinuation { continuation in
+            _ = provider.loadObject(ofClass: URL.self) { object, _ in
+                continuation.resume(returning: object as? URL)
+            }
+        }
+    }
+
+    private static func loadDropString(from provider: NSItemProvider) async -> NSString? {
+        await withCheckedContinuation { continuation in
+            _ = provider.loadObject(ofClass: NSString.self) { object, _ in
+                continuation.resume(returning: object as? NSString)
+            }
+        }
+    }
+
     public var isEmpty: Bool { text.isEmpty }
 
     /// The bundle Notes syncs towards. Craft ships under its maker's old name,
@@ -1571,6 +1696,17 @@ public final class NotesAdapter {
             if response == .OK, let url = savePanel.url {
                 try? content.write(to: url, atomically: true, encoding: .utf8)
             }
+        }
+    }
+}
+
+private extension NSItemProvider {
+    /// Whether text was explicitly registered, rather than merely coercible:
+    /// every file-URL provider implicitly loads its `file://` address as a
+    /// string, which must never land in a note.
+    var vendsExplicitText: Bool {
+        registeredTypeIdentifiers.contains {
+            UTType($0)?.conforms(to: .text) == true
         }
     }
 }
