@@ -28,6 +28,7 @@ public struct SystemStatsSnapshot: Sendable, Equatable {
     public var gpuTemperature: Double?
     public var batteryTemperature: Double?
     public var batteryCharge: Int? // 0...100
+    public var batteryHealthPercent: Double? // max capacity vs design, 0...100
     public var batteryIsCharging: Bool
     public var batteryHasBattery: Bool
     public var batteryHistory: [Double] // 0...1 fraction
@@ -53,6 +54,7 @@ public struct SystemStatsSnapshot: Sendable, Equatable {
         gpuTemperature: Double? = nil,
         batteryTemperature: Double? = nil,
         batteryCharge: Int? = nil,
+        batteryHealthPercent: Double? = nil,
         batteryIsCharging: Bool = false,
         batteryHasBattery: Bool = false,
         batteryHistory: [Double] = [],
@@ -77,6 +79,7 @@ public struct SystemStatsSnapshot: Sendable, Equatable {
         self.gpuTemperature = gpuTemperature
         self.batteryTemperature = batteryTemperature
         self.batteryCharge = batteryCharge
+        self.batteryHealthPercent = batteryHealthPercent
         self.batteryIsCharging = batteryIsCharging
         self.batteryHasBattery = batteryHasBattery
         self.batteryHistory = batteryHistory
@@ -122,6 +125,7 @@ public struct SystemStatsSample: Sendable, Equatable {
     public var gpuTemperature: Double?
     public var batteryTemperature: Double?
     public var batteryCharge: Int?
+    public var batteryHealthPercent: Double?
     public var batteryIsCharging: Bool?
     public var batteryHasBattery: Bool?
     public var netDownBytesPerSec: Double?
@@ -142,6 +146,7 @@ public struct SystemStatsSample: Sendable, Equatable {
         gpuTemperature: Double? = nil,
         batteryTemperature: Double? = nil,
         batteryCharge: Int? = nil,
+        batteryHealthPercent: Double? = nil,
         batteryIsCharging: Bool? = nil,
         batteryHasBattery: Bool? = nil,
         netDownBytesPerSec: Double? = nil,
@@ -161,6 +166,7 @@ public struct SystemStatsSample: Sendable, Equatable {
         self.gpuTemperature = gpuTemperature
         self.batteryTemperature = batteryTemperature
         self.batteryCharge = batteryCharge
+        self.batteryHealthPercent = batteryHealthPercent
         self.batteryIsCharging = batteryIsCharging
         self.batteryHasBattery = batteryHasBattery
         self.netDownBytesPerSec = netDownBytesPerSec
@@ -198,6 +204,7 @@ public final class LiveSystemStatsSource: SystemStatsSource {
             gpuTemperature: temps.gpu,
             batteryTemperature: temps.battery,
             batteryCharge: power.chargePercent,
+            batteryHealthPercent: power.healthPercent,
             batteryIsCharging: power.isCharging,
             batteryHasBattery: power.hasBattery,
             netDownBytesPerSec: network.downBytesPerSec,
@@ -368,6 +375,9 @@ public final class SystemStatsAdapter {
             if next.batteryIsCharging {
                 next.batteryHistory = appending(next.batteryHistory, value: Double(charge) / 100.0)
             }
+        }
+        if let health = sample.batteryHealthPercent {
+            next.batteryHealthPercent = health
         }
 
         if let down = sample.netDownBytesPerSec {

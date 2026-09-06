@@ -32,6 +32,21 @@ final class SystemStatsAdapterTests: XCTestCase {
         XCTAssertEqual(adapter.snapshot.memoryPressure, .warning)
     }
 
+    func testReportsBatteryHealthFromSource() async {
+        let source = FakeSystemStatsSource(sample: SystemStatsSample(
+            batteryCharge: 82,
+            batteryHealthPercent: 94,
+            batteryHasBattery: true
+        ))
+        let adapter = SystemStatsAdapter(source: source)
+
+        await adapter.refresh()
+
+        XCTAssertEqual(adapter.snapshot.batteryCharge, 82)
+        XCTAssertEqual(adapter.snapshot.batteryHealthPercent, 94)
+        XCTAssertEqual(adapter.snapshot.batteryHasBattery, true)
+    }
+
     func testReportsTemperaturesFromSource() async {
         let source = FakeSystemStatsSource(sample: SystemStatsSample(
             cpuTemperature: 65,

@@ -62,12 +62,14 @@ public struct BridgedTemperatureSample: Sendable, Equatable {
 /// One power reading, covering the built-in battery when present.
 public struct BridgedPowerSample: Sendable, Equatable {
     public var chargePercent: Int?
+    public var healthPercent: Double? // max capacity vs design, 0...100
     public var isCharging: Bool
     public var externalConnected: Bool
     public var hasBattery: Bool
 
-    public init(chargePercent: Int? = nil, isCharging: Bool = false, externalConnected: Bool = false, hasBattery: Bool = false) {
+    public init(chargePercent: Int? = nil, healthPercent: Double? = nil, isCharging: Bool = false, externalConnected: Bool = false, hasBattery: Bool = false) {
         self.chargePercent = chargePercent
+        self.healthPercent = healthPercent
         self.isCharging = isCharging
         self.externalConnected = externalConnected
         self.hasBattery = hasBattery
@@ -274,6 +276,7 @@ public actor BridgedMetricsSampler {
         let reading = sampler.sample()
         return BridgedPowerSample(
             chargePercent: reading.chargePercent,
+            healthPercent: reading.healthPercent,
             isCharging: reading.isCharging,
             externalConnected: reading.externalConnected,
             hasBattery: reading.hasBattery

@@ -7,7 +7,7 @@ import Darwin
 import SwiftUI
 
 /// The flagship widget: CPU, GPU, Memory and Battery with live graphs,
-/// per-app breakdowns and ¾-circle temperature gauges.
+/// per-app breakdowns and expandable detail rows.
 ///
 /// This is a CCP port of vorssaint's `SystemSection` (temperatures +
 /// hardware usage + memory + uptime) re-expressed as a glass card inside
@@ -21,12 +21,12 @@ import SwiftUI
 /// (6) "Swap" not "Swap used"
 /// (7) graphs a bit taller
 /// (8) Memory owns the chevron; its expansion shows what Pressure used to show
-/// (9) Memory has a horizontal usage bar next to its title, with a percent
-///     readout like CPU/GPU
+/// (9) full-width usage bar beside each title — every bar shares the same
+///     leading edge and width
 /// (11) Battery graph only when charging
 /// (12) distinct color per section, reused for every colored element in it
-/// (13) no separate temperature section — each gauge lives inside its section
-///     as a ¾-circle speedometer, with (12)'s color.
+/// (13) no header gauges — temperatures are rows in the expanded view
+/// (14) battery expansion adds a Health row
 
 @MainActor
 public final class SystemStatsWidget: CCPWidget {
@@ -64,6 +64,12 @@ private let chevronWidth: CGFloat = 8
 /// Title x-offset (chevron + the header HStack's 6pt spacing); breakdown
 /// rows hang here so process icons align with the title's left edge.
 private let titleIndent: CGFloat = chevronWidth + 6
+/// Fixed title width, fitting "Battery" (the longest) at caption — every
+/// header bar starts at the same x and shares one width. Bars carry 10pt
+/// leading, completing the 16pt title-to-bar gap with the stack's 6.
+/// minWidth, not width, so large Dynamic Type grows the title instead of
+/// clipping it.
+private let sectionTitleWidth: CGFloat = 56
 
 private struct BreakdownRow: Identifiable {
     let id: Int32
@@ -128,6 +134,11 @@ private struct SystemStatsContent: View {
                 } else {
                     placeholderGraph(history: adapter.snapshot.cpuHistory)
                 }
+                if let temp = adapter.snapshot.cpuTemperature {
+                    detailRow("Temperature", value: "\(Int(temp.rounded()))°", tint: temperatureTint(temp))
+                        .accessibilityLabel("CPU temperature \(Int(temp.rounded())) degrees")
+                        .help(String(format: "%.0f °C", temp))
+                }
             }
             breakdownList(for: .cpu)
         }
@@ -142,16 +153,9 @@ private struct SystemStatsContent: View {
                 Text("CPU")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.primary)
-                // (13) temperature gauge inside its section — close to title, left of bar
-                if let temp = adapter.snapshot.cpuTemperature {
-                    TemperatureGauge(temperature: temp)
-                } else {
-                    // Keep bar position consistent when no temp reading
-                    Color.clear.frame(width: 28, height: 1)
-                }
-                Spacer()
+                    .frame(minWidth: sectionTitleWidth, alignment: .leading)
                 UsageBar(fraction: adapter.snapshot.cpuUsage ?? 0, tint: cpuColor)
-                    .frame(width: 86)
+                    .padding(.leading, 10)
                 Text(adapter.snapshot.cpuUsage.map { percent($0) } ?? "--")
                     .font(.caption.weight(.semibold))
                     .monospacedDigit()
@@ -176,6 +180,11 @@ private struct SystemStatsContent: View {
                 } else {
                     placeholderGraph(history: adapter.snapshot.gpuHistory)
                 }
+                if let temp = adapter.snapshot.gpuTemperature {
+                    detailRow("Temperature", value: "\(Int(temp.rounded()))°", tint: temperatureTint(temp))
+                        .accessibilityLabel("GPU temperature \(Int(temp.rounded())) degrees")
+                        .help(String(format: "%.0f °C", temp))
+                }
             }
             breakdownList(for: .gpu)
         }
@@ -190,14 +199,9 @@ private struct SystemStatsContent: View {
                 Text("GPU")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.primary)
-                if let temp = adapter.snapshot.gpuTemperature {
-                    TemperatureGauge(temperature: temp)
-                } else {
-                    Color.clear.frame(width: 28, height: 1)
-                }
-                Spacer()
+                    .frame(minWidth: sectionTitleWidth, alignment: .leading)
                 UsageBar(fraction: adapter.snapshot.gpuUsage ?? 0, tint: gpuColor)
-                    .frame(width: 86)
+                    .padding(.leading, 10)
                 Text(adapter.snapshot.gpuUsage.map { percent($0) } ?? "--")
                     .font(.caption.weight(.semibold))
                     .monospacedDigit()
@@ -229,7 +233,6 @@ private struct SystemStatsContent: View {
                     memorySecondaryRow("Compressed", adapter.snapshot.memoryCompressed)
                     memorySecondaryRow("Cached Files", adapter.snapshot.memoryCached)
                 }
-                .padding(.leading, 16)
                 breakdownList(for: .memory)
             }
         }
@@ -261,6 +264,7 @@ private struct SystemStatsContent: View {
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
         }
+        .padding(.leading, titleIndent)
     }
 
     /// (text, tint) for the pressure pill — only warning states earn one.
@@ -273,7 +277,6 @@ private struct SystemStatsContent: View {
     }
 
     // (8) chevron now belongs to Memory itself
-    // (9) horizontal bar next to Memory title, showing total physical usage
     private var memoryHeader: some View {
         let snapshot = adapter.snapshot
         let used = snapshot.memoryUsed
@@ -288,10 +291,10 @@ private struct SystemStatsContent: View {
                 Text("Memory")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.primary)
-                Spacer()
-                // (9) usage bar beside title — with pressure gradient (new tweak 8)
+                    .frame(minWidth: sectionTitleWidth, alignment: .leading)
+                // (9) full-width bar — with pressure gradient (new tweak 8)
                 UsageBar(fraction: fraction ?? 0, tint: memoryColor, warningTint: memoryPressureWarningTint)
-                    .frame(width: 86)
+                    .padding(.leading, 10)
                 Text(valueText)
                     .font(.caption.weight(.semibold))
                     .monospacedDigit()
@@ -311,11 +314,22 @@ private struct SystemStatsContent: View {
         }
     }
 
-    // MARK: - Battery (3)(4)(11)(13)
+    // MARK: - Battery (3)(4)(11)(14)
 
     private var batterySection: some View {
         sectionContainer(kind: .battery, color: batteryColor) {
             batteryHeader
+            if expanded.contains(.battery) {
+                if let temp = adapter.snapshot.batteryTemperature {
+                    detailRow("Temperature", value: "\(Int(temp.rounded()))°", tint: temperatureTint(temp))
+                        .accessibilityLabel("Battery temperature \(Int(temp.rounded())) degrees")
+                        .help(String(format: "%.0f °C", temp))
+                }
+                if let health = adapter.snapshot.batteryHealthPercent {
+                    detailRow("Health", value: String(format: "%.0f%%", health))
+                        .accessibilityLabel(String(format: "Battery health %.0f percent", health))
+                }
+            }
             // (3) energy apps now live under battery expansion, no separate header
             // Graph removed per design — battery shows charge bar only
             breakdownList(for: .battery)
@@ -335,14 +349,9 @@ private struct SystemStatsContent: View {
                 Text("Battery")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.primary)
-                if let temp = adapter.snapshot.batteryTemperature {
-                    TemperatureGauge(temperature: temp)
-                } else {
-                    Color.clear.frame(width: 28, height: 1)
-                }
-                Spacer()
+                    .frame(minWidth: sectionTitleWidth, alignment: .leading)
                 UsageBar(fraction: fraction, tint: chargeTint(charge ?? 0))
-                    .frame(width: 86)
+                    .padding(.leading, 10)
                 Text(charge.map { "\($0)%" } ?? "--")
                     .font(.caption.weight(.semibold))
                     .monospacedDigit()
@@ -406,17 +415,30 @@ private struct SystemStatsContent: View {
     @ViewBuilder
     private func memorySecondaryRow(_ title: String, _ bytes: UInt64?) -> some View {
         if let bytes {
-            HStack(spacing: 8) {
-                Text(title)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(Self.bytes(bytes))
-                    .font(.system(size: 11, weight: .medium))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            }
+            detailRow(title, value: Self.bytes(bytes))
         }
+    }
+
+    /// Plain title/value detail row for the expanded view.
+    private func detailRow(_ title: String, value: String, tint: Color = .secondary) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.system(size: 11, weight: .medium))
+                .monospacedDigit()
+                .foregroundStyle(tint)
+        }
+        .padding(.leading, titleIndent)
+    }
+
+    /// Hot temperatures color the value; anything else rests secondary.
+    private func temperatureTint(_ temperature: Double) -> Color {
+        if temperature >= 85 { return energyRed }
+        if temperature >= 75 { return energyYellow }
+        return .secondary
     }
 
     private func emptyBreakdownText(for kind: SectionKind) -> String {
@@ -655,37 +677,6 @@ private struct ActivityMonitorButton: View {
 }
 
 // MARK: - Small views
-
-/// Temperature readout — number only, colored when hot.
-private struct TemperatureGauge: View {
-    let temperature: Double?
-    var size: CGFloat = 32
-
-    private var warningColor: Color? {
-        guard let temp = temperature else { return nil }
-        if temp >= 85 { return Color.red }
-        if temp >= 75 { return Color.yellow }
-        return nil
-    }
-
-    var body: some View {
-        Group {
-            if let temp = temperature {
-                Text("\(Int(temp.rounded()))°")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(warningColor ?? .secondary)
-            } else {
-                Text("--")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(minWidth: 28, alignment: .trailing)
-        .help(temperature.map { String(format: "%.0f °C", $0) } ?? "No reading")
-        .accessibilityLabel(temperature.map { String(format: "%.0f degrees", $0) } ?? "No temperature")
-    }
-}
 
 private struct BreakdownProcessRow: View {
     let row: BreakdownRow
