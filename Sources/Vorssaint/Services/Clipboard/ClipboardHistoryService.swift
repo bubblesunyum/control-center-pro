@@ -159,7 +159,13 @@ final class ClipboardHistoryService: ObservableObject {
         if list.count == 1, let entry = list.first {
             switch entry.kind {
             case .text:
+                // ── CCP PATCH ── a text entry captured with its RTF/HTML
+                // repastes rich-first with the plain string alongside, so
+                // styled targets keep formatting and plain targets still
+                // paste. See PATCHES.md.
+                if let rich = Self.richSingleWrite(for: entry) { return rich }
                 return { $0.setString(entry.text, forType: .string) }
+                // ── END CCP PATCH ─────────────────────────────────────────
             case .image:
                 guard let name = entry.imageFile,
                       let data = ClipboardImageStore.imageData(named: name) else { return nil }
@@ -201,6 +207,31 @@ final class ClipboardHistoryService: ObservableObject {
             return plannedWrite(for: [first])
         }
     }
+
+    // ── CCP PATCH ─────────────────────────────────────────────────────────
+    /// What a single text entry captured with formatting puts back: one item
+    /// carrying the original RTF/HTML blobs verbatim, plus the plain string
+    /// for targets that only take text. Opaque bytes throughout — no
+    /// attributed-string parsing, so capture and restore cannot disagree
+    /// about what styling means. Nil when neither blob survived (nothing
+    /// named, or purged from the store); the caller then pastes plain, which
+    /// is a graceful degradation rather than an abort, because the text
+    /// itself is inline in the entry. See PATCHES.md.
+    private static func richSingleWrite(for entry: ClipboardHistoryEntry)
+        -> ((NSPasteboard) -> Void)? {
+        guard entry.hasRichContent else { return nil }
+        let rtf = entry.richRTFFile.flatMap(ClipboardRichStore.richData(named:))
+        let html = entry.richHTMLFile.flatMap(ClipboardRichStore.richData(named:))
+        guard rtf != nil || html != nil else { return nil }
+        return { pasteboard in
+            let item = NSPasteboardItem()
+            if let rtf { item.setData(rtf, forType: .rtf) }
+            if let html { item.setData(html, forType: .html) }
+            pasteboard.writeObjects([item])
+            pasteboard.setString(entry.text, forType: .string)
+        }
+    }
+    // ── END CCP PATCH ─────────────────────────────────────────────────────
 
     /// Text and images interleaved in list order, as one attributed string:
     /// rich targets (Notes, Mail, TextEdit) paste everything together. Image
@@ -280,7 +311,14 @@ final class ClipboardHistoryService: ObservableObject {
         else { return false }
         if entries[index].text == text { return true }
         let previousEntries = entries
-        entries[index].text = text
+        // ── CCP PATCH ── edited text is no longer what was styled, so the
+        // named blobs go with it; the save sweep reaps the orphaned files.
+        let current = entries[index]
+        entries[index] = ClipboardHistoryEntry(id: current.id,
+                                               text: text,
+                                               copiedAt: current.copiedAt,
+                                               pinnedAt: current.pinnedAt)
+        // ── END CCP PATCH ─────────────────────────────────────────────────
         trimToLimit()
         guard entries.contains(where: { $0.id == entry.id }),
               ClipboardHistoryEditing.preservesPinnedEntries(from: previousEntries, in: entries)
@@ -543,7 +581,10 @@ final class ClipboardHistoryService: ObservableObject {
     private enum CapturedContent {
         case files([String])
         case image((data: Data, width: Int, height: Int))
-        case text(String)
+        // ── CCP PATCH ── the plain string plus the original RTF/HTML blobs
+        // when the copy carried them. See PATCHES.md.
+        case text(plain: String, rtf: Data?, html: Data?)
+        // ── END CCP PATCH ─────────────────────────────────────────────────
     }
 
     /// Establishes the starting change count on the same background lane used
@@ -608,7 +649,7 @@ final class ClipboardHistoryService: ObservableObject {
                 switch content {
                 case .files(let paths): self.promoteFiles(paths)
                 case .image(let image): self.promoteImage(image)
-                case .text(let text): self.promote(text)
+                case .text(let plain, let rtf, let html): self.promote(plain: plain, rtf: rtf, html: html)
                 }
             }
         }
@@ -643,8 +684,28 @@ final class ClipboardHistoryService: ObservableObject {
             webURLString: webURLString(from: pasteboard),
             plainText: pasteboard.string(forType: .string)
         ) else { return nil }
-        return .text(text)
+        // ── CCP PATCH ── the same two rich types PastePlainService already
+        // reads, captured as opaque bytes on this same lane read. Over-cap
+        // blobs are dropped with the plain text kept, never the reverse.
+        return .text(plain: text,
+                     rtf: copiedRichData(from: pasteboard, forType: .rtf),
+                     html: copiedRichData(from: pasteboard, forType: .html))
+        // ── END CCP PATCH ─────────────────────────────────────────────────
     }
+
+    // ── CCP PATCH ─────────────────────────────────────────────────────────
+    /// One rich blob off the pasteboard, or nil when absent or too large to
+    /// keep. Runs on the shared pasteboard lane with the rest of the read.
+    private static let maxRichBytes = 2 * 1024 * 1024
+
+    private static func copiedRichData(from pasteboard: NSPasteboard,
+                                       forType type: NSPasteboard.PasteboardType) -> Data? {
+        guard let data = pasteboard.data(forType: type), !data.isEmpty,
+              data.count <= maxRichBytes
+        else { return nil }
+        return data
+    }
+    // ── END CCP PATCH ─────────────────────────────────────────────────────
 
     private static let maxCopiedFiles = 100
     private static let maxImageBytes = 16 * 1024 * 1024
@@ -749,7 +810,15 @@ final class ClipboardHistoryService: ObservableObject {
         return (scheme == "http" || scheme == "https") && url.host != nil
     }
 
-    private func promote(_ raw: String) {
+    // ── CCP PATCH ─────────────────────────────────────────────────────────
+    /// Promotes a text copy with its formatting blobs. Dedupe stays keyed on
+    /// the plain string, matching search, preview and the pre-rich history:
+    /// re-copying identical text refreshes the entry with whatever styling
+    /// the latest copy carried (none, when the latest copy was plain). Blobs
+    /// are stored only after the entry is known-keepable, so a rejected
+    /// capture leaves no orphaned files; a superseded entry's blobs are
+    /// swept after the save, like purged images. See PATCHES.md.
+    private func promote(plain raw: String, rtf: Data?, html: Data?) {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.count <= ClipboardHistoryEditing.maxCharacters else { return }
         if UserDefaults.standard.bool(forKey: DefaultsKey.clipboardHistorySkipSensitive),
@@ -757,20 +826,28 @@ final class ClipboardHistoryService: ObservableObject {
             return
         }
 
+        let richRTFFile = rtf.flatMap { ClipboardRichStore.store($0, fileExtension: "rtf") }
+        let richHTMLFile = html.flatMap { ClipboardRichStore.store($0, fileExtension: "html") }
+
         let existing = entries.first(where: { $0.kind == .text && $0.text == text })
         entries.removeAll { $0.kind == .text && $0.text == text }
         if let existing {
             insertPromoted(ClipboardHistoryEntry(id: existing.id,
                                                  text: text,
                                                  copiedAt: Date(),
-                                                 pinnedAt: existing.pinnedAt))
+                                                 pinnedAt: existing.pinnedAt,
+                                                 richRTFFile: richRTFFile,
+                                                 richHTMLFile: richHTMLFile))
         } else {
-            insertPromoted(ClipboardHistoryEntry(text: text))
+            insertPromoted(ClipboardHistoryEntry(text: text,
+                                                 richRTFFile: richRTFFile,
+                                                 richHTMLFile: richHTMLFile))
         }
         normalizeEntryOrder()
         trimToLimit()
         save()
     }
+    // ── END CCP PATCH ─────────────────────────────────────────────────────
 
     func trimToLimit() {
         let limit = Defaults.sanitizedClipboardHistoryLimit(
@@ -866,6 +943,9 @@ final class ClipboardHistoryService: ObservableObject {
         trimToLimit()
         // Sweep image files that lost their entry (crash between write and save).
         ClipboardImageStore.cleanup(keeping: Set(entries.compactMap(\.imageFile)))
+        // ── CCP PATCH ── same sweep for rich-text blobs. See PATCHES.md.
+        ClipboardRichStore.cleanup(keeping: Self.richFileNames(in: entries))
+        // ── END CCP PATCH ─────────────────────────────────────────────────
         // A history read from the legacy blob migrates right away instead of
         // waiting for the next copy: launching once is enough to leave
         // UserDefaults behind.
@@ -907,6 +987,9 @@ final class ClipboardHistoryService: ObservableObject {
                         self.entries = encoded.entries
                     }
                     ClipboardImageStore.cleanup(keeping: Set(self.entries.compactMap(\.imageFile)))
+                    // ── CCP PATCH ── same sweep for rich-text blobs. See PATCHES.md.
+                    ClipboardRichStore.cleanup(keeping: Self.richFileNames(in: self.entries))
+                    // ── END CCP PATCH ─────────────────────────────────────────
                 }
             }
             guard let url = Self.storeURL else {
@@ -1333,6 +1416,60 @@ final class ClipboardHistoryService: ObservableObject {
     private func clampedQuickSelectionIndex(for count: Int) -> Int {
         min(max(quickSelectionIndex, 0), max(count - 1, 0))
     }
+}
+
+// ── CCP PATCH ─────────────────────────────────────────────────────────────
+/// File-backed storage for captured rich-text blobs: RTF/HTML sit beside the
+/// history JSON in Application Support (never base64'd into it), named by
+/// UUID and swept against the live entry list after every save — the same
+/// shape as `ClipboardImageStore`, minus the thumbnail cache, since blobs
+/// are only ever written back to the pasteboard verbatim. See PATCHES.md.
+enum ClipboardRichStore {
+    static var directory: URL? {
+        PrivateFileStore.containerURL?
+            .appendingPathComponent("ClipboardRich", isDirectory: true)
+    }
+
+    static func store(_ data: Data, fileExtension: String) -> String? {
+        guard let directory else { return nil }
+        PrivateFileStore.createDirectory(at: directory)
+        let name = UUID().uuidString + "." + fileExtension
+        guard PrivateFileStore.write(data, to: directory.appendingPathComponent(name)) else {
+            return nil
+        }
+        return name
+    }
+
+    /// Nil for a missing store, an unknown name, or a name that escapes the
+    /// directory: entry filenames decode from the history file, so a
+    /// tampered history must not turn a paste into a read from elsewhere.
+    static func richData(named name: String) -> Data? {
+        guard let directory,
+              !name.contains("/"), !name.contains("\\"), !name.hasPrefix(".")
+        else { return nil }
+        return try? Data(contentsOf: directory.appendingPathComponent(name))
+    }
+
+    static func cleanup(keeping names: Set<String>) {
+        guard let directory,
+              let files = try? FileManager.default.contentsOfDirectory(at: directory,
+                                                                       includingPropertiesForKeys: nil)
+        else { return }
+        for file in files where !names.contains(file.lastPathComponent) {
+            try? FileManager.default.removeItem(at: file)
+        }
+    }
+}
+// ── END CCP PATCH ─────────────────────────────────────────────────────────
+
+private extension ClipboardHistoryService {
+    // ── CCP PATCH ─────────────────────────────────────────────────────────
+    /// Every rich blob name the live entries still point at; the sweep keeps
+    /// exactly these. See PATCHES.md.
+    static func richFileNames(in entries: [ClipboardHistoryEntry]) -> Set<String> {
+        Set(entries.compactMap(\.richRTFFile)).union(entries.compactMap(\.richHTMLFile))
+    }
+    // ── END CCP PATCH ─────────────────────────────────────────────────────
 }
 
 /// File-backed storage for copied images: PNGs live in Application Support

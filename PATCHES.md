@@ -82,6 +82,44 @@ prefixes do — if upstream adds a file that must be excluded, remember the
 
 ---
 
+## `Sources/Vorssaint/Services/Clipboard/ClipboardHistory{Service,Support}.swift` — rich-text capture and restore (ccp-a5ss)
+
+**What.** Text history used to round-trip through the plain string only, so a
+styled copy pasted back plain. `ClipboardHistoryEntry` gains two optional
+filenames (`richRTFFile`, `richHTMLFile`, pinned `CodingKeys`, `decodeIfPresent`
+so old histories decode with no formatting to restore); a `ClipboardRichStore`
+keeps the opaque RTF/HTML blobs file-backed beside the history JSON, mirroring
+`ClipboardImageStore` minus the thumbnail cache; `readPasteboard` probes the
+same `.rtf`/`.html` types `PastePlainService` already reads (2MB cap each,
+plain kept when over); single-entry `plannedWrite` puts the blobs back verbatim
+on one `NSPasteboardItem` with the plain string alongside for text-only
+targets; a purged blob degrades to plain rather than aborting, since the text
+is inline; `updateText` drops the blobs (edited text is no longer what was
+styled); both post-save sweeps reap orphaned blobs. Dedupe, search, preview
+and batch-combine stay plain-keyed; multi-select re-paste stays plain. All new
+code fenced in `CCP PATCH` comments. `Tests/MetricsTests.swift` gains a fenced
+`CCP PATCH (ccp-a5ss)` block beside the other clipboard expects (round-trip,
+pre-rich decode) — it lives there rather than `CCPKitTests` because the engine
+type is internal and no test target imports `VorssaintEngines`; it runs under
+`./build.sh --test`.
+
+**Why.** Capture happens inside upstream's pasteboard poll and restore inside
+its write planner — a CCP-side observer would duplicate the poll and race it.
+The bridge/adapter need no changes: `copy()` looks the entry up by id, so the
+rich payload rides along untouched.
+
+**Deleting it.** Send upstream as one proposal: capture the two rich types
+beside `.string`, persist filenames, dual-write on restore. If accepted, this
+entry goes away entirely.
+
+**On merge.** Conflicts only if upstream touches capture (`readPasteboard`,
+`CapturedContent`, `promote`), the single-text arm of `plannedWrite`, the
+entry's `CodingKeys`/decoder, `updateText`, the two `cleanup` sweeps, or the
+clipboard expects in `Tests/MetricsTests.swift`.
+Reapply the fenced blocks.
+
+---
+
 ## `Sources/Vorssaint/Core/Permissions.swift` — UI overlay behind a hook
 
 **What.** Four lines. `requestAccessibility()` and `requestScreenRecording()`

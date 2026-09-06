@@ -554,6 +554,38 @@ struct MetricsTests {
         } else {
             expect(false, "clipboard image entry round-trips")
         }
+        // ── CCP PATCH (ccp-a5ss) ──────────────────────────────────────
+        // Rich-text history: entries naming blobs restore formatting, old
+        // histories decode plain. Lives here beside the other clipboard
+        // expects — CCPKitTests cannot see this internal engine type.
+        // See PATCHES.md.
+        let richEntry = ClipboardHistoryEntry(text: "styled",
+                                              richRTFFile: "a.rtf",
+                                              richHTMLFile: "a.html")
+        expect(richEntry.hasRichContent,
+               "a text entry naming rich blobs restores formatting on re-paste")
+        expect(!ClipboardHistoryEntry(text: "plain").hasRichContent
+                   && !ClipboardHistoryEntry(text: "", kind: .image, imageFile: "a.png").hasRichContent,
+               "plain text and non-text entries have no formatting to restore")
+        if let encoded = try? JSONEncoder().encode([richEntry]),
+           let decoded = try? JSONDecoder().decode([ClipboardHistoryEntry].self, from: encoded) {
+            expect(decoded.first?.richRTFFile == "a.rtf"
+                       && decoded.first?.richHTMLFile == "a.html"
+                       && decoded.first?.hasRichContent == true,
+                   "clipboard rich-text filenames round-trip through storage")
+        } else {
+            expect(false, "clipboard rich-text entry round-trips")
+        }
+        let preRichClipboardJSON = Data("""
+        [{"text":"hello","copiedAt":700000000,"kind":"text","filePaths":[]}]
+        """.utf8)
+        if let preRich = try? JSONDecoder().decode([ClipboardHistoryEntry].self, from: preRichClipboardJSON) {
+            expect(preRich.count == 1 && !preRich[0].hasRichContent,
+                   "clipboard histories saved before rich capture decode with plain re-paste")
+        } else {
+            expect(false, "clipboard pre-rich history decodes")
+        }
+        // ── END CCP PATCH (ccp-a5ss) ──────────────────────────────────
         expectEqual(imageEntry.preview, "1470×956",
                     "clipboard image preview shows the dimensions")
         expect(imageEntry.searchableText(imageLabel: "Imagem").contains("Imagem"),

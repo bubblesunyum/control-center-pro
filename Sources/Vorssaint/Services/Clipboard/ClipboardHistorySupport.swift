@@ -26,6 +26,14 @@ struct ClipboardHistoryEntry: Codable, Equatable, Identifiable {
     let imageHash: String?
     let imageWidth: Int?
     let imageHeight: Int?
+    // ── CCP PATCH ─────────────────────────────────────────────────────────
+    /// Rich-text blob names inside the clipboard rich store for `.text`
+    /// entries, captured alongside the plain string so a re-paste restores
+    /// the original formatting. Nil when the copy carried no RTF/HTML or
+    /// the blobs were over the size cap. See PATCHES.md.
+    let richRTFFile: String?
+    let richHTMLFile: String?
+    // ── END CCP PATCH ─────────────────────────────────────────────────────
 
     init(id: UUID = UUID(),
          text: String,
@@ -36,7 +44,12 @@ struct ClipboardHistoryEntry: Codable, Equatable, Identifiable {
          imageFile: String? = nil,
          imageHash: String? = nil,
          imageWidth: Int? = nil,
-         imageHeight: Int? = nil) {
+         imageHeight: Int? = nil,
+         // ── CCP PATCH ── rich-text filenames, defaulting nil so every
+         // existing call site keeps compiling. See PATCHES.md.
+         richRTFFile: String? = nil,
+         richHTMLFile: String? = nil) {
+        // ── END CCP PATCH ─────────────────────────────────────────────────
         self.id = id
         self.text = text
         self.copiedAt = copiedAt
@@ -47,11 +60,24 @@ struct ClipboardHistoryEntry: Codable, Equatable, Identifiable {
         self.imageHash = imageHash
         self.imageWidth = imageWidth
         self.imageHeight = imageHeight
+        // ── CCP PATCH ─────────────────────────────────────────────────────
+        self.richRTFFile = richRTFFile
+        self.richHTMLFile = richHTMLFile
+        // ── END CCP PATCH ─────────────────────────────────────────────────
     }
 
     var isPinned: Bool {
         pinnedAt != nil
     }
+
+    // ── CCP PATCH ─────────────────────────────────────────────────────────
+    /// Whether a re-paste can restore formatting: a text entry with at least
+    /// one rich blob still named. A purged blob degrades to plain rather
+    /// than aborting, since the text itself is inline in the entry.
+    var hasRichContent: Bool {
+        kind == .text && (richRTFFile != nil || richHTMLFile != nil)
+    }
+    // ── END CCP PATCH ─────────────────────────────────────────────────────
 
     var fileNames: [String] {
         filePaths.map { ($0 as NSString).lastPathComponent }
@@ -105,6 +131,10 @@ struct ClipboardHistoryEntry: Codable, Equatable, Identifiable {
 
     private enum CodingKeys: String, CodingKey {
         case id, text, copiedAt, pinnedAt, kind, filePaths, imageFile, imageHash, imageWidth, imageHeight
+        // ── CCP PATCH ── on-disk names for the rich-text filenames; pinned
+        // per the user's-data-outranks-code rule. See PATCHES.md.
+        case richRTFFile, richHTMLFile
+        // ── END CCP PATCH ─────────────────────────────────────────────────
     }
 
     init(from decoder: Decoder) throws {
@@ -120,6 +150,11 @@ struct ClipboardHistoryEntry: Codable, Equatable, Identifiable {
         imageHash = try container.decodeIfPresent(String.self, forKey: .imageHash)
         imageWidth = try container.decodeIfPresent(Int.self, forKey: .imageWidth)
         imageHeight = try container.decodeIfPresent(Int.self, forKey: .imageHeight)
+        // ── CCP PATCH ── histories written before rich capture decode with
+        // no formatting to restore, exactly as they always pasted.
+        richRTFFile = try container.decodeIfPresent(String.self, forKey: .richRTFFile)
+        richHTMLFile = try container.decodeIfPresent(String.self, forKey: .richHTMLFile)
+        // ── END CCP PATCH ─────────────────────────────────────────────────
     }
 }
 
