@@ -341,6 +341,13 @@ public final class NotesAdapter {
     // Push bookkeeping (ccp-2zi.5). The pad-to-document mapping is config,
     // like retention and selection — never note text.
     @ObservationIgnored private let craftDocumentsKey = "scratchpadCraftDocuments"
+    // Title sync (ccp-o2dh): the last Craft-confirmed title per pad, plus
+    // when the pad was last renamed locally. The pair is what makes a rename
+    // a syncable change — differing from the baseline is dirty in either
+    // direction, and the rename date settles both-sides-moved against the
+    // page root's mtime.
+    @ObservationIgnored private let syncedTitleKey = "scratchpadCraftTitles"
+    @ObservationIgnored private let titleRenamedAtKey = "scratchpadCraftTitleRenamedAt"
     // Which tabs the X hid (ccp-xc2j). UI state under its own key for the
     // same reason: the document bytes are upstream's, this set is ours.
     @ObservationIgnored private let closedTabsKey = "scratchpadClosedTabs"
@@ -615,6 +622,18 @@ public final class NotesAdapter {
     public func renameNote(_ id: UUID, to name: String) {
         guard let document, let next = document.renaming(id, to: name), persist(next) else { return }
         apply(next)
+        // An effectively-unchanged name (whitespace-only difference) commits
+        // nothing: stamping the LWW clock here would let a no-op outrank a
+        // genuinely newer remote rename.
+        guard next.notes.first(where: { $0.id == id })?.name != document.notes.first(where: { $0.id == id })?.name
+        else { return }
+        // A rename is a syncable change like an edit: stamp it for
+        // last-writer-wins and visit Craft on the next push, even when the
+        // text is clean. Unmapped pads keep the bit harmlessly — provisioning
+        // names the document from the pad, so the title converges at creation.
+        storeTitleRenameDate(Date(), for: id)
+        dirtyPadIDs.insert(id)
+        scheduleCraftPush()
     }
 
     /// Hide a tab. The doc is untouched — text, sync mapping and sidecar all
@@ -688,6 +707,8 @@ public final class NotesAdapter {
         guard persist(next) else { return false }
         dropSidecar(for: id)
         dropCraftDocumentID(for: id)
+        dropSyncedTitle(for: id)
+        dropTitleRenameDate(for: id)
         dropConflicts(for: id)
         dropStashIDs(for: id)
         dropSyncedAt(for: id)
@@ -975,17 +996,39 @@ public final class NotesAdapter {
             // noise, but deleted text reaching Craft would be data loss.
             guard self.document?.notes.contains(where: { $0.id == padID }) == true else { return true }
             setCraftDocumentID(newID, for: padID)
+            // Born named: the creation title IS the pad's name, so the title
+            // baseline starts converged — no rename PUT follows.
+            storeSyncedTitle(pad.name, for: padID)
             docID = newID
         }
         guard let docID else { return true }
+        // Unknown baseline reads as dirty: the push converges it. (A legacy
+        // mapping the pull saw first already recorded Craft's title there, so
+        // this only fires for pads the push reaches before any pull.)
+        let titleDirty = pad.name != syncedTitle(for: padID)
         let sidecar = sidecar(for: padID)
         let plan = sidecar.pushPlan(for: slices)
-        guard !plan.isEmpty else { return true }
+        guard !plan.isEmpty || titleDirty else { return true }
 
         var pendingError: Error?
+        var titleEcho: CraftBlock?
         var putEcho: [CraftBlock] = []
         var echoByInsert: [Int: [CraftBlock]] = [:]
         var deletesConfirmed = plan.deletes.isEmpty
+        if titleDirty {
+            // Its own leg, not the head of the content pipeline: a failed
+            // title must not starve the text behind it. Backpressure is the
+            // exception — another write into a throttled window only spends
+            // budget, so a rate-limited title skips the content legs.
+            do {
+                titleEcho = try await client.updateDocumentTitle(id: docID, title: pad.name)
+            } catch let titleError as CraftClientError {
+                pendingError = titleError
+                if case .rateLimited = titleError {
+                    throw titleError
+                }
+            }
+        }
         do {
             if !plan.updates.isEmpty {
                 putEcho = try await client.updateBlocks(plan.updates)
@@ -1014,13 +1057,29 @@ public final class NotesAdapter {
                 deletesConfirmed = true
             }
         } catch {
-            pendingError = error
+            // Backpressure wins the error: the retry delay answers the
+            // server's pacing, not the first failure's.
+            if pendingError == nil { pendingError = error }
+            if case .rateLimited = error as? CraftClientError { pendingError = error }
+        }
+        // The pad may be gone: the push awaited, and deleteNote's drops
+        // already ran. Storing now would resurrect sync state for a dead UUID
+        // that pulls never visit and UUIDs never reuse — leaking forever.
+        guard self.document?.notes.contains(where: { $0.id == padID }) == true else { return true }
+        // The echo's canonical markdown is the baseline, never what was
+        // sent — by the same fixed-point rule as the block sidecar, compared
+        // post-sanitise like the pull does. Recorded even on the way out: a
+        // later content failure must not un-confirm a title Craft holds.
+        if let titleEcho {
+            let confirmed = NotesSupport.sanitizedNoteName(titleEcho.markdown)
+            if !confirmed.isEmpty { storeSyncedTitle(confirmed, for: padID) }
         }
         storePushOutcome(padID: padID, sidecar: sidecar, text: padText, slices: slices,
                          putEcho: putEcho, postEchoByInsert: echoByInsert,
                          deletesConfirmed: deletesConfirmed)
         if let pendingError { throw pendingError }
-        return self.document?.notes.first(where: { $0.id == padID })?.text == padText
+        let current = self.document?.notes.first(where: { $0.id == padID })
+        return current?.text == padText && current?.name == pad.name
     }
 
     /// Observable for tests.
@@ -1092,6 +1151,48 @@ public final class NotesAdapter {
             groups[member.insert.afterID, default: []].append(member)
         }
         return order.compactMap { groups[$0] }
+    }
+
+    // MARK: - Craft title sync
+
+    /// The last Craft-confirmed title for a pad, if one was recorded. A pad
+    /// whose name differs from this is title-dirty in the push direction; a
+    /// fetch whose root differs is dirty in the pull direction. Unknown reads
+    /// as dirty — the push converges it — except on the pull's first sight of
+    /// a legacy mapping, which records rather than overwrites (see reconcile).
+    public func syncedTitle(for id: UUID) -> String? {
+        syncedTitleMap().load()[id.uuidString]
+    }
+
+    public func storeSyncedTitle(_ title: String?, for id: UUID) {
+        syncedTitleMap().set(title, for: id.uuidString)
+    }
+
+    public func dropSyncedTitle(for id: UUID) {
+        syncedTitleMap().set(nil, for: id.uuidString)
+    }
+
+    private func syncedTitleMap() -> DefaultsMap<String> {
+        DefaultsMap(defaults: defaults, key: syncedTitleKey)
+    }
+
+    /// When the pad was last renamed locally. Nil for never-renamed: ties and
+    /// unknown clocks break toward the pad, so an unknown date reads as
+    /// local-wins rather than a guess.
+    public func titleRenameDate(for id: UUID) -> Date? {
+        titleRenameDateMap().load()[id.uuidString]
+    }
+
+    public func storeTitleRenameDate(_ date: Date?, for id: UUID) {
+        titleRenameDateMap().set(date, for: id.uuidString)
+    }
+
+    public func dropTitleRenameDate(for id: UUID) {
+        titleRenameDateMap().set(nil, for: id.uuidString)
+    }
+
+    private func titleRenameDateMap() -> DefaultsMap<Date> {
+        DefaultsMap(defaults: defaults, key: titleRenamedAtKey)
     }
 
     // MARK: - Craft pull
@@ -1201,7 +1302,7 @@ public final class NotesAdapter {
 
     private func pullOnePad(_ padID: UUID, client: CraftClient, serverTime: Date?) async throws {
         guard let docID = craftDocumentID(for: padID) else { return }
-        let remote = try await client.fetchBlocks(documentID: docID)
+        let fetched = try await client.fetchDocument(documentID: docID)
         guard !Task.isCancelled else { return }
         // Re-read after the fetch: keystrokes interleave with the await, and
         // deciding on pre-fetch text strands them between the stash and the
@@ -1209,9 +1310,9 @@ public final class NotesAdapter {
         guard let document,
               let pad = document.notes.first(where: { $0.id == padID })
         else { return }
-        let remoteIDs = Set(remote.map(\.id))
+        let remoteIDs = Set(fetched.blocks.map(\.id))
         switch CraftPull.decide(local: pad.text, sidecar: sidecar(for: padID),
-                                remote: remote, stashIDs: stashIDs(for: padID)) {
+                                remote: fetched.blocks, stashIDs: stashIDs(for: padID)) {
         case .converged:
             storeSyncedAt(serverTime, for: padID)
             dirtyPadIDs.remove(padID)
@@ -1228,7 +1329,7 @@ public final class NotesAdapter {
             // where there is no head block to merge into.
             let inserts = [Self.conflictHeading(heading, at: serverTime)] + stash
             let echo = try await client.postBlocks(
-                inserts.map { BlockInsert(afterID: remote.last?.id, markdown: $0) },
+                inserts.map { BlockInsert(afterID: fetched.blocks.last?.id, markdown: $0) },
                 documentID: docID)
             // Recorded before the re-read below: the copy exists in Craft
             // whatever the user typed meanwhile, and the next pull must
@@ -1260,6 +1361,85 @@ public final class NotesAdapter {
         case .skip:
             break
         }
+        // Title runs after the content decision landed (a throwing stash
+        // leaves the title for the next pull), and even when the content
+        // skipped: the two move independently. A content adopt that cleared
+        // the dirty bit is safe — a still-dirty title re-adds it below.
+        reconcileTitle(padID: padID, remoteTitle: fetched.title,
+                       remoteModified: fetched.modifiedAt, serverTime: serverTime)
+    }
+
+    /// Reconcile one pad's name against the fetched page-root title.
+    private func reconcileTitle(padID: UUID, remoteTitle: String?,
+                                remoteModified: Date?, serverTime: Date?) {
+        guard let document,
+              let index = document.notes.firstIndex(where: { $0.id == padID }),
+              craftDocumentID(for: padID) != nil
+        else { return }
+        let localName = document.notes[index].name
+        // Compared post-sanitise, like every rename: a >40-char Craft title
+        // then converges instead of fighting the tab strip forever. An empty
+        // remote title reconciles nothing — pad names are never empty, so
+        // there is no adoption that keeps both sides meaningful.
+        guard let remoteName = remoteTitle.map(NotesSupport.sanitizedNoteName),
+              !remoteName.isEmpty
+        else {
+            // A title-less fetch (envelope shapes) decides nothing — but it
+            // must not strand a known-local rename the content decision just
+            // cleared: re-assert the bit when the baseline says local moved.
+            // Baseline-less mappings wait for a page-shaped pull instead.
+            if let baseline = syncedTitle(for: padID), localName != baseline {
+                dirtyPadIDs.insert(padID)
+                scheduleCraftPush()
+            }
+            return
+        }
+        guard let baseline = syncedTitle(for: padID) else {
+            // No baseline: the mapping predates title sync. Craft's title is
+            // the record; a differing pad name pushes local on the next round
+            // — pad wins, because the tab strip is the daily surface and the
+            // divergence almost always came from a local rename (the ccp-o2dh
+            // complaint), not from a deliberate Craft-side rename.
+            storeSyncedTitle(remoteName, for: padID)
+            if localName != remoteName {
+                dirtyPadIDs.insert(padID)
+                scheduleCraftPush()
+            }
+            return
+        }
+        switch (localName != baseline, remoteName != baseline) {
+        case (false, false):
+            break
+        case (true, false):
+            dirtyPadIDs.insert(padID)
+            scheduleCraftPush()
+        case (false, true):
+            adoptTitle(padID: padID, title: remoteName, date: remoteModified ?? serverTime)
+        case (true, true):
+            // Last-writer-wins; ties and unknown clocks break local, so a
+            // rename never lands under typing hands on a maybe.
+            if let remoteModified,
+               let renamedAt = titleRenameDate(for: padID),
+               remoteModified > renamedAt {
+                adoptTitle(padID: padID, title: remoteName, date: remoteModified)
+            } else {
+                dirtyPadIDs.insert(padID)
+                scheduleCraftPush()
+            }
+        }
+    }
+
+    /// Take a Craft-side rename silently: no dirty bit, no push — what just
+    /// arrived must not echo back. The rename date becomes the adoption's
+    /// clock, so a later local rename still has something to beat.
+    private func adoptTitle(padID: UUID, title: String, date: Date?) {
+        guard let document,
+              let next = document.renaming(padID, to: title),
+              persist(next)
+        else { return }
+        apply(next)
+        storeSyncedTitle(next.notes.first(where: { $0.id == padID })?.name ?? title, for: padID)
+        storeTitleRenameDate(date ?? Date(), for: padID)
     }
 
     /// Replace a pad's text and sidecar from a pull. Silent: the replacing

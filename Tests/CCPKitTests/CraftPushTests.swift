@@ -598,6 +598,9 @@ final class CraftPushAdapterTests: XCTestCase {
                                   fingerprint: BlockSidecar.fingerprint(slice.markdown))
             }), for: id)
         adapter.setCraftDocumentID("doc1", for: id)
+        // Seeded means converged, title included — or every flush below
+        // spends a rename PUT first and the counts shift.
+        adapter.storeSyncedTitle(adapter.selectedNoteName, for: id)
         return id
     }
 
@@ -1072,6 +1075,7 @@ final class CraftPushAdapterTests: XCTestCase {
                 BlockSidecar(entries: [BlockSidecarEntry(id: "\(word)-0",
                     fingerprint: BlockSidecar.fingerprint(word))]), for: id)
             adapter.setCraftDocumentID("doc-\(word)", for: id)
+            adapter.storeSyncedTitle(adapter.notes.first(where: { $0.id == id })?.name, for: id)
         }
 
         adapter.selectNote(first)
@@ -1106,6 +1110,7 @@ final class CraftPushAdapterTests: XCTestCase {
             BlockSidecar(entries: [BlockSidecarEntry(id: "a0",
                 fingerprint: BlockSidecar.fingerprint("aaa"))]), for: first)
         adapter.setCraftDocumentID("doc-aaa", for: first)
+        adapter.storeSyncedTitle(adapter.notes.first(where: { $0.id == first })?.name, for: first)
 
         // Edit A, then switch away before the push fires.
         adapter.selectNote(first)

@@ -45,6 +45,19 @@ extension CraftClient {
         return first
     }
 
+    /// `PUT /blocks` over the page id — the page root IS the document title,
+    /// and the block-update shape renames it (verified live 2026-09-06,
+    /// ccp-o2dh: create, page-id PUT, re-fetch, delete). Returns the echo's
+    /// canonical markdown, which is what the title baseline records — never
+    /// what was sent, by the same fixed-point rule as the block sidecar.
+    public func updateDocumentTitle(id: String, title: String) async throws(CraftClientError) -> CraftBlock {
+        let echo = try await updateBlocks([BlockUpdate(id: id, markdown: title)])
+        guard let first = echo.first else {
+            throw CraftClientError.unreachable(statusCode: nil)
+        }
+        return first
+    }
+
     private struct DocumentItemsEnvelope: Decodable {
         var items: [CraftDocument]?
     }

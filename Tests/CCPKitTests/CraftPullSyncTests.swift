@@ -23,7 +23,7 @@ final class CraftPullWireTests: XCTestCase {
               {"id":"img","type":"image"}
             ]}]}
             """)])
-        let blocks = try await client(transport).fetchBlocks(documentID: "doc1")
+        let blocks = try await client(transport).fetchDocument(documentID: "doc1").blocks
 
         XCTAssertEqual(transport.requests.count, 1)
         XCTAssertEqual(transport.requests[0].httpMethod, "GET")
@@ -44,14 +44,15 @@ final class CraftPullWireTests: XCTestCase {
         for json in ["{\"blocks\":[{\"id\":\"a\",\"markdown\":\"one\"}]}",
                      "[{\"id\":\"a\",\"markdown\":\"one\"}]"] {
             let transport = ScriptedTransport([.init(statusCode: 200, json: json)])
-            let blocks = try await client(transport).fetchBlocks(documentID: "doc1")
+            let blocks = try await client(transport).fetchDocument(documentID: "doc1").blocks
             XCTAssertEqual(blocks, [FetchedBlock(id: "a", markdown: "one")], "for \(json)")
         }
     }
 
     func testFetchParsesSinglePageObjectSkippingTheTitle() async throws {
         // The live shape (ccp-pn8g): GET /blocks returns the page itself,
-        // whose markdown is the document title — position, not text.
+        // whose markdown is the document title — position, not text. The
+        // title rides the fetch for the title sync (ccp-o2dh) instead.
         let transport = ScriptedTransport([.init(statusCode: 200, json: """
             {"id":"doc1","type":"page","markdown":"playground","content":[
               {"id":"a","markdown":"one","type":"text"},
@@ -60,17 +61,70 @@ final class CraftPullWireTests: XCTestCase {
                 {"id":"b","markdown":"two","type":"text"}]}
             ]}
             """)])
-        let blocks = try await client(transport).fetchBlocks(documentID: "doc1")
+        let fetched = try await client(transport).fetchDocument(documentID: "doc1")
 
-        XCTAssertEqual(blocks.map(\.id), ["a", "img", "b"])
-        XCTAssertEqual(blocks.map(\.markdown), ["one", nil, "two"])
+        XCTAssertEqual(fetched.title, "playground")
+        XCTAssertNil(fetched.modifiedAt, "no metadata fetched, no mtime")
+        XCTAssertEqual(fetched.blocks.map(\.id), ["a", "img", "b"])
+        XCTAssertEqual(fetched.blocks.map(\.markdown), ["one", nil, "two"])
+    }
+
+    func testFetchParsesPageRootMtimeFromMetadata() async throws {
+        // The title sync's remote clock (ccp-o2dh): lastModifiedAt wins,
+        // createdAt stands in when it is missing, garbage reads as unknown.
+        let transport = ScriptedTransport([.init(statusCode: 200, json: """
+            {"id":"doc1","type":"page","markdown":"playground",
+             "metadata":{"createdAt":"2026-09-06T18:00:00Z",
+                         "lastModifiedAt":"2026-09-06T19:05:37.034Z"},
+             "content":[{"id":"a","markdown":"one","type":"text"}]}
+            """)])
+        let fetched = try await client(transport).fetchDocument(documentID: "doc1")
+
+        XCTAssertEqual(fetched.title, "playground")
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        XCTAssertEqual(fetched.modifiedAt, fractional.date(from: "2026-09-06T19:05:37.034Z"))
+        XCTAssertEqual(fetched.blocks.map(\.id), ["a"])
+    }
+
+    func testFetchIgnoresCreatedAtAndToleratesGarbageMtime() async throws {
+        // createdAt is the document's birth, not the title's: only
+        // lastModifiedAt reads as the remote clock (ccp-o2dh review).
+        for metadata in ["\"createdAt\":\"2026-09-06T18:00:00Z\"",
+                         "\"lastModifiedAt\":\"not a date\"",
+                         "\"createdAt\":\"2026-09-06T18:00:00Z\",\"lastModifiedAt\":\"not a date\""] {
+            let transport = ScriptedTransport([.init(statusCode: 200, json: """
+                {"id":"doc1","type":"page","markdown":"playground",
+                 "metadata":{\(metadata)},
+                 "content":[]}
+                """)])
+            let fetched = try await client(transport).fetchDocument(documentID: "doc1")
+            XCTAssertNil(fetched.modifiedAt, "for \(metadata)")
+        }
+    }
+
+    func testFetchAsksForMetadataAndEnvelopesCarryNoTitle() async throws {
+        let transport = ScriptedTransport([.init(statusCode: 200, json: """
+            {"items":[{"id":"a","markdown":"one"}]}
+            """)])
+        let fetched = try await client(transport).fetchDocument(documentID: "doc1")
+
+        let url = try XCTUnwrap(transport.requests[0].url)
+        let query = Dictionary(
+            try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+                .map { ($0.name, $0.value) },
+            uniquingKeysWith: { first, _ in first })
+        XCTAssertEqual(query["fetchMetadata"], "true")
+        XCTAssertNil(fetched.title, "an envelope names no document")
+        XCTAssertNil(fetched.modifiedAt)
+        XCTAssertEqual(fetched.blocks, [FetchedBlock(id: "a", markdown: "one")])
     }
 
     func testFetchEmptyPageIsEmptyRatherThanUnreachable() async throws {
         let transport = ScriptedTransport([.init(statusCode: 200, json: """
             {"id":"doc1","type":"page","markdown":"empty","content":[]}
             """)])
-        let blocks = try await client(transport).fetchBlocks(documentID: "doc1")
+        let blocks = try await client(transport).fetchDocument(documentID: "doc1").blocks
 
         XCTAssertEqual(blocks, [])
     }
@@ -79,7 +133,7 @@ final class CraftPullWireTests: XCTestCase {
         for json in ["{\"items\":[{\"id\":\"doc1\",\"type\":\"page\",\"markdown\":\"playground\",\"content\":[{\"id\":\"a\",\"markdown\":\"one\"}]}]}",
                      "[{\"id\":\"doc1\",\"type\":\"page\",\"markdown\":\"playground\",\"content\":[{\"id\":\"a\",\"markdown\":\"one\"}]}]"] {
             let transport = ScriptedTransport([.init(statusCode: 200, json: json)])
-            let blocks = try await client(transport).fetchBlocks(documentID: "doc1")
+            let blocks = try await client(transport).fetchDocument(documentID: "doc1").blocks
             XCTAssertEqual(blocks, [FetchedBlock(id: "a", markdown: "one")], "for \(json)")
         }
     }
@@ -88,12 +142,12 @@ final class CraftPullWireTests: XCTestCase {
         let empty = ScriptedTransport([.init(statusCode: 200, json: """
             {"id":"doc1","type":"page","markdown":"empty"}
             """)])
-        let emptyBlocks = try await client(empty).fetchBlocks(documentID: "doc1")
+        let emptyBlocks = try await client(empty).fetchDocument(documentID: "doc1").blocks
         XCTAssertEqual(emptyBlocks, [])
 
         let error = ScriptedTransport([.init(statusCode: 200, json: "{}")])
         do {
-            _ = try await client(error).fetchBlocks(documentID: "doc1")
+            _ = try await client(error).fetchDocument(documentID: "doc1").blocks
             XCTFail("an id-less object must throw")
         } catch let clientError as CraftClientError {
             XCTAssertEqual(clientError, .unreachable(statusCode: 200))
@@ -104,7 +158,7 @@ final class CraftPullWireTests: XCTestCase {
         let transport = ScriptedTransport([.init(statusCode: 200, json: """
             {"items":[{"id":"a","markdown":"one"},{"id":"img","type":"image","content":[]}]}
             """)])
-        let blocks = try await client(transport).fetchBlocks(documentID: "doc1")
+        let blocks = try await client(transport).fetchDocument(documentID: "doc1").blocks
 
         XCTAssertEqual(blocks, [FetchedBlock(id: "a", markdown: "one"),
                                 FetchedBlock(id: "img", markdown: nil)])
@@ -113,7 +167,7 @@ final class CraftPullWireTests: XCTestCase {
     func testFetchFailureIsUnreachable() async throws {
         let transport = ScriptedTransport([.init(statusCode: 500, json: "{}")])
         do {
-            _ = try await client(transport).fetchBlocks(documentID: "doc1")
+            _ = try await client(transport).fetchDocument(documentID: "doc1").blocks
             XCTFail("a 500 must throw")
         } catch let error as CraftClientError {
             XCTAssertEqual(error, .unreachable(statusCode: 500))
@@ -156,6 +210,9 @@ final class CraftPullAdapterTests: XCTestCase {
                               fingerprint: BlockSidecar.fingerprint(markdown))
         }), for: id)
         adapter.setCraftDocumentID("doc1", for: id)
+        // Steady means title-converged too, or the flush below spends a
+        // rename PUT and never comes back clean.
+        adapter.storeSyncedTitle(adapter.selectedNoteName, for: id)
         await adapter.flushCraftPush()
         XCTAssertFalse(adapter.isPushDirty(id), "steady state starts clean")
         return id
@@ -339,6 +396,8 @@ final class CraftPullAdapterTests: XCTestCase {
         XCTAssertNil(adapter.syncedAt(for: id))
         XCTAssertEqual(adapter.sidecar(for: id).entries, [])
         XCTAssertNil(adapter.craftDocumentID(for: id))
+        XCTAssertNil(adapter.syncedTitle(for: id), "title baselines leave with the note")
+        XCTAssertNil(adapter.titleRenameDate(for: id))
     }
 
     func testFailedFetchLeavesPadSidecarAndDirtyBitAlone() async throws {

@@ -30,12 +30,35 @@ public struct FetchedBlock: Equatable, Sendable {
     }
 }
 
+/// One document as a pull sees it: the page-root title and mtime ride the
+/// same fetch as the blocks, so title sync costs no extra request. `title`
+/// is nil when the payload carried no attributable page root (an envelope
+/// or bare array names no document); `modifiedAt` is nil when the root
+/// carried no parseable metadata.
+public struct FetchedDocument: Equatable, Sendable {
+    public var title: String?
+    public var modifiedAt: Date?
+    public var blocks: [FetchedBlock]
+
+    public init(title: String? = nil, modifiedAt: Date? = nil, blocks: [FetchedBlock] = []) {
+        self.title = title
+        self.modifiedAt = modifiedAt
+        self.blocks = blocks
+    }
+}
+
 extension CraftClient {
     // MARK: - Block reads
+
+    private struct FetchedMetadata: Decodable {
+        var createdAt: String?
+        var lastModifiedAt: String?
+    }
 
     private struct FetchedNode: Decodable {
         var id: String?
         var markdown: String?
+        var metadata: FetchedMetadata?
         var content: [FetchedNode]?
     }
 
@@ -49,42 +72,53 @@ extension CraftClient {
 
     /// Decode a GET /blocks tree tolerantly: an `items` envelope, a `blocks`
     /// envelope, a bare array — or, as the live endpoint returns, the single
-    /// page object itself. Nodes without an id are skipped, never guessed at.
-    private static func decodeNodes(from data: Data) -> [FetchedNode]? {        let decoder = JSONDecoder()
+    /// page object itself. Envelopes and arrays name no document, so they
+    /// carry no title; the page object does, with its mtime when metadata was
+    /// fetched. Nodes without an id are skipped, never guessed at.
+    private static func decodeDocument(from data: Data) -> FetchedDocument? {
+        let decoder = JSONDecoder()
         if let envelope = try? decoder.decode(FetchedItemsEnvelope.self, from: data),
            let items = envelope.items {
-            return items
+            return FetchedDocument(blocks: items.flatMap(Self.flatten(node:)))
         }
         if let envelope = try? decoder.decode(FetchedBlocksEnvelope.self, from: data),
            let blocks = envelope.blocks {
-            return blocks
+            return FetchedDocument(blocks: blocks.flatMap(Self.flatten(node:)))
         }
         if let nodes = try? decoder.decode([FetchedNode].self, from: data) {
-            return nodes
+            return FetchedDocument(blocks: nodes.flatMap(Self.flatten(node:)))
         }
         // The live shape: one page object carrying its blocks under
-        // `content`. Only the children come back — the root is position,
-        // not text, even though it carries the document title as markdown.
-        // A missing key reads as an empty page; a missing id is not a page
-        // at all, so error payloads still throw.
+        // `content`. Only the children come back as blocks — the root is
+        // position, not text, even though it carries the document title as
+        // markdown. A missing key reads as an empty page; a missing id is not
+        // a page at all, so error payloads still throw.
         if let page = try? decoder.decode(FetchedNode.self, from: data),
            page.id != nil {
-            return page.content ?? []
+            // The root's mtime is the title sync's remote clock. lastModified
+            // only: createdAt is the document's birth, not the title's, and a
+            // rename necessarily postdates it — falling back would resolve
+            // every both-moved comparison local while pretending a comparison
+            // happened. Unknown reads as unknown, and ties break local.
+            let modified = page.metadata?.lastModifiedAt.flatMap(Self.parseServerTime)
+            return FetchedDocument(title: page.markdown, modifiedAt: modified,
+                                   blocks: (page.content ?? []).flatMap(Self.flatten(node:)))
         }
         return nil
     }
 
-    /// `GET /blocks?id=&maxDepth=-1` — the document's blocks in document
-    /// order, flattened depth-first. The root page node carries no markdown
-    /// and flattens away to its children; any descendant without markdown
-    /// stays in the list (markdown nil) so the sidecar can pin its position
-    /// and the push routes around it.
-    public func fetchBlocks(documentID: String) async throws(CraftClientError) -> [FetchedBlock] {
+    /// `GET /blocks?id=&maxDepth=-1&fetchMetadata=true` — the document's
+    /// title, mtime, and blocks in document order, flattened depth-first. The
+    /// root page node carries no block and flattens away to its children; any
+    /// descendant without markdown stays in the list (markdown nil) so the
+    /// sidecar can pin its position and the push routes around it.
+    public func fetchDocument(documentID: String) async throws(CraftClientError) -> FetchedDocument {
         var components = URLComponents(url: baseURL.appending(path: "blocks"),
                                        resolvingAgainstBaseURL: false)
         components?.queryItems = [
             URLQueryItem(name: "id", value: documentID),
             URLQueryItem(name: "maxDepth", value: "-1"),
+            URLQueryItem(name: "fetchMetadata", value: "true"),
         ]
         guard let url = components?.url else {
             throw CraftClientError.unreachable(statusCode: nil)
@@ -92,10 +126,10 @@ extension CraftClient {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         let (data, http) = try await send(request)
-        guard let nodes = Self.decodeNodes(from: data) else {
+        guard let document = Self.decodeDocument(from: data) else {
             throw CraftClientError.unreachable(statusCode: http.statusCode)
         }
-        return nodes.flatMap(Self.flatten(node:))
+        return document
     }
 
     private static func flatten(node: FetchedNode) -> [FetchedBlock] {
