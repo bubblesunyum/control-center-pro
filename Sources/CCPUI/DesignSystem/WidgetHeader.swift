@@ -51,14 +51,15 @@ public struct WidgetHeader<Accessory: View>: View {
             Label {
                 if !isAccessoryExpanded {
                     HStack(spacing: Space.half) {
-                        Text(descriptor.title)
-                            .lineLimit(1)
                         if descriptor.isMinimizable, let isMinimized, let onToggleMinimized {
-                            MinimizeCaret(
+                            MinimizeTitleButton(
                                 title: descriptor.title,
                                 isMinimized: isMinimized,
                                 toggle: onToggleMinimized
                             )
+                        } else {
+                            Text(descriptor.title)
+                                .lineLimit(1)
                         }
                         if let count {
                             CountBadge(count: count, of: descriptor.title)
@@ -104,24 +105,33 @@ public extension WidgetHeader where Accessory == EmptyView {
     }
 }
 
-/// The caret that minimizes a widget to its summary form and back.
+/// A minimizable widget's title and its caret as one hit area.
 ///
-/// It rides immediately after the title — the thing it collapses — rather than
-/// in the trailing accessory, so the eye reads it as part of the name. Same
-/// chevron language as the section headers inside the cards.
-private struct MinimizeCaret: View {
+/// Minimizing hides what the title names, so the title itself is the toggle
+/// and the caret is just the cue — the eye reads them as one thing because
+/// they act as one. Same chevron language as the section headers inside the
+/// cards. Quiet until the pointer lands, like `HeaderIconButton`: the chevron
+/// steps up from tertiary to primary on hover.
+private struct MinimizeTitleButton: View {
     let title: String
     let isMinimized: Bool
     let toggle: () -> Void
 
+    @State private var isHovered = false
+
     var body: some View {
         Button(action: toggle) {
-            Image(systemName: isMinimized ? "chevron.right" : "chevron.down")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.tertiary)
-                .contentShape(Rectangle())
+            HStack(spacing: Space.half) {
+                Text(title)
+                    .lineLimit(1)
+                Image(systemName: isMinimized ? "chevron.right" : "chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(isHovered ? .primary : .tertiary)
+            }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
         .help(isMinimized ? "Expand \(title)" : "Minimize \(title)")
         .accessibilityLabel(isMinimized ? "Expand \(title)" : "Minimize \(title)")
         .accessibilityValue(isMinimized ? "Minimized" : "Expanded")
