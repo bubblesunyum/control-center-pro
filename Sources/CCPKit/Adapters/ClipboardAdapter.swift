@@ -259,6 +259,14 @@ public final class ClipboardAdapter {
         return BridgedClipboardImages.imageData(named: name)
     }
 
+    /// Captured formatting bytes for a text entry, for drag-out. Empty when
+    /// the copy carried no RTF/HTML or the blobs are gone; the drag then
+    /// falls back to plain text.
+    public func richData(for entry: ClipboardEntry) -> (rtf: Data?, html: Data?) {
+        guard entry.kind == .text else { return (nil, nil) }
+        return BridgedClipboardRich.data(forEntry: entry.id)
+    }
+
     /// Thumbnail for an image entry or a single image-file entry, otherwise nil.
     public func thumbnail(for entry: ClipboardEntry) -> NSImage? {
         switch entry.kind {

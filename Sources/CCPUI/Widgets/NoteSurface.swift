@@ -43,7 +43,7 @@ struct NoteSurface: View {
         }
         // Clipboard rows, Finder files and browser text all land here; images
         // have no text form and spring back unaccepted.
-        .onDrop(of: [.plainText, .text, .fileURL, .url], isTargeted: $isDropTargeted) { providers in
+        .onDrop(of: [.plainText, .text, .rtf, .html, .fileURL, .url], isTargeted: $isDropTargeted) { providers in
             adapter.acceptDrop(providers: providers)
         }
     }

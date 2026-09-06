@@ -137,6 +137,51 @@ final class NotesDropTests: XCTestCase {
         XCTAssertTrue(adapter.text.isEmpty)
     }
 
+    // MARK: - Rich text
+
+    /// A drag carrying formatting lands as Markdown, not the plain string
+    /// riding alongside it.
+    func testAcceptDropConvertsRTFToMarkdown() async throws {
+        let (defaults, name) = try store()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let adapter = adapter(defaults)
+        let styled = NSAttributedString(
+            string: "Hello",
+            attributes: [.font: NSFont.boldSystemFont(ofSize: 12)])
+        let rtf = try styled.data(
+            from: NSRange(location: 0, length: styled.length),
+            documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf])
+        let provider = NSItemProvider()
+        provider.registerObject("Hello" as NSString, visibility: .all)
+        provider.registerDataRepresentation(forTypeIdentifier: UTType.rtf.identifier,
+                                            visibility: .all) { completion in
+            completion(rtf, nil)
+            return nil
+        }
+
+        XCTAssertTrue(adapter.acceptDrop(providers: [provider]))
+        let arrived = await becomesTrue { adapter.text == "**Hello**" }
+        XCTAssertTrue(arrived, "styled drop landed as plain text")
+    }
+
+    /// Unparseable bytes fall through to the plain string the drag carried.
+    func testAcceptDropFallsBackToPlain() async throws {
+        let (defaults, name) = try store()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let adapter = adapter(defaults)
+        let provider = NSItemProvider()
+        provider.registerObject("Hello" as NSString, visibility: .all)
+        provider.registerDataRepresentation(forTypeIdentifier: UTType.rtf.identifier,
+                                            visibility: .all) { completion in
+            completion(Data([0, 1, 2]), nil)
+            return nil
+        }
+
+        XCTAssertTrue(adapter.acceptDrop(providers: [provider]))
+        let arrived = await becomesTrue { adapter.text == "Hello" }
+        XCTAssertTrue(arrived, "garbage RTF blocked the plain fallback")
+    }
+
     // MARK: - Drag payload
 
     func testPlainTextMapping() {

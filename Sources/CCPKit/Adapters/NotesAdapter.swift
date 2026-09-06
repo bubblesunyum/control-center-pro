@@ -1552,8 +1552,15 @@ public final class NotesAdapter {
     }
 
     private static func canResolveDrop(_ provider: NSItemProvider) -> Bool {
+        // Rich types count as viable on their own: an unparseable RTF-only
+        // provider then accepts and lands nothing, but every real source
+        // pairs rich bytes with plain text, so the fallthrough covers it.
+        // Refusing rich-only here would spring-back drops the converter
+        // could have kept.
         provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
             || provider.hasItemConformingToTypeIdentifier(UTType.url.identifier)
+            || provider.hasItemConformingToTypeIdentifier(UTType.rtf.identifier)
+            || provider.hasItemConformingToTypeIdentifier(UTType.html.identifier)
             || provider.canLoadObject(ofClass: NSString.self)
     }
 
@@ -1570,6 +1577,17 @@ public final class NotesAdapter {
         if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier),
            let url = await loadDropURL(from: provider), !url.isFileURL {
             return url.absoluteString
+        }
+        // Styled bytes convert ahead of plain text, so a formatted copy
+        // keeps its shape as Markdown; anything else falls through to the
+        // string the drag already carried.
+        if provider.hasItemConformingToTypeIdentifier(UTType.rtf.identifier)
+            || provider.hasItemConformingToTypeIdentifier(UTType.html.identifier) {
+            let rtf = await loadDropData(forTypeIdentifier: UTType.rtf.identifier, from: provider)
+            let html = await loadDropData(forTypeIdentifier: UTType.html.identifier, from: provider)
+            if let converted = RichTextMarkdown.markdown(rtf: rtf, html: html) {
+                return converted
+            }
         }
         // Explicit only: every file-URL provider implicitly vends its
         // `file://` address as a string, which must never land in a note.
@@ -1604,6 +1622,15 @@ public final class NotesAdapter {
         await withCheckedContinuation { continuation in
             _ = provider.loadObject(ofClass: NSString.self) { object, _ in
                 continuation.resume(returning: object as? NSString)
+            }
+        }
+    }
+
+    private static func loadDropData(forTypeIdentifier identifier: String,
+                                     from provider: NSItemProvider) async -> Data? {
+        await withCheckedContinuation { continuation in
+            _ = provider.loadDataRepresentation(forTypeIdentifier: identifier) { data, _ in
+                continuation.resume(returning: data)
             }
         }
     }

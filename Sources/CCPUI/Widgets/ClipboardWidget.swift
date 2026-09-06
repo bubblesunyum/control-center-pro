@@ -374,6 +374,24 @@ private struct ClipboardRow: View {
         switch entry.kind {
         case .text:
             provider.registerObject(entry.text as NSString, visibility: .all)
+            // The formatting rides along for targets that convert it (the
+            // note well renders it as Markdown); plain-text targets read
+            // the string above, exactly as before.
+            let rich = adapter.richData(for: entry)
+            if let rtf = rich.rtf {
+                provider.registerDataRepresentation(forTypeIdentifier: UTType.rtf.identifier,
+                                                    visibility: .all) { completion in
+                    completion(rtf, nil)
+                    return nil
+                }
+            }
+            if let html = rich.html {
+                provider.registerDataRepresentation(forTypeIdentifier: UTType.html.identifier,
+                                                    visibility: .all) { completion in
+                    completion(html, nil)
+                    return nil
+                }
+            }
         case .files:
             // One live file drags as the file itself; anything else drags
             // as paths, so a deleted file lands as text instead of an

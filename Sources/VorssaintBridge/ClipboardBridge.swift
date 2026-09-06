@@ -143,9 +143,22 @@ public enum BridgedClipboardImages {
     public static func imageData(named name: String) -> Data? {
         ClipboardImageStore.imageData(named: name)
     }
-
     public static func fileThumbnail(atPath path: String) -> NSImage? {
         ClipboardImageStore.fileThumbnail(atPath: path)
+    }
+}
+
+// MARK: - Rich text
+
+/// Captured formatting bytes for drag-out. Resolved by id like `copy()`,
+/// so the bridged structs never carry the store filenames.
+public enum BridgedClipboardRich {
+    public static func data(forEntry id: UUID) -> (rtf: Data?, html: Data?) {
+        let entry = ClipboardHistoryService.shared.entries.first(where: { $0.id == id })
+        return (
+            entry?.richRTFFile.flatMap(ClipboardRichStore.richData(named:)),
+            entry?.richHTMLFile.flatMap(ClipboardRichStore.richData(named:))
+        )
     }
 }
 
