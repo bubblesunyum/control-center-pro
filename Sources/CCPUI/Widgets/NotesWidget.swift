@@ -158,8 +158,14 @@ private struct NotesContent: View {
 /// The header's trailing edge: tabs the X hid, listed by name. Choosing one
 /// brings its tab back and shows it. Empty and dimmed while nothing is
 /// hidden — a menu that opens onto nothing explains itself worse.
+///
+/// Wears the header icon-button chrome (see ``HeaderIconButton``): quiet
+/// until the pointer lands, then the hover chip.
 private struct ClosedNotesMenu: View {
     @Bindable var adapter: NotesAdapter
+    @State private var isHovered = false
+
+    private var isEmpty: Bool { adapter.closedNotes.isEmpty }
 
     var body: some View {
         Menu {
@@ -172,12 +178,16 @@ private struct ClosedNotesMenu: View {
                 .frame(width: Layout.headerAccessorySize, height: Layout.headerAccessorySize)
                 .contentShape(Rectangle())
         }
-        // One pattern, like the Files header: a bare … hosting the menu.
-        // Without this the Menu hangs its own chevron beside the glyph.
         .menuIndicator(.hidden)
-        .foregroundStyle(adapter.closedNotes.isEmpty ? .tertiary : .secondary)
-        .disabled(adapter.closedNotes.isEmpty)
-        .help(adapter.closedNotes.isEmpty ? "No closed notes" : "Closed notes")
-        .accessibilityLabel(adapter.closedNotes.isEmpty ? "No closed notes" : "Closed notes")
+        .foregroundStyle(isHovered && !isEmpty ? Color.primary : Color.secondary)
+        .opacity(isEmpty ? 0.45 : 1)
+        .background {
+            RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
+                .fill(isHovered && !isEmpty ? Color.controlFill : Color.clear)
+        }
+        .onHover { isHovered = $0 }
+        .disabled(isEmpty)
+        .help(isEmpty ? "No closed notes" : "Closed notes")
+        .accessibilityLabel(isEmpty ? "No closed notes" : "Closed notes")
     }
 }
