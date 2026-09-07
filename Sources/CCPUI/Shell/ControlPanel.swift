@@ -28,6 +28,7 @@ public struct ControlPanel: View {
     private let arrangement: PanelArrangement
     private let editor: PanelEditor
     private let onLanesFrame: (CGRect) -> Void
+    private let onCardFrames: ([CGRect]) -> Void
 
     @GestureState private var isGestureActive = false
     @State private var headerFrames: [HeaderFrame] = []
@@ -39,10 +40,11 @@ public struct ControlPanel: View {
     /// (see `resizeTranslation(for:)`).
     @State private var resizeScreenAnchor: CGPoint?
 
-    init(arrangement: PanelArrangement, editor: PanelEditor, onLanesFrame: @escaping (CGRect) -> Void = { _ in }) {
+    init(arrangement: PanelArrangement, editor: PanelEditor, onLanesFrame: @escaping (CGRect) -> Void = { _ in }, onCardFrames: @escaping ([CGRect]) -> Void = { _ in }) {
         self.arrangement = arrangement
         self.editor = editor
         self.onLanesFrame = onLanesFrame
+        self.onCardFrames = onCardFrames
     }
 
     public var body: some View {
@@ -66,6 +68,7 @@ public struct ControlPanel: View {
         .environment(\.panelArrangement, arrangement)
         .onPreferenceChange(DropZonePreference.self) { zones in
             editor.zones = zones
+            onCardFrames(zones.map(\.frame))
         }
         .onPreferenceChange(HeaderFramePreference.self) { frames in
             headerFrames = frames

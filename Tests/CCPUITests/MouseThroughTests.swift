@@ -20,15 +20,21 @@ final class MouseThroughTests: XCTestCase {
 
     private func check(
         _ point: CGPoint,
+        cards: [CGRect]? = nil,
+        isEditing: Bool = false,
         stickies: [Sticky] = [],
         galleryOpen: Bool = false,
         _ file: StaticString = #filePath,
         _ line: UInt = #line
     ) -> Bool {
-        ControlPanelController.isInteractive(
+        return ControlPanelController.isInteractive(
             at: point,
             windowFrame: window,
-            lanesFrame: lanes,
+            hitRects: ControlPanelController.hitRects(
+                lanesFrame: lanes,
+                cardFrames: cards,
+                isEditing: isEditing
+            ),
             stickies: stickies,
             galleryOpen: galleryOpen
         )
@@ -43,6 +49,56 @@ final class MouseThroughTests: XCTestCase {
     func testPointInEmptyScreenIsNot() {
         XCTAssertFalse(check(CGPoint(x: 100, y: 100)))
         XCTAssertFalse(check(CGPoint(x: 800, y: 100)))
+    }
+
+    /// Two cards with a 10pt gutter between them, in panel space. The gutter
+    /// is inside the lanes' bounding box but on no card: a click there is
+    /// outside the panel and must fall through (ccp-ckyz). Without card
+    /// frames the bounding box is the only answer and the gutter wrongly
+    /// reads as the panel's — the fallback this pins, not the behaviour.
+    private var twoCards: [CGRect] {
+        [CGRect(x: 700, y: 20, width: 130, height: 400), CGRect(x: 840, y: 20, width: 140, height: 400)]
+    }
+
+    func testGutterBetweenCardsIsNotInteractive() {
+        // Gutter runs x 830–840 panel-space, y 20–420 — on screen x 830–840,
+        // y 380–780 bottom-leading.
+        XCTAssertFalse(check(CGPoint(x: 835, y: 700), cards: twoCards))
+        XCTAssertFalse(check(CGPoint(x: 835, y: 400), cards: twoCards))
+    }
+
+    func testPointOnCardStaysInteractive() {
+        XCTAssertTrue(check(CGPoint(x: 800, y: 700), cards: twoCards))
+        XCTAssertTrue(check(CGPoint(x: 900, y: 700), cards: twoCards))
+    }
+
+    func testGutterFallsBackToBoundingBoxBeforeCardFramesArrive() {
+        XCTAssertTrue(check(CGPoint(x: 835, y: 700)))
+    }
+
+    func testGutterStaysInteractiveWhileEditing() {
+        // The union would punch holes mid-gesture (the lifted card's gap,
+        // the grip and badge overshoots), so edit mode keeps the box.
+        XCTAssertTrue(check(CGPoint(x: 835, y: 700), cards: twoCards, isEditing: true))
+    }
+
+    func testEditModeSlackCoversOuterOverhang() {
+        // The grip overshoot and badge cap past an edge card sit outside the
+        // lanes' box; the slack keeps a press there on the panel.
+        XCTAssertTrue(check(CGPoint(x: 985, y: 700), cards: twoCards, isEditing: true))
+        XCTAssertFalse(check(CGPoint(x: 995, y: 700), cards: twoCards, isEditing: true))
+    }
+
+    func testEmptyPanelFallsThrough() {
+        // No cards and the box gone: nothing to click, so nothing swallows.
+        XCTAssertFalse(check(CGPoint(x: 835, y: 700), cards: []))
+        XCTAssertFalse(check(CGPoint(x: 800, y: 700), cards: []))
+        // A sticky is still the panel's.
+        XCTAssertTrue(check(
+            CGPoint(x: 200, y: 200),
+            cards: [],
+            stickies: [sticky(200, 600)]
+        ))
     }
 
     func testPointOnStickyIsInteractive() {

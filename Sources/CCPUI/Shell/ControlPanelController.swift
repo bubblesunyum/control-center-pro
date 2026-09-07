@@ -34,6 +34,20 @@ public final class ControlPanelController {
     /// evaluation must assume interactive: a zero rect would let a click
     /// through onto the app below and dismiss the panel on its first frame.
     private var lanesFrameValid = false
+    /// Every card's frame in panel space, reported by the lanes. The
+    /// hit-test reads this union, not the lanes' bounding box: the gutters
+    /// between cards are blank window, and a click there must fall through
+    /// to the app below rather than be swallowed (ccp-dz0, ccp-ckyz).
+    /// Nil until the first report arrives; empty after means the panel
+    /// genuinely holds no cards.
+    private var cardFrames: [CGRect]?
+    /// The window width the caches were recorded at. Panel-space frames are
+    /// width-relative (the lanes pin top-trailing), so a reopen at a new
+    /// width must wait for fresh reports instead of translating stale rects
+    /// through the new frame. Height alone never shifts a panel-space rect,
+    /// so it never invalidates: a height-only seat change yields identical
+    /// values, which would deliver no correcting reports ever.
+    private var cacheSeatWidth: CGFloat = 0
 
     /// The pointer watchers while the panel is up — a local monitor and a
     /// global one, because each is deaf where the other hears: the global one
@@ -57,6 +71,12 @@ public final class ControlPanelController {
     public init(arrangement: PanelArrangement) {
         self.arrangement = arrangement
         window = ControlPanelWindow(contentRect: NSRect(origin: .zero, size: .zero))
+        // An already-empty panel reports no zones, so its card cache would
+        // sit at nil (the not-yet-arrived fallback) forever. Seed its
+        // emptiness once; every later change arrives as a report while open.
+        if arrangement.lanes.allSatisfy(\.isEmpty) {
+            cardFrames = []
+        }
 
         // Transparent all the way through: each card blurs the desktop for
         // itself, and the space between them is desktop. A backdrop view here
@@ -70,6 +90,9 @@ public final class ControlPanelController {
         let reportFrame: (CGRect) -> Void = { [weak self] frame in
             Task { @MainActor in self?.lanesFrameDidChange(frame) }
         }
+        let reportCards: ([CGRect]) -> Void = { [weak self] frames in
+            Task { @MainActor in self?.cardFramesDidChange(frames) }
+        }
 
         // Wire the panel's widgets to the controller's dismiss + paste so a
         // clipboard row can hide immediately and then paste into the app that
@@ -79,7 +102,8 @@ public final class ControlPanelController {
         content.rootView = AnyView(ControlPanel(
             arrangement: arrangement,
             editor: editor,
-            onLanesFrame: reportFrame
+            onLanesFrame: reportFrame,
+            onCardFrames: reportCards
         )
         .environment(\.hidePanel, hide)
         .environment(\.pasteIntoPreviousApp, paste))
@@ -165,11 +189,25 @@ public final class ControlPanelController {
 
     private func present(from statusItemButton: NSStatusBarButton?, editing: Bool) {
         anchor = statusItemButton?.window?.screen ?? NSScreen.main
-        lanesFrameValid = false
         rememberPasteTarget()
         arrangement.activate()
         if editing { editor.startEditing() }
         place()
+        // The caches deliberately survive hide/show: SwiftUI only reports a
+        // frame when it *changes*, so reopening an unchanged layout delivers
+        // no reports — resetting here would wedge the hit-test on its
+        // first-frame fallback (everything interactive, nothing dismisses)
+        // until the layout happens to move. The layout cannot change while
+        // the panel is down, so last open's frames are this open's — unless
+        // the seat itself changed width (another display, new scaling, the
+        // launch pre-warm's zero rect), which shifts every panel-space rect:
+        // then fall back and wait for the fresh reports like a first open.
+        // A width change always shifts the rects, so the correcting reports
+        // are guaranteed to arrive.
+        if window.frame.size.width != cacheSeatWidth {
+            lanesFrameValid = false
+            cardFrames = arrangement.lanes.allSatisfy(\.isEmpty) ? [] : nil
+        }
         window.orderFrontRegardless()
         window.makeKey()
         isVisible = true
@@ -263,6 +301,16 @@ public final class ControlPanelController {
     private func lanesFrameDidChange(_ frame: CGRect) {
         lanesFrame = frame
         lanesFrameValid = true
+        cacheSeatWidth = window.frame.size.width
+        updateMouseThrough(at: NSEvent.mouseLocation)
+    }
+
+    /// Card frames arrive on their own preference, often a frame after the
+    /// lanes' box. Re-evaluate on arrival: until they do the hit-test falls
+    /// back to the bounding box, which would keep swallowing gutter clicks.
+    private func cardFramesDidChange(_ frames: [CGRect]) {
+        cardFrames = frames
+        cacheSeatWidth = window.frame.size.width
         updateMouseThrough(at: NSEvent.mouseLocation)
     }
 
@@ -295,16 +343,43 @@ public final class ControlPanelController {
         guard isVisible else { return }
         // A delete confirmation open is modal-ish: the window takes the
         // pointer so the dialog answers clicks instead of the app below.
+        let hitRects = Self.hitRects(
+            lanesFrame: lanesFrame,
+            cardFrames: cardFrames,
+            isEditing: editor.isEditing
+        )
         let interactive = !lanesFrameValid || StickyStore.shared.isConfirmingDelete || Self.isInteractive(
             at: screenPoint,
             windowFrame: window.frame,
-            lanesFrame: lanesFrame,
+            hitRects: hitRects,
             stickies: editor.isEditing ? [] : StickyStore.shared.visible,
             galleryOpen: editor.isShowingGallery
         )
         if window.ignoresMouseEvents == interactive {
             window.ignoresMouseEvents = !interactive
         }
+    }
+
+    /// Outward slack on the edit-mode hit box. The resize target overshoots
+    /// its card and the remove badge caps past it, and on an edge card that
+    /// overhang sits past the lanes' outer boundary where the box doesn't
+    /// reach — without slack a press there falls through and exits edit mode
+    /// instead of resizing or removing.
+    nonisolated static let editHitTestOutset: CGFloat = 12
+
+    /// Which rects count as the panel's. At rest the cards' union is exact,
+    /// so gutter clicks fall through; editing keeps the lanes' box (with
+    /// slack) because the union would punch holes mid-gesture — the lifted
+    /// card leaves its lane as a frameless gap, and a window going
+    /// mouse-through under a held drag cancels it. Nil frames mean the first
+    /// report hasn't arrived, so the box stands in; an empty panel reports
+    /// nothing to click and falls through. Pure so the mode rule is provable
+    /// without ordering windows.
+    nonisolated static func hitRects(lanesFrame: CGRect, cardFrames: [CGRect]?, isEditing: Bool) -> [CGRect] {
+        if isEditing {
+            return [lanesFrame.insetBy(dx: -editHitTestOutset, dy: -editHitTestOutset)]
+        }
+        return cardFrames ?? [lanesFrame]
     }
 
     /// Re-evaluate click-through when the interactive set itself changes —
@@ -330,10 +405,17 @@ public final class ControlPanelController {
     /// top-leading origin, screen points are bottom-leading. Sticky geometry
     /// reads through the card's own frame helper — one definition shared with
     /// the desk and the drag guard.
+    ///
+    /// The rects are tested as a union, not as their bounding box: the
+    /// gutters between cards are blank window, and a point there is outside
+    /// the panel — it must fall through to the app below (which the dismissal
+    /// monitor then sees) rather than be swallowed. The caller picks the set:
+    /// the cards' frames at rest, the lanes' box until they arrive, in edit
+    /// mode, and never for an empty panel (no rects at all falls through).
     nonisolated static func isInteractive(
         at screenPoint: CGPoint,
         windowFrame: CGRect,
-        lanesFrame: CGRect,
+        hitRects: [CGRect],
         stickies: [Sticky],
         galleryOpen: Bool
     ) -> Bool {
@@ -344,7 +426,7 @@ public final class ControlPanelController {
             width: panel.width,
             height: panel.height
         ) }
-        if toScreen(lanesFrame).contains(screenPoint) { return true }
+        if hitRects.contains(where: { toScreen($0).contains(screenPoint) }) { return true }
         return stickies.contains { sticky in
             toScreen(StickyCard.frame(center: CGPoint(x: sticky.x, y: sticky.y)))
                 .contains(screenPoint)
