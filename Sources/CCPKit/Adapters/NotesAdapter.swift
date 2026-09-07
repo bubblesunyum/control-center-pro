@@ -316,19 +316,21 @@ public final class NotesAdapter {
     /// Deleting needs a note left over: the document must hold at least one.
     public var canDeleteNote: Bool { notes.count > 1 }
 
-    /// Whether this activate's pull has proven Craft reachable. False from
+    /// Whether the latest pull has proven Craft reachable. False from
     /// init until the first pull lands, and on every activate until its pull
-    /// finishes — keystrokes typed meanwhile could interleave with the fetch
-    /// that decides adopts, conflicts, and remote deletes (ccp-5fom).
+    /// finishes. Status-only (ccp-t53p): the editor stays open while it
+    /// proves, and the toolbar reads syncing/offline meanwhile.
     public private(set) var isSyncVerified = false
     /// The last verification failed: a credential is saved but Craft never
     /// answered. Sticky until the next pull succeeds, so a failing retry
-    /// never flickers the gate open between attempts.
+    /// never flickers the status between attempts.
     public private(set) var isSyncCheckFailed = false
 
-    /// A saved connection exists. Without one the pads are local-only notes
-    /// and stay editable; a credential that exists but never verified is not
-    /// this — those pads may have a Craft counterpart, so they wait.
+    /// A saved connection exists. Without one the pads are local-only notes.
+    /// With one the pads still stay editable while the pull proves it —
+    /// optimistic editing (ccp-t53p): a landing pull reconciles around
+    /// keystrokes (re-reads before adopts, stashes before overwrites,
+    /// unmaps instead of deleting unconfirmed text) rather than holding them.
     ///
     /// The file itself is read on events (init, activate, credential
     /// changes), never here: a read can run the one-time Keychain migration
@@ -345,10 +347,11 @@ public final class NotesAdapter {
             (try? FileCraftCredentialStore().loadConnectionURL()) != nil
     }
 
-    /// Typing is allowed for local-only pads and for verified pads. An
-    /// unverified pad may be deleted out from under the caret by the landing
-    /// pull, so the editor holds until the pull is in.
-    public var isEditable: Bool { !hasCraftCredential || isSyncVerified }
+    /// Always true: the editor never waits for the pull (ccp-t53p). A pull
+    /// that lands on fresh keystrokes stashes or unmaps instead of
+    /// overwriting, so holding keystrokes buys nothing. Kept as a property
+    /// so call-sites still read intent rather than a literal.
+    public var isEditable: Bool { true }
 
     /// What the toolbar's status corner shows for the selected pad.
     public enum SyncStatus: Equatable, Sendable {
@@ -530,7 +533,7 @@ public final class NotesAdapter {
                 // A new credential is unverified until a pull proves it —
                 // the pads it maps may already be trashed on the other side.
                 // Re-verify now rather than on the next open: the panel may
-                // already be up, and the editor holds until the pull lands.
+                // already be up, and the status should reflect the new space.
                 self.isSyncVerified = false
                 self.isSyncCheckFailed = false
                 self.pullTask?.cancel()
@@ -542,9 +545,9 @@ public final class NotesAdapter {
                 // next pull re-caches after save.
                 self.defaults.removeObject(forKey: self.craftSpaceIDKey)
                 self.dirtyUnmappedNonEmptyPads()
-                // Re-verify now when the panel is up — the editor holds until
-                // the pull lands. While shut the next activate pulls, so no
-                // round starts that nobody watches.
+                // Re-verify now when the panel is up for fresh status.
+                // While shut the next activate pulls, so no round starts
+                // that nobody watches.
                 if self.isPanelOpen {
                     self.pullTask = Task { [weak self] in await self?.pullAll() }
                 }
@@ -578,9 +581,10 @@ public final class NotesAdapter {
         // was saved) converge like any first edit — otherwise they sit
         // unmapped and clean until the user happens to type in each one.
         dirtyUnmappedNonEmptyPads()
-        // The panel was shut: Craft may have moved under us. Pull now; a
-        // failed read changes nothing, and an adopt never lands on unpushed
-        // edits without stashing them in Craft first.
+        // The panel was shut: Craft may have moved under us. Pull now in
+        // the background without locking the editor; a failed read changes
+        // nothing, and an adopt never lands on unpushed edits without
+        // stashing them in Craft first.
         pullTask?.cancel()
         pullTask = Task { [weak self] in await self?.pullAll() }
     }
@@ -591,8 +595,9 @@ public final class NotesAdapter {
         pullTask = nil
         pullRetryTask?.cancel()
         pullRetryTask = nil
-        // The next activate re-verifies before unlocking: what Craft did
-        // while the panel was shut is unknown again.
+        // The next activate re-verifies for status: what Craft did
+        // while the panel was shut is unknown again. The editor never
+        // waits for it.
         isSyncVerified = false
         flushSave()
         // A debounce that only fires while the panel is open loses the last
@@ -1501,7 +1506,7 @@ public final class NotesAdapter {
 
     /// Pull every mapped pad: one clock read, one trash listing, then one
     /// block fetch each. A failed clock verifies nothing — the pads stay
-    /// exactly as they are, locked, until a retry proves Craft reachable —
+    /// exactly as they are, editable, until a retry proves Craft reachable —
     /// and one pad's failure never skips the rest. Observable for tests; the
     /// activate path fires it as a task.
     func pullAll(fromRetry: Bool = false) async {
@@ -1530,7 +1535,7 @@ public final class NotesAdapter {
         let serverTime = space?.serverTime
         guard space != nil else {
             isSyncCheckFailed = true
-            // One transient 500 at open must not lock the whole session:
+            // One transient 500 at open must not strand the session:
             // retry while the panel is up. A later activate or credential
             // change cancels this and starts its own round.
             schedulePullRetry()

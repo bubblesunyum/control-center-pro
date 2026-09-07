@@ -24,9 +24,9 @@ struct MarkdownNoteEditor: View {
     /// it, so pads must not share one.
     let documentId: String
     var placeholder: String?
-    /// False while the pad is unverified (ccp-5fom): the engine renders
-    /// read-only with no caret, still selectable. Pass-through — the fork
-    /// already owns this behaviour.
+    /// Pass-through to the engine's read-only state. Always true from the
+    /// widget (ccp-t53p): the pull reconciles in the background instead of
+    /// holding the caret.
     var isEditable = true
 
     /// Body size, and the base the heading multipliers scale from.

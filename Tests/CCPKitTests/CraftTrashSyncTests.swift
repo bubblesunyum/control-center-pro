@@ -6,9 +6,10 @@ import XCTest
 @testable import CCPKit
 
 /// Remote deletes win (ccp-5fom): a doc Craft trashed deletes its pad —
-/// text, tab, mapping and traces — on the next pull, and the editor holds
-/// keystrokes until that pull verifies. Reuses the push file's scripted
-/// transport.
+/// text, tab, mapping and traces — on the next pull. The editor stays open
+/// while that pull proves (ccp-t53p): keystrokes typed meanwhile reconcile
+/// around the landing pull instead of waiting for it. Reuses the push file's
+/// scripted transport.
 @MainActor
 final class CraftTrashSyncTests: XCTestCase {
     private let base = URL(string: "https://connect.craft.do/links/test/api/v1")!
@@ -113,7 +114,7 @@ final class CraftTrashSyncTests: XCTestCase {
         XCTAssertEqual(adapter.sidecar(for: id).entries, [])
         XCTAssertNil(adapter.syncedTitle(for: id))
         XCTAssertFalse(adapter.isPushDirty(id))
-        XCTAssertTrue(adapter.isSyncVerified, "a proving pull unlocks")
+        XCTAssertTrue(adapter.isSyncVerified, "a proving pull verifies")
     }
 
     func testTrashedClosedNoteLeavesTheOverflowMenu() async throws {
@@ -243,18 +244,23 @@ final class CraftTrashSyncTests: XCTestCase {
         XCTAssertEqual(adapter.syncStatus, .localOnly, "unmapped pads read local-only, never saved")
     }
 
-    func testCredentialedAdapterIsLockedUntilThePull() async throws {
+    func testCredentialedAdapterIsEditableBeforeThePull() async throws {
         let name = "ccp.trash.gate.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let adapter = adapter(store, ScriptedTransport([]))
 
         XCTAssertTrue(adapter.hasCraftCredential)
-        XCTAssertFalse(adapter.isEditable, "unverified pads hold keystrokes")
+        XCTAssertTrue(adapter.isEditable, "the editor never waits for the pull")
+        XCTAssertEqual(adapter.syncStatus, .syncing)
+
+        // Typing while unverified is accepted, not held.
+        adapter.text = "typed before verify"
+        XCTAssertEqual(adapter.text, "typed before verify")
         XCTAssertEqual(adapter.syncStatus, .syncing)
     }
 
-    func testSuccessfulPullUnlocksAsSaved() async throws {
+    func testSuccessfulPullKeepsEditableAsSaved() async throws {
         let name = "ccp.trash.unlock.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
@@ -263,7 +269,7 @@ final class CraftTrashSyncTests: XCTestCase {
             """)])
         let adapter = adapter(store, transport)
         let id = try await steadyPad(adapter, text: "one")
-        XCTAssertFalse(adapter.isEditable, "no pull yet, no typing")
+        XCTAssertTrue(adapter.isEditable, "no pull yet, still typing")
 
         await adapter.pullAll()
 
@@ -276,7 +282,27 @@ final class CraftTrashSyncTests: XCTestCase {
         XCTAssertTrue(adapter.isPushDirty(id))
     }
 
-    func testFailedCheckLocksAsOffline() async throws {
+    func testTypingBeforePullSurvivesAnUnmovedRemote() async throws {
+        // Optimistic editing (ccp-t53p): keystrokes typed while the pull is
+        // still proving must not be yanked when the remote did not move —
+        // the pull skips and local leads.
+        let name = "ccp.trash.optimistic.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([connection, trash(), blocks("""
+            {"items":[{"id":"block-0","markdown":"one"}]}
+            """)])
+        let adapter = adapter(store, transport)
+        _ = try await steadyPad(adapter, text: "one")
+
+        adapter.text = "one edited before pull"
+        await adapter.pullAll()
+
+        XCTAssertTrue(adapter.isEditable)
+        XCTAssertEqual(adapter.text, "one edited before pull", "local leads when remote is still")
+    }
+
+    func testFailedCheckStaysEditableAsOffline() async throws {
         let name = "ccp.trash.offline.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
@@ -286,9 +312,14 @@ final class CraftTrashSyncTests: XCTestCase {
 
         await adapter.pullAll()
 
-        XCTAssertFalse(adapter.isEditable)
+        XCTAssertTrue(adapter.isEditable, "offline never locks typing")
         XCTAssertEqual(adapter.syncStatus, .offline)
         XCTAssertTrue(adapter.notes.contains(where: { $0.id == id }), "offline deletes nothing")
+
+        adapter.text = "one edited offline"
+        XCTAssertEqual(adapter.text, "one edited offline")
+        XCTAssertTrue(adapter.isEditable)
+        XCTAssertEqual(adapter.syncStatus, .offline)
     }
 
     func testLocalOnlyPadsStayEditable() throws {

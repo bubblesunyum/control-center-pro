@@ -24,16 +24,16 @@ struct NoteSurface: View {
                 placeholder: "Write something…",
                 isEditable: adapter.isEditable
             )
-            // Unverified pads hold keystrokes until the pull is in
-            // (ccp-5fom): dimmed, readable, no caret.
-            .opacity(adapter.isEditable ? 1 : 0.55)
+            // Optimistic editing (ccp-t53p): the pull reconciles around
+            // keystrokes in the background, so the editor never dims or
+            // holds the caret while it proves.
             // The card takes whatever height its lane gives it, and the editor
             // takes all of that: pinned to its floor instead, the note grows a
             // strip of container below the text that looks editable and
             // swallows the click.
             .frame(minHeight: Layout.noteEditorHeight, maxHeight: .infinity)
             .accessibilityLabel("Note text")
-            .accessibilityHint(adapter.isEditable ? "Editable Markdown" : notesSyncDisplay(adapter.syncStatus).text)
+            .accessibilityHint("Editable Markdown")
 
             NoteToolbar(adapter: adapter, onDeleteSelected: onDeleteSelected)
         }
@@ -46,11 +46,9 @@ struct NoteSurface: View {
             }
         }
         // Clipboard rows, Finder files and browser text all land here; images
-        // have no text form and spring back unaccepted. Drops hold while the
-        // pad is unverified, like keystrokes.
+        // have no text form and spring back unaccepted.
         .onDrop(of: [.plainText, .text, .rtf, .html, .fileURL, .url], isTargeted: $isDropTargeted) { providers in
-            guard adapter.isEditable else { return false }
-            return adapter.acceptDrop(providers: providers)
+            adapter.acceptDrop(providers: providers)
         }
     }
 }
