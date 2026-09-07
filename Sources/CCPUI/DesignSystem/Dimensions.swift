@@ -65,6 +65,9 @@ public enum Layout {
     /// How wide one tab may grow before its name truncates. Fits a default
     /// "Note 12" plus its close cell at headline size, with a little air.
     static let noteTabMaxWidth: CGFloat = 92
+    /// How tall the fade above the note toolbar stands. Taller than a line
+    /// of text, so the last line dissolves instead of clipping hard.
+    static let noteToolbarFadeHeight: CGFloat = Space.three + Space.half // 28
 
     /// Size of a row's leading icon and trailing menu button.
     static let rowActionSize: CGFloat = 22

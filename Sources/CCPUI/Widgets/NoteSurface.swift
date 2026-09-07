@@ -44,6 +44,20 @@ struct NoteSurface: View {
             .frame(minHeight: Layout.noteEditorHeight, maxHeight: .infinity)
             .accessibilityLabel("Note text")
             .accessibilityHint("Editable Markdown")
+            // The toolbar's fade lives here, over the editor's last lines,
+            // so the text dissolves into the toolbar instead of clipping.
+            .overlay(alignment: .bottom) {
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: Color.noteInset, location: 1),
+                    ],
+                    startPoint: .top, endPoint: .bottom
+                )
+                .frame(height: Layout.noteToolbarFadeHeight)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
 
             NoteToolbar(adapter: adapter, onDeleteSelected: onDeleteSelected)
         }
@@ -85,11 +99,12 @@ private extension View {
 /// and the words cannot drift apart.
 fileprivate func notesSyncDisplay(_ status: NotesAdapter.SyncStatus) -> (symbol: String, text: String) {
     switch status {
-    case .localOnly: ("tray", "Local only")
-    case .syncing: ("arrow.triangle.2.circlepath", "Syncing…")
-    case .offline: ("wifi.slash", "Couldn't reach Craft")
-    case .unsavedChanges: ("clock", "Unsaved changes")
-    case .saved: ("checkmark.circle", "Saved to Craft")
+    case .localOnly: ("internaldrive", "Local")
+    case .syncing: ("arrow.triangle.2.circlepath", "Syncing")
+    // The cloud-with-X the error state wants; `cloud.slash` does not exist.
+    case .offline: ("xmark.icloud", "Error")
+    case .unsavedChanges: ("clock", "Unsaved")
+    case .saved: ("cloud", "Synced")
     }
 }
 
@@ -144,6 +159,18 @@ private struct NoteToolbar: View {
         .padding(.horizontal, Space.one)
         .padding(.bottom, Space.one)
         .opacity(isEmpty && conflicts.isEmpty ? 0.5 : 1)
+        // Solid behind the row so the scrim above lands on the same tone.
+        // After the opacity, so an empty note dims the buttons, not the well.
+        .background(
+            Color.noteInset,
+            in: UnevenRoundedRectangle(
+                topLeadingRadius: 0,
+                bottomLeadingRadius: Radius.control,
+                bottomTrailingRadius: Radius.control,
+                topTrailingRadius: 0,
+                style: .continuous
+            )
+        )
         // Tabbing away tears the button (and its popover) down with a stale
         // true — the next conflict would otherwise open uninvited.
         .onChange(of: adapter.selectedNoteID) { isConflictsPresented = false }
@@ -151,7 +178,7 @@ private struct NoteToolbar: View {
 
     /// Connection/saved state for the selected doc (ccp-5fom), on the
     /// toolbar's leading edge where the trash used to sit. Small by design:
-    /// an icon and a few words, secondary all the way.
+    /// an icon and a word, secondary all the way.
     private var syncStatus: some View {
         let display = notesSyncDisplay(adapter.syncStatus)
         return Label(display.text, systemImage: display.symbol)
