@@ -79,24 +79,6 @@ struct ResizeGrip: View {
     }
 }
 
-/// A short arc concentric with the card's own corner: the grip box's outer
-/// corner sits exactly on the card's, so centering the arc one card-radius in
-/// hugs the edge. Inset half a step inside the hairline — flush, it would read
-/// as a broken border rather than a mark.
-private struct CornerTick: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.addArc(
-            center: CGPoint(x: rect.maxX - Radius.card, y: rect.maxY - Radius.card),
-            radius: Radius.card - Space.half,
-            startAngle: .degrees(0),
-            endAngle: .degrees(90),
-            clockwise: false
-        )
-        return path
-    }
-}
-
 /// The one resize commit: the drag's release and the VoiceOver step both go
 /// through here, so the refusal rule lives in exactly one place.
 ///

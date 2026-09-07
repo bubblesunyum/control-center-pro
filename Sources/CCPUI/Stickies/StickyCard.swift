@@ -7,10 +7,10 @@ import SwiftUI
 
 /// One sticky note on the panel: a paper card holding a Markdown editor.
 ///
-/// No visible chrome — no header, no title row. Every padded edge is the
-/// move handle (hover answers with the open hand) and a resize grip fades
-/// into the bottom-right corner after a short hover; everything else is
-/// paper for typing.
+/// No visible chrome — no header, no title row. The padded edge is the move
+/// handle (hover answers with the open hand) and a resize grip fades into
+/// the bottom-right corner after a short hover; everything inside the
+/// padding is paper for typing.
 ///
 /// Both gestures steer transient local state per frame and commit to the
 /// store once, on release. Writing the store per pixel re-renders the desk,
@@ -26,10 +26,10 @@ struct StickyCard: View {
     /// through here so the frame helpers below stay the one place the desk,
     /// the drag guard, and the controller's hit-test read geometry from.
     static let defaultSize = CGSize(width: Sticky.defaultWidth, height: Sticky.defaultHeight)
-    /// The grabbable rim around every edge. Invisible, inside the editor's
-    /// own text insets so it never covers a glyph — and what the reclaim
-    /// math keeps reachable.
-    static let edgeWidth: CGFloat = 14
+    /// The grabbable padding around every edge. The editor lives inside it,
+    /// so this ring is pure grab surface with no text or AppKit tracking
+    /// underneath — and what the reclaim math keeps reachable.
+    static let edgeWidth: CGFloat = Space.three
     /// A new sticky cascades from the one that spawned it, so it never lands
     /// exactly on top of its parent.
     static let cascadeOffset: CGFloat = Space.three
@@ -58,6 +58,16 @@ struct StickyCard: View {
         frame(
             center: CGPoint(x: sticky.x, y: sticky.y),
             size: CGSize(width: sticky.width, height: sticky.height)
+        )
+    }
+
+    /// The editor's frame inside the chrome: the stored size is the whole
+    /// card, padding included, so every geometry reader (desk, drag guard,
+    /// controller hit-test, reclaim) shares one definition with the drawing.
+    static func editorSize(for size: CGSize) -> CGSize {
+        CGSize(
+            width: max(size.width - edgeWidth * 2, 0),
+            height: max(size.height - edgeWidth * 2, 0)
         )
     }
 
@@ -127,32 +137,52 @@ struct StickyCard: View {
     }
 
     var body: some View {
-        MarkdownNoteEditor(
-            text: Binding(
-                get: { sticky.text },
-                set: { store.setText($0, for: sticky.id) }
-            ),
-            documentId: "sticky-\(sticky.id.uuidString)",
-            placeholder: "Jot it down…",
-            // Only the just-created sticky answers: `newSticky()` names it
-            // before the card exists, and the claim clears on arrival. Every
-            // other sticky stays out of the focus path entirely.
-            onCreate: { [weak panelFocus, id = sticky.id] textView in
-                guard panelFocus?.pendingStickyID == id else { return }
-                panelFocus?.pendingStickyID = nil
-                textView.window?.makeFirstResponder(textView)
-            }
-        )
-        .frame(width: drawnSize.width, height: drawnSize.height)
-        // Where the resize grip lives: hovering is passive — it never eats
-        // a click — so the whole card can answer it and the corner needs no
-        // hit-testable zone of its own while the grip is hidden.
-        .onContinuousHover { phase in
-            switch phase {
-            case .active(let point): cornerHover(point)
-            case .ended: endCornerHover()
-            }
+        ZStack {
+            // The grab surface: a hollow ring behind the editor, exactly the
+            // padding. Presses here never reach the text stack — no selection
+            // drag, no scroller tracking, no gesture competition — so the
+            // move gesture owns them outright.
+            GrabRing(inset: Self.edgeWidth)
+                .fill(.clear)
+                .contentShape(GrabRing(inset: Self.edgeWidth), eoFill: true)
+                .accessibilityLabel("Move sticky")
+                // The cursor is the hover answer: no fill change, just the hand.
+                // Paired strictly — a duplicate enter or a trailing exit after
+                // disappear must never push or pop alone.
+                .onHover { hovering in
+                    if hovering {
+                        guard !isEdgeHovered else { return }
+                        isEdgeHovered = true
+                        NSCursor.openHand.push()
+                    } else {
+                        guard isEdgeHovered else { return }
+                        isEdgeHovered = false
+                        NSCursor.pop()
+                    }
+                }
+                .gesture(moveGesture)
+            // Fenced off from the drag: a move steers only the card's offset,
+            // so the text stack must not re-evaluate per pixel.
+            StableStickyEditor(
+                text: sticky.text,
+                documentId: "sticky-\(sticky.id.uuidString)",
+                onText: { store.setText($0, for: sticky.id) },
+                // Only the just-created sticky answers: `newSticky()` names it
+                // before the card exists, and the claim clears on arrival. Every
+                // other sticky stays out of the focus path entirely.
+                onCreate: { [weak panelFocus, id = sticky.id] textView in
+                    guard panelFocus?.pendingStickyID == id else { return }
+                    panelFocus?.pendingStickyID = nil
+                    textView.window?.makeFirstResponder(textView)
+                }
+            )
+            .equatable()
+            .frame(
+                width: Self.editorSize(for: drawnSize).width,
+                height: Self.editorSize(for: drawnSize).height
+            )
         }
+        .frame(width: drawnSize.width, height: drawnSize.height)
         .background {
             RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
                 .fill(Color.stickyPaper(for: sticky.color))
@@ -162,7 +192,6 @@ struct StickyCard: View {
             RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
                 .strokeBorder(Color.stickyStroke, lineWidth: Stroke.hairline)
         }
-        .overlay { edgeRing }
         .overlay(alignment: .bottomTrailing) { cornerZone }
         .shadow(color: .cardShadow, radius: 8, y: 2)
         // Paper is paper in either appearance: the pastel never darkens, so
@@ -193,7 +222,10 @@ struct StickyCard: View {
             isPresented: $isConfirmingDelete,
             titleVisibility: .visible
         ) {
-            Button("Delete Sticky", role: .destructive) { store.delete(sticky.id) }
+            Button("Delete Sticky", role: .destructive) {
+                store.isConfirmingDelete = false
+                store.delete(sticky.id)
+            }
             Button("Cancel", role: .cancel) {}
         }
         // The panel's Esc handling reads the store flag so the keystroke
@@ -201,20 +233,48 @@ struct StickyCard: View {
         .onChange(of: isConfirmingDelete) { _, confirming in
             store.isConfirmingDelete = confirming
         }
-        // A cancelled gesture never calls `onEnded`: committing here too
-        // keeps the travelled distance instead of snapping back.
+        // The store flag follows the gestures, not the pixels: set on lift,
+        // cleared on release, so the controller never re-evaluates
+        // mouse-through under a held drag. A cancelled gesture never calls
+        // `onEnded`: committing here too keeps the travelled distance
+        // instead of snapping back.
         .onChange(of: isDragActive) { _, active in
-            if !active { commitDragIfNeeded() }
+            if active {
+                store.isDragging = true
+                dragLog("move start")
+            } else {
+                commitDragIfNeeded()
+            }
         }
         .onChange(of: isResizeActive) { _, active in
-            if !active { commitResizeIfNeeded() }
+            if active {
+                store.isDragging = true
+                dragLog("resize start")
+            } else {
+                commitResizeIfNeeded()
+            }
+        }
+        // TEMP (ccp-rlql A1): recreation tripwire — the store must never
+        // change under a held gesture; if it does the transients reset and
+        // the card snaps back. Remove after proof.
+        .onChange(of: sticky) { _, _ in
+            if isDragActive || isResizeActive {
+                dragLog("STORE-CHANGED mid-gesture!")
+            }
         }
         .onDisappear {
             gripTask?.cancel()
             gripTask = nil
             // A dead gesture owns nothing: whatever was in flight is over,
-            // and the controller must hear that even though no release ran.
+            // the transients clear with it, and the controller must hear
+            // that even though no release ran.
+            dragOffset = .zero
+            resizePreview = nil
+            resizeRide = .zero
             store.isDragging = false
+            // The card dies with a confirmed delete while the flag is global:
+            // without this the panel stops dismissing (see the Esc path).
+            store.isConfirmingDelete = false
             // Dismissing the panel fires no hover exit for a hidden window;
             // without this the open hand outlives the sticky.
             if isEdgeHovered {
@@ -224,108 +284,111 @@ struct StickyCard: View {
         }
     }
 
-    /// The move handle: the padded rim itself, hit-tested hollow so presses
-    /// on paper fall through to the editor. Minimum distance zero so the
-    /// card is already under the finger on the first pixel — stickies have
-    /// no hold-to-edit, unlike lane cards.
-    private var edgeRing: some View {
-        EdgeRing(edge: Self.edgeWidth)
-            .fill(.clear)
-            .contentShape(EdgeRing(edge: Self.edgeWidth), eoFill: true)
-            .accessibilityLabel("Move sticky")
-            // The cursor is the hover answer: no fill change, just the hand.
-            .onHover { hovering in
-                isEdgeHovered = hovering
-                if hovering {
-                    NSCursor.openHand.push()
-                } else {
-                    NSCursor.pop()
-                }
+    /// The move drag: steers a transient offset the card draws live and
+    /// commits once, on release. Minimum distance zero so the card is
+    /// already under the finger on the first pixel — stickies have no
+    /// hold-to-edit, unlike lane cards. The handle sits outside the text
+    /// stack, so zero never steals a selection.
+    private var moveGesture: some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .panel)
+            .updating($isDragActive) { _, state, _ in state = true }
+            .onChanged { value in
+                dragOffset = value.translation
             }
-            .gesture(
-                DragGesture(minimumDistance: 0, coordinateSpace: .panel)
-                    .updating($isDragActive) { _, state, _ in state = true }
-                    .onChanged { value in
-                        store.isDragging = true
-                        dragOffset = value.translation
-                    }
-                    .onEnded { value in
-                        store.move(
-                            sticky.id,
-                            toX: sticky.x + value.translation.width,
-                            toY: sticky.y + value.translation.height
-                        )
-                        dragOffset = .zero
-                        store.isDragging = false
-                    }
-            )
+            .onEnded { value in
+                store.move(
+                    sticky.id,
+                    toX: sticky.x + value.translation.width,
+                    toY: sticky.y + value.translation.height
+                )
+                dragOffset = .zero
+                syncDraggingFlag()
+                dragLog("move end dx=\(Int(value.translation.width)) dy=\(Int(value.translation.height))")
+            }
     }
 
     /// Commits the travelled offset when the gesture ended without `onEnded`
     /// — the system-cancel path. After a normal release the offset is
-    /// already zeroed and this is a no-op.
+    /// already zeroed and only the flag re-syncs, which is a no-op.
     private func commitDragIfNeeded() {
-        guard dragOffset != .zero else { return }
-        store.move(
-            sticky.id,
-            toX: sticky.x + dragOffset.width,
-            toY: sticky.y + dragOffset.height
-        )
-        dragOffset = .zero
-        store.isDragging = false
+        if dragOffset != .zero {
+            store.move(
+                sticky.id,
+                toX: sticky.x + dragOffset.width,
+                toY: sticky.y + dragOffset.height
+            )
+            dragOffset = .zero
+            dragLog("move commit (cancel path)")
+        }
+        syncDraggingFlag()
     }
 
-    /// Arms or retires the grip from the card's hover location. Location is
-    /// in card space, so the corner rect rides the live size — including
-    /// mid-resize, where hiding is deferred to the release path anyway.
-    private func cornerHover(_ point: CGPoint) {
-        let size = drawnSize
-        let inCorner = point.x >= size.width - Self.gripZone
-            && point.y >= size.height - Self.gripZone
-        if inCorner {
-            guard gripTask == nil, !showGrip else { return }
-            gripTask = Task { @MainActor in
-                try? await Task.sleep(for: Self.gripHoverDelay)
-                guard !Task.isCancelled else { return }
-                showGrip = true
-            }
+    /// The controller's mouse-through verdict follows whether a gesture is
+    /// in flight — either gesture — never the per-pixel stream.
+    private func syncDraggingFlag() {
+        store.isDragging = isDragActive || isResizeActive
+    }
+
+    // TEMP (ccp-rlql A1): live-drag validation logging, remove after proof.
+    // A file, not NSLog: unified-log delivery proved unreliable here.
+    // Watch with: tail -f /tmp/sticky-drag.log
+    private func dragLog(_ message: String) {
+        let line = "[sticky-drag] \(sticky.id.uuidString.prefix(4)) \(message)\n"
+        if let handle = FileHandle(forWritingAtPath: "/tmp/sticky-drag.log") {
+            handle.seekToEndOfFile()
+            if let data = line.data(using: .utf8) { handle.write(data) }
+            handle.closeFile()
         } else {
-            gripTask?.cancel()
-            gripTask = nil
-            if !isResizeActive { showGrip = false }
+            try? line.write(toFile: "/tmp/sticky-drag.log", atomically: true, encoding: .utf8)
         }
     }
 
-    private func endCornerHover() {
+    /// Arms the grip after the pointer rests in the corner, or retires it on
+    /// exit. The zone itself never leaves the tree — only the mark fades —
+    /// so there is always something to hover and to grab.
+    private func armGrip() {
+        guard gripTask == nil, !showGrip else { return }
+        gripTask = Task { @MainActor in
+            try? await Task.sleep(for: Self.gripHoverDelay)
+            guard !Task.isCancelled else { return }
+            showGrip = true
+        }
+    }
+
+    private func disarmGrip() {
         gripTask?.cancel()
         gripTask = nil
         if !isResizeActive { showGrip = false }
     }
 
-    /// The corner's hit area, present only while the grip shows — so hidden
-    /// costs nothing and every visible pixel of it answers the finger. The
-    /// gesture rides the whole zone, not the drawn mark.
-    @ViewBuilder
+    /// The corner's hit area: always installed, so the grip can always arm
+    /// and the first grab lands even before the fade-in. Only the drawn
+    /// mark answers `showGrip` — the gesture rides the whole zone either
+    /// way, and VoiceOver only sees it while visible. The mark is the
+    /// widgets' own corner tick, shared, not a second design.
     private var cornerZone: some View {
-        if showGrip {
-            ZStack(alignment: .bottomTrailing) {
-                GripMarks()
-                    .stroke(.secondary, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                    .frame(width: Space.two + Space.half, height: Space.two + Space.half)
-                    .padding(Space.one)
-            }
-            .frame(width: Self.gripZone, height: Self.gripZone)
-            .contentShape(Rectangle())
-            .accessibilityLabel("Resize sticky")
-            .accessibilityValue("\(Int(drawnSize.width)) by \(Int(drawnSize.height))")
-            .accessibilityAction(named: "Make wider") { nudgeResize(by: CGSize(width: Space.three, height: 0)) }
-            .accessibilityAction(named: "Make narrower") { nudgeResize(by: CGSize(width: -Space.three, height: 0)) }
-            .accessibilityAction(named: "Make taller") { nudgeResize(by: CGSize(width: 0, height: Space.three)) }
-            .accessibilityAction(named: "Make shorter") { nudgeResize(by: CGSize(width: 0, height: -Space.three)) }
-            .gesture(resizeGesture)
-            .transition(.opacity)
-            .animation(.easeOut(duration: 0.15), value: showGrip)
+        ZStack(alignment: .bottomTrailing) {
+            CornerTick()
+                .stroke(.white, style: StrokeStyle(lineWidth: Stroke.resizeTick, lineCap: .round))
+                .shadow(color: .cardShadow, radius: 2, y: 1)
+                .opacity(showGrip ? 1 : 0)
         }
+        .frame(width: Self.gripZone, height: Self.gripZone)
+        .contentShape(Rectangle())
+        .accessibilityHidden(!showGrip)
+        .accessibilityLabel("Resize sticky")
+        .accessibilityValue("\(Int(drawnSize.width)) by \(Int(drawnSize.height))")
+        .accessibilityAction(named: "Make wider") { nudgeResize(by: CGSize(width: Space.three, height: 0)) }
+        .accessibilityAction(named: "Make narrower") { nudgeResize(by: CGSize(width: -Space.three, height: 0)) }
+        .accessibilityAction(named: "Make taller") { nudgeResize(by: CGSize(width: 0, height: Space.three)) }
+        .accessibilityAction(named: "Make shorter") { nudgeResize(by: CGSize(width: 0, height: -Space.three)) }
+        // Priority over the padding's move gesture where the two overlap:
+        // a corner press resizes, never moves.
+        .highPriorityGesture(resizeGesture)
+        .onHover { hovering in
+            if hovering { armGrip() } else { disarmGrip() }
+        }
+        .animation(.easeOut(duration: 0.15), value: showGrip)
     }
 
     /// The resize drag: steers a clamped preview the card draws live and
@@ -336,7 +399,6 @@ struct StickyCard: View {
         DragGesture(minimumDistance: 2, coordinateSpace: .panel)
             .updating($isResizeActive) { _, state, _ in state = true }
             .onChanged { value in
-                store.isDragging = true
                 let preview = Self.previewResize(from: sticky, translation: value.translation)
                 resizePreview = preview.size
                 resizeRide = preview.ride
@@ -351,17 +413,20 @@ struct StickyCard: View {
                 store.resize(sticky.id, width: preview.size.width, height: preview.size.height)
                 resizePreview = nil
                 resizeRide = .zero
-                store.isDragging = false
+                syncDraggingFlag()
+                dragLog("resize end w=\(Int(preview.size.width)) h=\(Int(preview.size.height))")
             }
     }
 
     private func commitResizeIfNeeded() {
-        guard let preview = resizePreview else { return }
-        store.move(sticky.id, toX: sticky.x + resizeRide.width, toY: sticky.y + resizeRide.height)
-        store.resize(sticky.id, width: preview.width, height: preview.height)
-        resizePreview = nil
-        resizeRide = .zero
-        store.isDragging = false
+        if let preview = resizePreview {
+            store.move(sticky.id, toX: sticky.x + resizeRide.width, toY: sticky.y + resizeRide.height)
+            store.resize(sticky.id, width: preview.width, height: preview.height)
+            resizePreview = nil
+            resizeRide = .zero
+            dragLog("resize commit (cancel path)")
+        }
+        syncDraggingFlag()
     }
 
     private func nudgeResize(by delta: CGSize) {
@@ -373,10 +438,42 @@ struct StickyCard: View {
     }
 }
 
+/// The editor, fenced off from drag re-renders: a move steers only the
+/// card's offset, so the text view must not hear about every pixel — each
+/// body re-evaluation pokes the AppKit stack (header reconcile, scroll and
+/// undo bookkeeping) and the dropped frames read as the card trailing the
+/// finger. Equal while the text and document match, whatever closures the
+/// card rebuilt around them; resizes still land, because the frame sits
+/// outside the fence and only the frame moves.
+private struct StableStickyEditor: View, Equatable {
+    let text: String
+    let documentId: String
+    let onText: (String) -> Void
+    let onCreate: ((NSTextView) -> Void)?
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.text == rhs.text && lhs.documentId == rhs.documentId
+    }
+
+    var body: some View {
+        MarkdownNoteEditor(
+            text: Binding(get: { text }, set: onText),
+            documentId: documentId,
+            placeholder: "Jot it down…",
+            // Tight: the card's own padding is already the well. The Notes
+            // widget keeps the roomy default — this preset is sticky-only.
+            textInsets: MarkdownNoteEditor.stickyInsets,
+            onCreate: onCreate
+        )
+    }
+}
+
 /// The move handle's shape: the card's rounded rect minus its paper, as one
-/// even-odd path — so the rim grabs and the middle types.
-private struct EdgeRing: Shape {
-    var edge: CGFloat
+/// even-odd path — so the padding grabs and the editor types. It sits behind
+/// the editor rather than over it: the gesture owns a region AppKit never
+/// sees, instead of competing with the text stack for one.
+private struct GrabRing: Shape {
+    var inset: CGFloat
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
@@ -385,26 +482,12 @@ private struct EdgeRing: Shape {
             cornerSize: CGSize(width: Radius.card, height: Radius.card)
         )
         path.addRoundedRect(
-            in: rect.insetBy(dx: edge, dy: edge),
+            in: rect.insetBy(dx: inset, dy: inset),
             cornerSize: CGSize(
-                width: max(Radius.card - edge, 0),
-                height: max(Radius.card - edge, 0)
+                width: max(Radius.card - inset, 0),
+                height: max(Radius.card - inset, 0)
             )
         )
-        return path
-    }
-}
-
-/// Two strokes parallel to the bottom-right diagonal, stacked toward the
-/// corner. Explicit endpoints, no angles — an arc's sweep has exactly one
-/// wrong way to go and this shape found it.
-private struct GripMarks: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX + 2, y: rect.maxY - 8))
-        path.addLine(to: CGPoint(x: rect.maxX - 8, y: rect.minY + 2))
-        path.move(to: CGPoint(x: rect.minX + 8, y: rect.maxY - 2))
-        path.addLine(to: CGPoint(x: rect.maxX - 2, y: rect.minY + 8))
         return path
     }
 }

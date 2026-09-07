@@ -29,6 +29,11 @@ struct MarkdownNoteEditor: View {
     /// widget (ccp-t53p): the pull reconciles in the background instead of
     /// holding the caret.
     var isEditable = true
+    /// How far the text stands off the editor's own frame. Roomy by default;
+    /// a sticky sets its own tight pair — the card's grab padding is already
+    /// the well, and doubling it would shrink the paper and grow the scroll
+    /// range for nothing.
+    var textInsets = TextInsets(horizontal: Space.two + Space.half, vertical: Space.two)
     /// Fires with the editor's text view when it joins a window. The engine
     /// wrapper owns the view and offers no hook of its own, so this reports
     /// it per instance (see `TextViewReporter`) — the shell aiming focus
@@ -39,6 +44,11 @@ struct MarkdownNoteEditor: View {
     /// Body size, and the base the heading multipliers scale from.
     static let fontSize: CGFloat = 14
 
+    /// The tight pair a sticky uses: the card's grab padding is already the
+    /// well. Lives here, not at the call site, because only this file may
+    /// name the engine's inset type.
+    static let stickyInsets = TextInsets(horizontal: Space.half, vertical: Space.half)
+
     /// A lane-width card gives a heading nowhere to be big. H1 at 1.35× is
     /// still unmistakably a heading at 14pt, where the engine's own 2.0×
     /// would spend four lines of the card on one word.
@@ -47,7 +57,7 @@ struct MarkdownNoteEditor: View {
     var body: some View {
         NativeTextViewWrapper(
             text: $text,
-            configuration: Self.configuration,
+            configuration: configuration,
             fontSize: Self.fontSize,
             documentId: documentId,
             isEditable: isEditable,
@@ -64,20 +74,19 @@ struct MarkdownNoteEditor: View {
         }
     }
 
-    private static var configuration: MarkdownEditorConfiguration {
+    private var configuration: MarkdownEditorConfiguration {
         var configuration = MarkdownEditorConfiguration.default
-        configuration.theme = theme
+        configuration.theme = Self.theme
         // Markdown is a shortcut for formatting here, not the visible text:
         // markers stay hidden even with the caret inside them (ccp-e8df).
         configuration.markers.revealMarkersOnCaret = false
-        configuration.headings = HeadingStyle(fontMultipliers: headingMultipliers)
+        configuration.headings = HeadingStyle(fontMultipliers: Self.headingMultipliers)
         configuration.paragraph = ParagraphStyle(spacingFactor: 0.15,
                                                  lineHeightExtraSpacing: 1)
         // The well reads as inset only if the text clears its edge by a
         // visible margin on every side — roomy on purpose, roomier than card
         // chrome ever is.
-        configuration.textInsets = TextInsets(horizontal: Space.two + Space.half,
-                                              vertical: Space.two)
+        configuration.textInsets = textInsets
         return configuration
     }
 

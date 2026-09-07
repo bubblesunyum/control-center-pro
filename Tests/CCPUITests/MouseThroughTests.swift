@@ -108,9 +108,13 @@ final class MouseThroughTests: XCTestCase {
 
     func testStickyCenterIsSufficientButNotRequired() {
         let note = sticky(200, 600)
-        // 240×192 card: the corner inside is interactive, just outside isn't.
-        XCTAssertTrue(check(CGPoint(x: 200 + 100, y: 200 + 80), stickies: [note]))
-        XCTAssertFalse(check(CGPoint(x: 200 + 140, y: 200 + 120), stickies: [note]))
+        let halfW = StickyCard.defaultSize.width / 2
+        let halfH = StickyCard.defaultSize.height / 2
+        // Just inside the paper answers; just outside falls through. Screen
+        // y runs bottom-leading against the panel's top-leading, hence the
+        // mirrored vertical.
+        XCTAssertTrue(check(CGPoint(x: 200 + halfW - 20, y: 200 - (halfH - 20)), stickies: [note]))
+        XCTAssertFalse(check(CGPoint(x: 200 + halfW + 20, y: 200 - (halfH - 20)), stickies: [note]))
     }
 
     func testResizedStickyHitTestsItsStoredSize() {
@@ -126,7 +130,7 @@ final class MouseThroughTests: XCTestCase {
         // the finger 1:1 and the opposite corner stands still.
         let note = sticky(200, 600)
         let preview = StickyCard.previewResize(from: note, translation: CGSize(width: 100, height: 60))
-        XCTAssertEqual(preview.size, CGSize(width: 340, height: 252))
+        XCTAssertEqual(preview.size, CGSize(width: note.width + 100, height: note.height + 60))
         XCTAssertEqual(preview.ride, CGSize(width: 50, height: 30))
         // At the minimum the ride freezes with the size: the corner stays
         // glued instead of detaching.
@@ -134,8 +138,19 @@ final class MouseThroughTests: XCTestCase {
         XCTAssertEqual(clamped.size, CGSize(width: Sticky.minWidth, height: Sticky.minHeight))
         XCTAssertEqual(
             clamped.ride,
-            CGSize(width: (Sticky.minWidth - 240) / 2, height: (Sticky.minHeight - 192) / 2)
+            CGSize(width: (Sticky.minWidth - note.width) / 2, height: (Sticky.minHeight - note.height) / 2)
         )
+    }
+
+    func testEditorSizeLeavesTheGrabPadding() {
+        // The stored size is the whole card, padding included: a new note's
+        // text area is what the pre-chrome default offered.
+        XCTAssertEqual(
+            StickyCard.editorSize(for: StickyCard.defaultSize),
+            CGSize(width: 240, height: 192)
+        )
+        // Degenerate sizes pin at zero rather than inverting.
+        XCTAssertEqual(StickyCard.editorSize(for: .zero), .zero)
     }
 
     func testOpenGalleryMakesEverythingInteractive() {

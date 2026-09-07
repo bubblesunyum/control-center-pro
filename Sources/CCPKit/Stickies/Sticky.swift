@@ -12,9 +12,11 @@ import Foundation
 /// The on-disk keys are pinned — renaming one orphans every saved sticky.
 public struct Sticky: Codable, Equatable, Identifiable, Sendable {
     /// What a sticky measures when it has never been resized, and what notes
-    /// written before size existed decode to.
-    public static let defaultWidth: Double = 240
-    public static let defaultHeight: Double = 192
+    /// written before size existed decode to. Includes the card's grab
+    /// padding on every side (240 + 2×24, 192 + 2×24), so a new note's text
+    /// area matches what the pre-chrome default offered.
+    public static let defaultWidth: Double = 288
+    public static let defaultHeight: Double = 240
     /// The smallest a resize may leave behind — below this the text is a
     /// slit, not a note.
     public static let minWidth: Double = 160
