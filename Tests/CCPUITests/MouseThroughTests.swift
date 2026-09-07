@@ -113,6 +113,14 @@ final class MouseThroughTests: XCTestCase {
         XCTAssertFalse(check(CGPoint(x: 200 + 140, y: 200 + 120), stickies: [note]))
     }
 
+    func testResizedStickyHitTestsItsStoredSize() {
+        // A widened note answers across its full paper, not its old frame.
+        var wide = sticky(200, 600)
+        wide.width = 400
+        XCTAssertTrue(check(CGPoint(x: 200 + 180, y: 200), stickies: [wide]))
+        XCTAssertFalse(check(CGPoint(x: 200 + 220, y: 200), stickies: [wide]))
+    }
+
     func testOpenGalleryMakesEverythingInteractive() {
         XCTAssertTrue(check(CGPoint(x: 100, y: 100), galleryOpen: true))
     }
@@ -123,24 +131,41 @@ final class MouseThroughTests: XCTestCase {
         XCTAssertTrue(check(CGPoint(x: 800, y: 700), stickies: [sticky(800, 100)]))
     }
 
-    func testClampedCenterKeepsTheHeaderReachable() {
+    func testClampedCenterKeepsTheGrabStripReachable() {
         let bounds = CGRect(x: 0, y: 0, width: 1000, height: 800)
         // Flung off every edge comes back to just the grab strip.
-        let far = StickyCard.clampedCenter(CGPoint(x: 5000, y: -5000), in: bounds)
+        let far = StickyCard.clampedCenter(
+            CGPoint(x: 5000, y: -5000),
+            size: StickyCard.defaultSize,
+            in: bounds
+        )
         XCTAssertEqual(
             far,
             CGPoint(
-                x: 1000 - StickyCard.minGrab + StickyCard.size.width / 2,
-                y: StickyCard.size.height / 2 - StickyCard.headerHeight
+                x: 1000 - StickyCard.minGrab + StickyCard.defaultSize.width / 2,
+                y: StickyCard.defaultSize.height / 2 - StickyCard.grabHeight
+            )
+        )
+        // A resized note clamps by its own size, not the default's.
+        let bigFar = StickyCard.clampedCenter(
+            CGPoint(x: 5000, y: -5000),
+            size: CGSize(width: 400, height: 300),
+            in: bounds
+        )
+        XCTAssertEqual(
+            bigFar,
+            CGPoint(
+                x: 1000 - StickyCard.minGrab + 200,
+                y: 150 - StickyCard.grabHeight
             )
         )
         // Partially off-screen is fine and stays put.
         XCTAssertEqual(
-            StickyCard.clampedCenter(CGPoint(x: 990, y: 790), in: bounds),
+            StickyCard.clampedCenter(CGPoint(x: 990, y: 790), size: StickyCard.defaultSize, in: bounds),
             CGPoint(x: 990, y: 790)
         )
         XCTAssertEqual(
-            StickyCard.clampedCenter(CGPoint(x: 500, y: 400), in: bounds),
+            StickyCard.clampedCenter(CGPoint(x: 500, y: 400), size: StickyCard.defaultSize, in: bounds),
             CGPoint(x: 500, y: 400)
         )
     }

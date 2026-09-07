@@ -275,7 +275,7 @@ public final class ControlPanelController {
         reclaimStickies()
     }
 
-    /// Pull any sticky whose header left the window back to reachability.
+    /// Pull any sticky whose grab strip left the window back to reachability.
     /// Drifts off-screen are allowed, stranded notes are not: without a
     /// reachable pixel the only recovery is hand-editing the file. Runs on
     /// seat changes, never mid-drag.
@@ -284,6 +284,7 @@ public final class ControlPanelController {
         for sticky in StickyStore.shared.visible {
             let clamped = StickyCard.clampedCenter(
                 CGPoint(x: sticky.x, y: sticky.y),
+                size: CGSize(width: sticky.width, height: sticky.height),
                 in: bounds
             )
             if clamped.x != sticky.x || clamped.y != sticky.y {
@@ -428,7 +429,7 @@ public final class ControlPanelController {
         ) }
         if hitRects.contains(where: { toScreen($0).contains(screenPoint) }) { return true }
         return stickies.contains { sticky in
-            toScreen(StickyCard.frame(center: CGPoint(x: sticky.x, y: sticky.y)))
+            toScreen(StickyCard.frame(of: sticky))
                 .contains(screenPoint)
         }
     }

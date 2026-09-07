@@ -162,12 +162,12 @@ public struct ControlPanel: View {
                 // mutate the layout behind it.
                 guard !editor.isShowingGallery else { return }
                 // A press starting on a sticky belongs to the sticky's own
-                // header drag — never lift, resize, or arm a hold from it.
+                // grab-strip drag — never lift, resize, or arm a hold from it.
                 // Read off the store, not a preference: preferences trail by
                 // a layout pass, and a press in that gap would arm both the
                 // sticky drag and the lane hold at once.
                 guard !StickyStore.shared.visible.contains(where: {
-                    StickyCard.frame(center: CGPoint(x: $0.x, y: $0.y))
+                    StickyCard.frame(of: $0)
                         .contains(value.startLocation)
                 }) else { return }
                 if editor.isEditing {

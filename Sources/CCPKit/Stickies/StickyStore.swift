@@ -80,6 +80,14 @@ public final class StickyStore {
         stickies[index] = stickies[index].movedTo(x: x, y: y)
     }
 
+    /// A resize commit. One write, on release — the drag itself steers a
+    /// transient preview in the view, so a resize never re-renders the desk
+    /// or re-arms persistence per pixel. The minimum lives on `resizedTo`.
+    public func resize(_ id: UUID, width: Double, height: Double) {
+        guard let index = stickies.firstIndex(where: { $0.id == id }) else { return }
+        stickies[index] = stickies[index].resizedTo(width: width, height: height)
+    }
+
     public func setText(_ text: String, for id: UUID) {
         guard let index = stickies.firstIndex(where: { $0.id == id }) else { return }
         stickies[index].text = text
