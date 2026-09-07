@@ -20,6 +20,9 @@ public final class ControlPanelController {
     private let content: NSHostingView<AnyView>
     public let arrangement: PanelArrangement
     public let editor = PanelEditor()
+    /// Who the panel's keystrokes belong to. Notes claims its outlet on
+    /// arrival; every open hands it back unless there is a reason not to.
+    private let panelFocus = PanelFocus()
 
     /// The screen the panel is currently seated on. The window covers it
     /// wholesale, so this is the seat kept across display changes while open.
@@ -106,7 +109,8 @@ public final class ControlPanelController {
             onCardFrames: reportCards
         )
         .environment(\.hidePanel, hide)
-        .environment(\.pasteIntoPreviousApp, paste))
+        .environment(\.pasteIntoPreviousApp, paste)
+        .environment(\.panelFocus, panelFocus))
 
         // Lay the SwiftUI graph out now rather than on the first open, where it
         // would land inside the 100ms.
@@ -210,6 +214,7 @@ public final class ControlPanelController {
         }
         window.orderFrontRegardless()
         window.makeKey()
+        focusNotesForOpen()
         isVisible = true
         dismissal.start()
         startMouseThrough()
@@ -222,11 +227,52 @@ public final class ControlPanelController {
     /// A new sticky at the window's center, opening the panel first when it
     /// is down — a note nobody can see is a note nobody wrote.
     public func newSticky() {
+        let size = window.frame.size
+        let sticky = StickyStore.shared.add(x: size.width / 2, y: size.height / 2)
+        // Before showing: the open below must not run the Notes path first
+        // (yanking its caret to the end) only for the newborn to steal focus
+        // on arrival. The pending claim suppresses it; the card answers once.
+        panelFocus.pendingStickyID = sticky.id
         if !isVisible {
             show(from: nil)
         }
-        let size = window.frame.size
-        StickyStore.shared.add(x: size.width / 2, y: size.height / 2)
+    }
+
+    /// Every open belongs to Notes: the view graph survives hide/show, so a
+    /// sticky that held focus would otherwise keep it across opens — and
+    /// `initialFirstResponder` only applies when the window has no first
+    /// responder at all. Edit mode and the gallery have their own controls
+    /// to type in and are left alone.
+    private func focusNotesForOpen() {
+        guard let notes = panelFocus.notesTextView, notes.window === window else { return }
+        guard Self.shouldAutofocusNotes(
+            isEditing: editor.isEditing,
+            galleryOpen: editor.isShowingGallery,
+            notesEditable: notes.isEditable,
+            notesAlreadyFocused: window.firstResponder === notes,
+            newcomerPending: panelFocus.pendingStickyID != nil
+        ) else { return }
+        window.makeFirstResponder(notes)
+        // Append-ready: caret to the end, scrolled into view. Notes already
+        // holding focus keeps its caret where the user left it.
+        let end = NSRange(location: (notes.string as NSString).length, length: 0)
+        notes.setSelectedRange(end)
+        notes.scrollRangeToVisible(end)
+    }
+
+    /// Whether opening the panel should hand focus to Notes. Pure so the
+    /// policy is provable without ordering windows. A newborn sticky on its
+    /// way suppresses the claim: its arrival takes focus instead of flashing
+    /// through Notes first.
+    nonisolated static func shouldAutofocusNotes(
+        isEditing: Bool,
+        galleryOpen: Bool,
+        notesEditable: Bool,
+        notesAlreadyFocused: Bool,
+        newcomerPending: Bool
+    ) -> Bool {
+        guard !isEditing, !galleryOpen, notesEditable, !notesAlreadyFocused, !newcomerPending else { return false }
+        return true
     }
 
     private func dismiss(for reason: PanelDismissalMonitor.Reason) {

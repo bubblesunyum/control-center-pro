@@ -94,6 +94,7 @@ struct StickyCard: View {
     let sticky: Sticky
     let store: StickyStore
 
+    @Environment(\.panelFocus) private var panelFocus
     /// The in-flight move, in panel points. Added to the stored position for
     /// drawing and committed once, on release — the card follows the finger
     /// 1:1 while the store hears about it a single time.
@@ -132,7 +133,15 @@ struct StickyCard: View {
                 set: { store.setText($0, for: sticky.id) }
             ),
             documentId: "sticky-\(sticky.id.uuidString)",
-            placeholder: "Jot it down…"
+            placeholder: "Jot it down…",
+            // Only the just-created sticky answers: `newSticky()` names it
+            // before the card exists, and the claim clears on arrival. Every
+            // other sticky stays out of the focus path entirely.
+            onCreate: { [weak panelFocus, id = sticky.id] textView in
+                guard panelFocus?.pendingStickyID == id else { return }
+                panelFocus?.pendingStickyID = nil
+                textView.window?.makeFirstResponder(textView)
+            }
         )
         .frame(width: drawnSize.width, height: drawnSize.height)
         // Where the resize grip lives: hovering is passive — it never eats

@@ -15,6 +15,7 @@ struct NoteSurface: View {
     /// Delete whatever is shown, through the widget's confirmation.
     let onDeleteSelected: () -> Void
     @State private var isDropTargeted = false
+    @Environment(\.panelFocus) private var panelFocus
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,7 +23,16 @@ struct NoteSurface: View {
                 text: Binding(get: { adapter.text }, set: { adapter.text = $0 }),
                 documentId: adapter.selectedNoteID?.uuidString ?? "notes",
                 placeholder: "Write something…",
-                isEditable: adapter.isEditable
+                isEditable: adapter.isEditable,
+                // The panel's default keystrokes: the window falls back here
+                // on a fresh open, and the controller re-asserts it on every
+                // open after (see `PanelFocus`).
+                onCreate: { [weak panelFocus] textView in
+                    panelFocus?.notesTextView = textView
+                    if textView.isEditable {
+                        textView.window?.initialFirstResponder = textView
+                    }
+                }
             )
             // Optimistic editing (ccp-t53p): the pull reconciles around
             // keystrokes in the background, so the editor never dims or

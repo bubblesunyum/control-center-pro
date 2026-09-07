@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Control Center Pro contributors
 
+import AppKit
 import MarkdownEngine
 import SwiftUI
 
@@ -28,6 +29,12 @@ struct MarkdownNoteEditor: View {
     /// widget (ccp-t53p): the pull reconciles in the background instead of
     /// holding the caret.
     var isEditable = true
+    /// Fires with the editor's text view when it joins a window. The engine
+    /// wrapper owns the view and offers no hook of its own, so this reports
+    /// it per instance (see `TextViewReporter`) — the shell aiming focus
+    /// without naming the engine. Same name and shape as the plain-text
+    /// editor's own `onCreate` one file over.
+    var onCreate: ((NSTextView) -> Void)?
 
     /// Body size, and the base the heading multipliers scale from.
     static let fontSize: CGFloat = 14
@@ -46,6 +53,15 @@ struct MarkdownNoteEditor: View {
             isEditable: isEditable,
             placeholder: placeholder.map(Self.placeholderText)
         )
+        .background {
+            // Sibling of the wrapper's scroll view inside this editor's own
+            // container, so the reporter below finds this editor's text view
+            // and never a neighbour's. Nil by default: only the shell's
+            // focus claimants pass one.
+            if let onCreate {
+                TextViewReporter(onReport: onCreate)
+            }
+        }
     }
 
     private static var configuration: MarkdownEditorConfiguration {
@@ -78,5 +94,73 @@ struct MarkdownNoteEditor: View {
             .font: NSFont.systemFont(ofSize: fontSize),
             .foregroundColor: NSColor.tertiaryLabelColor,
         ])
+    }
+}
+
+/// Reports the nearest AppKit text view sharing this view's container.
+///
+/// SwiftUI builds `.background` content as a sibling of the modified view,
+/// so the first text view met walking outward from here — excluding the
+/// branch we came from at each level — is this editor's own. Fires again
+/// if the view is re-created; receivers keep whatever they need weakly.
+private struct TextViewReporter: NSViewRepresentable {
+    let onReport: (NSTextView) -> Void
+
+    func makeNSView(context: Context) -> TextViewReporterView {
+        let view = TextViewReporterView()
+        view.onReport = onReport
+        return view
+    }
+
+    func updateNSView(_ nsView: TextViewReporterView, context: Context) {
+        nsView.onReport = onReport
+    }
+}
+
+private final class TextViewReporterView: NSView {
+    /// How far up the hierarchy the search may climb. The editor's scroll
+    /// view is a sibling away; anything past a few levels is a neighbour,
+    /// never ours.
+    private static let maxSearchDepth = 6
+
+    var onReport: ((NSTextView) -> Void)?
+    private weak var reported: NSTextView?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil else { return }
+        // Siblings may not be attached yet; the render finishes this tick.
+        DispatchQueue.main.async { [weak self] in self?.search() }
+    }
+
+    override func layout() {
+        super.layout()
+        search()
+    }
+
+    private func search() {
+        var child: NSView = self
+        var node = superview
+        var depth = 0
+        while let current = node, depth < Self.maxSearchDepth {
+            for subview in current.subviews where subview !== child {
+                if let found = Self.textView(in: subview), found !== reported {
+                    reported = found
+                    onReport?(found)
+                    return
+                }
+            }
+            child = current
+            node = current.superview
+            depth += 1
+        }
+    }
+
+    private static func textView(in view: NSView) -> NSTextView? {
+        if let textView = view as? NSTextView { return textView }
+        for subview in view.subviews {
+            if let found = textView(in: subview) { return found }
+        }
+        return nil
     }
 }
