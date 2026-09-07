@@ -44,19 +44,22 @@ struct NoteSurface: View {
             .frame(minHeight: Layout.noteEditorHeight, maxHeight: .infinity)
             .accessibilityLabel("Note text")
             .accessibilityHint("Editable Markdown")
-            // The toolbar's fade lives here, over the editor's last lines,
-            // so the text dissolves into the toolbar instead of clipping.
-            .overlay(alignment: .bottom) {
-                LinearGradient(
-                    stops: [
-                        .init(color: .clear, location: 0),
-                        .init(color: Color.noteInset, location: 1),
-                    ],
-                    startPoint: .top, endPoint: .bottom
-                )
-                .frame(height: Layout.noteToolbarFadeHeight)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+            // The toolbar's fade: the last lines dissolve into the toolbar
+            // instead of clipping hard. A mask on the content, not a scrim
+            // on the backdrop — the well is near-black, so darkening it
+            // further reads as nothing; fading the glyphs is what reads.
+            .mask {
+                VStack(spacing: 0) {
+                    Color.white
+                    LinearGradient(
+                        stops: [
+                            .init(color: .white, location: 0),
+                            .init(color: .clear, location: 1),
+                        ],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                    .frame(height: Layout.noteToolbarFadeHeight)
+                }
             }
 
             NoteToolbar(adapter: adapter, onDeleteSelected: onDeleteSelected)
@@ -159,18 +162,6 @@ private struct NoteToolbar: View {
         .padding(.horizontal, Space.one)
         .padding(.bottom, Space.one)
         .opacity(isEmpty && conflicts.isEmpty ? 0.5 : 1)
-        // Solid behind the row so the scrim above lands on the same tone.
-        // After the opacity, so an empty note dims the buttons, not the well.
-        .background(
-            Color.noteInset,
-            in: UnevenRoundedRectangle(
-                topLeadingRadius: 0,
-                bottomLeadingRadius: Radius.control,
-                bottomTrailingRadius: Radius.control,
-                topTrailingRadius: 0,
-                style: .continuous
-            )
-        )
         // Tabbing away tears the button (and its popover) down with a stale
         // true — the next conflict would otherwise open uninvited.
         .onChange(of: adapter.selectedNoteID) { isConflictsPresented = false }
