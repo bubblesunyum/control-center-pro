@@ -342,6 +342,11 @@ public final class ControlPanelController {
 
     private func updateMouseThrough(at screenPoint: CGPoint) {
         guard isVisible else { return }
+        // A sticky drag owns the pointer until release: the hit-test below
+        // reads committed geometry, which trails the finger mid-drag, so
+        // re-evaluating here would flip the window mouse-through under a
+        // held gesture and stall it (ccp-rlql).
+        guard !StickyStore.shared.isDragging else { return }
         // A delete confirmation open is modal-ish: the window takes the
         // pointer so the dialog answers clicks instead of the app below.
         let hitRects = Self.hitRects(
@@ -390,6 +395,7 @@ public final class ControlPanelController {
         withObservationTracking {
             _ = StickyStore.shared.stickies
             _ = StickyStore.shared.isConfirmingDelete
+            _ = StickyStore.shared.isDragging
             _ = editor.isEditing
             _ = editor.isShowingGallery
         } onChange: {

@@ -121,6 +121,23 @@ final class MouseThroughTests: XCTestCase {
         XCTAssertFalse(check(CGPoint(x: 200 + 220, y: 200), stickies: [wide]))
     }
 
+    func testResizePreviewRidesTheGrabbedCorner() {
+        // The center rides half the translation so the grabbed corner tracks
+        // the finger 1:1 and the opposite corner stands still.
+        let note = sticky(200, 600)
+        let preview = StickyCard.previewResize(from: note, translation: CGSize(width: 100, height: 60))
+        XCTAssertEqual(preview.size, CGSize(width: 340, height: 252))
+        XCTAssertEqual(preview.ride, CGSize(width: 50, height: 30))
+        // At the minimum the ride freezes with the size: the corner stays
+        // glued instead of detaching.
+        let clamped = StickyCard.previewResize(from: note, translation: CGSize(width: -1000, height: -1000))
+        XCTAssertEqual(clamped.size, CGSize(width: Sticky.minWidth, height: Sticky.minHeight))
+        XCTAssertEqual(
+            clamped.ride,
+            CGSize(width: (Sticky.minWidth - 240) / 2, height: (Sticky.minHeight - 192) / 2)
+        )
+    }
+
     func testOpenGalleryMakesEverythingInteractive() {
         XCTAssertTrue(check(CGPoint(x: 100, y: 100), galleryOpen: true))
     }
@@ -133,7 +150,7 @@ final class MouseThroughTests: XCTestCase {
 
     func testClampedCenterKeepsTheGrabStripReachable() {
         let bounds = CGRect(x: 0, y: 0, width: 1000, height: 800)
-        // Flung off every edge comes back to just the grab strip.
+        // Flung off every edge comes back to just the grab rim.
         let far = StickyCard.clampedCenter(
             CGPoint(x: 5000, y: -5000),
             size: StickyCard.defaultSize,
@@ -143,7 +160,7 @@ final class MouseThroughTests: XCTestCase {
             far,
             CGPoint(
                 x: 1000 - StickyCard.minGrab + StickyCard.defaultSize.width / 2,
-                y: StickyCard.defaultSize.height / 2 - StickyCard.grabHeight
+                y: StickyCard.defaultSize.height / 2 - StickyCard.edgeWidth
             )
         )
         // A resized note clamps by its own size, not the default's.
@@ -156,7 +173,7 @@ final class MouseThroughTests: XCTestCase {
             bigFar,
             CGPoint(
                 x: 1000 - StickyCard.minGrab + 200,
-                y: 150 - StickyCard.grabHeight
+                y: 150 - StickyCard.edgeWidth
             )
         )
         // Partially off-screen is fine and stays put.

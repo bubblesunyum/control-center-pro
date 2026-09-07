@@ -26,6 +26,12 @@ public final class StickyStore {
     /// from under it. View state, never persisted.
     public var isConfirmingDelete = false
 
+    /// A sticky move or resize is in flight. The controller's mouse-through
+    /// hit-test reads committed positions, which trail the finger mid-drag —
+    /// re-evaluating it mid-gesture would call the window mouse-through under
+    /// a held drag and starve the gesture. View state, never persisted.
+    public var isDragging = false
+
     @ObservationIgnored private let fileStore: JSONFileStore<[Sticky]>
     @ObservationIgnored private var persistWork: DispatchWorkItem?
 
