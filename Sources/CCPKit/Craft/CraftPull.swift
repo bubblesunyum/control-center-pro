@@ -12,7 +12,6 @@ public enum PullDecision: Equatable, Sendable {
     /// The pad is clean: replace its text and sidecar from the fetch.
     case adopt(text: String, sidecar: BlockSidecar)
     /// Both sides moved: POST `stash` to Craft under `heading`, then adopt.
-    /// An empty stash adopts outright — there is nothing to lose.
     case conflict(heading: String, stash: [String], text: String, sidecar: BlockSidecar)
     /// Local leads and remote did not move, or there is nothing on either
     /// side yet: change nothing.
@@ -81,8 +80,11 @@ public enum CraftPull {
         }
         let stash = slices.map(\.markdown)
         guard !stash.isEmpty else {
-            // Local is empty: nothing to lose, adopt outright.
-            return .adopt(text: text, sidecar: seeded)
+            // The pad was cleared while Craft moved: empty text over a
+            // non-empty sidecar is a delete the push has not confirmed, not
+            // "nothing to lose". Adopting would wipe the clear and its dirty
+            // bit — skip so the push deletes what the sidecar still holds.
+            return .skip
         }
         // The stash carries the whole local text, confirmed base included —
         // deduping it is polish for a path that must first of all lose

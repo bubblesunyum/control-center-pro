@@ -128,6 +128,16 @@ final class CraftPullTests: XCTestCase {
                                         sidecar: CraftPull.seed([block("a", "theirs")])))
     }
 
+    func testClearedPadSkipsSoThePushOwnsTheDelete() {
+        // Cleared while Craft moved: the empty text over confirmed blocks is
+        // an unconfirmed delete, not "nothing to lose" — adopting would wipe
+        // the clear and clear its dirty bit with it.
+        let decision = CraftPull.decide(local: "",
+                                        sidecar: sidecar([("a", fingerprint("one"))]),
+                                        remote: [block("a", "ONE")])
+        XCTAssertEqual(decision, .skip)
+    }
+
     func testEmptySidesConverge() {
         let decision = CraftPull.decide(local: "", sidecar: BlockSidecar(), remote: [])
         XCTAssertEqual(decision, .converged)
