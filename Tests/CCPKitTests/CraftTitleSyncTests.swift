@@ -263,6 +263,9 @@ final class CraftTitleSyncTests: XCTestCase {
         XCTAssertEqual(adapter.syncedTitle(for: id), "Craft Title", "Craft's title is the record")
         XCTAssertEqual(adapter.selectedNoteName, "Note 1", "the pad stands until the push")
         XCTAssertTrue(adapter.isPushDirty(id))
+        XCTAssertEqual(adapter.conflicts(for: id).map(\.slices),
+                       [["Craft title “Craft Title” was replaced by “Note 1”"]],
+                       "the overwritten Craft rename leaves a trace to find it by")
 
         await adapter.flushCraftPush()
 

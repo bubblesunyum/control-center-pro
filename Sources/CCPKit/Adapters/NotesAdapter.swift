@@ -1704,6 +1704,13 @@ public final class NotesAdapter {
             // complaint), not from a deliberate Craft-side rename.
             storeSyncedTitle(remoteName, for: padID)
             if localName != remoteName {
+                // The "almost" needs a trace: a deliberate Craft-side rename
+                // would otherwise be overwritten with nothing to show for it.
+                // Content stashes a copy in Craft; a title has nowhere to put
+                // one — the push is about to destroy it there — so the record
+                // is the preservation, and the conflicts popover is the way back.
+                recordConflict(slices: ["Craft title “\(remoteName)” was replaced by “\(localName)”"],
+                               date: serverTime, for: padID)
                 dirtyPadIDs.insert(padID)
                 scheduleCraftPush()
             }
