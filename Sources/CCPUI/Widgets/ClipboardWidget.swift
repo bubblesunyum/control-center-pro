@@ -158,7 +158,10 @@ private struct ClipboardContent: View {
                                     ClipboardRow(
                                         entry: entry,
                                         adapter: adapter,
-                                        isLast: index == pinned.count - 1 && recent.isEmpty
+                                        // Last in its section, whether or not Recent
+                                        // follows: sections end in air (the gap below),
+                                        // never a rule — the Files rhythm.
+                                        isLast: index == pinned.count - 1
                                     )
                                 }
                             }
@@ -177,7 +180,10 @@ private struct ClipboardContent: View {
                                 }
                             }
                         }
-                        .padding(.top, Space.quarter)
+                        // Files' card stacks its header 8pt over content padded 4pt
+                        // down: 12pt of air before the first section. This list is
+                        // full-bleed under its own header, so it carries the 12 itself.
+                        .padding(.top, Space.oneHalf)
                     }
                 }
                 .frame(maxHeight: Layout.clipboardListHeight)
@@ -230,7 +236,8 @@ private struct ClipboardContent: View {
 private struct ClipboardRow: View {
     let entry: ClipboardEntry
     @Bindable var adapter: ClipboardAdapter
-    /// The last row draws no separator — the list ends, not divides.
+    /// The last row in its section draws no separator — a section ends in
+    /// air, not a rule.
     let isLast: Bool
     @State private var didCopy = false
     @State private var copyTask: Task<Void, Never>?
