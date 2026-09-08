@@ -82,14 +82,40 @@ final class NotesDocumentStorageTests: XCTestCase {
     func testARescuedDocumentIsReadBackWhenThisBuildCanDecodeIt() throws {
         let name = "ccp.notes.readback.\(UUID().uuidString)"
         let store = try defaults(name)
-        store.set(Data("not a document".utf8), forKey: "scratchpadDocument")
+        let garbage = Data("not a document".utf8)
+        store.set(garbage, forKey: "scratchpadDocument")
         store.set(storedJSON(key: "pads"), forKey: "scratchpadDocument.unreadable")
 
         let adapter = NotesAdapter(defaults: store, defaultName: "Note")
 
         XCTAssertEqual(adapter.text, "kept", "the rescued notes come back")
-        XCTAssertNil(store.data(forKey: "scratchpadDocument.unreadable"),
-                     "and the rescue key is consumed, not left to shadow later edits")
+        let committed = try XCTUnwrap(store.data(forKey: "scratchpadDocument"))
+        XCTAssertEqual(NotesDocument.decoded(committed, defaultName: "Note")?.notes.map(\.text),
+                       ["kept"],
+                       "the rescue re-commits so the notes survive a quit")
+        XCTAssertEqual(store.data(forKey: "scratchpadDocument.unreadable"), garbage,
+                       "and the unreadable live bytes are set aside, not dropped")
+        store.removePersistentDomain(forName: name)
+    }
+
+    /// After a rescue the live key decodes, so a later edit must save normally
+    /// without touching the set-aside bytes.
+    func testEditingAfterARescueSavesNormallyAndKeepsTheSetAside() throws {
+        let name = "ccp.notes.rescue-edit.\(UUID().uuidString)"
+        let store = try defaults(name)
+        let garbage = Data("not a document".utf8)
+        store.set(garbage, forKey: "scratchpadDocument")
+        store.set(storedJSON(key: "pads"), forKey: "scratchpadDocument.unreadable")
+
+        let adapter = NotesAdapter(defaults: store, defaultName: "Note")
+        adapter.text = "edited after rescue"
+        adapter.deactivate()
+
+        let committed = try XCTUnwrap(store.data(forKey: "scratchpadDocument"))
+        XCTAssertEqual(NotesDocument.decoded(committed, defaultName: "Note")?.notes.map(\.text),
+                       ["edited after rescue"])
+        XCTAssertEqual(store.data(forKey: "scratchpadDocument.unreadable"), garbage,
+                       "the set-aside survives the next edit")
         store.removePersistentDomain(forName: name)
     }
 

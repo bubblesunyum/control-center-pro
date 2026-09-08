@@ -640,9 +640,22 @@ public final class NotesAdapter {
 
         if let stored = defaults.object(forKey: documentKey) {
             let data = stored as? Data
-            guard let decoded = data.flatMap({ try? JSONDecoder().decode(NotesDocument.self, from: $0) })
-                ?? rescuedDocument()
-            else {
+            let mainDecoded = data.flatMap({ try? JSONDecoder().decode(NotesDocument.self, from: $0) })
+            // Try the live key first so a good main never consumes the backup.
+            // When only the rescue decodes, the live key still holds bytes we
+            // could not read — the rescue consumed its own key, so the
+            // recovered document must be re-committed and the live bytes set
+            // aside, or both copies are gone (one on quit, one on next edit).
+            let isRescued: Bool
+            let decoded: NotesDocument?
+            if let mainDecoded {
+                isRescued = false
+                decoded = mainDecoded
+            } else {
+                decoded = rescuedDocument()
+                isRescued = decoded != nil
+            }
+            guard let decoded else {
                 // Bytes we cannot read are still the user's notes. Stand an
                 // empty document in front of them, and treat it as already
                 // saved so that closing the panel — which flushes — writes
@@ -657,7 +670,10 @@ public final class NotesAdapter {
             }
             var loaded = decoded.sanitized(defaultName: defaultName)
             loaded.applyRetention(retention, now: Date())
-            if loaded == decoded {
+            if isRescued {
+                isStoredDocumentUnreadable = true
+                _ = persist(loaded)
+            } else if loaded == decoded {
                 lastSavedDocument = loaded
             } else {
                 _ = persist(loaded)
