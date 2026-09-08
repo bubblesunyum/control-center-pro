@@ -29,7 +29,17 @@ the answer shapes the seam:
   mapping dormant for a switch back.
 - **Several at once** — the seven per-backend `DefaultsMap` keys are *correct*
   rather than sprawl, because each backend owns its own bookkeeping. This would
-  also settle §5.2 permanently.
+  also settle §4.2 permanently.
+
+**ccp-jvu3 is this question in miniature, and it is already a filed bug.**
+Switching Craft *spaces* leaves pad mappings and sidecars pointed at the old
+space: they are space-scoped but stored as if global, so the next round PUTs
+old-space block ids into the new space and wedges on 404, retrying loud
+forever. Its own description says it "needs a decision: detect space change and
+either re-provision or refuse with status." That is the destination-change
+problem, one level down, and it says the answer matters **today** — before
+Obsidian exists. Whatever key shape answers ccp-jvu3 should be the same one
+that answers §1.1; resolve them together rather than twice.
 
 ### 1.2 What format does local truth take — one `notes.json`, or a folder of markdown files?
 
@@ -107,7 +117,7 @@ never falls through to `load()`, sets nothing aside, and the next
 ("instead of letting the next flush overwrite it with an empty desk"). Copy it.
 Two lines. Does **not** wait on step 5.
 
-### Step 3 — three sync-correctness bugs
+### Step 3 — four sync-correctness bugs
 
 - **ccp-o2qs** — `CraftPull.swift:83`, `guard !stash.isEmpty else { return
   .adopt(...) }`. A cleared pad yields zero slices; `pushPlan` over zero slices
@@ -122,6 +132,12 @@ Two lines. Does **not** wait on step 5.
   `target` at `:1805` and spends it at `:1809`; if the note is deleted
   meanwhile, `NotesDocument.appendText` dead-ends on the `firstIndex` guard at
   `:178` and the drop is silently eaten.
+- **ccp-bma3** — a first pull on a baseline-less (legacy) mapping records
+  Craft's title then pushes the pad name over it. Pad-wins is by design, but a
+  deliberate Craft-side rename made before title sync existed is overwritten
+  with no conflict record and no affordance — unlike content conflicts, which
+  stash a copy. Same `reconcileTitle` code the protocol's title/content split
+  objection lands in (§4.1), so fix it before that code moves.
 
 ### Step 4 — ccp-r3el, and rewrite ccp-2zi.4's description
 
@@ -176,7 +192,12 @@ Needs `decodeIfPresent` with a first-note fallback.
 
 **Answer §1.2 before choosing the notes format.**
 
-### Step 6 — split `NotesAdapter.swift`, narrowly
+### Step 6 — split `NotesAdapter.swift`, narrowly — **this is ccp-egd**
+
+Do not file a new bead: ccp-egd ("scratchpad polish: split
+ScratchpadAdapter/Document/Support into focused files", 2026-09-01) is this
+work, under the pre-rename naming. Claim it and narrow its scope to the cuts
+below.
 
 **Not "pure movement" — the obvious split is not behaviour-neutral.** Swift
 `private` reaches extensions only within the same file, so moving the AppKit
@@ -348,15 +369,46 @@ Same shape as the `a-codable-rename-is-a-data-migration` trap. If §1.1 answers
   of this plan produced three different confident verdicts; the neutral one
   found the implementation defects the others never reached.
 
-## 6. Beads
+## 6. Related beads deliberately outside this sequence
 
-`ccp-3me4` (P1) · `ccp-mz2x` (P1) · `ccp-o2qs` · `ccp-i0wm` · `ccp-5ex4` ·
-`ccp-r3el` · `ccp-56b7` · `ccp-2zi.4` (P0, in progress, description needs the
-§2 rewrite) · `ccp-o3k` (pad history — overlaps the preserve-then-adopt path;
+These live in the same code. None blocks the sequence; each would collide with
+it if worked in parallel.
+
+- **ccp-3td** — the hash diff cannot distinguish byte-identical blocks (a
+  repeated `---`, the same short bullet twice), so a reorder can pair the wrong
+  slice to the wrong block id. A watch-item on ccp-xgl's diff, filed P2 by the
+  user. It lives inside `BlockSidecar`/`CraftPull` — the code step 7 seals
+  behind `CraftNoteDestination` — so the extraction must not imply the sidecar
+  is sound. Fix it before or after, never during.
+- **ccp-hw0** (P1) — the to-do markdown round-trip is resolved in substance but
+  the bead is open as *the test*, which belongs to ccp-xgl. It asserts against
+  the same `CraftBlockSplitter` path step 7 moves.
+- **ccp-739g** — `isEditable` is always true since ccp-t53p; removing the
+  property touches `NoteSurface` and the adapter. Trivial, but it conflicts
+  with step 6's file moves, so sequence it either side.
+- **ccp-540**, **ccp-8sa** — scratchpad design-token and chrome polish. Pure
+  view work, no overlap, safe in parallel.
+- **ccp-2zi.7** (sync status in the header), **ccp-occ** (read-only Craft
+  blocks) — both consume the sync surface step 7 reshapes. Do them after.
+- **ccp-9o8o** — toolbar loud-state captures (conflict row, offline status).
+  Blocked on real-space writes, and the conflict row is what §4.1's
+  record-persistence objection is about.
+
+## 7. Beads
+
+**In the sequence:** `ccp-3me4` (P1) · `ccp-mz2x` (P1) · `ccp-o2qs` ·
+`ccp-i0wm` · `ccp-5ex4` · `ccp-bma3` · `ccp-r3el` · `ccp-egd` (step 6) ·
+`ccp-56b7` · `ccp-2zi.4` (P0, open, description needs the §2 rewrite).
+
+**Open questions:** `ccp-jvu3` is §1.1 one level down and should be resolved
+with it.
+
+**Related, sequenced around:** see §6. · `ccp-o3k` (pad history — overlaps the preserve-then-adopt path;
 `MarkdownNoteEditor`'s `documentId` is `adapter.selectedNoteID?.uuidString`
 (`NoteSurface.swift:24`) and MarkdownEngine scopes undo by it, so
 `adoptRemote:1730-1745` replaces text under a stack that can walk back into
 pre-pull text and push it as if typed).
 
-Steps 5, 6 and 7 need beads filed before their commits — the commit-msg hook
-enforces one per commit.
+Steps 5 and 7 need beads filed before their commits — the commit-msg hook
+enforces one per commit. Step 6 already has one (ccp-egd); do not file a
+second.
