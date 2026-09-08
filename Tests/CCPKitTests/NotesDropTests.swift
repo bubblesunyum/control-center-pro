@@ -245,4 +245,21 @@ final class NotesDropTests: XCTestCase {
         XCTAssertEqual(adapter.notes.first(where: { $0.id == first })?.text, "for first")
         XCTAssertTrue(adapter.notes.first(where: { $0.id == second })?.text.isEmpty == true)
     }
+
+    /// The trash pass can delete a converged pad under a resolving drop: the
+    /// fragment lands in the selected note rather than nowhere.
+    func testAppendToDeletedNoteFallsBackToSelected() throws {
+        let (defaults, name) = try store()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let adapter = adapter(defaults)
+        let first = try XCTUnwrap(adapter.selectedNoteID)
+        adapter.createNote()
+        let second = try XCTUnwrap(adapter.selectedNoteID)
+        XCTAssertTrue(adapter.deleteNote(first))
+
+        adapter.appendDroppedText("orphan", to: first)
+
+        XCTAssertEqual(adapter.notes.first(where: { $0.id == second })?.text, "orphan")
+        XCTAssertEqual(adapter.text, "orphan")
+    }
 }

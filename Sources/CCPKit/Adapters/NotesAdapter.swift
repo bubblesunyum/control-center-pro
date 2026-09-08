@@ -1794,23 +1794,34 @@ public final class NotesAdapter {
 
     /// Append to the note selected at drop time, not at resolve time: a
     /// slow-resolving drop must land where it was dropped, without yanking
-    /// a tab the user has since moved away from.
+    /// a tab the user has since moved away from. When that note is gone —
+    /// the trash pass deletes converged pads under a resolving drop — fall
+    /// back to the selected note rather than eating the fragment.
     func appendDroppedText(_ dropped: String, to noteID: UUID?) {
         let fragment = dropped.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !fragment.isEmpty, hasLoaded, !isReplacingText,
-              let noteID, var document else { return }
+              var document else { return }
+        let landingID: UUID
+        if let noteID, document.notes.contains(where: { $0.id == noteID }) {
+            landingID = noteID
+        } else if let selected = selectedNoteID,
+                  document.notes.contains(where: { $0.id == selected }) {
+            landingID = selected
+        } else {
+            return
+        }
         let before = document
-        document.appendText(fragment, to: noteID, modifiedAt: Date())
+        document.appendText(fragment, to: landingID, modifiedAt: Date())
         guard document != before else { return }
         self.document = document
         notes = document.notes
-        if noteID == selectedNoteID {
+        if landingID == selectedNoteID {
             isReplacingText = true
-            text = document.notes.first(where: { $0.id == noteID })?.text ?? text
+            text = document.notes.first(where: { $0.id == landingID })?.text ?? text
             isReplacingText = false
         }
         scheduleSave()
-        dirtyPadIDs.insert(noteID)
+        dirtyPadIDs.insert(landingID)
         scheduleCraftPush()
     }
 
