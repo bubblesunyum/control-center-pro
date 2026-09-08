@@ -62,9 +62,13 @@ public final class ShelfStore {
         }
         // Lenient: ignore items whose kind or required fields fail.
         struct Failable: Decodable { let item: ShelfItem?; init(from d: Decoder) throws { item = try? ShelfItem(from: d) } }
-        if let wrapped = try? JSONDecoder().decode([Failable].self, from: data) {
+        if let wrapped = try? JSONDecoder().decode([Failable].self, from: data),
+           !wrapped.isEmpty, !wrapped.compactMap(\.item).isEmpty {
             return wrapped.compactMap(\.item)
         }
+        // Nothing salvageable — fall through to load(), which moves the file
+        // aside as evidence instead of letting the next flush overwrite it
+        // with an empty shelf.
         return store.load()
     }
 

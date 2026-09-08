@@ -56,6 +56,41 @@ final class ShelfPinningTests: XCTestCase {
 
         XCTAssertEqual(shelf.items.map(\.title), ["kept", "new", "old"])
     }
+
+    func testOneBadItemDoesNotCostTheShelf() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let good = ShelfItem(kind: .text, title: "survivor", text: "survivor")
+        let goodJSON = String(data: try JSONEncoder().encode(good), encoding: .utf8)!
+        let payload = "[\(goodJSON),{\"id\":\"not-a-uuid\",\"kind\":\"text\",\"title\":{}}]"
+        try Data(payload.utf8).write(to: directory.appendingPathComponent("shelf.json"))
+
+        let shelf = ShelfStore(directory: directory)
+
+        XCTAssertEqual(shelf.items.map(\.title), ["survivor"])
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: directory.appendingPathComponent("shelf.json.corrupt").path
+        ), "a salvageable shelf must not be moved aside")
+    }
+
+    /// An array whose every item fails leaves nothing to keep: fall through to
+    /// load() so the file is moved aside as evidence instead of letting the
+    /// next flush overwrite it with an empty shelf.
+    func testAShelfWithNothingSalvageableIsMovedAside() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("[{\"id\":\"not-a-uuid\",\"kind\":\"text\",\"title\":{}}]".utf8)
+            .write(to: directory.appendingPathComponent("shelf.json"))
+
+        let shelf = ShelfStore(directory: directory)
+
+        XCTAssertTrue(shelf.items.isEmpty)
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: directory.appendingPathComponent("shelf.json.corrupt").path
+        ))
+    }
 }
 
 final class ShelfItemCodingTests: XCTestCase {
