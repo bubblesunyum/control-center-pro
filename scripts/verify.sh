@@ -77,6 +77,12 @@ if [ ! -f Package.swift ]; then
   echo "  skip  build   (no Package.swift yet — scaffold the package first)"
   echo "  skip  tests   (no Package.swift yet)"
 else
+  # Same stale-plan guard as scripts/app.sh (psy-rfun): a commit that adds a
+  # psymail source file must re-plan, not fail the gate on a cached file list.
+  # Through `step`, so a guard that fails says so — swallowed, it surfaces one
+  # line later as a bare "cannot find X in scope", which is the exact confusion
+  # it exists to prevent.
+  step "plan" scripts/ensure-fresh-plan.sh
   step "build" swift build
 
   if [ "$mode" != "--quick" ]; then

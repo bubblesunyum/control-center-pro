@@ -89,6 +89,11 @@ if (( LAUNCH )); then
   quit_app
 fi
 
+# SwiftPM never re-scans the psymail-mini path dependency for added/removed
+# files (psy-rfun) — refresh the cached plan first, or the build below fails
+# against new sources with "cannot find in scope".
+scripts/ensure-fresh-plan.sh
+
 swift build -c "$CONFIGURATION" --product "$EXECUTABLE" > /tmp/ccp-app-build.log 2>&1 || {
   echo "build failed — see /tmp/ccp-app-build.log" >&2
   grep -E "error:" /tmp/ccp-app-build.log | sort -u | head -8 >&2
