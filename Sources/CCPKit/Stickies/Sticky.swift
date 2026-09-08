@@ -19,9 +19,9 @@ public struct Sticky: Codable, Equatable, Identifiable, Sendable {
     public static let defaultHeight: Double = 240
     /// The smallest a resize may leave behind — below this the text is a
     /// slit, not a note. The floor is the card, paper border included, so
-    /// the height leaves roughly three lines of paper behind it.
-    public static let minWidth: Double = 160
-    public static let minHeight: Double = 96
+    /// the height leaves roughly two lines of paper behind it.
+    public static let minWidth: Double = 136
+    public static let minHeight: Double = 72
 
     public var id: UUID
     public var text: String
