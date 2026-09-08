@@ -1637,13 +1637,6 @@ public final class NotesAdapter {
             // The popover lists what was preserved and when; recorded only
             // for the copy that actually landed.
             recordConflict(slices: stash, date: serverTime, for: padID)
-            // Re-read after the POST: adopting now would overwrite keystrokes
-            // newer than the stash and clear their dirty bit. Leave everything
-            // — the stash just posted is their safety copy, and the next pull
-            // stashes the fresh text the same way. (`document` above is the
-            // pre-POST snapshot; the live state is re-read here.)
-            guard self.document?.notes.first(where: { $0.id == padID })?.text == pad.text
-            else { return }
             // The stash pins unwritable: it lives in Craft, never in the
             // pad, so the next push must route around it rather than
             // delete what it cannot see.
@@ -1653,6 +1646,17 @@ public final class NotesAdapter {
                     id: item.id, fingerprint: BlockSidecar.fingerprint(item.markdown),
                     isWritable: false))
             }
+            // The sidecar advances even when the text cannot: the POST just
+            // changed Craft, and a sidecar predating the stash reads those
+            // blocks as a second remote move and posts the stash again.
+            storeSidecar(sidecar, for: padID)
+            // Re-read after the POST: adopting now would overwrite keystrokes
+            // newer than the stash and clear their dirty bit. Leave the text —
+            // the stash just posted is their safety copy, and the next pull
+            // stashes the fresh text the same way. (`document` above is the
+            // pre-POST snapshot; the live state is re-read here.)
+            guard self.document?.notes.first(where: { $0.id == padID })?.text == pad.text
+            else { return }
             adoptRemote(padID: padID, text: text, sidecar: sidecar)
             storeSyncedAt(serverTime, for: padID)
             dirtyPadIDs.remove(padID)

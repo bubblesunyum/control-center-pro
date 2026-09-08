@@ -543,16 +543,21 @@ final class CraftPullAdapterTests: XCTestCase {
     func testKeystrokesDuringTheStashPostAreNotAdoptedOver() async throws {
         // The second race: deciding on fresh text but adopting after the
         // stash POST strands keystrokes typed while the POST is away. The
-        // pull leaves everything — the posted stash is their safety copy.
+        // pull leaves the text — the posted stash is their safety copy.
         let name = "ccp.pull.postrace.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
+        let stashed = blocks("""
+            {"items":[{"id":"r1","markdown":"theirs"},
+                      {"id":"c1","markdown":"# Conflicted copy"},
+                      {"id":"c2","markdown":"mine edited"}]}
+            """)
         let transport = ScriptedTransport([connection, trash(), blocks("""
             {"items":[{"id":"r1","markdown":"theirs"}]}
             """), blocks("""
             {"items":[{"id":"c1","markdown":"# Conflicted copy"},
                        {"id":"c2","markdown":"mine edited"}]}
-            """)])
+            """), connection, trash(), stashed])
         let adapter = adapter(store, transport)
         let id = try await steadyPad(adapter, text: "mine", seeded: ["mine"])
         adapter.storeSidecar(BlockSidecar(entries: [
@@ -572,8 +577,14 @@ final class CraftPullAdapterTests: XCTestCase {
         XCTAssertTrue(adapter.isPushDirty(id), "their dirty bit stands with them")
         XCTAssertEqual(adapter.stashIDs(for: id), ["c1", "c2"],
                        "the posted copy is pinned even though the adopt aborted")
-        XCTAssertEqual(adapter.sidecar(for: id).entries.map(\.id), ["r1"],
-                       "no adopt, no reseed")
+        XCTAssertEqual(adapter.sidecar(for: id).entries.map(\.id), ["r1", "c1", "c2"],
+                       "the sidecar advances past the stash so the next pull reads it as confirmed")
+        XCTAssertEqual(adapter.sidecar(for: id).entries.filter { !$0.isWritable }.count, 2)
+
+        await adapter.pullAll()
+
+        XCTAssertEqual(adapter.text, "mine edited!", "the next pull skips; the stash is no second move")
+        XCTAssertEqual(transport.requests.count, 7, "clock, trash plus fetch, no second stash")
     }
 
     func testUnmappedPadMakesNoBlockRequests() async throws {        let name = "ccp.pull.unmapped.\(UUID().uuidString)"
