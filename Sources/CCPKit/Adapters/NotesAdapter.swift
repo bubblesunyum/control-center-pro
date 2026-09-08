@@ -6,37 +6,6 @@ import Foundation
 import Observation
 import UniformTypeIdentifiers
 
-// MARK: - Retention
-
-/// How long each note keeps text that nobody edits. The check runs only
-/// when the widget loads, against the stored edit dates, so the feature needs
-/// no timer at all. Pulled from Vorssaint's NotesSupport — same interval
-/// values, same stored key, so a document written by the floating note reads
-/// correctly here and vice-versa.
-public enum NoteRetention: String, CaseIterable, Sendable {
-    case never
-    case day
-    case week
-    case month
-
-    /// Seconds the text may sit unedited before it clears; nil keeps forever.
-    public var maxIdleInterval: TimeInterval? {
-        switch self {
-        case .never: return nil
-        case .day: return 86_400
-        case .week: return 7 * 86_400
-        case .month: return 30 * 86_400
-        }
-    }
-
-    public static func sanitized(_ rawValue: String?) -> NoteRetention {
-        guard let rawValue, let retention = NoteRetention(rawValue: rawValue) else {
-            return .never
-        }
-        return retention
-    }
-}
-
 // MARK: - Note & Document
 
 public struct Note: Codable, Equatable, Identifiable, Sendable {
@@ -191,15 +160,6 @@ public struct NotesDocument: Codable, Equatable, Sendable {
         notes[index].text = combined
         notes[index].modifiedAt = modifiedAt
     }
-
-    public mutating func applyRetention(_ retention: NoteRetention, now: Date) {
-        for index in notes.indices where NotesSupport.shouldClear(
-            lastEdited: notes[index].modifiedAt, now: now, retention: retention
-        ) {
-            notes[index].text = ""
-            notes[index].modifiedAt = nil
-        }
-    }
 }
 
 // MARK: - Support
@@ -222,25 +182,8 @@ public enum NotesSupport {
         return "\(safeBase) \(existingNames.count + 1)"
     }
 
-    public static func migratedLegacyDocument(text: String,
-                                              lastEdited: Date?,
-                                              defaultName: String,
-                                              retention: NoteRetention,
-                                              now: Date,
-                                              id: UUID = UUID()) -> NotesDocument {
-        var document = NotesDocument.initial(defaultName: defaultName, id: id, text: text, modifiedAt: lastEdited)
-        document.applyRetention(retention, now: now)
-        return document
-    }
-
     public static func requiresDeleteConfirmation(_ note: Note) -> Bool {
         !note.text.isEmpty
-    }
-
-    public static func shouldClear(lastEdited: Date?, now: Date, retention: NoteRetention) -> Bool {
-        guard let limit = retention.maxIdleInterval, let lastEdited else { return false }
-        let idle = now.timeIntervalSince(lastEdited)
-        return idle > limit
     }
 
     public static func exportFileName(title: String, date: Date) -> String {
@@ -261,8 +204,7 @@ public enum NotesSupport {
 /// service offers, without the panel, hotkey, or pin logic.
 ///
 /// Reads and writes the same UserDefaults keys as the upstream service so a
-/// note written in one surface is there in the other, and so the retention
-/// sweep that runs on load is single-sourced.
+/// note written in one surface is there in the other.
 @MainActor
 @Observable
 public final class NotesAdapter {
@@ -394,7 +336,6 @@ public final class NotesAdapter {
     // are upstream's, shared with Vorssaint's floating scratchpad, and renaming
     // either one orphans every note already written.
     @ObservationIgnored private let documentKey = "scratchpadDocument"
-    @ObservationIgnored private let retentionKey = "scratchpadRetention"
     @ObservationIgnored private let rescueKey = "scratchpadDocument.unreadable"
     // The Craft block-id sidecar (ccp-xgl): pad id to the (block id, hash)
     // pairing the push diffs against. Ours, not upstream's, so it lives
@@ -426,7 +367,7 @@ public final class NotesAdapter {
     // and when, per pad, newest first. The pins stay the sync's business.
     @ObservationIgnored private let conflictsKey = "scratchpadCraftConflicts"
     // Push bookkeeping (ccp-2zi.5). The pad-to-document mapping is config,
-    // like retention and selection — never note text.
+    // like selection — never note text.
     @ObservationIgnored private let craftDocumentsKey = "scratchpadCraftDocuments"
     // Title sync (ccp-o2dh): the last Craft-confirmed title per pad, plus
     // when the pad was last renamed locally. The pair is what makes a rename
@@ -476,7 +417,7 @@ public final class NotesAdapter {
         self.defaultName = defaultName
         closedNoteIDs = Self.decodedClosedNoteIDs(defaults.data(forKey: closedTabsKey))
         refreshCredentialPresence()
-        loadApplyingRetention()
+        loadDocument()
         observeTermination()
     }
 
@@ -583,7 +524,7 @@ public final class NotesAdapter {
         isPanelOpen = true
         pullRetryTask?.cancel()
         pullRetryTask = nil
-        loadApplyingRetention()
+        loadDocument()
         // Pads written before provisioning existed (or before a credential
         // was saved) converge like any first edit — otherwise they sit
         // unmapped and clean until the user happens to type in each one.
@@ -636,13 +577,12 @@ public final class NotesAdapter {
 
     // MARK: - Document loading
 
-    private func loadApplyingRetention() {
+    private func loadDocument() {
         hasLoaded = true
         if let document, document != lastSavedDocument {
             flushSave()
             return
         }
-        let retention = NoteRetention.sanitized(defaults.string(forKey: retentionKey))
 
         if let stored = defaults.object(forKey: documentKey) {
             let data = stored as? Data
@@ -674,8 +614,7 @@ public final class NotesAdapter {
                 isStoredDocumentUnreadable = true
                 return
             }
-            var loaded = decoded.sanitized(defaultName: defaultName)
-            loaded.applyRetention(retention, now: Date())
+            let loaded = decoded.sanitized(defaultName: defaultName)
             if isRescued {
                 isStoredDocumentUnreadable = true
                 _ = persist(loaded)
@@ -694,10 +633,8 @@ public final class NotesAdapter {
         // `com.controlcenterpro.*`), so CCP's first launch has no file to
         // migrate — intentional not to reach into the old bundle's folder.
         let migrated = NotesDocument.initial(defaultName: defaultName)
-        var withRetention = migrated
-        withRetention.applyRetention(retention, now: Date())
-        _ = persist(withRetention)
-        apply(withRetention)
+        _ = persist(migrated)
+        apply(migrated)
     }
 
     private func scheduleSave() {
@@ -1018,7 +955,7 @@ public final class NotesAdapter {
     /// The Craft document a pad syncs to, if one was provisioned. Mapped
     /// automatically on first push of a non-empty pad (ccp-0gek) — never by
     /// hand — so an unmapped pad is simply one whose document does not exist
-    /// yet. Like retention and selection this is config, never note text.
+    /// yet. Like selection this is config, never note text.
     public func craftDocumentID(for id: UUID) -> String? {
         storedCraftDocuments()[id.uuidString]
     }

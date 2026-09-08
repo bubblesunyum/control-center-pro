@@ -14,7 +14,7 @@ import SwiftUI
 /// Under the header the note sits as a single inset well whose toolbar ends
 /// in the way out to Craft. ``NoteSurface`` owns that well.
 ///
-/// Document mechanics (tabs, retention, debounced UserDefaults persistence) are
+/// Document mechanics (tabs, debounced UserDefaults persistence) are
 /// the values Vorssaint's floating pad uses, via `NotesAdapter`, so a note
 /// written here is there and vice-versa.
 @MainActor
