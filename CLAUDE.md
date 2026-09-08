@@ -194,6 +194,13 @@ event monitors installed and removed, lifecycle calls, layout mutation — is
   before any write the user actually asked for. Both halves of that cost real
   notes on 2026-09-04 (ccp-uqn) — the rename was the bug, the write-on-failure
   was why it was unrecoverable.
+- **A gesture never measures through the view it moves.** If a drag's output
+  offsets or resizes the view the gesture is attached to, `value.translation`
+  feeds the view's own motion back in and the card shakes, lands wrong, and
+  resizes as if ratio-locked — a named coordinate space does not save you.
+  Use `ScreenDragAnchor`, and reset it on every exit. It reads exactly like
+  dropped frames, so it costs days: `bd recall
+  a-dragged-view-feeds-its-own-motion-back-into-the-gesture`.
 - Spacing, radii, materials, and type come from the CCPUI design system, never
   from literals in a widget. See [STYLE.md](./STYLE.md).
 - GPL-3.0-or-later: SPDX headers on every new file, upstream's headers left
