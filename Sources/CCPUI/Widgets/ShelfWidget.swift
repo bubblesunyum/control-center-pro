@@ -117,9 +117,8 @@ private struct ShelfWidgetContent: View {
                 // second one here.
                 VStack(alignment: .leading, spacing: Space.half) {
                     if !pinned.isEmpty {
-                        shelfSectionHeader(title: "Pinned", isCollapsed: isPinnedCollapsed) {
-                            isPinnedCollapsed.toggle()
-                        }
+                        WidgetSectionLabel("Pinned", isCollapsed: $isPinnedCollapsed)
+                            .padding(.horizontal, Space.half)
                         if !isPinnedCollapsed {
                             ForEach(pinned.prefix(Self.maxSectionRows)) { item in
                                 shelfRow(for: item)
@@ -127,7 +126,7 @@ private struct ShelfWidgetContent: View {
                             moreLabel(remaining: pinned.count - Self.maxSectionRows)
                         }
                         if !isPinnedCollapsed && (!unpinned.isEmpty || !downloads.files.isEmpty) {
-                            Color.clear.frame(height: Space.oneHalf)
+                            WidgetSectionGap()
                         }
                     }
                     if !unpinned.isEmpty {
@@ -136,13 +135,12 @@ private struct ShelfWidgetContent: View {
                         }
                         moreLabel(remaining: unpinned.count - Self.maxSectionRows)
                         if !downloads.files.isEmpty {
-                            Color.clear.frame(height: Space.oneHalf)
+                            WidgetSectionGap()
                         }
                     }
                     if !downloads.files.isEmpty {
-                        shelfSectionHeader(title: "Downloads", isCollapsed: isDownloadsCollapsed) {
-                            isDownloadsCollapsed.toggle()
-                        }
+                        WidgetSectionLabel("Downloads", isCollapsed: $isDownloadsCollapsed)
+                            .padding(.horizontal, Space.half)
                         if !isDownloadsCollapsed {
                             ForEach(downloads.files) { file in
                                 RecentDownloadRow(file: file)
@@ -220,31 +218,6 @@ private struct ShelfWidgetContent: View {
         }
     }
 
-    private func shelfSectionHeader(
-        title: String,
-        isCollapsed: Bool,
-        toggle: @escaping () -> Void
-    ) -> some View {
-        Button(action: toggle) {
-            HStack(spacing: Space.half) {
-                Text(title.uppercased())
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .tracking(0.5)
-                Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, Space.half)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .padding(.bottom, Space.half)
-        .accessibilityLabel("\(title) section")
-        .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
-        .accessibilityHint(isCollapsed ? "Expands this section" : "Collapses this section")
-    }
 }
 
 /// The Files card's overflow menu: the header's three actions behind one

@@ -152,7 +152,8 @@ private struct ClipboardContent: View {
                         Color.clear.frame(height: 0).id("ccp.clipboard.top")
                         LazyVStack(alignment: .leading, spacing: 0) {
                             if !pinned.isEmpty {
-                                sectionLabel("Pinned")
+                                WidgetSectionLabel("Pinned")
+                                    .padding(.horizontal, Space.oneHalf)
                                 ForEach(Array(pinned.enumerated()), id: \.element.id) { index, entry in
                                     ClipboardRow(
                                         entry: entry,
@@ -162,7 +163,11 @@ private struct ClipboardContent: View {
                                 }
                             }
                             if !recent.isEmpty {
-                                if !pinned.isEmpty { sectionLabel("Recent") }
+                                if !pinned.isEmpty {
+                                    WidgetSectionGap()
+                                    WidgetSectionLabel("Recent")
+                                        .padding(.horizontal, Space.oneHalf)
+                                }
                                 ForEach(Array(recent.enumerated()), id: \.element.id) { index, entry in
                                     ClipboardRow(
                                         entry: entry,
@@ -220,14 +225,6 @@ private struct ClipboardContent: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func sectionLabel(_ title: String) -> some View {
-        Text(title.uppercased())
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .tracking(0.5)
-            .padding(.horizontal, Space.oneHalf)
-            .padding(.vertical, Space.half)
-    }
 }
 
 private struct ClipboardRow: View {
@@ -283,8 +280,7 @@ private struct ClipboardRow: View {
             .animation(.easeOut(duration: 0.2), value: didCopy)
             .onDisappear { copyTask?.cancel() }
             if !isLast {
-                Divider()
-                    .padding(.leading, Space.oneHalf)
+                WidgetRowDivider()
             }
         }
     }

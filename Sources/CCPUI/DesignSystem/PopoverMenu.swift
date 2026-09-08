@@ -19,9 +19,7 @@ struct PopoverMenuSectionLabel: View {
 
     var body: some View {
         Text(title.uppercased())
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .tracking(0.5)
+            .sectionCaps()
             .padding(.horizontal, Space.one)
             .padding(.bottom, Space.quarter)
     }
