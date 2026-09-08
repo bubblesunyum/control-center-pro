@@ -445,6 +445,13 @@ public final class NotesAdapter {
     @ObservationIgnored private var pushRetryTask: Task<Void, Never>?
     @ObservationIgnored private var isPushInFlight = false
     @ObservationIgnored private var needsPushAfterFlight = false
+    /// The pull half of the same gate: a pull deciding on a half-pushed
+    /// remote reads our own writes as a move and stashes them, and a push
+    /// diffing under an adopting pull gets its sidecar clobbered on
+    /// write-back. One round at a time — each side yields to the other and
+    /// re-runs after.
+    @ObservationIgnored private var isPullInFlight = false
+    @ObservationIgnored private var needsPullAfterFlight = false
     @ObservationIgnored private var consecutivePushFailures = 0
     @ObservationIgnored private var pushThrottledUntil: Date?
     @ObservationIgnored private var dirtyPadIDs: Set<UUID> = []
@@ -549,7 +556,7 @@ public final class NotesAdapter {
                 // While shut the next activate pulls, so no round starts
                 // that nobody watches.
                 if self.isPanelOpen {
-                    self.pullTask = Task { [weak self] in await self?.pullAll() }
+                    self.schedulePull()
                 }
             }
         }
@@ -585,8 +592,7 @@ public final class NotesAdapter {
         // the background without locking the editor; a failed read changes
         // nothing, and an adopt never lands on unpushed edits without
         // stashing them in Craft first.
-        pullTask?.cancel()
-        pullTask = Task { [weak self] in await self?.pullAll() }
+        schedulePull()
     }
 
     public func deactivate() {
@@ -1075,6 +1081,28 @@ public final class NotesAdapter {
         }
     }
 
+    /// Start a fresh pull round, replacing any in flight. The replaced round
+    /// stands down cooperatively; the gate keeps the overlap honest — a new
+    /// round arriving inside the old one yields and re-runs after it.
+    private func schedulePull() {
+        pullTask?.cancel()
+        pullTask = Task { [weak self] in await self?.pullAll() }
+    }
+
+    /// Re-run rounds that yielded to a finished one: a deferred push
+    /// debounces as usual, a deferred pull runs while the panel is up —
+    /// shut, the next activate pulls anyway and no round starts unwatched.
+    private func drainAfterFlight() {
+        if needsPushAfterFlight {
+            needsPushAfterFlight = false
+            scheduleCraftPush()
+        }
+        if needsPullAfterFlight {
+            needsPullAfterFlight = false
+            if isPanelOpen { schedulePull() }
+        }
+    }
+
     /// Push now: the deactivate path and tests. Explicit, so it bypasses the
     /// throttle window — a panel close right after a failure still tries.
     /// Coalesces with an in-flight push rather than running beside it.
@@ -1108,15 +1136,15 @@ public final class NotesAdapter {
 
     private func pushNow() async {
         pushTask = nil
-        guard !isPushInFlight else { needsPushAfterFlight = true; return }
+        // One round at a time: re-entry coalesces, and a pull deciding
+        // mid-push reads a half-written remote as a move — so a debounced
+        // push landing inside a pull waits for the next round instead.
+        guard !isPushInFlight, !isPullInFlight else { needsPushAfterFlight = true; return }
         guard let baseURL = craftBaseURL() else { return }
         isPushInFlight = true
         defer {
             isPushInFlight = false
-            if needsPushAfterFlight {
-                needsPushAfterFlight = false
-                scheduleCraftPush()
-            }
+            drainAfterFlight()
         }
         let client = CraftClient(baseURL: baseURL, transport: craftTransport)
         var failure: Error?
@@ -1538,6 +1566,17 @@ public final class NotesAdapter {
             pullRetryTask = nil
         }
         guard let baseURL = craftBaseURL() else { return }
+        // The mirror half: a fetch landing inside a push reads the
+        // half-written remote as a move and stashes our own writes. Yield;
+        // the push re-runs this round on its way out. A second pull
+        // arriving inside the first coalesces the same way — deciding twice
+        // on one pre-store sidecar double-posts the stash.
+        guard !isPushInFlight, !isPullInFlight else { needsPullAfterFlight = true; return }
+        isPullInFlight = true
+        defer {
+            isPullInFlight = false
+            drainAfterFlight()
+        }
         isSyncVerified = false
         isSyncCheckFailed = false
         let client = CraftClient(baseURL: baseURL, transport: craftTransport)

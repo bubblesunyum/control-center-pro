@@ -597,4 +597,152 @@ final class CraftPullAdapterTests: XCTestCase {
 
         XCTAssertEqual(transport.requests.count, 2, "the clock read plus the trash listing")
     }
+
+    // MARK: - Push/pull serialization
+
+    /// One round at a time: a debounced push landing inside a pull would
+    /// diff against a sidecar the pull is about to replace, and a pull
+    /// fetching under a push reads the half-written remote as a move and
+    /// stashes our own writes. The latch holds one side mid-flight while
+    /// the other side arrives; request counts prove they never overlap.
+    private final class Latch: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Void, Never>?
+        private var released = false
+
+        func wait() async {
+            await withCheckedContinuation { continuation in
+                lock.lock()
+                if released {
+                    lock.unlock()
+                    continuation.resume()
+                } else {
+                    self.continuation = continuation
+                    lock.unlock()
+                }
+            }
+        }
+
+        func release() {
+            lock.lock()
+            released = true
+            let continuation = self.continuation
+            self.continuation = nil
+            lock.unlock()
+            continuation?.resume()
+        }
+    }
+
+    func testPushWaitsForAnInFlightPull() async throws {
+        let name = "ccp.sync.pushwaits.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let fetch = Latch()
+        let transport = ScriptedTransport([connection, trash(), blocks("""
+            {"items":[{"id":"block-0","markdown":"one"}]}
+            """)])
+        transport.onRequest = {
+            if transport.requests.count == 3 { await fetch.wait() }
+        }
+        let adapter = adapter(store, transport)
+        let id = try await steadyPad(adapter, text: "one")
+        adapter.text = "one edited"
+
+        async let pull: () = adapter.pullAll()
+        let pullReachedFetch = await becomesTrue { transport.requests.count == 3 }
+        XCTAssertTrue(pullReachedFetch, "the pull reached its fetch")
+
+        await adapter.flushCraftPush()
+
+        XCTAssertEqual(transport.requests.count, 3, "the push does not write beside the pull")
+        fetch.release()
+        await pull
+        XCTAssertEqual(transport.requests.count, 3, "an unmoved remote with local edits skips clean")
+
+        transport.scripts += [trash(), blocks("""
+            {"items":[{"id":"block-0","markdown":"one edited"}]}
+            """)]
+        await adapter.flushCraftPush()
+
+        XCTAssertEqual(transport.requests.count, 5, "trash sweep plus the deferred PUT")
+        let body = try transport.jsonBody(of: 4)
+        XCTAssertEqual(body["blocks"] as? [[String: String]],
+                       [["id": "block-0", "markdown": "one edited"]])
+        XCTAssertFalse(adapter.isPushDirty(id))
+    }
+
+    func testPullYieldsToAnInFlightPush() async throws {
+        let name = "ccp.sync.pullyields.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let put = Latch()
+        let transport = ScriptedTransport([trash(), blocks("""
+            {"items":[{"id":"block-0","markdown":"one edited"}]}
+            """)])
+        transport.onRequest = {
+            if transport.requests.count == 2 { await put.wait() }
+        }
+        let adapter = adapter(store, transport)
+        let id = try await steadyPad(adapter, text: "one")
+        adapter.text = "one edited"
+
+        async let push: () = adapter.flushCraftPush()
+        let pushReachedPut = await becomesTrue { transport.requests.count == 2 }
+        XCTAssertTrue(pushReachedPut, "the push reached its PUT")
+
+        await adapter.pullAll()
+
+        XCTAssertEqual(transport.requests.count, 2, "the pull does not fetch under the push")
+        put.release()
+        await push
+        await Task.yield()
+        let noUnwatchedPull = await becomesTrue { transport.requests.count > 2 }
+        XCTAssertFalse(noUnwatchedPull, "no pull starts unwatched while the panel is shut")
+
+        transport.scripts += [connection, trash(), blocks("""
+            {"items":[{"id":"block-0","markdown":"one edited"}]}
+            """)]
+        await adapter.pullAll()
+
+        XCTAssertEqual(transport.requests.count, 5, "clock, trash plus fetch once the push has landed")
+        XCTAssertEqual(adapter.text, "one edited")
+        XCTAssertFalse(adapter.isPushDirty(id), "the converged pull stands cleared")
+    }
+
+    func testSecondPullCoalescesOntoAnInFlightPull() async throws {
+        // Two pulls deciding on one pre-store sidecar double-post the stash:
+        // the second yields and re-runs after the first lands instead.
+        let name = "ccp.sync.pullcoalesce.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let fetch = Latch()
+        let same = blocks("""
+            {"items":[{"id":"block-0","markdown":"one"}]}
+            """)
+        let transport = ScriptedTransport([connection, trash(), same])
+        transport.onRequest = {
+            if transport.requests.count == 6 { await fetch.wait() }
+        }
+        let adapter = adapter(store, transport)
+        _ = try await steadyPad(adapter, text: "one")
+
+        adapter.activate()
+        let verified = await becomesTrue { adapter.isSyncVerified }
+        XCTAssertTrue(verified, "the activate pull lands first")
+        XCTAssertEqual(transport.requests.count, 3)
+
+        transport.scripts += [connection, trash(), same, connection, trash(), same]
+        async let first: () = adapter.pullAll()
+        let firstReachedFetch = await becomesTrue { transport.requests.count == 6 }
+        XCTAssertTrue(firstReachedFetch, "the first pull reached its fetch")
+
+        await adapter.pullAll()
+
+        XCTAssertEqual(transport.requests.count, 6, "the second pull does not fetch beside the first")
+        fetch.release()
+        await first
+        let rerunLanded = await becomesTrue { adapter.isSyncVerified && transport.requests.count == 9 }
+        XCTAssertTrue(rerunLanded, "the coalesced pull re-runs once the first lands")
+        XCTAssertTrue(adapter.isSyncVerified)
+    }
 }
