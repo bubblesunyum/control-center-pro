@@ -74,22 +74,33 @@ final class ShelfPinningTests: XCTestCase {
         ), "a salvageable shelf must not be moved aside")
     }
 
-    /// An array whose every item fails leaves nothing to keep: fall through to
-    /// load() so the file is moved aside as evidence instead of letting the
-    /// next flush overwrite it with an empty shelf.
-    func testAShelfWithNothingSalvageableIsMovedAside() throws {
+    /// An array whose every item fails leaves nothing to keep: the read leaves
+    /// the file alone, and the next flush sets it aside as evidence instead of
+    /// overwriting it with an empty shelf.
+    func testAShelfWithNothingSalvageableIsSetAsideOnFlush() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try Data("[{\"id\":\"not-a-uuid\",\"kind\":\"text\",\"title\":{}}]".utf8)
-            .write(to: directory.appendingPathComponent("shelf.json"))
+        let payload = #"[{"id":"not-a-uuid","kind":"text","title":{}}]"#
+        try Data(payload.utf8).write(to: directory.appendingPathComponent("shelf.json"))
 
         let shelf = ShelfStore(directory: directory)
 
         XCTAssertTrue(shelf.items.isEmpty)
-        XCTAssertTrue(FileManager.default.fileExists(
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: directory.appendingPathComponent("shelf.json").path),
+            "the read is non-destructive"
+        )
+        XCTAssertFalse(FileManager.default.fileExists(
             atPath: directory.appendingPathComponent("shelf.json.corrupt").path
         ))
+
+        shelf.flush()
+
+        XCTAssertEqual(
+            try String(contentsOf: directory.appendingPathComponent("shelf.json.corrupt"), encoding: .utf8),
+            payload
+        )
     }
 }
 

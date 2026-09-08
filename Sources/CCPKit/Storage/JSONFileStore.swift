@@ -5,11 +5,13 @@ import Foundation
 
 /// One Codable value, kept as JSON in Application Support.
 ///
-/// Reading is total: a file that isn't there yet and a file that can't be
-/// parsed both come back as the default, because neither is a reason to keep
-/// the panel from opening. A file that can't be parsed is moved aside rather
-/// than overwritten — resetting someone's arrangement is bad enough without
-/// destroying the evidence of why.
+/// Reading is total and non-destructive: a file that isn't there yet and a
+/// file that can't be parsed both come back as the default, because neither
+/// is a reason to keep the panel from opening — and neither is a reason to
+/// destroy evidence. A read never moves anything aside. The first deliberate
+/// write over bytes we cannot read sets them aside instead, once only, so
+/// resetting someone's arrangement is never also destroying the explanation
+/// of why.
 public struct JSONFileStore<Value: Codable & Sendable>: Sendable {
     public let url: URL
     private let defaultValue: Value
@@ -27,12 +29,22 @@ public struct JSONFileStore<Value: Codable & Sendable>: Sendable {
 
     public func load() -> Value {
         guard let data = try? Data(contentsOf: url) else { return defaultValue }
-        do {
-            return try JSONDecoder().decode(Value.self, from: data)
-        } catch {
-            setAside()
-            return defaultValue
+        if let decoded = try? JSONDecoder().decode(Value.self, from: data) {
+            return decoded
         }
+        return rescued() ?? defaultValue
+    }
+
+    /// A previous set-aside that still decodes, standing in for live bytes we
+    /// cannot read. Only consulted when the live file exists but fails — a
+    /// missing live file is a fresh start, not a resurrection. Adopted as live
+    /// state; the next save re-commits it, which is what makes a recovery
+    /// survive quitting rather than living only in memory.
+    private func rescued() -> Value? {
+        guard let data = try? Data(contentsOf: corruptURL),
+              let decoded = try? JSONDecoder().decode(Value.self, from: data)
+        else { return nil }
+        return decoded
     }
 
     public func save(_ value: Value) throws {
@@ -44,14 +56,50 @@ public struct JSONFileStore<Value: Codable & Sendable>: Sendable {
             at: url.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
+        setAsideUndecodableLiveFile()
         try data.write(to: url, options: .atomic)
     }
 
-    private func setAside() {
-        let spoiled = url.appendingPathExtension("corrupt")
-        try? FileManager.default.removeItem(at: spoiled)
-        try? FileManager.default.moveItem(at: url, to: spoiled)
+    /// The first deliberate write over bytes we cannot read moves them aside
+    /// as evidence. Once-only: an existing `.corrupt` is never overwritten,
+    /// and a live file that already decodes is left alone. This lives on the
+    /// write because the store cannot remember a failed read — and because a
+    /// write is the one operation that knows someone is behind it.
+    private func setAsideUndecodableLiveFile() {
+        guard !FileManager.default.fileExists(atPath: corruptURL.path),
+              let data = try? Data(contentsOf: url),
+              (try? JSONDecoder().decode(Value.self, from: data)) == nil
+        else { return }
+        try? FileManager.default.moveItem(at: url, to: corruptURL)
     }
+
+    private var corruptURL: URL { url.appendingPathExtension("corrupt") }
+
+    /// Per-item lenient decode for array stores: one bad element no longer
+    /// costs the whole file. Falls back to `load()` — the default, or a
+    /// rescue — when nothing salvages, leaving the file for the next save to
+    /// set aside.
+    public func tolerantLoad<Element>() -> [Element] where Value == [Element], Element: Codable {
+        guard let data = try? Data(contentsOf: url) else { return load() }
+        if let decoded = try? JSONDecoder().decode([Element].self, from: data) {
+            return decoded
+        }
+        if let wrapped = try? JSONDecoder().decode([FailableElement<Element>].self, from: data) {
+            let salvaged = wrapped.compactMap(\.element)
+            if !wrapped.isEmpty, !salvaged.isEmpty {
+                return salvaged
+            }
+        }
+        return load()
+    }
+}
+
+/// One leniently-decoded array element: a single bad item decodes to nil
+/// instead of failing the whole array. File scope because Swift forbids
+/// nesting a type inside a generic function.
+private struct FailableElement<Element: Decodable>: Decodable {
+    let element: Element?
+    init(from decoder: Decoder) throws { element = try? Element(from: decoder) }
 }
 
 public extension URL {

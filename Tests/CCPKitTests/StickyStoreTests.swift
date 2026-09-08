@@ -182,7 +182,7 @@ final class StickyStoreTests: XCTestCase {
         XCTAssertEqual(sticky.height, Sticky.minHeight)
     }
 
-    func testAFileWithNothingSalvageableIsMovedAside() throws {
+    func testAFileWithNothingSalvageableIsSetAsideOnFlush() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -190,11 +190,22 @@ final class StickyStoreTests: XCTestCase {
 
         let store = StickyStore(directory: directory)
 
-        // Empty desk, but the evidence survives for whoever asks why.
+        // Empty desk, and the live file untouched by the read.
         XCTAssertTrue(store.visible.isEmpty)
         XCTAssertTrue(FileManager.default.fileExists(
+            atPath: directory.appendingPathComponent("stickies.json").path
+        ))
+        XCTAssertFalse(FileManager.default.fileExists(
             atPath: directory.appendingPathComponent("stickies.json.corrupt").path
         ))
+
+        store.flush()
+
+        // The first deliberate write keeps the evidence for whoever asks why.
+        XCTAssertEqual(
+            try String(contentsOf: directory.appendingPathComponent("stickies.json.corrupt"), encoding: .utf8),
+            "not json at all"
+        )
     }
 
     func testDisplayTitleFallsBackWhenEmpty() {

@@ -43,28 +43,7 @@ public final class StickyStore {
     /// user's own.
     init(directory: URL) {
         fileStore = JSONFileStore(filename: "stickies.json", default: [], in: directory)
-        stickies = Self.tolerantLoad(from: fileStore)
-    }
-
-    private static func tolerantLoad(from store: JSONFileStore<[Sticky]>) -> [Sticky] {
-        // JSONFileStore.load is atomic: one bad sticky throws and the whole
-        // file is moved to *.corrupt. Decode leniently per-item instead.
-        guard let data = try? Data(contentsOf: store.url) else { return store.load() }
-        if let decoded = try? JSONDecoder().decode([Sticky].self, from: data) {
-            return decoded
-        }
-        struct Failable: Decodable {
-            let sticky: Sticky?
-            init(from decoder: Decoder) throws { sticky = try? Sticky(from: decoder) }
-        }
-        if let wrapped = try? JSONDecoder().decode([Failable].self, from: data),
-           !wrapped.isEmpty, !wrapped.compactMap(\.sticky).isEmpty {
-            return wrapped.compactMap(\.sticky)
-        }
-        // Nothing salvageable — fall through to load(), which moves the file
-        // aside as evidence instead of letting the next flush overwrite it
-        // with an empty desk.
-        return store.load()
+        stickies = fileStore.tolerantLoad()
     }
 
     /// The stickies on the desk, in draw order.

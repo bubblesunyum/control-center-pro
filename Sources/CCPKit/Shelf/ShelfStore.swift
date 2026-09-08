@@ -50,26 +50,7 @@ public final class ShelfStore {
     /// user's own.
     init(directory: URL) {
         fileStore = JSONFileStore(filename: "shelf.json", default: [], in: directory)
-        items = Self.pinnedFirst(Self.tolerantLoad(from: fileStore))
-    }
-
-    private static func tolerantLoad(from store: JSONFileStore<[ShelfItem]>) -> [ShelfItem] {
-        // JSONFileStore.load is atomic: one bad item throws and the whole
-        // file is moved to *.corrupt. Decode leniently per-item instead.
-        guard let data = try? Data(contentsOf: store.url) else { return store.load() }
-        if let decoded = try? JSONDecoder().decode([ShelfItem].self, from: data) {
-            return decoded
-        }
-        // Lenient: ignore items whose kind or required fields fail.
-        struct Failable: Decodable { let item: ShelfItem?; init(from d: Decoder) throws { item = try? ShelfItem(from: d) } }
-        if let wrapped = try? JSONDecoder().decode([Failable].self, from: data),
-           !wrapped.isEmpty, !wrapped.compactMap(\.item).isEmpty {
-            return wrapped.compactMap(\.item)
-        }
-        // Nothing salvageable — fall through to load(), which moves the file
-        // aside as evidence instead of letting the next flush overwrite it
-        // with an empty shelf.
-        return store.load()
+        items = Self.pinnedFirst(fileStore.tolerantLoad())
     }
 
     // MARK: - Pin
