@@ -23,6 +23,9 @@ public final class ControlPanelController {
     /// Who the panel's keystrokes belong to. Notes claims its outlet on
     /// arrival; every open hands it back unless there is a reason not to.
     private let panelFocus = PanelFocus()
+    /// Whether the panel is up, for the views inside it: the window hides
+    /// without tearing the graph down, so this is how a view hears about it.
+    private let visibility = PanelVisibility()
 
     /// The screen the panel is currently seated on. The window covers it
     /// wholesale, so this is the seat kept across display changes while open.
@@ -58,7 +61,7 @@ public final class ControlPanelController {
     /// past it. Same lifetime as the dismissal monitor.
     private var mouseThroughMonitors: [Any] = []
 
-    public private(set) var isVisible = false
+    public var isVisible: Bool { visibility.isVisible }
 
     /// The app that was frontmost when the panel was shown — where a clipboard
     /// paste should land after the panel hides.
@@ -110,7 +113,8 @@ public final class ControlPanelController {
         )
         .environment(\.hidePanel, hide)
         .environment(\.pasteIntoPreviousApp, paste)
-        .environment(\.panelFocus, panelFocus))
+        .environment(\.panelFocus, panelFocus)
+        .environment(\.panelVisibility, visibility))
 
         // Lay the SwiftUI graph out now rather than on the first open, where it
         // would land inside the 100ms.
@@ -134,9 +138,10 @@ public final class ControlPanelController {
         stopMouseThrough()
         editor.stopEditing()
         window.orderOut(nil)
-        isVisible = false
         // After the window is down, not before: a widget stopped first would
-        // have the panel drawing a frame of whatever it left behind.
+        // have the panel drawing a frame of whatever it left behind. The
+        // views inside hear the same news through `visibility`.
+        visibility.hide()
         arrangement.deactivate()
         // Whatever edit mode changed goes to disk now rather than 500ms into
         // a panel nobody can see.
@@ -215,7 +220,7 @@ public final class ControlPanelController {
         window.orderFrontRegardless()
         window.makeKey()
         focusNotesForOpen()
-        isVisible = true
+        visibility.show()
         dismissal.start()
         startMouseThrough()
     }

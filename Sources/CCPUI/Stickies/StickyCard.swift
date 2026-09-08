@@ -259,21 +259,22 @@ struct StickyCard: View {
                 commitResizeIfNeeded()
             }
         }
-        .onDisappear {
-            // A dead gesture owns nothing: whatever was in flight is over,
-            // the transients clear with it, and the controller must hear
-            // that even though no release ran.
-            dragOffset = .zero
-            resizePreview = nil
-            resizeRide = .zero
-            moveAnchor.reset()
-            resizeAnchor.reset()
-            store.isDragging = false
+        // Hiding the panel is a going-away like any other: the window goes
+        // down with the graph intact, so this is the only thing that runs.
+        .onPanelHidden {
+            // The same landing as the release and the system cancel: a hide
+            // is not a reason to lose travel, and `orderOut` doesn't end an
+            // AppKit tracking session — the finger may still be down, and
+            // Esc mid-drag takes this path. Discarding here would snap the
+            // note back to where the drag started.
+            commitDragIfNeeded()
+            commitResizeIfNeeded()
             // The card dies with a confirmed delete while the flag is global:
             // without this the panel stops dismissing (see the Esc path).
             store.isConfirmingDelete = false
-            // Dismissing the panel fires no hover exit for a hidden window;
-            // without this the open hand outlives the sticky.
+            // The pointer never gets an exit from a window that went down
+            // under it; without this the open hand outlives the panel
+            // (ccp-6cvu).
             if isEdgeHovered {
                 NSCursor.pop()
                 isEdgeHovered = false

@@ -108,7 +108,9 @@ public struct ControlPanel: View {
                 resizeAnchor.reset()
             }
         }
-        .onDisappear {
+        // A panel nobody can see holds no press: the hold would otherwise
+        // fire into a hidden panel and enter edit mode there (ccp-2yy).
+        .onPanelHidden {
             holdTask?.cancel()
             holdTask = nil
             holdWidgetID = nil
