@@ -143,11 +143,14 @@ final class MouseThroughTests: XCTestCase {
     }
 
     func testEditorSizeLeavesTheGrabPadding() {
-        // The stored size is the whole card, padding included: a new note's
-        // text area is what the pre-chrome default offered.
+        // The stored size is the whole card, paper border included, so the
+        // text area is the card less that border on every side.
         XCTAssertEqual(
             StickyCard.editorSize(for: StickyCard.defaultSize),
-            CGSize(width: 240, height: 192)
+            CGSize(
+                width: StickyCard.defaultSize.width - StickyCard.edgeWidth * 2,
+                height: StickyCard.defaultSize.height - StickyCard.edgeWidth * 2
+            )
         )
         // Degenerate sizes pin at zero rather than inverting.
         XCTAssertEqual(StickyCard.editorSize(for: .zero), .zero)

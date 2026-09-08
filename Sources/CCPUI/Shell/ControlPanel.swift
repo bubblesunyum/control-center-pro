@@ -35,10 +35,11 @@ public struct ControlPanel: View {
     @State private var gripFrames: [GripFrame] = []
     @State private var holdTask: Task<Void, Never>?
     @State private var holdWidgetID: WidgetID?
-    /// Where the press that began the resize sat on screen. The resize drag
-    /// is measured from here, not from the gesture's panel-space translation
-    /// (see `resizeTranslation(for:)`).
-    @State private var resizeScreenAnchor: CGPoint?
+    /// Where the press that began the resize landed. The resize drag is
+    /// measured from here, not from the gesture's panel-space translation:
+    /// the lanes grow under the finger, and counting that growth as more drag
+    /// feeds the gesture its own output (see `ScreenDragAnchor`).
+    @State private var resizeAnchor = ScreenDragAnchor()
 
     init(arrangement: PanelArrangement, editor: PanelEditor, onLanesFrame: @escaping (CGRect) -> Void = { _ in }, onCardFrames: @escaping ([CGRect]) -> Void = { _ in }) {
         self.arrangement = arrangement
@@ -104,14 +105,14 @@ public struct ControlPanel: View {
                 holdTask?.cancel()
                 holdTask = nil
                 holdWidgetID = nil
-                resizeScreenAnchor = nil
+                resizeAnchor.reset()
             }
         }
         .onDisappear {
             holdTask?.cancel()
             holdTask = nil
             holdWidgetID = nil
-            resizeScreenAnchor = nil
+            resizeAnchor.reset()
             // A grip drag the system cancelled never sees onEnded, so its
             // preview would otherwise outlive the panel.
             editor.endResize()
@@ -178,13 +179,13 @@ public struct ControlPanel: View {
                     // frame with no slot behind it falls through to reorder,
                     // which is what a press on a card means.
                     if editor.resizePreview != nil {
-                        editor.updateResize(translation: resizeTranslation(for: value))
+                        editor.updateResize(translation: resizeAnchor.translation())
                         return
                     }
                     if let grip = gripFrames.first(where: { $0.frame.contains(value.startLocation) }),
                        let slot = arrangement.slot(for: grip.id) {
                         editor.beginResize(grip.id, from: slot.span, baseSize: slot.resizeStep)
-                        resizeScreenAnchor = NSEvent.mouseLocation
+                        resizeAnchor.engage()
                         return
                     }
                     // Normal reorder — require a tiny move before lifting to
@@ -234,7 +235,7 @@ public struct ControlPanel: View {
                 holdTask?.cancel()
                 holdTask = nil
                 holdWidgetID = nil
-                resizeScreenAnchor = nil
+                resizeAnchor.reset()
                 // A resize commits once, on release — or snaps back when a
                 // wider lane would hang off the screen.
                 if let preview = editor.resizePreview {
@@ -264,20 +265,6 @@ public struct ControlPanel: View {
                 }
                 editor.drop()
             }
-    }
-
-    /// The resize drag in screen points, measured from the press that began
-    /// it. The gesture's own translation is in panel space, and the window
-    /// grows under the finger while it drags — counting that growth as more
-    /// drag feeds the gesture its own output, and the card runs away past the
-    /// clamp the span arithmetic promises. Screen deltas can't include view
-    /// motion, by construction; without an anchor (begin missed it) the
-    /// gesture's translation is the honest fallback.
-    private func resizeTranslation(for value: DragGesture.Value) -> CGSize {
-        guard let anchor = resizeScreenAnchor else { return value.translation }
-        let now = NSEvent.mouseLocation
-        // Screen y runs up, panel y runs down.
-        return CGSize(width: now.x - anchor.x, height: anchor.y - now.y)
     }
 
     private var lanes: some View {

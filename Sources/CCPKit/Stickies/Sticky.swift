@@ -12,15 +12,16 @@ import Foundation
 /// The on-disk keys are pinned — renaming one orphans every saved sticky.
 public struct Sticky: Codable, Equatable, Identifiable, Sendable {
     /// What a sticky measures when it has never been resized, and what notes
-    /// written before size existed decode to. Includes the card's grab
-    /// padding on every side (240 + 2×24, 192 + 2×24), so a new note's text
-    /// area matches what the pre-chrome default offered.
+    /// written before size existed decode to. The whole card, the paper
+    /// border on every side included — so the paper a new note offers is this
+    /// less twice `StickyCard.edgeWidth`.
     public static let defaultWidth: Double = 288
     public static let defaultHeight: Double = 240
     /// The smallest a resize may leave behind — below this the text is a
-    /// slit, not a note.
+    /// slit, not a note. The floor is the card, paper border included, so
+    /// the height leaves roughly three lines of paper behind it.
     public static let minWidth: Double = 160
-    public static let minHeight: Double = 120
+    public static let minHeight: Double = 96
 
     public var id: UUID
     public var text: String

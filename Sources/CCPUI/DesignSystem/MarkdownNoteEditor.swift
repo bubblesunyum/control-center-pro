@@ -34,6 +34,11 @@ struct MarkdownNoteEditor: View {
     /// the well, and doubling it would shrink the paper and grow the scroll
     /// range for nothing.
     var textInsets = TextInsets(horizontal: Space.two + Space.half, vertical: Space.two)
+    /// How much empty room the engine keeps below the last line so a caret
+    /// typing at the bottom of a long document isn't pinned to the edge.
+    /// Sized to the viewport, so a sticky sets its own — see
+    /// `stickyOverscroll`.
+    var overscroll = OverscrollPolicy.default
     /// Fires with the editor's text view when it joins a window. The engine
     /// wrapper owns the view and offers no hook of its own, so this reports
     /// it per instance (see `TextViewReporter`) — the shell aiming focus
@@ -44,10 +49,18 @@ struct MarkdownNoteEditor: View {
     /// Body size, and the base the heading multipliers scale from.
     static let fontSize: CGFloat = 14
 
-    /// The tight pair a sticky uses: the card's grab padding is already the
-    /// well. Lives here, not at the call site, because only this file may
-    /// name the engine's inset type.
-    static let stickyInsets = TextInsets(horizontal: Space.half, vertical: Space.half)
+    /// What a sticky asks for instead of the defaults. Both live here, not at
+    /// the call site, because only this file may name the engine's types.
+    ///
+    /// No inset: the card's 16pt paper border is already the well, and
+    /// doubling it would shrink the paper for nothing.
+    static let stickyInsets = TextInsets()
+    /// No slack: the engine's is a fraction of the viewport, and in a note
+    /// this small it starts accruing a few lines in and pushes the content
+    /// past the bottom — so the scroller appears on a note whose text visibly
+    /// fits. Zeroed, the content is exactly the text, and the scroll view's
+    /// own autohide raises a bar only on real overflow.
+    static let stickyOverscroll = OverscrollPolicy(percent: 0, maxPoints: 0, minPoints: 0)
 
     /// A lane-width card gives a heading nowhere to be big. H1 at 1.35× is
     /// still unmistakably a heading at 14pt, where the engine's own 2.0×
@@ -87,6 +100,7 @@ struct MarkdownNoteEditor: View {
         // visible margin on every side — roomy on purpose, roomier than card
         // chrome ever is.
         configuration.textInsets = textInsets
+        configuration.overscroll = overscroll
         return configuration
     }
 

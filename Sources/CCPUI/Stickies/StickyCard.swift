@@ -13,14 +13,17 @@ import SwiftUI
 /// padding is paper for typing.
 ///
 /// Both gestures steer transient local state per frame and commit to the
-/// store once, on release. Writing the store per pixel re-renders the desk,
+/// store once, on release: writing the store per pixel re-renders the desk,
 /// re-arms persistence, and re-fires the controller's mouse-through watch on
-/// every frame — and the gesture lives on the view those writes recreate,
-/// so its anchor re-captures mid-drag and the card shakes instead of
-/// following the finger. The controller additionally holds its mouse-through
-/// verdict for the drag's duration (see `StickyStore.isDragging`): its
-/// hit-test reads committed geometry, which trails the finger, and flipping
-/// the window through under a held drag starves the gesture.
+/// every frame. And both measure themselves in screen points rather than in
+/// the gesture's own translation — the card is offset and resized *by* that
+/// translation, and SwiftUI converts each event through the card's current
+/// transform, so its own motion comes back out of the next frame and the
+/// gesture is fed its own output (see `ScreenDragAnchor`). The controller
+/// additionally holds its mouse-through verdict for the drag's duration (see
+/// `StickyStore.isDragging`): its hit-test reads committed geometry, which
+/// trails the finger, and flipping the window through under a held drag
+/// starves the gesture.
 struct StickyCard: View {
     /// What a never-resized sticky measures: the model's own default, read
     /// through here so the frame helpers below stay the one place the desk,
@@ -29,7 +32,7 @@ struct StickyCard: View {
     /// The grabbable padding around every edge. The editor lives inside it,
     /// so this ring is pure grab surface with no text or AppKit tracking
     /// underneath — and what the reclaim math keeps reachable.
-    static let edgeWidth: CGFloat = Space.three
+    static let edgeWidth: CGFloat = Space.two
     /// A new sticky cascades from the one that spawned it, so it never lands
     /// exactly on top of its parent.
     static let cascadeOffset: CGFloat = Space.three
@@ -37,13 +40,12 @@ struct StickyCard: View {
     /// Deliberate drifts off-screen are fine; a note with no reachable pixel
     /// is stranded, and the only recovery would be hand-editing the file.
     static let minGrab: CGFloat = 64
-    /// How long the pointer must rest in the corner before the resize grip
-    /// appears. Slow enough to never flash by while reaching for text, fast
-    /// enough to find on purpose.
-    static let gripHoverDelay: Duration = .milliseconds(500)
-    /// The corner that answers hover and holds the grip: the platform touch
-    /// target, not the drawn mark.
-    static let gripZone: CGFloat = Layout.resizeTouchTarget
+    /// The corner that answers hover and holds the grip: the touch target,
+    /// not the drawn mark. Deliberately under the platform's 44pt: the zone
+    /// takes a high-priority gesture, and one that size would reach 28pt past
+    /// the paper's border and answer a click at the end of the last line with
+    /// a resize instead of a caret.
+    static let gripZone: CGFloat = Space.three
 
     static func frame(center: CGPoint, size: CGSize) -> CGRect {
         CGRect(
@@ -109,14 +111,19 @@ struct StickyCard: View {
     /// drawing and committed once, on release — the card follows the finger
     /// 1:1 while the store hears about it a single time.
     @State private var dragOffset: CGSize = .zero
+    /// Where the press that began the move landed, so the drag is measured
+    /// against the screen instead of against the card it is moving.
+    @State private var moveAnchor = ScreenDragAnchor()
     @GestureState private var isDragActive = false
     /// The in-flight resize: a transient size plus the center's ride, one
     /// clamped commit on release.
     @State private var resizePreview: CGSize?
     @State private var resizeRide: CGSize = .zero
+    /// The resize's own anchor — the card grows under the finger, so its
+    /// translation is the one most exposed to the feedback.
+    @State private var resizeAnchor = ScreenDragAnchor()
     @GestureState private var isResizeActive = false
     @State private var showGrip = false
-    @State private var gripTask: Task<Void, Never>?
     /// Whether the pointer is over the move rim. Separate from the cursor it
     /// drives: hover exit fires mid-gesture as the card moves under a held
     /// finger, so popping directly on exit would fight an in-flight drag.
@@ -241,7 +248,6 @@ struct StickyCard: View {
         .onChange(of: isDragActive) { _, active in
             if active {
                 store.isDragging = true
-                dragLog("move start")
             } else {
                 commitDragIfNeeded()
             }
@@ -249,28 +255,19 @@ struct StickyCard: View {
         .onChange(of: isResizeActive) { _, active in
             if active {
                 store.isDragging = true
-                dragLog("resize start")
             } else {
                 commitResizeIfNeeded()
             }
         }
-        // TEMP (ccp-rlql A1): recreation tripwire — the store must never
-        // change under a held gesture; if it does the transients reset and
-        // the card snaps back. Remove after proof.
-        .onChange(of: sticky) { _, _ in
-            if isDragActive || isResizeActive {
-                dragLog("STORE-CHANGED mid-gesture!")
-            }
-        }
         .onDisappear {
-            gripTask?.cancel()
-            gripTask = nil
             // A dead gesture owns nothing: whatever was in flight is over,
             // the transients clear with it, and the controller must hear
             // that even though no release ran.
             dragOffset = .zero
             resizePreview = nil
             resizeRide = .zero
+            moveAnchor.reset()
+            resizeAnchor.reset()
             store.isDragging = false
             // The card dies with a confirmed delete while the flag is global:
             // without this the panel stops dismissing (see the Esc path).
@@ -288,28 +285,24 @@ struct StickyCard: View {
     /// commits once, on release. Minimum distance zero so the card is
     /// already under the finger on the first pixel — stickies have no
     /// hold-to-edit, unlike lane cards. The handle sits outside the text
-    /// stack, so zero never steals a selection.
+    /// stack, so zero never steals a selection. The travel is the anchor's,
+    /// not the gesture's: the card is offset by exactly what this hand
+    /// returns, so the gesture's own translation would count that back out.
     private var moveGesture: some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .panel)
             .updating($isDragActive) { _, state, _ in state = true }
-            .onChanged { value in
-                dragOffset = value.translation
+            .onChanged { _ in
+                dragOffset = moveAnchor.translation()
             }
-            .onEnded { value in
-                store.move(
-                    sticky.id,
-                    toX: sticky.x + value.translation.width,
-                    toY: sticky.y + value.translation.height
-                )
-                dragOffset = .zero
-                syncDraggingFlag()
-                dragLog("move end dx=\(Int(value.translation.width)) dy=\(Int(value.translation.height))")
+            .onEnded { _ in
+                commitDragIfNeeded()
             }
     }
 
-    /// Commits the travelled offset when the gesture ended without `onEnded`
-    /// — the system-cancel path. After a normal release the offset is
-    /// already zeroed and only the flag re-syncs, which is a no-op.
+    /// Commits the travelled offset. Both exits land here — the release and
+    /// the system-cancel path, which never calls `onEnded` — so a cancelled
+    /// drag keeps the distance it travelled instead of snapping back. Idle
+    /// after the first, because the offset is zeroed on the way through.
     private func commitDragIfNeeded() {
         if dragOffset != .zero {
             store.move(
@@ -318,8 +311,8 @@ struct StickyCard: View {
                 toY: sticky.y + dragOffset.height
             )
             dragOffset = .zero
-            dragLog("move commit (cancel path)")
         }
+        moveAnchor.reset()
         syncDraggingFlag()
     }
 
@@ -329,46 +322,15 @@ struct StickyCard: View {
         store.isDragging = isDragActive || isResizeActive
     }
 
-    // TEMP (ccp-rlql A1): live-drag validation logging, remove after proof.
-    // A file, not NSLog: unified-log delivery proved unreliable here.
-    // Watch with: tail -f /tmp/sticky-drag.log
-    private func dragLog(_ message: String) {
-        let line = "[sticky-drag] \(sticky.id.uuidString.prefix(4)) \(message)\n"
-        if let handle = FileHandle(forWritingAtPath: "/tmp/sticky-drag.log") {
-            handle.seekToEndOfFile()
-            if let data = line.data(using: .utf8) { handle.write(data) }
-            handle.closeFile()
-        } else {
-            try? line.write(toFile: "/tmp/sticky-drag.log", atomically: true, encoding: .utf8)
-        }
-    }
-
-    /// Arms the grip after the pointer rests in the corner, or retires it on
-    /// exit. The zone itself never leaves the tree — only the mark fades —
-    /// so there is always something to hover and to grab.
-    private func armGrip() {
-        guard gripTask == nil, !showGrip else { return }
-        gripTask = Task { @MainActor in
-            try? await Task.sleep(for: Self.gripHoverDelay)
-            guard !Task.isCancelled else { return }
-            showGrip = true
-        }
-    }
-
-    private func disarmGrip() {
-        gripTask?.cancel()
-        gripTask = nil
-        if !isResizeActive { showGrip = false }
-    }
-
-    /// The corner's hit area: always installed, so the grip can always arm
-    /// and the first grab lands even before the fade-in. Only the drawn
-    /// mark answers `showGrip` — the gesture rides the whole zone either
-    /// way, and VoiceOver only sees it while visible. The mark is the
-    /// widgets' own corner tick, shared, not a second design.
+    /// The corner's hit area: always installed, so the mark can answer the
+    /// pointer at once and the first grab lands whatever the fade is doing.
+    /// Only the mark answers `showGrip` — the gesture rides the whole zone
+    /// either way, and VoiceOver only sees it while visible. The mark is the
+    /// widgets' own corner tick, shared, not a second design, drawn with no
+    /// inset so it straddles the paper's edge instead of sitting inside it.
     private var cornerZone: some View {
         ZStack(alignment: .bottomTrailing) {
-            CornerTick()
+            CornerTick(inset: 0)
                 .stroke(.white, style: StrokeStyle(lineWidth: Stroke.resizeTick, lineCap: .round))
                 .shadow(color: .cardShadow, radius: 2, y: 1)
                 .opacity(showGrip ? 1 : 0)
@@ -385,8 +347,11 @@ struct StickyCard: View {
         // Priority over the padding's move gesture where the two overlap:
         // a corner press resizes, never moves.
         .highPriorityGesture(resizeGesture)
+        // No delay: the mark answers the corner the moment the pointer is on
+        // it. A resize in flight keeps it, since the pointer leaves the zone
+        // as the card grows out from under it.
         .onHover { hovering in
-            if hovering { armGrip() } else { disarmGrip() }
+            if hovering || !isResizeActive { showGrip = hovering }
         }
         .animation(.easeOut(duration: 0.15), value: showGrip)
     }
@@ -396,36 +361,32 @@ struct StickyCard: View {
     /// corner travels as the card grows, so a local reading would count the
     /// card's own growth against the finger.
     private var resizeGesture: some Gesture {
-        DragGesture(minimumDistance: 2, coordinateSpace: .panel)
+        DragGesture(minimumDistance: 0, coordinateSpace: .panel)
             .updating($isResizeActive) { _, state, _ in state = true }
-            .onChanged { value in
-                let preview = Self.previewResize(from: sticky, translation: value.translation)
+            .onChanged { _ in
+                let travel = resizeAnchor.translation()
+                // The first frame is the press itself: a plain corner click
+                // must not stand a preview up and write the store on release.
+                guard travel != .zero || resizePreview != nil else { return }
+                let preview = Self.previewResize(from: sticky, translation: travel)
                 resizePreview = preview.size
                 resizeRide = preview.ride
             }
-            .onEnded { value in
-                let preview = Self.previewResize(from: sticky, translation: value.translation)
-                store.move(
-                    sticky.id,
-                    toX: sticky.x + preview.ride.width,
-                    toY: sticky.y + preview.ride.height
-                )
-                store.resize(sticky.id, width: preview.size.width, height: preview.size.height)
-                resizePreview = nil
-                resizeRide = .zero
-                syncDraggingFlag()
-                dragLog("resize end w=\(Int(preview.size.width)) h=\(Int(preview.size.height))")
+            .onEnded { _ in
+                commitResizeIfNeeded()
             }
     }
 
+    /// Commits the drawn size, from the release and from the system-cancel
+    /// path alike — a cancelled resize keeps what it grew to.
     private func commitResizeIfNeeded() {
         if let preview = resizePreview {
             store.move(sticky.id, toX: sticky.x + resizeRide.width, toY: sticky.y + resizeRide.height)
             store.resize(sticky.id, width: preview.width, height: preview.height)
             resizePreview = nil
             resizeRide = .zero
-            dragLog("resize commit (cancel path)")
         }
+        resizeAnchor.reset()
         syncDraggingFlag()
     }
 
@@ -460,9 +421,12 @@ private struct StableStickyEditor: View, Equatable {
             text: Binding(get: { text }, set: onText),
             documentId: documentId,
             placeholder: "Jot it down…",
-            // Tight: the card's own padding is already the well. The Notes
-            // widget keeps the roomy default — this preset is sticky-only.
+            // None of either: the card's 16pt paper border is already the
+            // well, and the caret-comfort slack a full-window document wants
+            // raises a scroller on a note that visibly fits. The Notes widget
+            // keeps both defaults — these presets are sticky-only.
             textInsets: MarkdownNoteEditor.stickyInsets,
+            overscroll: MarkdownNoteEditor.stickyOverscroll,
             onCreate: onCreate
         )
     }

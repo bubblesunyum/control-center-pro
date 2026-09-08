@@ -69,7 +69,10 @@ scripts/verify.sh --full   # + slow checks and any smoke run
 
 Run this rather than raw build commands. It swallows tens of thousands of log
 lines and prints one line per step, which is the difference between proving your
-work and spending the day's context learning one bit.
+work and spending the day's context learning one bit. The `plan` step ahead of
+the build is a stale-plan guard: SwiftPM caches a path dependency's file list,
+so a sibling checkout that gained a source file fails the build with a bare
+"cannot find in scope" until the plan is refreshed.
 
 ## The review pass is standing, not optional
 

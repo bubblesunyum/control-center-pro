@@ -10,14 +10,19 @@ import SwiftUI
 ///
 /// A short arc concentric with the card's own corner: the grip box's outer
 /// corner sits exactly on the card's, so centering the arc one card-radius
-/// in hugs the edge. Inset half a step inside the hairline — flush, it
-/// would read as a broken border rather than a mark.
+/// in hugs the edge.
 struct CornerTick: Shape {
+    /// How far inside the card's own corner the arc's centre line runs. A
+    /// lane grip sits the default half-step in — flush, its mark would read
+    /// as a broken border rather than a handle. A sticky passes zero, so its
+    /// tick straddles the edge: half the stroke on the paper, half off it.
+    var inset: CGFloat = Space.half
+
     func path(in rect: CGRect) -> Path {
         var path = Path()
         path.addArc(
             center: CGPoint(x: rect.maxX - Radius.card, y: rect.maxY - Radius.card),
-            radius: Radius.card - Space.half,
+            radius: Radius.card - inset,
             startAngle: .degrees(0),
             endAngle: .degrees(90),
             clockwise: false

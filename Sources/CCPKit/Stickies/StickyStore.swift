@@ -82,10 +82,6 @@ public final class StickyStore {
     }
 
     public func move(_ id: UUID, toX x: Double, toY y: Double) {
-        // TEMP (ccp-rlql A1): every store write is a suspect while drags
-        // jitter — a write mid-gesture recreates the card and resets the
-        // transient offset. Remove after proof.
-        dragLog("move \(id.uuidString.prefix(4)) → \(Int(x)),\(Int(y))")
         guard let index = stickies.firstIndex(where: { $0.id == id }) else { return }
         stickies[index] = stickies[index].movedTo(x: x, y: y)
     }
@@ -94,15 +90,11 @@ public final class StickyStore {
     /// transient preview in the view, so a resize never re-renders the desk
     /// or re-arms persistence per pixel. The minimum lives on `resizedTo`.
     public func resize(_ id: UUID, width: Double, height: Double) {
-        // TEMP (ccp-rlql A1): see move(_:toX:toY:). Remove after proof.
-        dragLog("resize \(id.uuidString.prefix(4)) → \(Int(width))x\(Int(height))")
         guard let index = stickies.firstIndex(where: { $0.id == id }) else { return }
         stickies[index] = stickies[index].resizedTo(width: width, height: height)
     }
 
     public func setText(_ text: String, for id: UUID) {
-        // TEMP (ccp-rlql A1): see move(_:toX:toY:). Remove after proof.
-        dragLog("setText \(id.uuidString.prefix(4)) len=\(text.count)")
         guard let index = stickies.firstIndex(where: { $0.id == id }) else { return }
         stickies[index].text = text
     }
@@ -154,18 +146,5 @@ public final class StickyStore {
     // For previews / tests
     public func setStickiesForTesting(_ new: [Sticky]) {
         stickies = new
-    }
-
-    // TEMP (ccp-rlql A1): live-drag validation logging, remove after proof.
-    // Watch with: tail -f /tmp/sticky-drag.log
-    private func dragLog(_ message: String) {
-        let line = "[sticky-drag] store \(message)\n"
-        if let handle = FileHandle(forWritingAtPath: "/tmp/sticky-drag.log") {
-            handle.seekToEndOfFile()
-            if let data = line.data(using: .utf8) { handle.write(data) }
-            handle.closeFile()
-        } else {
-            try? line.write(toFile: "/tmp/sticky-drag.log", atomically: true, encoding: .utf8)
-        }
     }
 }

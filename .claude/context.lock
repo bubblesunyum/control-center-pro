@@ -5,12 +5,12 @@
     ".claude/agents/reviewer-design.md": "e33457cee19285cc",
     ".claude/agents/reviewer-taste.md": "bbd3d37bc5429b0a",
     ".claude/skills/workflow/SKILL.md": "9ccee0cf7ad97c31",
-    "doc": "cda0191d4b72a232",
+    "doc": "465f0550f92aceb5",
     "scripts/brief.sh": "58d710492c34dda3",
     "scripts/context.py": "586af6d85e348ae7",
     "scripts/opencode-agents.py": "5e28af95787ef261",
     "scripts/review.sh": "ea8cc2b58b043be0",
-    "scripts/verify.sh": "0f8dfc7567660e4e"
+    "scripts/verify.sh": "1939d6fc6f93fab5"
   },
   ".claude/skills/agentic-review/SKILL.md": {
     ".claude/agents/reviewer-correctness.md": "dfa12aa581b45c70",
@@ -27,13 +27,13 @@
     "\u2026": ""
   },
   "AGENTS.md": {
-    "doc": "6e5e357daf432411",
+    "doc": "767e26d37143cec3",
     "scripts/brief.sh": "58d710492c34dda3",
     "scripts/review.sh": "ea8cc2b58b043be0",
-    "scripts/verify.sh": "0f8dfc7567660e4e"
+    "scripts/verify.sh": "1939d6fc6f93fab5"
   },
   "CLAUDE.md": {
-    "Package.swift": "20d33a734529f8d8",
-    "doc": "f3f442501b16645b"
+    "Package.swift": "cc41d97ec6cf917b",
+    "doc": "122edffd5bfffd27"
   }
 }

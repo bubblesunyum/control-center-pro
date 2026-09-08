@@ -42,8 +42,10 @@ how the pieces fit together.
   `.opencode/agent/` holds the reviewers translated into opencode's dialect by
   `scripts/opencode-agents.py`. See below — two of the obvious moves here are
   traps.
-- **Gate:** `scripts/verify.sh` — build, tests, optional smoke, plus doc
-  staleness. Tiny output on purpose.
+- **Gate:** `scripts/verify.sh` — a stale-plan refresh, build, tests, optional
+  smoke, plus doc staleness. Tiny output on purpose. Every step runs through
+  `step`, including the plan guard: one that failed silently would surface a
+  line later as the compile error it exists to prevent.
 - **Dashboard:** `scripts/dashboard.py` serves a live diagram at localhost:7391.
   It never opens a browser itself. It publishes the live port to
   `.claude/launch.json` and prints the link with the instruction to open it in

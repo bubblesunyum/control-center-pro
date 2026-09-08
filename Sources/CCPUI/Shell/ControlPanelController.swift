@@ -311,8 +311,6 @@ public final class ControlPanelController {
     /// The lanes keep their top-right seat inside, via the view's own insets.
     private func place() {
         guard let visible = anchor?.visibleFrame else { return }
-        // TEMP (ccp-rlql A1): live-drag validation logging, remove after proof.
-        Self.dragLog("place()")
 
         // What the display can show is edit mode's limit too, so it is told
         // here rather than working it out from a screen it has no business
@@ -336,8 +334,6 @@ public final class ControlPanelController {
                 in: bounds
             )
             if clamped.x != sticky.x || clamped.y != sticky.y {
-                // TEMP (ccp-rlql A1): live-drag validation logging, remove after proof.
-                Self.dragLog("reclaim \(sticky.id.uuidString.prefix(4))")
                 StickyStore.shared.move(sticky.id, toX: clamped.x, toY: clamped.y)
             }
         }
@@ -390,20 +386,6 @@ public final class ControlPanelController {
         window.ignoresMouseEvents = false
     }
 
-    // TEMP (ccp-rlql A1): live-drag validation logging, remove after proof.
-    // A file, not NSLog: unified-log delivery proved unreliable here.
-    // Watch with: tail -f /tmp/sticky-drag.log
-    private static func dragLog(_ message: String) {
-        let line = "[sticky-drag] controller \(message)\n"
-        if let handle = FileHandle(forWritingAtPath: "/tmp/sticky-drag.log") {
-            handle.seekToEndOfFile()
-            if let data = line.data(using: .utf8) { handle.write(data) }
-            handle.closeFile()
-        } else {
-            try? line.write(toFile: "/tmp/sticky-drag.log", atomically: true, encoding: .utf8)
-        }
-    }
-
     private func updateMouseThrough(at screenPoint: CGPoint) {
         guard isVisible else { return }
         // A sticky drag owns the pointer until release: the hit-test below
@@ -427,8 +409,6 @@ public final class ControlPanelController {
         )
         if window.ignoresMouseEvents == interactive {
             window.ignoresMouseEvents = !interactive
-            // TEMP (ccp-rlql A1): live-drag validation logging, remove after proof.
-            Self.dragLog("mouse-through now \(window.ignoresMouseEvents ? "through" : "interactive")")
         }
     }
 
