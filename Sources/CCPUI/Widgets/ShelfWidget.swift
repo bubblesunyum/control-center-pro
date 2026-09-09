@@ -234,6 +234,8 @@ private struct ShelfOverflowMenu: View {
     @Bindable var hiddenFiles: QuickTogglesAdapter
     let dismiss: () -> Void
 
+    @State private var hiddenFilesHovered = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PopoverMenuSectionLabel("Actions")
@@ -246,11 +248,10 @@ private struct ShelfOverflowMenu: View {
             }
             .accessibilityHint(window.isVisible ? "Hides the floating Files window" : "Shows the floating Files window")
             if store.selection.isEmpty {
-                PopoverMenuRow(systemImage: "trash", title: "Clear all", isDestructive: true) {
+                PopoverMenuRow(systemImage: "trash", title: "Clear all", isDestructive: true, isDisabled: !store.hasUnpinnedItems) {
                     store.clear()
                     dismiss()
                 }
-                .disabled(!store.hasUnpinnedItems)
                 .help("Removes every unpinned item from Files")
                 .accessibilityHint("Removes every unpinned item from Files")
             } else {
@@ -299,14 +300,16 @@ private struct ShelfOverflowMenu: View {
             .padding(.horizontal, Space.one)
             .padding(.vertical, Space.half)
             .frame(maxWidth: .infinity, minHeight: Layout.shelfMenuRowHeight)
-            .background(
-                RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
-                    .fill(Color.clear)
-            )
             .contentShape(Rectangle())
         }
-        .buttonStyle(PopoverMenuRowStyle())
+        .buttonStyle(BareButtonStyle())
         .disabled(isBusy)
+        .opacity(isBusy ? 0.45 : 1)
+        .background(
+            hiddenFilesHovered ? Color.menuRowHover : Color.clear,
+            in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+        )
+        .onHover { hiddenFilesHovered = $0 }
         .help(isOn ? "Hide hidden files — Finder will restart" : "Show hidden files — Finder will restart")
         .accessibilityLabel("Show hidden files")
         .accessibilityValue(isOn ? "On" : "Off")

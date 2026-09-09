@@ -28,18 +28,26 @@ struct PopoverMenuSectionLabel: View {
 
 /// One row in a popover menu: a leading symbol in a fixed column and a title,
 /// with the row's hover fill.
+///
+/// The fill lives outside the `Button` on purpose: a disabled button swallows
+/// its style's hover tracking, so a row that keeps its fill inside goes
+/// hover-dead the moment it is disabled (the Files "Clear all" row).
 struct PopoverMenuRow: View {
     private let systemImage: String
     private let title: String
     private var isDestructive = false
+    private var isDisabled = false
     private let action: () -> Void
 
-    init(systemImage: String, title: String, isDestructive: Bool = false, action: @escaping () -> Void) {
+    init(systemImage: String, title: String, isDestructive: Bool = false, isDisabled: Bool = false, action: @escaping () -> Void) {
         self.systemImage = systemImage
         self.title = title
         self.isDestructive = isDestructive
+        self.isDisabled = isDisabled
         self.action = action
     }
+
+    @State private var hovered = false
 
     var body: some View {
         Button(action: action) {
@@ -61,8 +69,23 @@ struct PopoverMenuRow: View {
             .frame(maxWidth: .infinity, minHeight: Layout.shelfMenuRowHeight)
             .contentShape(Rectangle())
         }
-        .buttonStyle(PopoverMenuRowStyle())
+        .buttonStyle(BareButtonStyle())
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.45 : 1)
+        .background(
+            hovered ? Color.menuRowHover : Color.clear,
+            in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+        )
+        .onHover { hovered = $0 }
         .accessibilityLabel(title)
+    }
+}
+
+/// A button that draws its label untouched: press and hover feedback live on
+/// the views outside it, so they keep working when the button is disabled.
+struct BareButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
     }
 }
 
