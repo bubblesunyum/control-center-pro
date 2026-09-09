@@ -263,7 +263,7 @@ private struct ShelfOverflowMenu: View {
                 .help(store.selection.isEmpty ? "Removes every unpinned item from Files" : "Removes selected items from Files")
                 .accessibilityHint(store.selection.isEmpty ? "Removes every unpinned item from Files" : "Removes selected items from Files")
             }
-            PopoverMenuSectionLabel("Tools")
+            Divider().padding(.vertical, Space.half)
             hiddenFilesRow
         }
         .padding(Space.oneHalf)
