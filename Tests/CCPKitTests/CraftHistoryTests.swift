@@ -128,6 +128,19 @@ final class CraftHistoryTests: XCTestCase {
         XCTAssertEqual(adapter.padsPendingUndoClear, [id], "the text was still replaced")
     }
 
+    func testTypingNeitherSnapshotsNorFlagsReplacement() throws {
+        // The undo-clear answers wholesale replacements only: keystrokes
+        // must leave the stack alone, so typing records nothing and flags
+        // nothing — the surface has nothing to spend.
+        let (adapter, id) = adapter(text: "hello")
+
+        adapter.text = "hello edited"
+
+        XCTAssertTrue(adapter.snapshots(for: id).isEmpty)
+        XCTAssertTrue(adapter.padsPendingUndoClear.isEmpty)
+        XCTAssertTrue(adapter.isPushDirty(id), "typing still pushes as usual")
+    }
+
     func testRestoreUnknownSnapshotIsNoOp() throws {
         let (adapter, id) = adapter(text: "current")
 
