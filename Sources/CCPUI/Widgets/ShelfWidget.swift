@@ -237,7 +237,6 @@ private struct ShelfOverflowMenu: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PopoverMenuSectionLabel("Actions")
-                .padding(.top, Space.half)
             PopoverMenuRow(
                 systemImage: window.isVisible ? "xmark" : "arrow.up.forward",
                 title: window.isVisible ? "Hide shelf" : "Open shelf"
@@ -269,7 +268,7 @@ private struct ShelfOverflowMenu: View {
             PopoverMenuSectionLabel("Tools")
             hiddenFilesRow
         }
-        .padding(.vertical, Space.half)
+        .padding(Space.oneHalf)
         .frame(minWidth: Layout.shelfMenuWidth)
     }
 

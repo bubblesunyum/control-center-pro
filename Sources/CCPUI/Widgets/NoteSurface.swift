@@ -272,11 +272,10 @@ private struct ConflictsPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PopoverMenuSectionLabel("Conflicts")
-                .padding(.top, Space.half)
             panes
             footer
         }
-        .padding(.vertical, Space.half)
+        .padding(Space.oneHalf)
         .frame(minWidth: Layout.conflictsPopoverWidth,
                minHeight: Layout.conflictsPopoverHeight)
         .onAppear { selection = records.first?.id }
@@ -304,7 +303,6 @@ private struct ConflictsPopover: View {
                 }
             }
         }
-        .padding(.horizontal, Space.one)
     }
 
     private var selectedRecord: ConflictRecord? {

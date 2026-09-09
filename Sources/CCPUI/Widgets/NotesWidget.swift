@@ -203,7 +203,6 @@ private struct ClosedNotesPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PopoverMenuSectionLabel("Closed notes")
-                .padding(.top, Space.half)
             ForEach(adapter.restorableClosedNotes) { note in
                 PopoverMenuRow(systemImage: "note.text", title: note.name) {
                     _ = adapter.reopenTab(note.id)
@@ -211,7 +210,7 @@ private struct ClosedNotesPopover: View {
                 }
             }
         }
-        .padding(.vertical, Space.half)
+        .padding(Space.oneHalf)
         .frame(minWidth: Layout.shelfMenuWidth)
     }
 }

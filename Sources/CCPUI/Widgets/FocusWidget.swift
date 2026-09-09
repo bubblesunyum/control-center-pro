@@ -227,7 +227,6 @@ private struct FocusSettingsPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PopoverMenuSectionLabel("Durations")
-                .padding(.top, Space.half)
             durationRow(title: "Focus", minutes: binding(for: \.focusMinutes), range: FocusSettings.focusRange, step: 5)
             durationRow(title: "Short break", minutes: binding(for: \.shortBreakMinutes), range: FocusSettings.shortBreakRange, step: 1)
             durationRow(title: "Long break", minutes: binding(for: \.longBreakMinutes), range: FocusSettings.longBreakRange, step: 5)
@@ -246,8 +245,7 @@ private struct FocusSettingsPopover: View {
             }
             .padding(.top, Space.half)
         }
-        .padding(.vertical, Space.half)
-        .padding(.bottom, Space.half)
+        .padding(Space.oneHalf)
         .frame(minWidth: Layout.shelfMenuWidth)
     }
 
