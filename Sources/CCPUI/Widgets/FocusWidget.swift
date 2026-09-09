@@ -88,6 +88,17 @@ private struct FocusContent: View {
             // the content so the air reads equal on every side.
             .frame(maxHeight: .infinity, alignment: .center)
         }
+        // A tap anywhere quiet answers the celebration — buttons keep their
+        // own actions, and answering twice is a no-op either way.
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if isAwaitingAck { isAcknowledged = true }
+        }
+        .accessibilityActions {
+            if isAwaitingAck {
+                Button("Acknowledge completion") { isAcknowledged = true }
+            }
+        }
         .celebrationGlow(isActive: isAwaitingAck)
         .animation(.snappy, value: descriptor.title)
         .onChange(of: store.pendingNext) { isAcknowledged = false }
@@ -95,9 +106,9 @@ private struct FocusContent: View {
 
     // MARK: - Rows
 
-    /// The transport: the pause/play that carries the phase rides white in
-    /// the ring's center, reset and skip hold the trailing edge. One
-    /// arrangement in every state, so the row never reflows.
+    /// The transport: pause/play rides bare in the ring's center, reset and
+    /// skip hold the trailing edge. One arrangement in every state, so the
+    /// row never reflows.
     private var mainRow: some View {
         HStack(spacing: Space.two) {
             ZStack {
@@ -106,15 +117,13 @@ private struct FocusContent: View {
                     tint: progressTint,
                     isBreathing: store.isRunning
                 )
-                // The disc carries the phase color so the white transport
-                // glyph reads in either appearance; the ring around it keeps
-                // the progress.
-                Circle()
-                    .fill(progressTint)
+                // Bare glyph on empty glass: adaptive primary, white in dark
+                // and black in light, since a fixed white vanishes on light
+                // glass. The whole ring is the target.
                 Button(action: centerAction) {
                     Image(systemName: centerIcon)
                         .font(.callout.weight(.bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.primary)
                         .frame(width: Self.ringDiameter, height: Self.ringDiameter)
                         .contentShape(Circle())
                 }
@@ -132,12 +141,6 @@ private struct FocusContent: View {
                 .accessibilityLabel("\(descriptor.title)\(store.isPaused ? ", paused" : ""), \(countdownText) remaining")
             Spacer(minLength: Space.half)
             controls
-            if isAwaitingAck {
-                CelebrationSeal(accessibilityLabel: "Acknowledge completion") {
-                    isAcknowledged = true
-                }
-                .transition(.scale.combined(with: .opacity))
-            }
         }
     }
 
@@ -159,7 +162,7 @@ private struct FocusContent: View {
         else { store.start(.focus) }
     }
 
-    private static let ringDiameter: CGFloat = 48
+    private static let ringDiameter: CGFloat = 56
 
     /// The last-minute heartbeat: flips every second under a minute to go,
     /// which replays the pop. Running phases only — breaks, pauses and the
@@ -228,6 +231,7 @@ private struct FocusContent: View {
                     Text("\(store.settings.focusMinutes) min")
                         .monospacedDigit()
                         .foregroundStyle(.primary)
+                        .frame(minWidth: Self.pillValueWidth, alignment: .trailing)
                 }
                 Circle()
                     .fill(.tertiary)
@@ -237,6 +241,7 @@ private struct FocusContent: View {
                     Text(store.settings.breaksEnabled ? "\(store.settings.shortBreakMinutes) min" : "Off")
                         .monospacedDigit()
                         .foregroundStyle(.primary)
+                        .frame(minWidth: Self.pillValueWidth, alignment: .trailing)
                 }
             }
             .font(.caption.weight(.medium))
@@ -261,6 +266,9 @@ private struct FocusContent: View {
     }
 
     private static let pillSeparatorDiameter: CGFloat = 3
+    /// Wide enough for the longest readout ("120 min") so dragging a value
+    /// never resizes the pill — and never walks the popover anchored to it.
+    private static let pillValueWidth: CGFloat = 48
 
     // MARK: - Progress
 
@@ -372,14 +380,17 @@ private struct FocusSettingsPopover: View {
                     .foregroundStyle(.primary)
             }
             .font(.caption.weight(.medium))
-            // The slider rides its own row: an empty label keeps the title
-            // from doubling beside it, and the readout above stays the name.
-            Slider(value: value, in: range, step: step) {
-                EmptyView()
-            }
-            .tint(Color.widgetAccent)
-            .accessibilityLabel("\(title) duration")
-            .accessibilityValue(readout(value: Int(value.wrappedValue), offText: offText))
+            // The slider rides its own row. Hand-rolled, on purpose: the
+            // native one draws its own blue track and dark knob on this
+            // system and ignores tint, so it can never wear our accent or a
+            // visible grabber. This one can.
+            DurationSlider(
+                value: value,
+                range: range,
+                step: step,
+                label: "\(title) duration",
+                valueText: readout(value: Int(value.wrappedValue), offText: offText)
+            )
             HStack(spacing: Space.quarter) {
                 ForEach(presets, id: \.self) { preset in
                     presetChip(preset: preset, title: title, value: value, offText: offText)
@@ -409,6 +420,75 @@ private struct FocusSettingsPopover: View {
         .accessibilityLabel(offText != nil && preset == 0
             ? "Turn breaks off" : "\(title), \(preset) minutes")
     }
+}
+
+/// A chunky duration slider: accent fill, white grabber, step snapping.
+/// Native Slider is one line, but it brings its own colors on this system.
+private struct DurationSlider: View {
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let step: Double
+    let label: String
+    let valueText: String
+
+    @State private var isDragging = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            let travel = max(proxy.size.width - Self.knobDiameter, 1)
+            let fraction = (value - range.lowerBound) / (range.upperBound - range.lowerBound)
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.controlFill)
+                    .frame(height: Self.trackHeight)
+                Capsule()
+                    .fill(Color.widgetAccent)
+                    .frame(width: Self.knobDiameter + travel * fraction, height: Self.trackHeight)
+                Circle()
+                    .fill(.white)
+                    .shadow(color: .cardShadow, radius: 2, y: 1)
+                    .frame(width: Self.knobDiameter, height: Self.knobDiameter)
+                    .offset(x: travel * fraction)
+                    .scaleEffect(isDragging && !reduceMotion ? 1.15 : 1)
+                    .animation(.bouncy(duration: 0.3), value: isDragging)
+            }
+            .frame(height: Self.knobDiameter)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { drag in
+                        isDragging = true
+                        value = snapped(
+                            range.lowerBound + min(max(
+                                (drag.location.x - Self.knobDiameter / 2) / travel, 0), 1)
+                                * (range.upperBound - range.lowerBound)
+                        )
+                    }
+                    .onEnded { _ in
+                        isDragging = false
+                    }
+            )
+        }
+        .frame(height: Self.knobDiameter)
+        .accessibilityLabel(label)
+        .accessibilityValue(valueText)
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: value = snapped(min(value + step, range.upperBound))
+            case .decrement: value = snapped(max(value - step, range.lowerBound))
+            @unknown default: break
+            }
+        }
+    }
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private func snapped(_ raw: Double) -> Double {
+        (raw / step).rounded() * step
+    }
+
+    private static let knobDiameter: CGFloat = 22
+    private static let trackHeight: CGFloat = 8
 }
 
 /// One round media button: quiet circle until the pointer lands. Same size

@@ -45,39 +45,3 @@ private struct CelebrationGlow: ViewModifier {
 
     private var glowNow: Bool { isActive && !reduceMotion }
 }
-
-/// The answer to the glow: a springy checkmark seal that pops in when
-/// something finishes and dismisses the celebration when tapped. It
-/// acknowledges — it never starts the next thing itself.
-public struct CelebrationSeal: View {
-    private let accessibilityLabel: String
-    private let action: () -> Void
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var popped = false
-
-    public init(accessibilityLabel: String, action: @escaping () -> Void) {
-        self.accessibilityLabel = accessibilityLabel
-        self.action = action
-    }
-
-    public var body: some View {
-        Button(action: action) {
-            Image(systemName: "checkmark")
-                .font(.title3.weight(.bold))
-                .foregroundStyle(.white)
-                .frame(width: Self.diameter, height: Self.diameter)
-                .background(Circle().fill(Color.success))
-                .scaleEffect(popped ? 1 : 0.4)
-                .opacity(popped ? 1 : 0)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel)
-        .onAppear {
-            guard !reduceMotion else { return popped = true }
-            withAnimation(.bouncy(duration: 0.5)) { popped = true }
-        }
-    }
-
-    private static let diameter: CGFloat = 40
-}
