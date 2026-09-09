@@ -38,7 +38,6 @@ public extension Color {
     /// Fill for a pressable surface inside a card, at rest.
     static let controlFill = Ink.white08
     static let cardShadow = Ink.black24
-
     /// The note surface sits two lightening fills above its card; without a
     /// scrim it reads as glare rather than as a surface set into the card. A
     /// black scrim darkens in either appearance, where leaning on the system
@@ -55,11 +54,12 @@ public extension Color {
     /// rather than for the system accent, which is where a different answer
     /// would go if one is ever needed.
     static let widgetAccent = Color.accentColor
+    /// Hurry, not alarm — today the Focus countdown in its last minute.
+    static let urgent = Color.orange
+    /// The quiet track a progress ring fills against.
+    static let ringTrack = Color.primary.opacity(0.1)
     /// What a completed action reads as — the drop-catcher's tick.
     static let success = Color.green
-    /// An upcoming dot in the Focus cycle — quiet against the card, where the
-    /// filled dots wear the widget accent.
-    static let cycleDotEmpty = Color.secondary.opacity(0.28)
     static let labelMuted = Color.secondary
     /// Baseline drawn behind a sparkline so its zero is readable.
     static let sparklineBaseline = Color.secondary.opacity(0.28)

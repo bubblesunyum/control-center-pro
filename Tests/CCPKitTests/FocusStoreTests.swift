@@ -70,7 +70,7 @@ final class FocusStoreTests: XCTestCase {
     func testStartFocusSetsDeadlineAndSchedulesNotification() {
         let (store, clock, notifier) = makeStore()
         store.updateSettings(FocusSettings(
-            focusMinutes: 25, shortBreakMinutes: 5, longBreakMinutes: 15, roundsBeforeLongBreak: 4))
+            focusMinutes: 25, shortBreakMinutes: 5, breaksEnabled: true))
 
         store.start(.focus)
 
@@ -113,7 +113,9 @@ final class FocusStoreTests: XCTestCase {
         store.panelClosed()
     }
 
-    func testNoChimeWhenPanelClosed() {
+    func testChimeWhenPanelClosed() {
+        // The chime is the store's own sound, separate from the scheduled
+        // notification — a shut panel still sounds the round's end.
         let (store, clock, notifier) = makeStore()
         store.start(.focus)
 
@@ -121,7 +123,7 @@ final class FocusStoreTests: XCTestCase {
         store.tick()
 
         XCTAssertEqual(store.pendingNext, .shortBreak)
-        XCTAssertEqual(notifier.chimeCount, 0)
+        XCTAssertEqual(notifier.chimeCount, 1)
     }
 
     func testBreakCompletionWaitsOnFocus() {
@@ -136,50 +138,68 @@ final class FocusStoreTests: XCTestCase {
         XCTAssertEqual(store.completedFocusToday, 0)
     }
 
-    func testFourthConsecutiveFocusEarnsLongBreak() {
+    func testFocusBreakCycleRepeats() {
         let (store, clock, _) = makeStore()
         store.updateSettings(FocusSettings(
-            focusMinutes: 25, shortBreakMinutes: 5, longBreakMinutes: 15, roundsBeforeLongBreak: 4))
+            focusMinutes: 25, shortBreakMinutes: 5, breaksEnabled: true))
 
-        for round in 1...4 {
+        for round in 1...3 {
             store.start(.focus)
             clock.advance(by: 25 * 60 + 1)
             store.tick()
-            if round < 4 {
-                XCTAssertEqual(store.pendingNext, .shortBreak, "round \(round)")
-                store.startNext()
-                clock.advance(by: 5 * 60 + 1)
-                store.tick()
-                XCTAssertEqual(store.pendingNext, .focus)
-            }
+            XCTAssertEqual(store.pendingNext, .shortBreak, "round \(round)")
+            XCTAssertEqual(store.focusStreak, round)
+            store.startNext()
+            clock.advance(by: 5 * 60 + 1)
+            store.tick()
+            XCTAssertEqual(store.pendingNext, .focus)
         }
-
-        XCTAssertEqual(store.focusStreak, 4)
-        XCTAssertEqual(store.pendingNext, .longBreak)
     }
 
-    func testLongBreakCompletionRestartsTheCycle() {
-        let (store, clock, _) = makeStore()
+    func testBreaksDisabledCyclesFocusToFocus() {
+        let (store, clock, notifier) = makeStore()
         store.updateSettings(FocusSettings(
-            focusMinutes: 25, shortBreakMinutes: 5, longBreakMinutes: 15, roundsBeforeLongBreak: 2))
+            focusMinutes: 25, shortBreakMinutes: 5, breaksEnabled: false))
 
         store.start(.focus)
         clock.advance(by: 25 * 60 + 1)
         store.tick()
-        store.startNext()
-        clock.advance(by: 5 * 60 + 1)
-        store.tick()
-        store.startNext()
-        clock.advance(by: 25 * 60 + 1)
-        store.tick()
-        XCTAssertEqual(store.pendingNext, .longBreak)
+
+        // The between-phase stop stays — only the rest goes.
+        XCTAssertEqual(store.pendingNext, .focus)
+        XCTAssertEqual(store.focusStreak, 1)
+        XCTAssertEqual(notifier.chimeCount, 1)
 
         store.startNext()
-        clock.advance(by: 15 * 60 + 1)
-        store.tick()
+        XCTAssertEqual(store.activePhase, .focus)
+    }
+
+    func testSkipWithBreaksDisabledWaitsOnFocus() {
+        let (store, _, _) = makeStore()
+        store.updateSettings(FocusSettings(
+            focusMinutes: 25, shortBreakMinutes: 5, breaksEnabled: false))
+        store.start(.focus)
+
+        store.skip()
 
         XCTAssertEqual(store.pendingNext, .focus)
         XCTAssertEqual(store.focusStreak, 0)
+    }
+
+    func testDisablingBreaksWhileWaitingRepointsAtFocus() {
+        let (store, clock, _) = makeStore()
+        store.start(.focus)
+        clock.advance(by: 25 * 60 + 1)
+        store.tick()
+        XCTAssertEqual(store.pendingNext, .shortBreak)
+
+        var next = store.settings
+        next.breaksEnabled = false
+        store.updateSettings(next)
+
+        XCTAssertEqual(store.pendingNext, .focus)
+        store.startNext()
+        XCTAssertEqual(store.activePhase, .focus)
     }
 
     // MARK: - Pause / resume
@@ -289,12 +309,11 @@ final class FocusStoreTests: XCTestCase {
     func testSettingsClampToStepperRanges() {
         let (store, _, _) = makeStore()
         store.updateSettings(FocusSettings(
-            focusMinutes: 500, shortBreakMinutes: 0, longBreakMinutes: -3, roundsBeforeLongBreak: 99))
+            focusMinutes: 500, shortBreakMinutes: 0, breaksEnabled: false))
 
         XCTAssertEqual(store.settings.focusMinutes, 120)
         XCTAssertEqual(store.settings.shortBreakMinutes, 1)
-        XCTAssertEqual(store.settings.longBreakMinutes, 5)
-        XCTAssertEqual(store.settings.roundsBeforeLongBreak, 8)
+        XCTAssertFalse(store.settings.breaksEnabled)
     }
 
     func testSettingsPersistAndLeaveRunningDeadlineAlone() {
@@ -304,12 +323,33 @@ final class FocusStoreTests: XCTestCase {
         let deadline = store.endsAt
 
         store.updateSettings(FocusSettings(
-            focusMinutes: 50, shortBreakMinutes: 10, longBreakMinutes: 20, roundsBeforeLongBreak: 4))
+            focusMinutes: 50, shortBreakMinutes: 10, breaksEnabled: false))
 
         XCTAssertEqual(store.endsAt, deadline)
 
         let revived = FocusStore(in: directory, clock: clock)
         XCTAssertEqual(revived.settings.focusMinutes, 50)
+        XCTAssertFalse(revived.settings.breaksEnabled)
+    }
+
+    // MARK: - Legacy files
+
+    func testLegacySettingsDecodeWithDefaults() throws {
+        // An old focus.json carries long-break keys and no breaks switch —
+        // it still reads, leftovers ignored, switch on.
+        let data = """
+            {"focusMinutes":25,"shortBreakMinutes":5,"longBreakMinutes":15,"roundsBeforeLongBreak":4}
+            """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(FocusSettings.self, from: data)
+
+        XCTAssertEqual(decoded.focusMinutes, 25)
+        XCTAssertEqual(decoded.shortBreakMinutes, 5)
+        XCTAssertTrue(decoded.breaksEnabled)
+    }
+
+    func testLegacyLongBreakPhaseDecodesAsBreak() throws {
+        let data = "\"longBreak\"".data(using: .utf8)!
+        XCTAssertEqual(try JSONDecoder().decode(FocusPhase.self, from: data), .shortBreak)
     }
 
     // MARK: - Notification authorization
@@ -420,7 +460,8 @@ final class FocusStoreTests: XCTestCase {
 
         // A pause outliving the 90-day retention window.
         clock.advance(by: 91 * 24 * 60 * 60)
-        store.resetStreak()
+        // Any save runs the sweep — re-saving the untouched settings will do.
+        store.updateSettings(store.settings)
 
         // Still there: the open stretch is spared the sweep.
         XCTAssertEqual(store.sessions.count, 1)

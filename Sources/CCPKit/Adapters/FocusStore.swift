@@ -10,10 +10,10 @@ import Observation
 /// Deadline-based: a running phase is `activePhase + endsAt`, never a counter.
 /// While the panel is open a 1s ticker refreshes the countdown and notices
 /// the deadline passing; with the panel shut nothing ticks — a phase that
-/// ends there is announced by its scheduled notification, and reopening
-/// recomputes from the clock. The menu-bar countdown is the status item's own
-/// timer reading this same truth, so a shut panel with no session running
-/// costs nothing.
+/// ends there is announced by its scheduled notification plus the store's own
+/// chime, and reopening recomputes from the clock. The menu-bar countdown is
+/// the status item's own timer reading this same truth, so a shut panel with
+/// no session running costs nothing.
 @MainActor
 @Observable
 public final class FocusStore {
@@ -26,8 +26,9 @@ public final class FocusStore {
     /// The phase a finished stretch is waiting on. Non-nil only between
     /// phases — transitions are manual, never automatic.
     public private(set) var pendingNext: FocusPhase?
-    /// Consecutive completed focuses in this cycle. A skipped or reset focus
-    /// breaks the chain; breaks never do.
+    /// Consecutive completed focuses. Nothing reads it yet — no dots, no
+    /// long break — but the count stays warm for whatever comes next.
+    /// A skipped or reset focus breaks the chain; breaks never do.
     public private(set) var focusStreak: Int
     public private(set) var sessions: [FocusSession]
     /// The countdown's clock. Refreshed by the ticker while open and by every
@@ -122,8 +123,8 @@ public final class FocusStore {
     // MARK: - Panel lifecycle
 
     /// The widget forwards activate()/deactivate() here. A transition the
-    /// ticker missed while shut lands silently — its notification already
-    /// fired — and the chime stays a panel-open sound only.
+    /// ticker missed while shut lands silently — its notification and chime
+    /// already fired — rather than sounding at open.
     public func panelOpened() {
         panelOpenCount += 1
         now = clock.now()
@@ -205,7 +206,8 @@ public final class FocusStore {
     }
 
     /// Abandon the active stretch but keep the cycle going — land waiting on
-    /// the phase that follows. A skipped focus earns no long break.
+    /// the phase that follows. With breaks off a skipped focus just waits on
+    /// another focus.
     public func skip() {
         reconcile(announce: true)
         guard let phase = activePhase else { return }
@@ -215,7 +217,7 @@ public final class FocusStore {
         activePhase = nil
         endsAt = nil
         pausedRemaining = nil
-        pendingNext = phase == .focus ? shortOrLong() : .focus
+        pendingNext = phase == .focus ? nextAfterFocus() : .focus
         notifier.cancelScheduled()
         save()
         ensureTicker()
@@ -223,15 +225,13 @@ public final class FocusStore {
 
     public func updateSettings(_ next: FocusSettings) {
         settings = next.clamped
+        // A pendingNext decided under the old switch goes stale: turning
+        // breaks off while waiting on a break must not still offer it.
+        if activePhase == nil, !settings.breaksEnabled, pendingNext == .shortBreak {
+            pendingNext = .focus
+        }
         save()
         // A running phase keeps its deadline — new durations start next phase.
-    }
-
-    /// Clear the cycle counter. History stays; only the road to the next long
-    /// break restarts.
-    public func resetStreak() {
-        focusStreak = 0
-        save()
     }
 
     // MARK: - Notifications
@@ -264,24 +264,25 @@ public final class FocusStore {
         notifier.cancelScheduled()
         if phase == .focus {
             focusStreak += 1
-            pendingNext = shortOrLong()
+            pendingNext = nextAfterFocus()
         } else {
-            // A finished long break closes the cycle — the dots start over.
-            if phase == .longBreak { focusStreak = 0 }
             pendingNext = .focus
         }
         activePhase = nil
         self.endsAt = nil
-        if announce, panelOpenCount > 0 { notifier.chime() }
+        // The chime is the store's own sound, separate from the scheduled
+        // notification — it plays wherever the deadline is noticed, panel
+        // open or shut. Only the quiet reconciles (launch, panel open) skip
+        // it, since those land a finish the user already slept through.
+        if announce { notifier.chime() }
         save()
         ensureTicker()
     }
 
-    /// A skipped or freshly-finished focus earns the long break only on a
-    /// completed round boundary — streak is 0 after a skip, so this is short.
-    private func shortOrLong() -> FocusPhase {
-        focusStreak > 0 && focusStreak % settings.roundsBeforeLongBreak == 0
-            ? .longBreak : .shortBreak
+    /// What a finished focus waits on. Breaks off means straight back to
+    /// focus — the between-phase stop stays, the rest goes.
+    private func nextAfterFocus() -> FocusPhase {
+        settings.breaksEnabled ? .shortBreak : .focus
     }
 
     private func closeOpenSession(completed: Bool, at date: Date) {
@@ -302,9 +303,6 @@ public final class FocusStore {
         case .shortBreak:
             title = "Break over"
             body = "Ready for the next focus stretch?"
-        case .longBreak:
-            title = "Long break over"
-            body = "Recovered? Start the next focus stretch."
         }
         notifier.schedule(title: title, body: body, at: endingAt)
     }

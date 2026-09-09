@@ -5,70 +5,87 @@ import Foundation
 
 /// Which kind of stretch the clock is measuring. Idle and paused are not
 /// phases — they are the absence of one, tracked beside the phase.
+///
+/// There used to be a long break; now there is one break. The custom decoding
+/// keeps that past readable: a stored `longBreak` lands as a break rather
+/// than failing the whole file.
 public enum FocusPhase: String, Codable, Sendable, CaseIterable {
     case focus
     case shortBreak
-    case longBreak
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        switch try container.decode(String.self) {
+        case "focus": self = .focus
+        case "longBreak": self = .shortBreak
+        default: self = .shortBreak
+        }
+    }
 }
 
 public extension FocusPhase {
     var title: String {
         switch self {
         case .focus: "Focus"
-        case .shortBreak: "Short break"
-        case .longBreak: "Long break"
+        case .shortBreak: "Break"
         }
     }
+
+    /// Whether this phase is a rest one. Today there is only one.
+    var isBreak: Bool { self != .focus }
 }
 
-/// Durations in minutes plus the cycle length. Plain data — the store owns
+/// Durations plus the breaks switch. Plain data — the store owns
 /// what the numbers mean.
 ///
 /// The ranges are the steppers' ranges too, so clamping and the UI can never
-/// disagree about what a legal duration is.
+/// disagree about what a legal duration is. Decoding tolerates the removed
+/// long-break keys: an old file still reads, the leftovers are ignored.
 public struct FocusSettings: Codable, Sendable, Hashable {
     public static let focusRange = 5...120
     public static let shortBreakRange = 1...30
-    public static let longBreakRange = 5...60
-    public static let roundsRange = 2...8
 
     public var focusMinutes: Int
     public var shortBreakMinutes: Int
-    public var longBreakMinutes: Int
-    public var roundsBeforeLongBreak: Int
+    public var breaksEnabled: Bool
 
     public static let `default` = FocusSettings(
         focusMinutes: 25,
         shortBreakMinutes: 5,
-        longBreakMinutes: 15,
-        roundsBeforeLongBreak: 4
+        breaksEnabled: true
     )
 
     public init(
         focusMinutes: Int,
         shortBreakMinutes: Int,
-        longBreakMinutes: Int,
-        roundsBeforeLongBreak: Int
+        breaksEnabled: Bool = true
     ) {
         self.focusMinutes = focusMinutes
         self.shortBreakMinutes = shortBreakMinutes
-        self.longBreakMinutes = longBreakMinutes
-        self.roundsBeforeLongBreak = roundsBeforeLongBreak
+        self.breaksEnabled = breaksEnabled
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.focusMinutes = try container.decodeIfPresent(Int.self, forKey: .focusMinutes)
+            ?? Self.default.focusMinutes
+        self.shortBreakMinutes = try container.decodeIfPresent(Int.self, forKey: .shortBreakMinutes)
+            ?? Self.default.shortBreakMinutes
+        self.breaksEnabled = try container.decodeIfPresent(Bool.self, forKey: .breaksEnabled)
+            ?? Self.default.breaksEnabled
     }
 
     enum CodingKeys: String, CodingKey {
         case focusMinutes
         case shortBreakMinutes
-        case longBreakMinutes
-        case roundsBeforeLongBreak
+        case breaksEnabled
     }
 
     public var clamped: FocusSettings {
         FocusSettings(
             focusMinutes: focusMinutes.clamped(to: Self.focusRange),
             shortBreakMinutes: shortBreakMinutes.clamped(to: Self.shortBreakRange),
-            longBreakMinutes: longBreakMinutes.clamped(to: Self.longBreakRange),
-            roundsBeforeLongBreak: roundsBeforeLongBreak.clamped(to: Self.roundsRange)
+            breaksEnabled: breaksEnabled
         )
     }
 
@@ -76,7 +93,6 @@ public struct FocusSettings: Codable, Sendable, Hashable {
         switch phase {
         case .focus: focusMinutes
         case .shortBreak: shortBreakMinutes
-        case .longBreak: longBreakMinutes
         }
     }
 }

@@ -5,11 +5,13 @@ import CCPKit
 import AppKit
 import SwiftUI
 
-/// A pomodoro timer: focus stretches broken by short and long breaks.
+/// A pomodoro timer: focus stretches broken by breaks.
 ///
 /// Deadline-based — the store holds `phase + endsAt`, so a stretch keeps its
 /// end time while the panel is shut and across relaunches. Transitions are
 /// manual: a finished stretch waits on its follower rather than starting it.
+/// The completion chime is the store's own sound and plays whether the panel
+/// is open or not, separate from the scheduled notification.
 @MainActor
 public final class FocusWidget: CCPWidget {
     public static let descriptor = WidgetDescriptor(
@@ -37,15 +39,43 @@ public final class FocusWidget: CCPWidget {
 
 private struct FocusContent: View {
     @Bindable var store: FocusStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isMenuPresented = false
+    @State private var isAcknowledged = false
 
     private var todayCount: Int? {
         let count = store.completedFocusToday
         return count > 0 ? count : nil
     }
 
+    /// The card title names the phase — "Focus" or "Focus Break" — so the
+    /// labelled status row the card used to wear is gone. A derived copy of
+    /// the static descriptor: identity and icon stay intrinsic, only the
+    /// title follows the clock.
+    private var descriptor: WidgetDescriptor {
+        let base = FocusWidget.descriptor
+        return WidgetDescriptor(
+            id: base.id,
+            title: titlePhase?.isBreak == true ? "Focus Break" : "Focus",
+            symbolName: base.symbolName,
+            size: base.size
+        )
+    }
+
+    /// The phase the title names: the running one, or the one waiting to
+    /// start — the same phase the countdown and the Start button describe.
+    /// Idle names nothing and reads as Focus.
+    private var titlePhase: FocusPhase? {
+        store.activePhase ?? store.pendingNext
+    }
+
+    /// Waiting on the next phase and not yet answered — the glow's lifetime.
+    private var isAwaitingAck: Bool {
+        store.pendingNext != nil && !isAcknowledged
+    }
+
     var body: some View {
-        WidgetCard(FocusWidget.descriptor, count: todayCount, accessory: {
+        WidgetCard(descriptor, count: todayCount, accessory: {
             HeaderIconButton(systemImage: "ellipsis", label: "Focus settings") {
                 isMenuPresented = true
             }
@@ -54,68 +84,64 @@ private struct FocusContent: View {
             }
         }) {
             VStack(alignment: .leading, spacing: Space.one) {
-                statusRow
-                timerRow
-                UsageBar(fraction: progressFraction, tint: progressTint)
+                mainRow
                 if store.notificationStatus == .denied {
                     notificationGrantRow
                 }
             }
             .padding(.bottom, Space.half)
         }
+        .celebrationGlow(isActive: isAwaitingAck)
+        .animation(.snappy, value: descriptor.title)
+        .onChange(of: store.pendingNext) { isAcknowledged = false }
     }
 
     // MARK: - Rows
 
-    private var statusRow: some View {
-        HStack(spacing: Space.half) {
-            Text(statusText)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.primary)
-            Spacer(minLength: Space.half)
-            roundDots
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(statusText), \(store.focusStreak) of \(store.settings.roundsBeforeLongBreak) focuses")
-    }
-
-    private var statusText: String {
-        if let phase = store.activePhase {
-            return store.isPaused ? "\(phase.title) · paused" : phase.title
-        }
-        if let next = store.pendingNext {
-            switch next {
-            case .focus: return "Break over"
-            default: return "Focus complete"
+    private var mainRow: some View {
+        HStack(spacing: Space.one) {
+            ProgressRing(
+                fraction: progressFraction,
+                tint: progressTint,
+                isBreathing: store.isRunning
+            )
+            .frame(width: Self.ringDiameter, height: Self.ringDiameter)
+            VStack(alignment: .leading, spacing: Space.half) {
+                Text(countdownText)
+                    .font(.title2.weight(.semibold))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .foregroundStyle(isLastMinute ? Color.urgent : Color.primary)
+                    .scaleEffect(heartbeat && !reduceMotion ? 1.05 : 1)
+                    .animation(.easeInOut(duration: 0.45), value: heartbeat)
+                    .accessibilityLabel("\(descriptor.title)\(store.isPaused ? ", paused" : ""), \(countdownText) remaining")
+                controls
             }
-        }
-        return "Ready"
-    }
-
-    private var roundDots: some View {
-        HStack(spacing: Space.quarter) {
-            ForEach(0..<store.settings.roundsBeforeLongBreak, id: \.self) { index in
-                Circle()
-                    .fill(index < min(store.focusStreak, store.settings.roundsBeforeLongBreak)
-                        ? Color.widgetAccent : Color.cycleDotEmpty)
-                    .frame(width: Self.dotDiameter, height: Self.dotDiameter)
+            Spacer(minLength: Space.half)
+            if isAwaitingAck {
+                CelebrationSeal(accessibilityLabel: "Acknowledge completion") {
+                    isAcknowledged = true
+                }
+                .transition(.scale.combined(with: .opacity))
             }
         }
     }
 
-    private static let dotDiameter: CGFloat = 6
+    private static let ringDiameter: CGFloat = 48
 
-    private var timerRow: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Space.one) {
-            Text(countdownText)
-                .font(.title2.weight(.semibold))
-                .monospacedDigit()
-                .contentTransition(.numericText())
-            Spacer(minLength: Space.half)
-            controls
+    /// The last-minute heartbeat: flips every second under a minute to go,
+    /// which replays the pop. Running phases only — breaks, pauses and the
+    /// between-phase wait hold still.
+    private var heartbeat: Bool {
+        guard isLastMinute else { return false }
+        return Int(store.remaining(at: store.now) ?? 0) % 2 == 0
+    }
+
+    private var isLastMinute: Bool {
+        guard store.isRunning, let remaining = store.remaining(at: store.now) else {
+            return false
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Time remaining, \(countdownText)")
+        return remaining < 60
     }
 
     private var countdownText: String {
@@ -165,10 +191,8 @@ private struct FocusContent: View {
 
     private var nextTitle: String {
         switch store.pendingNext {
-        case .focus: "Start focus"
         case .shortBreak: "Start break"
-        case .longBreak: "Start long break"
-        case nil: "Start focus"
+        case .focus, nil: "Start focus"
         }
     }
 
@@ -181,11 +205,11 @@ private struct FocusContent: View {
         return store.pendingNext != nil ? 1 : 0
     }
 
-    private var progressTint: Color? {
-        let kind = store.activePhase ?? store.pendingNext
-        switch kind {
-        case .focus, nil: return nil
-        case .shortBreak, .longBreak: return Color.success
+    private var progressTint: Color {
+        if isLastMinute { return Color.urgent }
+        switch store.activePhase ?? store.pendingNext {
+        case .focus, nil: return Color.widgetAccent
+        case .shortBreak: return Color.success
         }
     }
 
@@ -216,7 +240,7 @@ private struct FocusContent: View {
 
 // MARK: - Settings popover
 
-/// Durations and the cycle length behind the header's three dots — the same
+/// Durations and the breaks switch behind the header's three dots — the same
 /// trigger and popover language as the Files overflow and closed-notes menus.
 ///
 /// Steppers apply live; a running stretch keeps its deadline, so the popover
@@ -226,13 +250,21 @@ private struct FocusSettingsPopover: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            Toggle(isOn: breaksBinding) {
+                HStack(spacing: Space.half) {
+                    Text("Take breaks")
+                    Spacer(minLength: Space.one)
+                }
+                .font(.caption)
+                .padding(.horizontal, Space.one)
+                .padding(.vertical, Space.half)
+            }
+            .accessibilityLabel("Take breaks between focus stretches")
             PopoverMenuSectionLabel("Durations")
-            durationRow(title: "Focus", minutes: binding(for: \.focusMinutes), range: FocusSettings.focusRange, step: 5)
-            durationRow(title: "Short break", minutes: binding(for: \.shortBreakMinutes), range: FocusSettings.shortBreakRange, step: 1)
-            durationRow(title: "Long break", minutes: binding(for: \.longBreakMinutes), range: FocusSettings.longBreakRange, step: 5)
-            PopoverMenuSectionLabel("Cycle")
                 .padding(.top, Space.one)
-            roundsRow
+            durationRow(title: "Focus", minutes: binding(for: \.focusMinutes), range: FocusSettings.focusRange, step: 5)
+            durationRow(title: "Break", minutes: binding(for: \.shortBreakMinutes), range: FocusSettings.shortBreakRange, step: 1)
+                .disabled(!store.settings.breaksEnabled)
             if store.activePhase != nil {
                 Text("Applies to the next phase — this one keeps its deadline.")
                     .font(.caption2)
@@ -240,13 +272,20 @@ private struct FocusSettingsPopover: View {
                     .padding(.horizontal, Space.one)
                     .padding(.top, Space.half)
             }
-            PopoverMenuRow(systemImage: "arrow.counterclockwise", title: "Reset streak") {
-                store.resetStreak()
-            }
-            .padding(.top, Space.half)
         }
         .padding(Space.oneHalf)
         .frame(minWidth: Layout.shelfMenuWidth)
+    }
+
+    private var breaksBinding: Binding<Bool> {
+        Binding(
+            get: { store.settings.breaksEnabled },
+            set: {
+                var next = store.settings
+                next.breaksEnabled = $0
+                store.updateSettings(next)
+            }
+        )
     }
 
     private func binding(for keyPath: WritableKeyPath<FocusSettings, Int>) -> Binding<Int> {
@@ -274,21 +313,6 @@ private struct FocusSettingsPopover: View {
             .padding(.vertical, Space.half)
         }
         .accessibilityLabel("\(title) duration, \(minutes.wrappedValue) minutes")
-    }
-
-    private var roundsRow: some View {
-        Stepper(value: binding(for: \.roundsBeforeLongBreak), in: FocusSettings.roundsRange) {
-            HStack(spacing: Space.half) {
-                Text("Long break every")
-                Spacer(minLength: Space.one)
-                Text("\(store.settings.roundsBeforeLongBreak) focuses")
-                    .foregroundStyle(.secondary)
-            }
-            .font(.caption)
-            .padding(.horizontal, Space.one)
-            .padding(.vertical, Space.half)
-        }
-        .accessibilityLabel("Long break every \(store.settings.roundsBeforeLongBreak) focuses")
     }
 }
 

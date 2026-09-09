@@ -38,9 +38,9 @@ public final class NoopFocusNotifier: FocusNotifier, Sendable {
 }
 
 /// The real time's-up signals: a system notification scheduled at each phase
-/// start (it fires even with the panel shut and the app idle) and a soft
-/// chime the store plays itself when the panel is open to watch the deadline
-/// pass.
+/// start (it fires even with the panel shut and the app idle) and the store's
+/// own chime, played on every completion whether the panel is open or not —
+/// so a user with notification sounds off still hears the round end.
 ///
 /// One pending request at a time — a phase start replaces the previous one,
 /// and pause/reset/skip withdraws it — so a stale deadline can never ping.
@@ -51,6 +51,9 @@ public final class LiveFocusNotifier: FocusNotifier, @unchecked Sendable {
     private static let requestID = "ccp-focus-phase-end"
 
     private let center: UNUserNotificationCenter
+    // Retained: a throwaway NSSound deallocates mid-play and truncates the
+    // chime, and a missing name must fall back rather than fail silently.
+    private var chimeSound: NSSound?
 
     public init(center: UNUserNotificationCenter = .current()) {
         self.center = center
@@ -90,6 +93,12 @@ public final class LiveFocusNotifier: FocusNotifier, @unchecked Sendable {
     }
 
     public func chime() {
-        NSSound(named: "Glass")?.play()
+        if chimeSound == nil { chimeSound = NSSound(named: "Glass") }
+        if let chimeSound {
+            chimeSound.stop()
+            chimeSound.play()
+        } else {
+            NSSound.beep()
+        }
     }
 }

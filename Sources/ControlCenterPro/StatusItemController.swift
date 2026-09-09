@@ -139,27 +139,47 @@ final class StatusItemController {
         // Drive the store's own tick: with the panel shut its ticker is
         // stopped, and without this a deadline that passes unseen leaves the
         // title wedged at 0:00 — remaining clamps at zero but never nils.
-        // Silent with the panel shut (the chime is a panel-open sound); the
-        // scheduled notification already announced the ending.
+        // The store plays its own chime wherever the deadline is noticed.
         store.tick()
-        guard let remaining = store.remaining(at: Date()) else {
-            stopCountdownTimer()
-            item.length = NSStatusItem.squareLength
-            item.button?.title = ""
-            return
-        }
-        item.length = NSStatusItem.variableLength
-        if let button = item.button {
-            button.font = NSFont.monospacedDigitSystemFont(
-                ofSize: NSFont.systemFontSize, weight: .regular)
-            button.title = FocusStore.mmss(remaining)
-        }
         // A paused stretch has no deadline coming — draw its frozen title
         // once and stop, rather than waking every second to repaint it.
         if store.isRunning {
             startCountdownTimer()
         } else {
             stopCountdownTimer()
+        }
+        // The edit pill owns the item's length, image and title while
+        // editing; this leaves its capsule alone, and the editing observer
+        // runs this again after the pill comes out, restoring the chrome.
+        guard !panel.editor.isEditing else { return }
+        guard let remaining = store.remaining(at: Date()) else {
+            stopCountdownTimer()
+            item.length = NSStatusItem.squareLength
+            if let button = item.button {
+                button.title = ""
+                // Icon-only again: the image stands alone, centred.
+                button.imagePosition = .imageOnly
+            }
+            return
+        }
+        item.length = NSStatusItem.variableLength
+        if let button = item.button {
+            // The countdown reads to the left of the icon, in the same
+            // monospaced digits as before so the variable-length item never
+            // jitters. One font for title and icon keeps them on the same
+            // baseline, which is what centres the row vertically.
+            let font = NSFont.monospacedDigitSystemFont(
+                ofSize: NSFont.systemFontSize, weight: .regular)
+            if button.font?.isEqual(font) != true {
+                button.font = font
+            }
+            let title = FocusStore.mmss(remaining)
+            if button.title != title {
+                button.title = title
+            }
+            if button.imagePosition != .imageTrailing {
+                button.imagePosition = .imageTrailing
+            }
         }
     }
 
