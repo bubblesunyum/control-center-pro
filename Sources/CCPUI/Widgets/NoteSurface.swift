@@ -332,11 +332,11 @@ private struct ConflictsPopover: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Divider().padding(.vertical, Space.half)
             Text("Copies stay in your Craft doc.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, Space.one)
+                .padding(.top, Space.half)
                 .padding(.bottom, Space.quarter)
             if let selectedRecord, let padID {
                 PopoverMenuRow(systemImage: "trash", title: "Forget this copy") {

@@ -22,7 +22,7 @@ struct PopoverMenuSectionLabel: View {
             .sectionCaps()
             .padding(.horizontal, Space.one)
             .padding(.top, Space.one)
-            .padding(.bottom, Space.quarter)
+            .padding(.bottom, Space.one)
     }
 }
 

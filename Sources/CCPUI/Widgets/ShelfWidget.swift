@@ -264,7 +264,6 @@ private struct ShelfOverflowMenu: View {
                 }
                 .help("Removes selected items from Files")
             }
-            Divider().padding(.vertical, Space.half)
             PopoverMenuSectionLabel("Tools")
             hiddenFilesRow
         }
