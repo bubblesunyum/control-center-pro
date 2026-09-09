@@ -311,6 +311,36 @@ plus `verify`/`push`/`trash`/`forget`, with `SyncOutcome` of
 These are coordinator design problems, not Craft problems — an Obsidian backend
 faces all five.
 
+#### Reassessment 2026-09-09: what step 7 shipped, and what it means here
+
+Step 7 shipped as `CraftSyncStore` — a Craft-scoped storage protocol with
+`CraftNoteDestination` behind it, the adapter holding a private handle, and a
+`FakeCraftSyncStore` proving substitution across a full push and pull
+(ccp-2zi.4) — not the concrete type with the no-Craft-nouns invariant. The
+invariant as written is not met: the adapter's push/pull engine still names
+`sidecar`/`craftDocumentID`/`stashIDs`/`CraftPull`/`BlockSidecar` freely.
+Deliberate, under taste review: a generic storage protocol is false generality
+(a vault backend is paths and files with no ids, so nothing but a fake
+conforms to `sidecar()`), and the engine talking to its own Craft-scoped store
+is the backend, not a leak. What guards the second backend instead: views
+speak no Craft nouns (`syncStatus` value, `conflicts(for:)`/`dismissConflict`
+only), each backend owns its keys, and the fake proves the storage boundary
+substitutes.
+
+Of the five objections: 1–3 stand unchanged (both pull re-reads still in
+`pullOnePad`, `deactivate()` still cancels the tasks, `dirtyPadIDs` still
+coordinator-owned). Objection 4 is clarified rather than answered: shipped
+`syncStatus` composes store + coordinator + credential state synchronously in
+the adapter, so status computation stays in the coordinator under any future
+seam — the draft needs the member, not a redesign. Objection 5 is retired:
+conflicts are persisted `CraftSyncStore` members.
+
+If this protocol is ever revived, the seam is per-pad operations driven by
+the coordinator (debounce, dirty bits, the one-round gate, lifecycle) — not
+the batch `reconcile` shape, which objections 1–3 rule out. Neither
+ccp-2zi.7 (reads the existing status value) nor ccp-occ (inert regions are a
+package question) was ever blocked by it.
+
 ### 4.2 Collapsing the seven keys into one `CraftPadRecord`
 
 **Do not do this.** If the record reads empty where the old maps read populated,
