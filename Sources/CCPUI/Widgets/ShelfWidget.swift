@@ -263,7 +263,7 @@ private struct ShelfOverflowMenu: View {
                 .help(store.selection.isEmpty ? "Removes every unpinned item from Files" : "Removes selected items from Files")
                 .accessibilityHint(store.selection.isEmpty ? "Removes every unpinned item from Files" : "Removes selected items from Files")
             }
-            Divider().padding(.vertical, Space.half)
+            Divider().padding(.vertical, Space.oneHalf)
             hiddenFilesRow
         }
         .padding(Space.oneHalf)
