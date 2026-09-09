@@ -40,7 +40,7 @@ public final class FocusWidget: CCPWidget {
 private struct FocusContent: View {
     @Bindable var store: FocusStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isMenuPresented = false
+    @State private var isDurationsEditorPresented = false
     @State private var isAcknowledged = false
 
     private var todayCount: Int? {
@@ -75,21 +75,14 @@ private struct FocusContent: View {
     }
 
     var body: some View {
-        WidgetCard(descriptor, count: todayCount, accessory: {
-            HeaderIconButton(systemImage: "ellipsis", label: "Focus settings") {
-                isMenuPresented = true
-            }
-            .popover(isPresented: $isMenuPresented, arrowEdge: .top) {
-                FocusSettingsPopover(store: store)
-            }
-        }) {
+        WidgetCard(descriptor, count: todayCount) {
             VStack(alignment: .leading, spacing: Space.one) {
                 mainRow
+                durationsRow
                 if store.notificationStatus == .denied {
                     notificationGrantRow
                 }
             }
-            .padding(.bottom, Space.half)
         }
         .celebrationGlow(isActive: isAwaitingAck)
         .animation(.snappy, value: descriptor.title)
@@ -99,25 +92,23 @@ private struct FocusContent: View {
     // MARK: - Rows
 
     private var mainRow: some View {
-        HStack(spacing: Space.one) {
+        HStack(spacing: Space.two) {
             ProgressRing(
                 fraction: progressFraction,
                 tint: progressTint,
                 isBreathing: store.isRunning
             )
             .frame(width: Self.ringDiameter, height: Self.ringDiameter)
-            VStack(alignment: .leading, spacing: Space.half) {
-                Text(countdownText)
-                    .font(.title2.weight(.semibold))
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                    .foregroundStyle(isLastMinute ? Color.urgent : Color.primary)
-                    .scaleEffect(heartbeat && !reduceMotion ? 1.05 : 1)
-                    .animation(.easeInOut(duration: 0.45), value: heartbeat)
-                    .accessibilityLabel("\(descriptor.title)\(store.isPaused ? ", paused" : ""), \(countdownText) remaining")
-                controls
-            }
+            Text(countdownText)
+                .font(.title.weight(.semibold))
+                .monospacedDigit()
+                .contentTransition(.numericText())
+                .foregroundStyle(isLastMinute ? Color.urgent : Color.primary)
+                .scaleEffect(heartbeat && !reduceMotion ? 1.05 : 1)
+                .animation(.easeInOut(duration: 0.45), value: heartbeat)
+                .accessibilityLabel("\(descriptor.title)\(store.isPaused ? ", paused" : ""), \(countdownText) remaining")
             Spacer(minLength: Space.half)
+            controls
             if isAwaitingAck {
                 CelebrationSeal(accessibilityLabel: "Acknowledge completion") {
                     isAcknowledged = true
@@ -156,35 +147,37 @@ private struct FocusContent: View {
 
     // MARK: - Controls
 
+    /// Media controls in countdown order: reset, pause, skip. The pause that
+    /// carries the phase is prominent; the rest stay quiet until the pointer
+    /// lands. One look for every state — a play button starts, whatever waits.
     @ViewBuilder
     private var controls: some View {
-        HStack(spacing: Space.half) {
+        HStack(spacing: Space.quarter) {
             if store.isRunning {
-                Button("Pause") { store.pause() }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                Button("Skip") { store.skip() }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .accessibilityLabel("Skip this phase")
-                Button("Reset") { store.reset() }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                MediaButton(systemImage: "arrow.counterclockwise", label: "Reset timer") {
+                    store.reset()
+                }
+                MediaButton(systemImage: "pause.fill", label: "Pause", isProminent: true) {
+                    store.pause()
+                }
+                MediaButton(systemImage: "forward.fill", label: "Skip this phase") {
+                    store.skip()
+                }
             } else if store.isPaused {
-                Button("Resume") { store.resume() }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                Button("Reset") { store.reset() }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                MediaButton(systemImage: "arrow.counterclockwise", label: "Reset timer") {
+                    store.reset()
+                }
+                MediaButton(systemImage: "play.fill", label: "Resume", isProminent: true) {
+                    store.resume()
+                }
             } else if store.pendingNext != nil {
-                Button(nextTitle) { store.startNext() }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                MediaButton(systemImage: "play.fill", label: nextTitle, isProminent: true) {
+                    store.startNext()
+                }
             } else {
-                Button("Start focus") { store.start(.focus) }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                MediaButton(systemImage: "play.fill", label: "Start focus", isProminent: true) {
+                    store.start(.focus)
+                }
             }
         }
     }
@@ -194,6 +187,51 @@ private struct FocusContent: View {
         case .shortBreak: "Start break"
         case .focus, nil: "Start focus"
         }
+    }
+
+    // MARK: - Durations
+
+    /// Both intervals on one row, straight from the settings: tapping either
+    /// opens the editor. A zero break reads as Off — that is the off switch.
+    private var durationsRow: some View {
+        HStack(spacing: Space.half) {
+            durationPill(
+                systemImage: "timer",
+                title: "Focus",
+                text: "\(store.settings.focusMinutes) min",
+                label: "Focus length, \(store.settings.focusMinutes) minutes. Change durations."
+            )
+            durationPill(
+                systemImage: "mug.fill",
+                title: "Break",
+                text: store.settings.breaksEnabled ? "\(store.settings.shortBreakMinutes) min" : "Off",
+                label: store.settings.breaksEnabled
+                    ? "Break length, \(store.settings.shortBreakMinutes) minutes. Change durations."
+                    : "Breaks off. Change durations."
+            )
+        }
+        .popover(isPresented: $isDurationsEditorPresented, arrowEdge: .bottom) {
+            FocusSettingsPopover(store: store)
+        }
+    }
+
+    private func durationPill(systemImage: String, title: String, text: String, label: String) -> some View {
+        Button { isDurationsEditorPresented = true } label: {
+            HStack(spacing: Space.half) {
+                Image(systemName: systemImage)
+                Text(title)
+                Text(text)
+                    .monospacedDigit()
+                    .foregroundStyle(.primary)
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, Space.one)
+            .padding(.vertical, Space.half)
+            .background(Capsule().fill(Color.controlFill))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 
     // MARK: - Progress
@@ -240,79 +278,133 @@ private struct FocusContent: View {
 
 // MARK: - Settings popover
 
-/// Durations and the breaks switch behind the header's three dots — the same
-/// trigger and popover language as the Files overflow and closed-notes menus.
-///
-/// Steppers apply live; a running stretch keeps its deadline, so the popover
-/// says so while one runs rather than letting an edit look dead.
+/// Both intervals as sliders behind the duration pills. Sliders apply live;
+/// a running stretch keeps its deadline, and new values start next phase.
+/// Dragging break all the way down reads Off — that is how breaks turn off.
 private struct FocusSettingsPopover: View {
     @Bindable var store: FocusStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Toggle(isOn: breaksBinding) {
-                HStack(spacing: Space.half) {
-                    Text("Take breaks")
-                    Spacer(minLength: Space.one)
-                }
-                .font(.caption)
-                .padding(.horizontal, Space.one)
-                .padding(.vertical, Space.half)
-            }
-            .accessibilityLabel("Take breaks between focus stretches")
-            PopoverMenuSectionLabel("Durations")
-                .padding(.top, Space.one)
-            durationRow(title: "Focus", minutes: binding(for: \.focusMinutes), range: FocusSettings.focusRange, step: 5)
-            durationRow(title: "Break", minutes: binding(for: \.shortBreakMinutes), range: FocusSettings.shortBreakRange, step: 1)
-                .disabled(!store.settings.breaksEnabled)
-            if store.activePhase != nil {
-                Text("Applies to the next phase — this one keeps its deadline.")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, Space.one)
-                    .padding(.top, Space.half)
-            }
+        VStack(alignment: .leading, spacing: Space.one) {
+            sliderRow(
+                systemImage: "timer",
+                title: "Focus",
+                value: sliderBinding(for: \.focusMinutes),
+                range: doubleRange(FocusSettings.focusRange),
+                step: 5,
+                presets: [15, 25, 50]
+            )
+            sliderRow(
+                systemImage: "mug.fill",
+                title: "Break",
+                value: sliderBinding(for: \.shortBreakMinutes),
+                range: doubleRange(FocusSettings.shortBreakRange),
+                step: 1,
+                presets: [0, 5, 15],
+                offText: "Off"
+            )
         }
         .padding(Space.oneHalf)
         .frame(minWidth: Layout.shelfMenuWidth)
     }
 
-    private var breaksBinding: Binding<Bool> {
+    private func sliderBinding(for keyPath: WritableKeyPath<FocusSettings, Int>) -> Binding<Double> {
         Binding(
-            get: { store.settings.breaksEnabled },
+            get: { Double(store.settings[keyPath: keyPath]) },
             set: {
                 var next = store.settings
-                next.breaksEnabled = $0
+                next[keyPath: keyPath] = Int($0)
                 store.updateSettings(next)
             }
         )
     }
 
-    private func binding(for keyPath: WritableKeyPath<FocusSettings, Int>) -> Binding<Int> {
-        Binding(
-            get: { store.settings[keyPath: keyPath] },
-            set: {
-                var next = store.settings
-                next[keyPath: keyPath] = $0
-                store.updateSettings(next)
-            }
-        )
+    private func doubleRange(_ range: ClosedRange<Int>) -> ClosedRange<Double> {
+        Double(range.lowerBound)...Double(range.upperBound)
     }
 
-    private func durationRow(title: String, minutes: Binding<Int>, range: ClosedRange<Int>, step: Int) -> some View {
-        Stepper(value: minutes, in: range, step: step) {
+    private func sliderRow(
+        systemImage: String,
+        title: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        step: Double,
+        presets: [Int],
+        offText: String? = nil
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Space.half) {
             HStack(spacing: Space.half) {
+                Image(systemName: systemImage)
+                    .foregroundStyle(.secondary)
                 Text(title)
                 Spacer(minLength: Space.one)
-                Text("\(minutes.wrappedValue) min")
+                Text(readout(value: Int(value.wrappedValue), offText: offText))
                     .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .contentTransition(.numericText())
+                    .foregroundStyle(.primary)
             }
-            .font(.caption)
-            .padding(.horizontal, Space.one)
-            .padding(.vertical, Space.half)
+            .font(.caption.weight(.medium))
+            Slider(value: value, in: range, step: step) {
+                Text(title)
+            }
+            .accessibilityLabel("\(title) duration")
+            HStack(spacing: Space.quarter) {
+                ForEach(presets, id: \.self) { preset in
+                    presetChip(preset: preset, title: title, value: value, offText: offText)
+                }
+            }
         }
-        .accessibilityLabel("\(title) duration, \(minutes.wrappedValue) minutes")
     }
+
+    private func readout(value: Int, offText: String?) -> String {
+        if value == 0, let offText { return offText }
+        return "\(value) min"
+    }
+
+    private func presetChip(preset: Int, title: String, value: Binding<Double>, offText: String?) -> some View {
+        let isSelected = Int(value.wrappedValue) == preset
+        let chipText = preset == 0 ? offText ?? "0" : "\(preset)"
+        return Button(chipText) {
+            value.wrappedValue = Double(preset)
+        }
+        .buttonStyle(.plain)
+        .font(.caption2.weight(.semibold))
+        .monospacedDigit()
+        .foregroundStyle(isSelected ? .white : .secondary)
+        .padding(.horizontal, Space.one)
+        .padding(.vertical, Space.quarter)
+        .background(Capsule().fill(isSelected ? Color.widgetAccent : Color.controlFill))
+        .accessibilityLabel(offText != nil && preset == 0
+            ? "Turn breaks off" : "\(title), \(preset) minutes")
+    }
+}
+
+/// One round media button: quiet circle until the pointer lands, accent disc
+/// when it carries the phase. Same size and language in every state, so the
+/// row never reflows as the timer moves through them.
+private struct MediaButton: View {
+    let systemImage: String
+    let label: String
+    var isProminent: Bool = false
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(isProminent ? .white : isHovered ? .primary : .secondary)
+                .frame(width: Self.diameter, height: Self.diameter)
+                .background(Circle().fill(
+                    isProminent ? Color.widgetAccent : isHovered ? Color.controlFill : Color.clear
+                ))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .onHover { isHovered = $0 }
+    }
+
+    private static let diameter: CGFloat = 32
 }
 

@@ -35,34 +35,35 @@ public extension FocusPhase {
     var isBreak: Bool { self != .focus }
 }
 
-/// Durations plus the breaks switch. Plain data — the store owns
-/// what the numbers mean.
+/// Durations, plain data — the store owns what the numbers mean.
 ///
-/// The ranges are the steppers' ranges too, so clamping and the UI can never
-/// disagree about what a legal duration is. Decoding tolerates the removed
-/// long-break keys: an old file still reads, the leftovers are ignored.
+/// The ranges are the editors' ranges too, so clamping and the UI can never
+/// disagree about what a legal duration is. A zero break means no breaks:
+/// dragging break to zero turns them off rather than needing a switch.
+/// Decoding tolerates the removed keys: an old file still reads, leftovers
+/// are ignored, and a file saved with the old breaks switch off lands at
+/// zero so it stays off.
 public struct FocusSettings: Codable, Sendable, Hashable {
     public static let focusRange = 5...120
-    public static let shortBreakRange = 1...30
+    public static let shortBreakRange = 0...30
 
     public var focusMinutes: Int
     public var shortBreakMinutes: Int
-    public var breaksEnabled: Bool
+
+    /// Breaks are on whenever a break has a length. Zero is the off switch.
+    public var breaksEnabled: Bool { shortBreakMinutes > 0 }
 
     public static let `default` = FocusSettings(
         focusMinutes: 25,
-        shortBreakMinutes: 5,
-        breaksEnabled: true
+        shortBreakMinutes: 5
     )
 
     public init(
         focusMinutes: Int,
-        shortBreakMinutes: Int,
-        breaksEnabled: Bool = true
+        shortBreakMinutes: Int
     ) {
         self.focusMinutes = focusMinutes
         self.shortBreakMinutes = shortBreakMinutes
-        self.breaksEnabled = breaksEnabled
     }
 
     public init(from decoder: Decoder) throws {
@@ -71,8 +72,12 @@ public struct FocusSettings: Codable, Sendable, Hashable {
             ?? Self.default.focusMinutes
         self.shortBreakMinutes = try container.decodeIfPresent(Int.self, forKey: .shortBreakMinutes)
             ?? Self.default.shortBreakMinutes
-        self.breaksEnabled = try container.decodeIfPresent(Bool.self, forKey: .breaksEnabled)
-            ?? Self.default.breaksEnabled
+        // The old switch, honoured once: off with a nonzero length means zero.
+        if try container.decodeIfPresent(Bool.self, forKey: .breaksEnabled) == false,
+           shortBreakMinutes > 0
+        {
+            self.shortBreakMinutes = 0
+        }
     }
 
     enum CodingKeys: String, CodingKey {
@@ -81,11 +86,19 @@ public struct FocusSettings: Codable, Sendable, Hashable {
         case breaksEnabled
     }
 
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(focusMinutes, forKey: .focusMinutes)
+        try container.encode(shortBreakMinutes, forKey: .shortBreakMinutes)
+        // Derived, but still written: a reader from before the migration
+        // learns off-ness from this key rather than from the zero.
+        try container.encode(breaksEnabled, forKey: .breaksEnabled)
+    }
+
     public var clamped: FocusSettings {
         FocusSettings(
             focusMinutes: focusMinutes.clamped(to: Self.focusRange),
-            shortBreakMinutes: shortBreakMinutes.clamped(to: Self.shortBreakRange),
-            breaksEnabled: breaksEnabled
+            shortBreakMinutes: shortBreakMinutes.clamped(to: Self.shortBreakRange)
         )
     }
 

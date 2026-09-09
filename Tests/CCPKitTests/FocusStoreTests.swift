@@ -70,7 +70,7 @@ final class FocusStoreTests: XCTestCase {
     func testStartFocusSetsDeadlineAndSchedulesNotification() {
         let (store, clock, notifier) = makeStore()
         store.updateSettings(FocusSettings(
-            focusMinutes: 25, shortBreakMinutes: 5, breaksEnabled: true))
+            focusMinutes: 25, shortBreakMinutes: 5))
 
         store.start(.focus)
 
@@ -141,7 +141,7 @@ final class FocusStoreTests: XCTestCase {
     func testFocusBreakCycleRepeats() {
         let (store, clock, _) = makeStore()
         store.updateSettings(FocusSettings(
-            focusMinutes: 25, shortBreakMinutes: 5, breaksEnabled: true))
+            focusMinutes: 25, shortBreakMinutes: 5))
 
         for round in 1...3 {
             store.start(.focus)
@@ -159,7 +159,7 @@ final class FocusStoreTests: XCTestCase {
     func testBreaksDisabledCyclesFocusToFocus() {
         let (store, clock, notifier) = makeStore()
         store.updateSettings(FocusSettings(
-            focusMinutes: 25, shortBreakMinutes: 5, breaksEnabled: false))
+            focusMinutes: 25, shortBreakMinutes: 0))
 
         store.start(.focus)
         clock.advance(by: 25 * 60 + 1)
@@ -177,7 +177,7 @@ final class FocusStoreTests: XCTestCase {
     func testSkipWithBreaksDisabledWaitsOnFocus() {
         let (store, _, _) = makeStore()
         store.updateSettings(FocusSettings(
-            focusMinutes: 25, shortBreakMinutes: 5, breaksEnabled: false))
+            focusMinutes: 25, shortBreakMinutes: 0))
         store.start(.focus)
 
         store.skip()
@@ -194,7 +194,7 @@ final class FocusStoreTests: XCTestCase {
         XCTAssertEqual(store.pendingNext, .shortBreak)
 
         var next = store.settings
-        next.breaksEnabled = false
+        next.shortBreakMinutes = 0
         store.updateSettings(next)
 
         XCTAssertEqual(store.pendingNext, .focus)
@@ -309,11 +309,17 @@ final class FocusStoreTests: XCTestCase {
     func testSettingsClampToStepperRanges() {
         let (store, _, _) = makeStore()
         store.updateSettings(FocusSettings(
-            focusMinutes: 500, shortBreakMinutes: 0, breaksEnabled: false))
+            focusMinutes: 500, shortBreakMinutes: -3))
 
         XCTAssertEqual(store.settings.focusMinutes, 120)
-        XCTAssertEqual(store.settings.shortBreakMinutes, 1)
+        XCTAssertEqual(store.settings.shortBreakMinutes, 0)
         XCTAssertFalse(store.settings.breaksEnabled)
+    }
+
+    func testZeroBreakMeansNoBreaks() {
+        let settings = FocusSettings(focusMinutes: 25, shortBreakMinutes: 0)
+        XCTAssertFalse(settings.breaksEnabled)
+        XCTAssertTrue(FocusSettings(focusMinutes: 25, shortBreakMinutes: 5).breaksEnabled)
     }
 
     func testSettingsPersistAndLeaveRunningDeadlineAlone() {
@@ -323,12 +329,13 @@ final class FocusStoreTests: XCTestCase {
         let deadline = store.endsAt
 
         store.updateSettings(FocusSettings(
-            focusMinutes: 50, shortBreakMinutes: 10, breaksEnabled: false))
+            focusMinutes: 50, shortBreakMinutes: 0))
 
         XCTAssertEqual(store.endsAt, deadline)
 
         let revived = FocusStore(in: directory, clock: clock)
         XCTAssertEqual(revived.settings.focusMinutes, 50)
+        XCTAssertEqual(revived.settings.shortBreakMinutes, 0)
         XCTAssertFalse(revived.settings.breaksEnabled)
     }
 
@@ -350,6 +357,17 @@ final class FocusStoreTests: XCTestCase {
     func testLegacyLongBreakPhaseDecodesAsBreak() throws {
         let data = "\"longBreak\"".data(using: .utf8)!
         XCTAssertEqual(try JSONDecoder().decode(FocusPhase.self, from: data), .shortBreak)
+    }
+
+    func testLegacyBreaksSwitchOffMigratesToZero() throws {
+        // A file saved with the old breaks switch off keeps them off.
+        let data = """
+            {"focusMinutes":25,"shortBreakMinutes":5,"breaksEnabled":false}
+            """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(FocusSettings.self, from: data)
+
+        XCTAssertEqual(decoded.shortBreakMinutes, 0)
+        XCTAssertFalse(decoded.breaksEnabled)
     }
 
     // MARK: - Notification authorization
