@@ -24,27 +24,30 @@ final class CraftTrashSyncTests: XCTestCase {
     }
 
     private func adapter(_ store: UserDefaults, _ transport: ScriptedTransport,
-                         dir: URL? = nil) -> NotesAdapter {
+                         dir: URL? = nil) -> (NotesAdapter, CraftNoteDestination) {
+        let destination = CraftNoteDestination(defaults: store)
         let adapter = NotesAdapter(defaults: store, defaultName: "Note",
-                                   notesDirectory: dir ?? freshNotesDirectory())
+                                   notesDirectory: dir ?? freshNotesDirectory(),
+                                   destination: destination)
         adapter.craftTransport = transport
         adapter.craftBaseURLOverride = base
-        return adapter
+        return (adapter, destination)
     }
 
     /// A mapped pad holding `text`, converged and clean — the steady state a
     /// pull finds in production. The scrub push is a no-op (sidecar already
     /// describes the text), so it spends no scripts.
     @discardableResult
-    private func steadyPad(_ adapter: NotesAdapter, text: String) async throws -> UUID {
+    private func steadyPad(_ adapter: NotesAdapter, _ destination: CraftNoteDestination,
+                           text: String) async throws -> UUID {
         let id = try XCTUnwrap(adapter.selectedNoteID)
         adapter.text = text
-        adapter.storeSidecar(BlockSidecar(entries: [text].enumerated().map { index, markdown in
+        destination.storeSidecar(BlockSidecar(entries: [text].enumerated().map { index, markdown in
             BlockSidecarEntry(id: "block-\(index)",
                               fingerprint: BlockSidecar.fingerprint(markdown))
         }), for: id)
-        adapter.setCraftDocumentID("doc1", for: id)
-        adapter.storeSyncedTitle(adapter.selectedNoteName, for: id)
+        destination.setCraftDocumentID("doc1", for: id)
+        destination.storeSyncedTitle(adapter.selectedNoteName, for: id)
         await adapter.flushCraftPush()
         XCTAssertFalse(adapter.isPushDirty(id), "steady state starts clean")
         return id
@@ -103,8 +106,8 @@ final class CraftTrashSyncTests: XCTestCase {
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([connection, trash("doc1")])
-        let adapter = adapter(store, transport)
-        let id = try await steadyPad(adapter, text: "one")
+        let (adapter, destination) = adapter(store, transport)
+        let id = try await steadyPad(adapter, destination, text: "one")
         adapter.createNote()
         let survivor = try XCTUnwrap(adapter.selectedNoteID)
 
@@ -112,9 +115,9 @@ final class CraftTrashSyncTests: XCTestCase {
 
         XCTAssertFalse(adapter.notes.contains(where: { $0.id == id }), "the trashed pad is gone")
         XCTAssertEqual(adapter.notes.map(\.id), [survivor])
-        XCTAssertNil(adapter.craftDocumentID(for: id), "the mapping leaves with the note")
-        XCTAssertEqual(adapter.sidecar(for: id).entries, [])
-        XCTAssertNil(adapter.syncedTitle(for: id))
+        XCTAssertNil(destination.craftDocumentID(for: id), "the mapping leaves with the note")
+        XCTAssertEqual(destination.sidecar(for: id).entries, [])
+        XCTAssertNil(destination.syncedTitle(for: id))
         XCTAssertFalse(adapter.isPushDirty(id))
         XCTAssertTrue(adapter.isSyncVerified, "a proving pull verifies")
     }
@@ -124,8 +127,8 @@ final class CraftTrashSyncTests: XCTestCase {
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([connection, trash("doc1")])
-        let adapter = adapter(store, transport)
-        let id = try await steadyPad(adapter, text: "one")
+        let (adapter, destination) = adapter(store, transport)
+        let id = try await steadyPad(adapter, destination, text: "one")
         XCTAssertTrue(adapter.closeTab(id))
         XCTAssertEqual(adapter.restorableClosedNotes.map(\.id), [id], "hidden with text lists first")
 
@@ -142,13 +145,13 @@ final class CraftTrashSyncTests: XCTestCase {
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([connection,
                                            ScriptedTransport.Script(statusCode: 500, json: "{}")])
-        let adapter = adapter(store, transport)
-        let id = try await steadyPad(adapter, text: "one")
+        let (adapter, destination) = adapter(store, transport)
+        let id = try await steadyPad(adapter, destination, text: "one")
 
         await adapter.pullAll()
 
         XCTAssertTrue(adapter.notes.contains(where: { $0.id == id }), "failure skips the pass")
-        XCTAssertEqual(adapter.craftDocumentID(for: id), "doc1", "the mapping stands")
+        XCTAssertEqual(destination.craftDocumentID(for: id), "doc1", "the mapping stands")
         XCTAssertTrue(adapter.isSyncVerified, "the clock still verified")
     }
 
@@ -160,13 +163,13 @@ final class CraftTrashSyncTests: XCTestCase {
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([connection, trash(),
                                            ScriptedTransport.Script(statusCode: 404, json: "{}")])
-        let adapter = adapter(store, transport)
-        let id = try await steadyPad(adapter, text: "one")
+        let (adapter, destination) = adapter(store, transport)
+        let id = try await steadyPad(adapter, destination, text: "one")
 
         await adapter.pullAll()
 
         XCTAssertTrue(adapter.notes.contains(where: { $0.id == id }))
-        XCTAssertEqual(adapter.craftDocumentID(for: id), "doc1")
+        XCTAssertEqual(destination.craftDocumentID(for: id), "doc1")
     }
 
     func testDirtyTrashedPadKeepsItsTextAndGoesLocalOnly() async throws {
@@ -179,16 +182,16 @@ final class CraftTrashSyncTests: XCTestCase {
         let transport = ScriptedTransport([connection, trash("doc1"), blocks("""
             {"items":[{"id":"block-0","markdown":"two"}]}
             """)])
-        let adapter = adapter(store, transport)
-        let doomed = try await steadyPad(adapter, text: "one")
+        let (adapter, destination) = adapter(store, transport)
+        let doomed = try await steadyPad(adapter, destination, text: "one")
         adapter.createNote()
         let clean = try XCTUnwrap(adapter.selectedNoteID)
         adapter.text = "two"
-        adapter.storeSidecar(BlockSidecar(entries: [
+        destination.storeSidecar(BlockSidecar(entries: [
             BlockSidecarEntry(id: "block-0", fingerprint: BlockSidecar.fingerprint("two")),
         ]), for: clean)
-        adapter.setCraftDocumentID("doc2", for: clean)
-        adapter.storeSyncedTitle(adapter.selectedNoteName, for: clean)
+        destination.setCraftDocumentID("doc2", for: clean)
+        destination.storeSyncedTitle(adapter.selectedNoteName, for: clean)
         await adapter.flushCraftPush()
         adapter.selectNote(doomed)
         adapter.text = "one edited"
@@ -196,10 +199,10 @@ final class CraftTrashSyncTests: XCTestCase {
         await adapter.pullAll()
 
         XCTAssertEqual(adapter.notes.first(where: { $0.id == doomed })?.text, "one edited")
-        XCTAssertNil(adapter.craftDocumentID(for: doomed), "unconfirmed pads unmap, never delete")
-        XCTAssertEqual(adapter.sidecar(for: doomed).entries, [])
+        XCTAssertNil(destination.craftDocumentID(for: doomed), "unconfirmed pads unmap, never delete")
+        XCTAssertEqual(destination.sidecar(for: doomed).entries, [])
         XCTAssertFalse(adapter.isPushDirty(doomed), "local-only pads owe no push")
-        XCTAssertEqual(adapter.craftDocumentID(for: clean), "doc2", "the clean neighbour stands")
+        XCTAssertEqual(destination.craftDocumentID(for: clean), "doc2", "the clean neighbour stands")
         XCTAssertEqual(adapter.notes.count, 2)
     }
 
@@ -210,15 +213,15 @@ final class CraftTrashSyncTests: XCTestCase {
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([connection, trash("doc1")])
-        let adapter = adapter(store, transport)
-        let id = try await steadyPad(adapter, text: "one")
+        let (adapter, destination) = adapter(store, transport)
+        let id = try await steadyPad(adapter, destination, text: "one")
 
         await adapter.pullAll()
 
         XCTAssertFalse(adapter.notes.contains(where: { $0.id == id }))
         XCTAssertEqual(adapter.notes.count, 1)
         XCTAssertEqual(adapter.text, "", "a fresh blank stands in")
-        XCTAssertNil(adapter.craftDocumentID(for: id))
+        XCTAssertNil(destination.craftDocumentID(for: id))
     }
 
     func testPushSettlesTrashedPadsBeforeWriting() async throws {
@@ -230,8 +233,8 @@ final class CraftTrashSyncTests: XCTestCase {
         let transport = ScriptedTransport([connection, trash(), blocks("""
             {"items":[{"id":"block-0","markdown":"one"}]}
             """), trash("doc1")])
-        let adapter = adapter(store, transport)
-        let id = try await steadyPad(adapter, text: "one")
+        let (adapter, destination) = adapter(store, transport)
+        let id = try await steadyPad(adapter, destination, text: "one")
 
         await adapter.pullAll()
         XCTAssertEqual(adapter.syncStatus, .saved)
@@ -241,7 +244,7 @@ final class CraftTrashSyncTests: XCTestCase {
 
         XCTAssertEqual(transport.requests.count, 4, "clock, trash, fetch, sweep — nothing written")
         XCTAssertEqual(adapter.text, "one edited", "the text stands")
-        XCTAssertNil(adapter.craftDocumentID(for: id), "unconfirmed pads unmap")
+        XCTAssertNil(destination.craftDocumentID(for: id), "unconfirmed pads unmap")
         XCTAssertFalse(adapter.isPushDirty(id))
         XCTAssertEqual(adapter.syncStatus, .localOnly, "unmapped pads read local-only, never saved")
     }
@@ -250,7 +253,7 @@ final class CraftTrashSyncTests: XCTestCase {
         let name = "ccp.trash.gate.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let adapter = adapter(store, ScriptedTransport([]))
+        let (adapter, destination) = adapter(store, ScriptedTransport([]))
 
         XCTAssertTrue(adapter.hasCraftCredential)
         XCTAssertTrue(adapter.isEditable, "the editor never waits for the pull")
@@ -269,8 +272,8 @@ final class CraftTrashSyncTests: XCTestCase {
         let transport = ScriptedTransport([connection, trash(), blocks("""
             {"items":[{"id":"block-0","markdown":"one"}]}
             """)])
-        let adapter = adapter(store, transport)
-        let id = try await steadyPad(adapter, text: "one")
+        let (adapter, destination) = adapter(store, transport)
+        let id = try await steadyPad(adapter, destination, text: "one")
         XCTAssertTrue(adapter.isEditable, "no pull yet, still typing")
 
         await adapter.pullAll()
@@ -294,8 +297,8 @@ final class CraftTrashSyncTests: XCTestCase {
         let transport = ScriptedTransport([connection, trash(), blocks("""
             {"items":[{"id":"block-0","markdown":"one"}]}
             """)])
-        let adapter = adapter(store, transport)
-        _ = try await steadyPad(adapter, text: "one")
+        let (adapter, destination) = adapter(store, transport)
+        _ = try await steadyPad(adapter, destination, text: "one")
 
         adapter.text = "one edited before pull"
         await adapter.pullAll()
@@ -309,8 +312,8 @@ final class CraftTrashSyncTests: XCTestCase {
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([ScriptedTransport.Script(statusCode: 500, json: "{}")])
-        let adapter = adapter(store, transport)
-        let id = try await steadyPad(adapter, text: "one")
+        let (adapter, destination) = adapter(store, transport)
+        let id = try await steadyPad(adapter, destination, text: "one")
 
         await adapter.pullAll()
 

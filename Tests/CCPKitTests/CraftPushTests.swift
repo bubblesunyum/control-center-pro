@@ -584,25 +584,28 @@ final class CraftPushAdapterTests: XCTestCase {
     }
 
     private func adapter(_ store: UserDefaults, _ transport: ScriptedTransport,
-                         dir: URL? = nil) -> NotesAdapter {
+                         dir: URL? = nil) -> (NotesAdapter, CraftNoteDestination) {
+        let destination = CraftNoteDestination(defaults: store)
         let adapter = NotesAdapter(defaults: store, defaultName: "Note",
-                                   notesDirectory: dir ?? freshNotesDirectory())
+                                   notesDirectory: dir ?? freshNotesDirectory(),
+                                   destination: destination)
         adapter.craftTransport = transport
         adapter.craftBaseURLOverride = base
-        return adapter
+        return (adapter, destination)
     }
 
-    private func seed(_ adapter: NotesAdapter, text: String) throws -> UUID {
+    private func seed(_ adapter: NotesAdapter, _ destination: CraftNoteDestination,
+                      text: String) throws -> UUID {
         let id = try XCTUnwrap(adapter.selectedNoteID)
-        adapter.storeSidecar(
+        destination.storeSidecar(
             BlockSidecar(entries: CraftBlockSplitter.slices(in: text).enumerated().map { index, slice in
                 BlockSidecarEntry(id: "block-\(index)",
                                   fingerprint: BlockSidecar.fingerprint(slice.markdown))
             }), for: id)
-        adapter.setCraftDocumentID("doc1", for: id)
+        destination.setCraftDocumentID("doc1", for: id)
         // Seeded means converged, title included — or every flush below
         // spends a rename PUT first and the counts shift.
-        adapter.storeSyncedTitle(adapter.selectedNoteName, for: id)
+        destination.storeSyncedTitle(adapter.selectedNoteName, for: id)
         return id
     }
 
@@ -619,14 +622,14 @@ final class CraftPushAdapterTests: XCTestCase {
         let transport = ScriptedTransport([emptyTrash(), .init(statusCode: 200, json: """
             {"items":[{"id":"block-1","markdown":"TWO!"}]}
             """)])
-        let adapter = adapter(store, transport)
-        let id = try seed(adapter, text: "one\n\ntwo\n")
+        let (adapter, destination) = adapter(store, transport)
+        let id = try seed(adapter, destination, text: "one\n\ntwo\n")
 
         adapter.text = "one\n\nTWO\n"
         await adapter.flushCraftPush()
 
         XCTAssertEqual(transport.requests.count, 2, "trash sweep plus one PUT")
-        XCTAssertEqual(adapter.sidecar(for: id).entries[1].fingerprint,
+        XCTAssertEqual(destination.sidecar(for: id).entries[1].fingerprint,
                        BlockSidecar.fingerprint("TWO!"))
         XCTAssertEqual(adapter.text, "one\n\nTWO\n",
                        "a push never rewrites the pad — the user's spelling stands")
@@ -646,8 +649,8 @@ final class CraftPushAdapterTests: XCTestCase {
                 {"items":[{"id":"block-1","markdown":"TW0!"}]}
                 """),
         ])
-        let adapter = adapter(store, transport)
-        let id = try seed(adapter, text: "one\n\ntwo\n")
+        let (adapter, destination) = adapter(store, transport)
+        let id = try seed(adapter, destination, text: "one\n\ntwo\n")
 
         adapter.text = "one\n\nTWO\n"
         transport.onRequest = {
@@ -666,7 +669,7 @@ final class CraftPushAdapterTests: XCTestCase {
 
         await adapter.flushCraftPush()
         XCTAssertFalse(adapter.isPushDirty(id))
-        XCTAssertEqual(adapter.sidecar(for: id).entries[1].fingerprint,
+        XCTAssertEqual(destination.sidecar(for: id).entries[1].fingerprint,
                        BlockSidecar.fingerprint("TW0!"))
         XCTAssertEqual(adapter.text, "one\n\nTW0\n")
     }
@@ -676,14 +679,14 @@ final class CraftPushAdapterTests: XCTestCase {
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([.init(statusCode: 500, json: "{}")])
-        let adapter = adapter(store, transport)
-        let id = try seed(adapter, text: "one\n\ntwo\n")
-        let before = adapter.sidecar(for: id)
+        let (adapter, destination) = adapter(store, transport)
+        let id = try seed(adapter, destination, text: "one\n\ntwo\n")
+        let before = destination.sidecar(for: id)
 
         adapter.text = "one\n\nTWO\n"
         await adapter.flushCraftPush()
 
-        XCTAssertEqual(adapter.sidecar(for: id), before)
+        XCTAssertEqual(destination.sidecar(for: id), before)
         XCTAssertEqual(adapter.text, "one\n\nTWO\n")
     }
 
@@ -692,7 +695,7 @@ final class CraftPushAdapterTests: XCTestCase {
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([])
-        let adapter = adapter(store, transport)
+        let (adapter, destination) = adapter(store, transport)
         adapter.craftBaseURLOverride = nil
         adapter.craftCredentialUnavailable = true
 
@@ -720,13 +723,13 @@ final class CraftPushAdapterTests: XCTestCase {
                 {"items":[{"id":"b1","markdown":"hello"}]}
                 """),
         ])
-        let adapter = adapter(store, transport)
+        let (adapter, destination) = adapter(store, transport)
         let id = try XCTUnwrap(adapter.selectedNoteID)
 
         adapter.text = "hello"
         await adapter.flushCraftPush()
 
-        XCTAssertEqual(adapter.craftDocumentID(for: id), "doc-new")
+        XCTAssertEqual(destination.craftDocumentID(for: id), "doc-new")
         XCTAssertEqual(transport.requests.count, 2)
         XCTAssertEqual(transport.requests[0].httpMethod, "POST")
         XCTAssertTrue(transport.requests[0].url?.absoluteString.hasSuffix("/documents") ?? false)
@@ -736,7 +739,7 @@ final class CraftPushAdapterTests: XCTestCase {
         XCTAssertEqual((postBody["position"] as? [String: String])?["position"], "start")
         XCTAssertEqual((postBody["position"] as? [String: String])?["pageId"], "doc-new")
         XCTAssertFalse(adapter.isPushDirty(id))
-        XCTAssertEqual(adapter.sidecar(for: id).entries.map(\.id), ["b1"])
+        XCTAssertEqual(destination.sidecar(for: id).entries.map(\.id), ["b1"])
     }
 
     func testProvisionFailureKeepsDirtyAndUnmapped() async throws {
@@ -744,13 +747,13 @@ final class CraftPushAdapterTests: XCTestCase {
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([.init(statusCode: 500, json: "{}")])
-        let adapter = adapter(store, transport)
+        let (adapter, destination) = adapter(store, transport)
         let id = try XCTUnwrap(adapter.selectedNoteID)
 
         adapter.text = "hello"
         await adapter.flushCraftPush()
 
-        XCTAssertNil(adapter.craftDocumentID(for: id),
+        XCTAssertNil(destination.craftDocumentID(for: id),
                      "the mapping lands only on a confirmed create")
         XCTAssertTrue(adapter.isPushDirty(id))
     }
@@ -760,7 +763,7 @@ final class CraftPushAdapterTests: XCTestCase {
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([])
-        let adapter = adapter(store, transport)
+        let (adapter, destination) = adapter(store, transport)
         let id = try XCTUnwrap(adapter.selectedNoteID)
 
         adapter.text = ""
@@ -768,7 +771,7 @@ final class CraftPushAdapterTests: XCTestCase {
 
         XCTAssertTrue(transport.requests.isEmpty,
                       "a document does not exist until the first edit")
-        XCTAssertNil(adapter.craftDocumentID(for: id))
+        XCTAssertNil(destination.craftDocumentID(for: id))
         XCTAssertFalse(adapter.isPushDirty(id))
     }
 
@@ -777,7 +780,7 @@ final class CraftPushAdapterTests: XCTestCase {
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([])
-        let adapter = adapter(store, transport)
+        let (adapter, destination) = adapter(store, transport)
         let id = try XCTUnwrap(adapter.selectedNoteID)
 
         adapter.text = "   \n  "
@@ -785,7 +788,7 @@ final class CraftPushAdapterTests: XCTestCase {
 
         XCTAssertTrue(transport.requests.isEmpty,
                       "blank text has no slices, so there is nothing to sync")
-        XCTAssertNil(adapter.craftDocumentID(for: id))
+        XCTAssertNil(destination.craftDocumentID(for: id))
         XCTAssertFalse(adapter.isPushDirty(id))
     }
 
@@ -798,7 +801,7 @@ final class CraftPushAdapterTests: XCTestCase {
         let transport = ScriptedTransport([.init(statusCode: 200, json: """
             {"items":[{"id":"doc-new","title":"Note 1"}]}
             """)])
-        let adapter = adapter(store, transport)
+        let (adapter, destination) = adapter(store, transport)
         let first = try XCTUnwrap(adapter.selectedNoteID)
         adapter.createNote()
         adapter.selectNote(first)
@@ -810,8 +813,8 @@ final class CraftPushAdapterTests: XCTestCase {
         await adapter.flushCraftPush()
 
         XCTAssertEqual(transport.requests.count, 1, "the create fired; nothing followed it")
-        XCTAssertNil(adapter.craftDocumentID(for: first))
-        XCTAssertTrue(adapter.sidecar(for: first).entries.isEmpty)
+        XCTAssertNil(destination.craftDocumentID(for: first))
+        XCTAssertTrue(destination.sidecar(for: first).entries.isEmpty)
         XCTAssertFalse(adapter.notes.contains(where: { $0.id == first }))
     }
 
@@ -822,7 +825,7 @@ final class CraftPushAdapterTests: XCTestCase {
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([.init(statusCode: 429, json: "{}",
                                                  headers: ["Retry-After": "45"])])
-        let adapter = adapter(store, transport)
+        let (adapter, destination) = adapter(store, transport)
         let first = try XCTUnwrap(adapter.selectedNoteID)
         adapter.createNote()
         let second = try XCTUnwrap(adapter.selectedNoteID)
@@ -854,7 +857,7 @@ final class CraftPushAdapterTests: XCTestCase {
                 {"items":[{"id":"b1","markdown":"hello"}]}
                 """),
         ])
-        let adapter = adapter(store, transport)
+        let (adapter, destination) = adapter(store, transport)
         let id = try XCTUnwrap(adapter.selectedNoteID)
 
         adapter.text = "hello"
@@ -910,7 +913,9 @@ final class CraftPushAdapterTests: XCTestCase {
                 {"items":[{"id":"b1","markdown":"hello"}]}
                 """)
         }
-        let relaunched = NotesAdapter(defaults: store, defaultName: "Note", notesDirectory: dir)
+        let destination = CraftNoteDestination(defaults: store)
+        let relaunched = NotesAdapter(defaults: store, defaultName: "Note", notesDirectory: dir,
+                                      destination: destination)
         relaunched.craftTransport = transport
         relaunched.craftBaseURLOverride = base
         let id = try XCTUnwrap(relaunched.selectedNoteID)
@@ -918,7 +923,7 @@ final class CraftPushAdapterTests: XCTestCase {
         relaunched.activate()
         await relaunched.flushCraftPush()
 
-        XCTAssertEqual(relaunched.craftDocumentID(for: id), "doc-new")
+        XCTAssertEqual(destination.craftDocumentID(for: id), "doc-new")
         XCTAssertFalse(relaunched.isPushDirty(id))
     }
     func testCredentialSaveDirtiesUnmappedNonEmptyPads() async throws {
@@ -937,7 +942,7 @@ final class CraftPushAdapterTests: XCTestCase {
                 {"items":[{"id":"b1","markdown":"hello"}]}
                 """),
         ])
-        let adapter = adapter(store, transport)
+        let (adapter, destination) = adapter(store, transport)
         adapter.craftBaseURLOverride = nil
         adapter.craftCredentialUnavailable = true
         let id = try XCTUnwrap(adapter.selectedNoteID)
@@ -963,7 +968,7 @@ final class CraftPushAdapterTests: XCTestCase {
         XCTAssertTrue(adapter.isSyncVerified, "the save re-verifies while open")
         await adapter.flushCraftPush()
 
-        XCTAssertEqual(adapter.craftDocumentID(for: id), "doc-new")
+        XCTAssertEqual(destination.craftDocumentID(for: id), "doc-new")
         XCTAssertEqual(transport.requests.count, 6, "two clocks, two trash reads, create, post")
         XCTAssertFalse(adapter.isPushDirty(id))
         adapter.deactivate()
@@ -986,21 +991,21 @@ final class CraftPushAdapterTests: XCTestCase {
                 """),
             .init(statusCode: 200, json: "{}"),
         ])
-        let adapter = adapter(store, transport)
-        let id = try seed(adapter, text: "one\n\ntwo\n\nthree\n")
+        let (adapter, destination) = adapter(store, transport)
+        let id = try seed(adapter, destination, text: "one\n\ntwo\n\nthree\n")
 
         adapter.text = "one\n\nTWO\n"
         // Drop "three": update + delete in one plan.
         await adapter.flushCraftPush()
 
         // The PUT half is stored; the delete is restored for retry.
-        XCTAssertEqual(adapter.sidecar(for: id).entries.map(\.id),
+        XCTAssertEqual(destination.sidecar(for: id).entries.map(\.id),
                        ["block-0", "block-1", "block-2"])
-        XCTAssertEqual(adapter.sidecar(for: id).entries[1].fingerprint,
+        XCTAssertEqual(destination.sidecar(for: id).entries[1].fingerprint,
                        BlockSidecar.fingerprint("TWO!"))
 
         await adapter.flushCraftPush()
-        XCTAssertEqual(adapter.sidecar(for: id).entries.map(\.id), ["block-0", "block-1"],
+        XCTAssertEqual(destination.sidecar(for: id).entries.map(\.id), ["block-0", "block-1"],
                        "retry drops the delete without re-posting anything")
         XCTAssertEqual(transport.requests.count, 6, "sweep, PUT, DELETE-fail, sweep, PUT, DELETE-ok")
     }
@@ -1021,15 +1026,15 @@ final class CraftPushAdapterTests: XCTestCase {
                 {"items":[{"id":"ny","markdown":"y"}]}
                 """),
         ])
-        let adapter = adapter(store, transport)
-        let id = try seed(adapter, text: "a\n\nb\n\nc\n")
+        let (adapter, destination) = adapter(store, transport)
+        let id = try seed(adapter, destination, text: "a\n\nb\n\nc\n")
 
         adapter.text = "A\n\nx\n\nb\n\nc\n\ny\n"
         await adapter.flushCraftPush()
 
         let methods = transport.requests.map { $0.httpMethod }
         XCTAssertEqual(methods, ["GET", "PUT", "POST", "POST"])
-        XCTAssertEqual(adapter.sidecar(for: id).entries.map(\.id),
+        XCTAssertEqual(destination.sidecar(for: id).entries.map(\.id),
                        ["block-0", "nx", "block-1", "block-2", "ny"],
                        "new ids land in pad order")
     }
@@ -1050,8 +1055,8 @@ final class CraftPushAdapterTests: XCTestCase {
                 {"items":[{"id":"nc","markdown":"c"}]}
                 """),
         ])
-        let adapter = adapter(store, transport)
-        let id = try seed(adapter, text: "B\n")
+        let (adapter, destination) = adapter(store, transport)
+        let id = try seed(adapter, destination, text: "B\n")
 
         // A has no anchor (head of the pad) but c anchors to B.
         adapter.text = "A\n\nB\n\nc\n"
@@ -1069,7 +1074,7 @@ final class CraftPushAdapterTests: XCTestCase {
         let movePosition = try XCTUnwrap(moveBody["position"] as? [String: String])
         XCTAssertEqual(movePosition["position"], "before")
         XCTAssertEqual(movePosition["siblingId"], "block-0")
-        XCTAssertEqual(adapter.sidecar(for: id).entries.map(\.id), ["na", "block-0", "nc"],
+        XCTAssertEqual(destination.sidecar(for: id).entries.map(\.id), ["na", "block-0", "nc"],
                        "new ids land in pad order")
         XCTAssertFalse(adapter.isPushDirty(id), "nothing stalls anymore")
     }
@@ -1079,8 +1084,8 @@ final class CraftPushAdapterTests: XCTestCase {
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([.init(statusCode: 500, json: "{}")])
-        let adapter = adapter(store, transport)
-        _ = try seed(adapter, text: "one\n\ntwo\n")
+        let (adapter, destination) = adapter(store, transport)
+        _ = try seed(adapter, destination, text: "one\n\ntwo\n")
 
         adapter.text = "one\n\nTWO\n"
         await adapter.flushCraftPush()
@@ -1111,16 +1116,16 @@ final class CraftPushAdapterTests: XCTestCase {
                 .joined(separator: ",")
             return ScriptedTransport.Script(statusCode: 200, json: "{\"items\":[\(echo)]}")
         }
-        let adapter = adapter(store, transport)
+        let (adapter, destination) = adapter(store, transport)
         adapter.createNote()
         let first = adapter.notes[0].id
         let second = adapter.notes[1].id
         for (id, word) in [(first, "aaa"), (second, "bbb")] {
-            adapter.storeSidecar(
+            destination.storeSidecar(
                 BlockSidecar(entries: [BlockSidecarEntry(id: "\(word)-0",
                     fingerprint: BlockSidecar.fingerprint(word))]), for: id)
-            adapter.setCraftDocumentID("doc-\(word)", for: id)
-            adapter.storeSyncedTitle(adapter.notes.first(where: { $0.id == id })?.name, for: id)
+            destination.setCraftDocumentID("doc-\(word)", for: id)
+            destination.storeSyncedTitle(adapter.notes.first(where: { $0.id == id })?.name, for: id)
         }
 
         adapter.selectNote(first)
@@ -1137,9 +1142,9 @@ final class CraftPushAdapterTests: XCTestCase {
             return ((body["blocks"] as? [[String: String]]) ?? []).compactMap { $0["id"] }
         })
         XCTAssertEqual(putIDs, ["aaa-0", "bbb-0"])
-        XCTAssertEqual(adapter.sidecar(for: first).entries.map(\.fingerprint),
+        XCTAssertEqual(destination.sidecar(for: first).entries.map(\.fingerprint),
                        [BlockSidecar.fingerprint("AAA!")])
-        XCTAssertEqual(adapter.sidecar(for: second).entries.map(\.fingerprint),
+        XCTAssertEqual(destination.sidecar(for: second).entries.map(\.fingerprint),
                        [BlockSidecar.fingerprint("BBB!")])
     }
 
@@ -1150,14 +1155,14 @@ final class CraftPushAdapterTests: XCTestCase {
         let transport = ScriptedTransport([emptyTrash(), .init(statusCode: 200, json: """
             {"items":[{"id":"a0","markdown":"AAA!"}]}
             """)])
-        let adapter = adapter(store, transport)
+        let (adapter, destination) = adapter(store, transport)
         adapter.createNote()
         let first = adapter.notes[0].id
-        adapter.storeSidecar(
+        destination.storeSidecar(
             BlockSidecar(entries: [BlockSidecarEntry(id: "a0",
                 fingerprint: BlockSidecar.fingerprint("aaa"))]), for: first)
-        adapter.setCraftDocumentID("doc-aaa", for: first)
-        adapter.storeSyncedTitle(adapter.notes.first(where: { $0.id == first })?.name, for: first)
+        destination.setCraftDocumentID("doc-aaa", for: first)
+        destination.storeSyncedTitle(adapter.notes.first(where: { $0.id == first })?.name, for: first)
 
         // Edit A, then switch away before the push fires.
         adapter.selectNote(first)
@@ -1168,7 +1173,7 @@ final class CraftPushAdapterTests: XCTestCase {
         XCTAssertEqual(adapter.text, "", "the visible pad is untouched")
         XCTAssertEqual(adapter.notes.first(where: { $0.id == first })?.text, "AAA",
                        "no push ever rewrites a pad")
-        XCTAssertEqual(adapter.sidecar(for: first).entries.map(\.fingerprint),
+        XCTAssertEqual(destination.sidecar(for: first).entries.map(\.fingerprint),
                        [BlockSidecar.fingerprint("AAA!")],
                        "the sidecar still learns the canonical form")
     }
@@ -1179,8 +1184,8 @@ final class CraftPushAdapterTests: XCTestCase {
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport(
             (0..<6).map { _ in ScriptedTransport.Script(statusCode: 500, json: "{}") })
-        let adapter = adapter(store, transport)
-        _ = try seed(adapter, text: "one\n\ntwo\n")
+        let (adapter, destination) = adapter(store, transport)
+        _ = try seed(adapter, destination, text: "one\n\ntwo\n")
 
         adapter.text = "one\n\nTWO\n"
         for _ in 0..<4 { await adapter.flushCraftPush() }
@@ -1191,13 +1196,15 @@ final class CraftPushAdapterTests: XCTestCase {
         let name = "ccp.push.mapdrop.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
+        let destination = CraftNoteDestination(defaults: store)
         let adapter = NotesAdapter(defaults: store, defaultName: "Note",
-                                   notesDirectory: freshNotesDirectory())
+                                   notesDirectory: freshNotesDirectory(),
+                                   destination: destination)
         adapter.createNote()
         let doomed = adapter.notes[0].id
 
-        adapter.setCraftDocumentID("doc9", for: doomed)
+        destination.setCraftDocumentID("doc9", for: doomed)
         XCTAssertTrue(adapter.deleteNote(doomed))
-        XCTAssertNil(adapter.craftDocumentID(for: doomed))
+        XCTAssertNil(destination.craftDocumentID(for: doomed))
     }
 }

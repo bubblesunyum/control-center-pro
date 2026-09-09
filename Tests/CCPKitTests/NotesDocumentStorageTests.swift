@@ -27,10 +27,12 @@ final class NotesDocumentStorageTests: XCTestCase {
         return defaults
     }
 
-    private func notesAdapter(_ store: UserDefaults, dir: URL) -> NotesAdapter {
+    private func notesAdapter(_ store: UserDefaults, dir: URL,
+                              destination: CraftNoteDestination? = nil) -> NotesAdapter {
         // Local-only unless a test says otherwise: a deactivate's trailing
         // push must never reach past the scripted transport.
-        let adapter = NotesAdapter(defaults: store, defaultName: "Note", notesDirectory: dir)
+        let adapter = NotesAdapter(defaults: store, defaultName: "Note", notesDirectory: dir,
+                                   destination: destination ?? CraftNoteDestination(defaults: store))
         adapter.craftCredentialUnavailable = true
         return adapter
     }
@@ -268,10 +270,11 @@ final class NotesDocumentStorageTests: XCTestCase {
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let dir = freshNotesDirectory()
-        let first = notesAdapter(store, dir: dir)
+        let destination = CraftNoteDestination(defaults: store)
+        let first = notesAdapter(store, dir: dir, destination: destination)
         first.craftCredentialUnavailable = true
         let id = try XCTUnwrap(first.selectedNoteID)
-        first.setCraftDocumentID("doc1", for: id)
+        destination.setCraftDocumentID("doc1", for: id)
         first.text = "unpushed"
         first.deactivate()
 
@@ -295,17 +298,18 @@ final class NotesDocumentStorageTests: XCTestCase {
         let dir = freshNotesDirectory()
 
         let scrub = ScriptedTransport([])
-        let first = notesAdapter(store, dir: dir)
+        let destination = CraftNoteDestination(defaults: store)
+        let first = notesAdapter(store, dir: dir, destination: destination)
         first.craftCredentialUnavailable = false
         first.craftTransport = scrub
         first.craftBaseURLOverride = base
         let id = try XCTUnwrap(first.selectedNoteID)
         first.text = "before"
-        first.storeSidecar(BlockSidecar(entries: [
+        destination.storeSidecar(BlockSidecar(entries: [
             BlockSidecarEntry(id: "block-0", fingerprint: BlockSidecar.fingerprint("before")),
         ]), for: id)
-        first.setCraftDocumentID("doc1", for: id)
-        first.storeSyncedTitle(first.selectedNoteName, for: id)
+        destination.setCraftDocumentID("doc1", for: id)
+        destination.storeSyncedTitle(first.selectedNoteName, for: id)
         await first.flushCraftPush()
         XCTAssertFalse(first.isPushDirty(id), "steady state starts clean")
         // The edit lands, the panel closes, the process quits inside the

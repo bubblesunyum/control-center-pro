@@ -274,29 +274,35 @@ final class NoteTabsTests: XCTestCase {
     func testPullCachesTheSpaceIDForDeepLinks() async throws {
         let (defaults, name) = try store()
         defer { defaults.removePersistentDomain(forName: name) }
-        let adapter = adapter(defaults)
+        let destination = CraftNoteDestination(defaults: defaults)
+        let adapter = NotesAdapter(defaults: defaults, defaultName: "Note",
+                                   notesDirectory: freshNotesDirectory(),
+                                   destination: destination)
         adapter.craftBaseURLOverride = URL(string: "https://connect.craft.do/links/test/api/v1")!
         adapter.craftTransport = ScriptedTransport([.init(statusCode: 200, json: """
             {"space":{"id":"space-9","name":"Test"},"utc":{"time":"2026-09-06T19:00:00Z"}}
             """)])
 
-        XCTAssertNil(adapter.craftSpaceID)
+        XCTAssertNil(destination.craftSpaceID)
         await adapter.pullAll()
-        XCTAssertEqual(adapter.craftSpaceID, "space-9")
+        XCTAssertEqual(destination.craftSpaceID, "space-9")
     }
 
     func testCredentialChangeClearsTheSpaceID() async throws {
         let (defaults, name) = try store()
         defer { defaults.removePersistentDomain(forName: name) }
-        let adapter = adapter(defaults)
+        let destination = CraftNoteDestination(defaults: defaults)
+        let adapter = NotesAdapter(defaults: defaults, defaultName: "Note",
+                                   notesDirectory: freshNotesDirectory(),
+                                   destination: destination)
         adapter.craftBaseURLOverride = URL(string: "https://connect.craft.do/links/test/api/v1")!
         adapter.craftTransport = ScriptedTransport([.init(statusCode: 200, json: """
             {"space":{"id":"space-9","name":"Test"},"utc":{"time":"2026-09-06T19:00:00Z"}}
             """)])
         await adapter.pullAll()
-        XCTAssertEqual(adapter.craftSpaceID, "space-9")
+        XCTAssertEqual(destination.craftSpaceID, "space-9")
 
         NotificationCenter.default.post(name: .craftCredentialDidChange, object: nil)
-        XCTAssertNil(adapter.craftSpaceID, "forget must not leave a stale deep-link address")
+        XCTAssertNil(destination.craftSpaceID, "forget must not leave a stale deep-link address")
     }
 }

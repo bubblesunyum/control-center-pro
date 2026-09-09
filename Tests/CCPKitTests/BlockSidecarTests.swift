@@ -198,44 +198,46 @@ final class BlockSidecarStorageTests: XCTestCase {
         let name = "ccp.sidecar.roundtrip.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { cleanup(name, store) }
-        let dir = freshNotesDirectory()
-        let adapter = NotesAdapter(defaults: store, defaultName: "Note", notesDirectory: dir)
-        let id = try XCTUnwrap(adapter.selectedNoteID)
+        let destination = CraftNoteDestination(defaults: store)
+        let id = UUID()
 
-        XCTAssertTrue(adapter.sidecar(for: id).entries.isEmpty)
+        XCTAssertTrue(destination.sidecar(for: id).entries.isEmpty)
         let sidecar = BlockSidecar(entries: [BlockSidecarEntry(id: "b1", fingerprint: "f")])
-        adapter.storeSidecar(sidecar, for: id)
-        XCTAssertEqual(adapter.sidecar(for: id), sidecar)
+        destination.storeSidecar(sidecar, for: id)
+        XCTAssertEqual(destination.sidecar(for: id), sidecar)
 
-        let fresh = NotesAdapter(defaults: store, defaultName: "Note", notesDirectory: dir)
-        XCTAssertEqual(fresh.sidecar(for: id), sidecar)
+        let relaunched = CraftNoteDestination(defaults: store)
+        XCTAssertEqual(relaunched.sidecar(for: id), sidecar)
     }
 
     func testClosingANoteDropsItsSidecar() throws {
         let name = "ccp.sidecar.close.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { cleanup(name, store) }
-        let adapter = NotesAdapter(defaults: store, defaultName: "Note", notesDirectory: freshNotesDirectory())
+        let destination = CraftNoteDestination(defaults: store)
+        let adapter = NotesAdapter(defaults: store, defaultName: "Note",
+                                   notesDirectory: freshNotesDirectory(),
+                                   destination: destination)
         adapter.createNote()
         let doomed = adapter.notes[0].id
 
-        adapter.storeSidecar(BlockSidecar(entries: [BlockSidecarEntry(id: "b1", fingerprint: "f")]),
-                             for: doomed)
+        destination.storeSidecar(BlockSidecar(entries: [BlockSidecarEntry(id: "b1", fingerprint: "f")]),
+                                 for: doomed)
         XCTAssertTrue(adapter.deleteNote(doomed))
-        XCTAssertTrue(adapter.sidecar(for: doomed).entries.isEmpty)
+        XCTAssertTrue(destination.sidecar(for: doomed).entries.isEmpty)
     }
 
     func testUnreadableSidecarBytesReadAsNeverSynced() throws {
         let name = "ccp.sidecar.unreadable.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { cleanup(name, store) }
-        let adapter = NotesAdapter(defaults: store, defaultName: "Note", notesDirectory: freshNotesDirectory())
-        let id = try XCTUnwrap(adapter.selectedNoteID)
+        let destination = CraftNoteDestination(defaults: store)
+        let id = UUID()
 
         let garbage = Data("{\"not\":\"a sidecar\"}".utf8)
         store.set(garbage, forKey: "scratchpadCraftSidecars")
 
-        XCTAssertTrue(adapter.sidecar(for: id).entries.isEmpty)
+        XCTAssertTrue(destination.sidecar(for: id).entries.isEmpty)
         XCTAssertEqual(store.data(forKey: "scratchpadCraftSidecars"), garbage,
                        "loading must not replace bytes it could not read")
     }
@@ -244,37 +246,37 @@ final class BlockSidecarStorageTests: XCTestCase {
         let name = "ccp.sidecar.rescue.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { cleanup(name, store) }
-        let adapter = NotesAdapter(defaults: store, defaultName: "Note", notesDirectory: freshNotesDirectory())
-        let id = try XCTUnwrap(adapter.selectedNoteID)
+        let destination = CraftNoteDestination(defaults: store)
+        let id = UUID()
 
         let garbage = Data("{\"not\":\"a sidecar\"}".utf8)
         store.set(garbage, forKey: "scratchpadCraftSidecars")
-        XCTAssertTrue(adapter.sidecar(for: id).entries.isEmpty)
+        XCTAssertTrue(destination.sidecar(for: id).entries.isEmpty)
 
         let sidecar = BlockSidecar(entries: [BlockSidecarEntry(id: "b1", fingerprint: "f")])
-        adapter.storeSidecar(sidecar, for: id)
+        destination.storeSidecar(sidecar, for: id)
 
         XCTAssertEqual(store.data(forKey: "scratchpadCraftSidecars.unreadable"), garbage)
-        XCTAssertEqual(adapter.sidecar(for: id), sidecar)
+        XCTAssertEqual(destination.sidecar(for: id), sidecar)
     }
 
     func testStoredEmptyMapDoesNotArmTheRescue() throws {
         let name = "ccp.sidecar.empty.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { cleanup(name, store) }
-        let adapter = NotesAdapter(defaults: store, defaultName: "Note", notesDirectory: freshNotesDirectory())
-        let id = try XCTUnwrap(adapter.selectedNoteID)
+        let destination = CraftNoteDestination(defaults: store)
+        let id = UUID()
 
         // What older builds wrote when the last entry dropped: valid JSON,
         // not corruption.
         store.set(Data("{}".utf8), forKey: "scratchpadCraftSidecars")
-        XCTAssertTrue(adapter.sidecar(for: id).entries.isEmpty)
+        XCTAssertTrue(destination.sidecar(for: id).entries.isEmpty)
 
         let sidecar = BlockSidecar(entries: [BlockSidecarEntry(id: "b1", fingerprint: "f")])
-        adapter.storeSidecar(sidecar, for: id)
+        destination.storeSidecar(sidecar, for: id)
 
         XCTAssertNil(store.object(forKey: "scratchpadCraftSidecars.unreadable"),
                       "no rescue copy for bytes that decoded fine")
-        XCTAssertEqual(adapter.sidecar(for: id), sidecar)
+        XCTAssertEqual(destination.sidecar(for: id), sidecar)
     }
 }

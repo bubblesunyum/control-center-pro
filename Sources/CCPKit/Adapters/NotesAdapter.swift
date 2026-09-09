@@ -313,7 +313,7 @@ public final class NotesAdapter {
             // Verified and clean but never provisioned — an empty pad, or
             // text the trash sent back to local-only — exists nowhere in
             // Craft, so it must not read as saved there.
-            if craftDocumentID(for: selectedNoteID) == nil { return .localOnly }
+            if craftDestination.craftDocumentID(for: selectedNoteID) == nil { return .localOnly }
         }
         return .saved
     }
@@ -354,17 +354,14 @@ public final class NotesAdapter {
     @ObservationIgnored private let documentRescueKey = "scratchpadDocument.unreadable"
     // The pre-index closed-tabs key. Migrated into the index the same once.
     @ObservationIgnored private let legacyClosedTabsKey = "scratchpadClosedTabs"
-    // The Craft block-id sidecar (ccp-xgl): pad id to the (block id, hash)
-    // pairing the push diffs against. Ours, not upstream's, so it lives
-    // under its own key — sync bookkeeping, never note text.
-    @ObservationIgnored private let sidecarKey = "scratchpadCraftSidecars"
-    @ObservationIgnored private let sidecarsRescueKey = "scratchpadCraftSidecars.unreadable"
-    @ObservationIgnored private var isStoredSidecarsUnreadable = false
-    // Pull bookkeeping (ccp-2zi.6): the last server moment each pad agreed
-    // with Craft. Advisory — moved detection is an exact signature compare,
-    // never the clock — and feed for the sync-status widget. A failed decode
-    // reads as never-synced, never as a reason to touch the pad.
-    @ObservationIgnored private let syncedAtKey = "scratchpadCraftSyncedAt"
+    /// The pad's Craft-side memory behind one seam: sidecars, document ids,
+    /// title baselines, stash pins, conflict records, the space id. Same keys
+    /// and persisted format the adapter used to own inline. Private so the
+    /// seam holds: the engine speaks Craft nouns through it, and nothing else
+    /// — no public accessor, no view — may. Hiding the engine's own Craft
+    /// vocabulary (CraftClient, CraftPull, BlockSidecar) is the deferred
+    /// operation seam (§4.1), not this step.
+    @ObservationIgnored private let craftDestination: any CraftSyncStore
     @ObservationIgnored private var pullTask: Task<Void, Never>?
     @ObservationIgnored private var pullRetryTask: Task<Void, Never>?
     /// Seconds between clock-failure retries while the panel stays up.
@@ -373,32 +370,9 @@ public final class NotesAdapter {
     /// then — a save made while shut must not arm network work nobody
     /// watches; the next activate pulls anyway.
     @ObservationIgnored private var isPanelOpen = false
-    // Conflict copies a pad posted (ccp-2zi.6): Craft block ids that pin the
-    // sidecar and stay out of the pad. Apart from the sidecar's policy flags
-    // on purpose — a policy-unwritable block the user fixes in Craft must
-    // rejoin the pad, while a stash copy must never come back. No legacy
-    // state to migrate: the pull never ran before this bead, so no sidecar
-    // in the wild carries conflict pins yet.
-    @ObservationIgnored private let stashKey = "scratchpadCraftStash"
-    // Conflict records for the popover (ccp-omt1): what each stash preserved
-    // and when, per pad, newest first. The pins stay the sync's business.
-    @ObservationIgnored private let conflictsKey = "scratchpadCraftConflicts"
-    // Push bookkeeping (ccp-2zi.5). The pad-to-document mapping is config,
-    // like selection — never note text.
-    @ObservationIgnored private let craftDocumentsKey = "scratchpadCraftDocuments"
-    // Title sync (ccp-o2dh): the last Craft-confirmed title per pad, plus
-    // when the pad was last renamed locally. The pair is what makes a rename
-    // a syncable change — differing from the baseline is dirty in either
-    // direction, and the rename date settles both-sides-moved against the
-    // page root's mtime.
-    @ObservationIgnored private let syncedTitleKey = "scratchpadCraftTitles"
-    @ObservationIgnored private let titleRenamedAtKey = "scratchpadCraftTitleRenamedAt"
     // Which tabs the X hid (ccp-xc2j). UI state, kept in the index for the
     // same reason: the files hold text, the index holds where the tabs are.
     // The pre-index key survives above as the migration source only.
-    // The space id GET /connection reports (ccp-xc2j). What the per-document
-    // deep link is addressed with. Refreshed on every pull's clock read.
-    @ObservationIgnored private let craftSpaceIDKey = "scratchpadCraftSpaceID"
     @ObservationIgnored private var pushTask: Task<Void, Never>?
     @ObservationIgnored private var pushRetryTask: Task<Void, Never>?
     @ObservationIgnored private var isPushInFlight = false
@@ -440,9 +414,19 @@ public final class NotesAdapter {
     /// - Parameter notesDirectory: where this adapter's markdown files live.
     ///   Nil follows the Settings folder; tests pass a temporary folder so
     ///   the files never touch the real vault.
-    public init(defaults: UserDefaults, defaultName: String, notesDirectory: URL?) {
+    public convenience init(defaults: UserDefaults, defaultName: String, notesDirectory: URL?) {
+        self.init(defaults: defaults, defaultName: defaultName,
+                  notesDirectory: notesDirectory,
+                  destination: CraftNoteDestination(defaults: defaults))
+    }
+
+    /// Test seam: the sync engine behind a stand-in destination, so the sync
+    /// tests prove the seam by substituting a fake for Craft (ccp-2zi.4).
+    init(defaults: UserDefaults, defaultName: String, notesDirectory: URL?,
+         destination: any CraftSyncStore) {
         self.defaults = defaults
         self.defaultName = defaultName
+        self.craftDestination = destination
         if let notesDirectory {
             self.notesDirectory = notesDirectory
             followsSettingsFolder = false
@@ -462,6 +446,7 @@ public final class NotesAdapter {
     public init(document: NotesDocument) {
         self.defaults = UserDefaults(suiteName: "ccp.notes.ephemeral.\(UUID().uuidString)") ?? .standard
         self.defaultName = "Note"
+        self.craftDestination = CraftNoteDestination(defaults: defaults)
         self.notesDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ccp.notes.\(UUID().uuidString)")
         followsSettingsFolder = false
@@ -535,7 +520,7 @@ public final class NotesAdapter {
                 // The deep link's address dies with the credential: opening
                 // the old space's doc after forget is a stale launch, and the
                 // next pull re-caches after save.
-                self.defaults.removeObject(forKey: self.craftSpaceIDKey)
+                self.craftDestination.storeCraftSpaceID(nil)
                 self.dirtyUnmappedNonEmptyPads()
                 // Re-verify now when the panel is up for fresh status.
                 // While shut the next activate pulls, so no round starts
@@ -589,7 +574,7 @@ public final class NotesAdapter {
     private func dirtyUnmappedNonEmptyPads() {
         guard craftBaseURL() != nil, let document else { return }
         let fresh = document.notes
-            .filter { !$0.text.isEmpty && craftDocumentID(for: $0.id) == nil }
+            .filter { !$0.text.isEmpty && craftDestination.craftDocumentID(for: $0.id) == nil }
             .map(\.id)
         guard !fresh.isEmpty else { return }
         dirtyPadIDs.formUnion(fresh)
@@ -747,7 +732,7 @@ public final class NotesAdapter {
         // reads as unconfirmed, so legacy mappings without a title baseline
         // converge on the next push rather than silently claiming clean.
         dirtyPadIDs = Set(decoded.notes.map(\.id).filter {
-            craftDocumentID(for: $0) != nil && hasUnconfirmedEdits($0)
+            craftDestination.craftDocumentID(for: $0) != nil && hasUnconfirmedEdits($0)
         })
         guard persist(decoded), verifyMigration(of: decoded) else { return }
         // Two consecutive corruptions: the rescue key already holds older
@@ -984,7 +969,7 @@ public final class NotesAdapter {
         // last-writer-wins and visit Craft on the next push, even when the
         // text is clean. Unmapped pads keep the bit harmlessly — provisioning
         // names the document from the pad, so the title converges at creation.
-        storeTitleRenameDate(Date(), for: id)
+        craftDestination.storeTitleRenameDate(Date(), for: id)
         dirtyPadIDs.insert(id)
         scheduleCraftPush()
     }
@@ -1072,14 +1057,9 @@ public final class NotesAdapter {
     /// Every per-pad sync trace, in one place: deleteNote and unmapPad share
     /// it, so the next key never updates one and misses the other.
     private func dropSyncState(for id: UUID) {
-        dropSidecar(for: id)
-        dropCraftDocumentID(for: id)
-        dropSyncedTitle(for: id)
-        dropTitleRenameDate(for: id)
-        dropConflicts(for: id)
-        dropStashIDs(for: id)
-        dropSyncedAt(for: id)
+        craftDestination.dropSyncState(for: id)
         dirtyPadIDs.remove(id)
+        conflictsVersion += 1
     }
 
     /// Settle one pad whose Craft doc is trashed (ccp-5fom). A converged pad
@@ -1088,7 +1068,7 @@ public final class NotesAdapter {
     /// would destroy the only copy in either place. A sole pad mints its
     /// replacement first, since deleteNote refuses the last doc.
     private func settleTrashedPad(_ padID: UUID) {
-        guard craftDocumentID(for: padID) != nil,
+        guard craftDestination.craftDocumentID(for: padID) != nil,
               document?.notes.contains(where: { $0.id == padID }) == true
         else { return }
         guard !hasUnconfirmedEdits(padID) else {
@@ -1112,8 +1092,8 @@ public final class NotesAdapter {
               let pad = document.notes.first(where: { $0.id == padID })
         else { return false }
         let slices = CraftBlockSplitter.slices(in: pad.text)
-        if !sidecar(for: padID).pushPlan(for: slices).isEmpty { return true }
-        guard let baseline = syncedTitle(for: padID) else {
+        if !craftDestination.sidecar(for: padID).pushPlan(for: slices).isEmpty { return true }
+        guard let baseline = craftDestination.syncedTitle(for: padID) else {
             // No baseline — a legacy mapping or never converged: keep the
             // text on a maybe rather than deleting.
             return true
@@ -1131,9 +1111,9 @@ public final class NotesAdapter {
               let pad = document.notes.first(where: { $0.id == padID })
         else { return false }
         let slices = CraftBlockSplitter.slices(in: pad.text)
-        guard craftDocumentID(for: padID) != nil else { return !slices.isEmpty }
-        if pad.name != syncedTitle(for: padID) { return true }
-        return !sidecar(for: padID).pushPlan(for: slices).isEmpty
+        guard craftDestination.craftDocumentID(for: padID) != nil else { return !slices.isEmpty }
+        if pad.name != craftDestination.syncedTitle(for: padID) { return true }
+        return !craftDestination.sidecar(for: padID).pushPlan(for: slices).isEmpty
     }
 
     /// Drop every per-pad sync trace and keep the note: text, tab and
@@ -1189,67 +1169,7 @@ public final class NotesAdapter {
         return ids
     }
 
-    // MARK: - Craft block-id sidecar
-
-    /// The sidecar for a pad, or empty when it never synced. Bytes that do
-    /// not decode read as never-synced — like the document, a failed decode
-    /// is bytes we do not understand, never bytes we may replace.
-    public func sidecar(for id: UUID) -> BlockSidecar {
-        storedSidecars()[id.uuidString] ?? BlockSidecar()
-    }
-
-    public func storeSidecar(_ sidecar: BlockSidecar, for id: UUID) {
-        if isStoredSidecarsUnreadable { rescueUnreadableSidecars() }
-        sidecarMap().set(sidecar, for: id.uuidString)
-    }
-
-    public func dropSidecar(for id: UUID) {
-        guard storedSidecars()[id.uuidString] != nil else { return }
-        sidecarMap().set(nil, for: id.uuidString)
-    }
-
-    private func sidecarMap() -> DefaultsMap<BlockSidecar> {
-        DefaultsMap(defaults: defaults, key: sidecarKey)
-    }
-
-    private func storedSidecars() -> [String: BlockSidecar] {
-        if sidecarMap().hasUndecodableBytes { isStoredSidecarsUnreadable = true }
-        return sidecarMap().load()
-    }
-
-    /// Bytes we cannot read are still some later build's recovery path. Copied
-    /// aside before the healing write lands on top, like the document — and
-    /// only once, so a second corruption never eats the first copy.
-    private func rescueUnreadableSidecars() {
-        isStoredSidecarsUnreadable = false
-        guard let stored = defaults.object(forKey: sidecarKey),
-              defaults.object(forKey: sidecarsRescueKey) == nil
-        else { return }
-        defaults.set(stored, forKey: sidecarsRescueKey)
-    }
-
     // MARK: - Craft push
-
-    /// The Craft document a pad syncs to, if one was provisioned. Mapped
-    /// automatically on first push of a non-empty pad (ccp-0gek) — never by
-    /// hand — so an unmapped pad is simply one whose document does not exist
-    /// yet. Like selection this is config, never note text.
-    public func craftDocumentID(for id: UUID) -> String? {
-        storedCraftDocuments()[id.uuidString]
-    }
-
-    public func setCraftDocumentID(_ docID: String, for id: UUID) {
-        craftDocumentMap().set(docID, for: id.uuidString)
-        // A new sync relationship gets fresh chances.
-        consecutivePushFailures = 0
-        pushThrottledUntil = nil
-    }
-
-    public func dropCraftDocumentID(for id: UUID) {
-        let map = craftDocumentMap()
-        guard map.load()[id.uuidString] != nil else { return }
-        map.set(nil, for: id.uuidString)
-    }
 
     /// Create the pad's Craft document. The doc is born EMPTY in `unsorted`
     /// (title = pad name at creation, never renamed after) and the content
@@ -1259,14 +1179,6 @@ public final class NotesAdapter {
     /// document the sidecar does not know and deleted text is never pushed.
     private func provisionCraftDocument(name: String, client: CraftClient) async throws -> String {
         try await client.createDocument(title: name).id
-    }
-
-    private func craftDocumentMap() -> DefaultsMap<String> {
-        DefaultsMap(defaults: defaults, key: craftDocumentsKey)
-    }
-
-    private func storedCraftDocuments() -> [String: String] {
-        craftDocumentMap().load()
     }
 
     private func craftBaseURL() -> URL? {
@@ -1373,7 +1285,7 @@ public final class NotesAdapter {
         // Unknown trash blocks the round rather than green-lighting it: a
         // blind write is exactly what strands the text.
         let mappedWriters = dirtyPadIDs.filter {
-            craftDocumentID(for: $0) != nil && padNeedsPush($0)
+            craftDestination.craftDocumentID(for: $0) != nil && padNeedsPush($0)
         }
         let attempted: [UUID]
         if mappedWriters.isEmpty {
@@ -1381,7 +1293,7 @@ public final class NotesAdapter {
         } else if let trashed = try? await client.trashedDocumentIDs(),
                   craftBaseURL() == baseURL {
             for padID in Array(dirtyPadIDs) where craftBaseURL() == baseURL {
-                if let docID = craftDocumentID(for: padID), trashed.contains(docID) {
+                if let docID = craftDestination.craftDocumentID(for: padID), trashed.contains(docID) {
                     settleTrashedPad(padID)
                 }
             }
@@ -1460,7 +1372,7 @@ public final class NotesAdapter {
         else { return true }
         let padText = pad.text
         let slices = CraftBlockSplitter.slices(in: padText)
-        var docID = craftDocumentID(for: padID)
+        var docID = craftDestination.craftDocumentID(for: padID)
         if docID == nil {
             // Lazy provisioning (ccp-0gek): no local pad without a Craft doc.
             // The doc is created EMPTY on first push and the content follows
@@ -1477,18 +1389,21 @@ public final class NotesAdapter {
             // nothing and push nowhere: the orphaned empty doc is trash
             // noise, but deleted text reaching Craft would be data loss.
             guard self.document?.notes.contains(where: { $0.id == padID }) == true else { return true }
-            setCraftDocumentID(newID, for: padID)
+            craftDestination.setCraftDocumentID(newID, for: padID)
+            // A new sync relationship gets fresh chances.
+            consecutivePushFailures = 0
+            pushThrottledUntil = nil
             // Born named: the creation title IS the pad's name, so the title
             // baseline starts converged — no rename PUT follows.
-            storeSyncedTitle(pad.name, for: padID)
+            craftDestination.storeSyncedTitle(pad.name, for: padID)
             docID = newID
         }
         guard let docID else { return true }
         // Unknown baseline reads as dirty: the push converges it. (A legacy
         // mapping the pull saw first already recorded Craft's title there, so
         // this only fires for pads the push reaches before any pull.)
-        let titleDirty = pad.name != syncedTitle(for: padID)
-        let sidecar = sidecar(for: padID)
+        let titleDirty = pad.name != craftDestination.syncedTitle(for: padID)
+        let sidecar = craftDestination.sidecar(for: padID)
         let plan = sidecar.pushPlan(for: slices)
         guard !plan.isEmpty || titleDirty else { return true }
 
@@ -1554,7 +1469,7 @@ public final class NotesAdapter {
         // later content failure must not un-confirm a title Craft holds.
         if let titleEcho {
             let confirmed = NotesSupport.sanitizedNoteName(titleEcho.markdown)
-            if !confirmed.isEmpty { storeSyncedTitle(confirmed, for: padID) }
+            if !confirmed.isEmpty { craftDestination.storeSyncedTitle(confirmed, for: padID) }
         }
         storePushOutcome(padID: padID, sidecar: sidecar, text: padText, slices: slices,
                          putEcho: putEcho, postEchoByInsert: echoByInsert,
@@ -1577,7 +1492,7 @@ public final class NotesAdapter {
         let newSidecar = sidecar.applyingPush(text: text, slices: slices,
                                            putEcho: putEcho, postEchoByInsert: postEchoByInsert,
                                            deletesConfirmed: deletesConfirmed)
-        storeSidecar(newSidecar, for: padID)
+        craftDestination.storeSidecar(newSidecar, for: padID)
     }
 
     /// One POST batch per anchor group, in plan order. Anchorless inserts
@@ -1635,132 +1550,35 @@ public final class NotesAdapter {
         return order.compactMap { groups[$0] }
     }
 
-    // MARK: - Craft title sync
-
-    /// The last Craft-confirmed title for a pad, if one was recorded. A pad
-    /// whose name differs from this is title-dirty in the push direction; a
-    /// fetch whose root differs is dirty in the pull direction. Unknown reads
-    /// as dirty — the push converges it — except on the pull's first sight of
-    /// a legacy mapping, which records rather than overwrites (see reconcile).
-    public func syncedTitle(for id: UUID) -> String? {
-        syncedTitleMap().load()[id.uuidString]
-    }
-
-    public func storeSyncedTitle(_ title: String?, for id: UUID) {
-        syncedTitleMap().set(title, for: id.uuidString)
-    }
-
-    public func dropSyncedTitle(for id: UUID) {
-        syncedTitleMap().set(nil, for: id.uuidString)
-    }
-
-    private func syncedTitleMap() -> DefaultsMap<String> {
-        DefaultsMap(defaults: defaults, key: syncedTitleKey)
-    }
-
-    /// When the pad was last renamed locally. Nil for never-renamed: ties and
-    /// unknown clocks break toward the pad, so an unknown date reads as
-    /// local-wins rather than a guess.
-    public func titleRenameDate(for id: UUID) -> Date? {
-        titleRenameDateMap().load()[id.uuidString]
-    }
-
-    public func storeTitleRenameDate(_ date: Date?, for id: UUID) {
-        titleRenameDateMap().set(date, for: id.uuidString)
-    }
-
-    public func dropTitleRenameDate(for id: UUID) {
-        titleRenameDateMap().set(nil, for: id.uuidString)
-    }
-
-    private func titleRenameDateMap() -> DefaultsMap<Date> {
-        DefaultsMap(defaults: defaults, key: titleRenamedAtKey)
-    }
-
     // MARK: - Craft pull
-
-    /// The last server moment a pad agreed with Craft, if one was recorded.
-    public func syncedAt(for id: UUID) -> Date? {
-        syncedAtMap().load()[id.uuidString]
-    }
-
-    private func storeSyncedAt(_ date: Date?, for id: UUID) {
-        guard let date else { return }
-        syncedAtMap().set(date, for: id.uuidString)
-    }
-
-    private func syncedAtMap() -> DefaultsMap<Date> {
-        DefaultsMap(defaults: defaults, key: syncedAtKey)
-    }
-
-    /// Conflict-copy ids for a pad, pruned to blocks Craft still holds.
-    func stashIDs(for id: UUID) -> Set<String> {
-        Set(stashMap().load()[id.uuidString] ?? [])
-    }
-
-    private func storeStashIDs(_ ids: Set<String>, for id: UUID) {
-        stashMap().set(ids.isEmpty ? nil : Array(ids), for: id.uuidString)
-    }
-
-    private func stashMap() -> DefaultsMap<[String]> {
-        DefaultsMap(defaults: defaults, key: stashKey)
-    }
-
-    /// Test seam: closing a note must leave no per-pad sync state behind.
-    /// UUIDs never reuse and pulls only visit mapped pads, so anything kept
-    /// leaks forever — and its Craft copies surface nowhere once the mapping
-    /// and records are gone.
-    func dropStashIDs(for id: UUID) {
-        stashMap().set(nil, for: id.uuidString)
-    }
-
-    func dropSyncedAt(for id: UUID) {
-        syncedAtMap().set(nil, for: id.uuidString)
-    }
 
     // MARK: - Craft conflict records
 
-    /// Bumped on every record/dismiss/drop. The records live in UserDefaults,
-    /// which observation cannot see — views read it through `conflicts(for:)`
-    /// so they refresh when the set changes (a background pull recording, a
-    /// dismiss emptying the list).
+    /// Bumped on every record/dismiss/drop. The records live behind the
+    /// destination, which observation cannot see — views read it through
+    /// `conflicts(for:)` so they refresh when the set changes (a background
+    /// pull recording, a dismiss emptying the list).
     private(set) var conflictsVersion = 0
 
     /// Conflicts stashed for a pad, newest first. Empty when none ever
     /// stashed — pins from before records existed list nothing.
     public func conflicts(for id: UUID) -> [ConflictRecord] {
         _ = conflictsVersion
-        return conflictsMap().load()[id.uuidString] ?? []
+        return craftDestination.conflicts(for: id)
     }
 
     /// Forgets one conflict record. The Craft-side copy and its sidecar pins
     /// stay: forgetting must never re-echo the copy into the pad.
     public func dismissConflict(_ recordID: UUID, for id: UUID) {
-        let kept = conflicts(for: id).filter { $0.id != recordID }
-        conflictsMap().set(kept.isEmpty ? nil : kept, for: id.uuidString)
+        craftDestination.dismissConflict(recordID, for: id)
         conflictsVersion += 1
     }
 
-    public func dropConflicts(for id: UUID) {
-        conflictsMap().set(nil, for: id.uuidString)
-        conflictsVersion += 1
-    }
-
-    /// Conflicts kept per pad. More than a handful of lost versions stops
-    /// informing and starts hoarding; Craft holds the full history anyway.
-    private static let maximumConflictsPerPad = 5
-
-    /// Test seam: the pull spends this on a landed stash.
+    /// Test seam: the pull spends this on a landed stash. The destination
+    /// keeps the records; the bump publishes for the toolbar.
     func recordConflict(slices: [String], date: Date?, for id: UUID) {
-        let record = ConflictRecord(date: date, slices: slices)
-        conflictsMap().set(
-            Array(([record] + conflicts(for: id)).prefix(Self.maximumConflictsPerPad)),
-            for: id.uuidString)
+        craftDestination.recordConflict(slices: slices, date: date, for: id)
         conflictsVersion += 1
-    }
-
-    private func conflictsMap() -> DefaultsMap<[ConflictRecord]> {
-        DefaultsMap(defaults: defaults, key: conflictsKey)
     }
 
     /// Pull every mapped pad: one clock read, one trash listing, then one
@@ -1801,7 +1619,7 @@ public final class NotesAdapter {
         guard craftBaseURL() == baseURL, !Task.isCancelled else { return }
         // The deep link's address refreshes with the clock read the pull
         // already pays for — no extra request when the button is pressed.
-        storeCraftSpaceID(space?.spaceID)
+        craftDestination.storeCraftSpaceID(space?.spaceID)
         let serverTime = space?.serverTime
         guard space != nil else {
             isSyncCheckFailed = true
@@ -1815,7 +1633,7 @@ public final class NotesAdapter {
         // fresh pull for the new space, so this round stands down rather
         // than attesting — or deleting for — a URL it never used.
         guard craftBaseURL() == baseURL, !Task.isCancelled else { return }
-        let mappedPadIDs = storedCraftDocuments().keys.compactMap(UUID.init(uuidString:))
+        let mappedPadIDs = craftDestination.mappedPadIDs
         // Remote deletes win (ccp-5fom): a doc Craft trashed settles its pad
         // here — deleted when converged, kept local-only when it holds text
         // Craft never confirmed — through the same drop set as the toolbar
@@ -1826,12 +1644,12 @@ public final class NotesAdapter {
         if let trashed = try? await client.trashedDocumentIDs() {
             for padID in mappedPadIDs {
                 guard craftBaseURL() == baseURL, !Task.isCancelled else { return }
-                if let docID = craftDocumentID(for: padID), trashed.contains(docID) {
+                if let docID = craftDestination.craftDocumentID(for: padID), trashed.contains(docID) {
                     settleTrashedPad(padID)
                 }
             }
         }
-        for padID in storedCraftDocuments().keys.compactMap(UUID.init(uuidString:)) {
+        for padID in craftDestination.mappedPadIDs {
             guard craftBaseURL() == baseURL, !Task.isCancelled else { return }
             // A throw is one pad's "store unreachable", never the loop's.
             try? await pullOnePad(padID, client: client, serverTime: serverTime)
@@ -1853,7 +1671,7 @@ public final class NotesAdapter {
     }
 
     private func pullOnePad(_ padID: UUID, client: CraftClient, serverTime: Date?) async throws {
-        guard let docID = craftDocumentID(for: padID) else { return }
+        guard let docID = craftDestination.craftDocumentID(for: padID) else { return }
         let fetched = try await client.fetchDocument(documentID: docID)
         guard !Task.isCancelled else { return }
         // Re-read after the fetch: keystrokes interleave with the await, and
@@ -1863,15 +1681,15 @@ public final class NotesAdapter {
               let pad = document.notes.first(where: { $0.id == padID })
         else { return }
         let remoteIDs = Set(fetched.blocks.map(\.id))
-        switch CraftPull.decide(local: pad.text, sidecar: sidecar(for: padID),
-                                remote: fetched.blocks, stashIDs: stashIDs(for: padID)) {
+        switch CraftPull.decide(local: pad.text, sidecar: craftDestination.sidecar(for: padID),
+                                remote: fetched.blocks, stashIDs: craftDestination.stashIDs(for: padID)) {
         case .converged:
-            storeSyncedAt(serverTime, for: padID)
+            craftDestination.storeSyncedAt(serverTime, for: padID)
             dirtyPadIDs.remove(padID)
         case .adopt(let text, let newSidecar):
             adoptRemote(padID: padID, text: text, sidecar: newSidecar)
-            storeStashIDs(stashIDs(for: padID).intersection(remoteIDs), for: padID)
-            storeSyncedAt(serverTime, for: padID)
+            craftDestination.storeStashIDs(craftDestination.stashIDs(for: padID).intersection(remoteIDs), for: padID)
+            craftDestination.storeSyncedAt(serverTime, for: padID)
             dirtyPadIDs.remove(padID)
         case .conflict(let heading, let stash, let text, let seeded):
             // The stash appends at the document's end: every insert shares
@@ -1886,8 +1704,8 @@ public final class NotesAdapter {
             // Recorded before the re-read below: the copy exists in Craft
             // whatever the user typed meanwhile, and the next pull must
             // already know to keep it out of the pad.
-            let stashed = stashIDs(for: padID).intersection(remoteIDs).union(echo.map(\.id))
-            storeStashIDs(stashed, for: padID)
+            let stashed = craftDestination.stashIDs(for: padID).intersection(remoteIDs).union(echo.map(\.id))
+            craftDestination.storeStashIDs(stashed, for: padID)
             // The popover lists what was preserved and when; recorded only
             // for the copy that actually landed.
             recordConflict(slices: stash, date: serverTime, for: padID)
@@ -1903,7 +1721,7 @@ public final class NotesAdapter {
             // The sidecar advances even when the text cannot: the POST just
             // changed Craft, and a sidecar predating the stash reads those
             // blocks as a second remote move and posts the stash again.
-            storeSidecar(sidecar, for: padID)
+            craftDestination.storeSidecar(sidecar, for: padID)
             // Re-read after the POST: adopting now would overwrite keystrokes
             // newer than the stash and clear their dirty bit. Leave the text —
             // the stash just posted is their safety copy, and the next pull
@@ -1912,7 +1730,7 @@ public final class NotesAdapter {
             guard self.document?.notes.first(where: { $0.id == padID })?.text == pad.text
             else { return }
             adoptRemote(padID: padID, text: text, sidecar: sidecar)
-            storeSyncedAt(serverTime, for: padID)
+            craftDestination.storeSyncedAt(serverTime, for: padID)
             dirtyPadIDs.remove(padID)
         case .skip:
             break
@@ -1930,7 +1748,7 @@ public final class NotesAdapter {
                                 remoteModified: Date?, serverTime: Date?) {
         guard let document,
               let index = document.notes.firstIndex(where: { $0.id == padID }),
-              craftDocumentID(for: padID) != nil
+              craftDestination.craftDocumentID(for: padID) != nil
         else { return }
         let localName = document.notes[index].name
         // Compared post-sanitise, like every rename: a >40-char Craft title
@@ -1944,19 +1762,19 @@ public final class NotesAdapter {
             // must not strand a known-local rename the content decision just
             // cleared: re-assert the bit when the baseline says local moved.
             // Baseline-less mappings wait for a page-shaped pull instead.
-            if let baseline = syncedTitle(for: padID), localName != baseline {
+            if let baseline = craftDestination.syncedTitle(for: padID), localName != baseline {
                 dirtyPadIDs.insert(padID)
                 scheduleCraftPush()
             }
             return
         }
-        guard let baseline = syncedTitle(for: padID) else {
+        guard let baseline = craftDestination.syncedTitle(for: padID) else {
             // No baseline: the mapping predates title sync. Craft's title is
             // the record; a differing pad name pushes local on the next round
             // — pad wins, because the tab strip is the daily surface and the
             // divergence almost always came from a local rename (the ccp-o2dh
             // complaint), not from a deliberate Craft-side rename.
-            storeSyncedTitle(remoteName, for: padID)
+            craftDestination.storeSyncedTitle(remoteName, for: padID)
             if localName != remoteName {
                 // The "almost" needs a trace: a deliberate Craft-side rename
                 // would otherwise be overwritten with nothing to show for it.
@@ -1982,7 +1800,7 @@ public final class NotesAdapter {
             // Last-writer-wins; ties and unknown clocks break local, so a
             // rename never lands under typing hands on a maybe.
             if let remoteModified,
-               let renamedAt = titleRenameDate(for: padID),
+               let renamedAt = craftDestination.titleRenameDate(for: padID),
                remoteModified > renamedAt {
                 adoptTitle(padID: padID, title: remoteName, date: remoteModified)
             } else {
@@ -2001,8 +1819,8 @@ public final class NotesAdapter {
               persist(next)
         else { return }
         apply(next)
-        storeSyncedTitle(next.notes.first(where: { $0.id == padID })?.name ?? title, for: padID)
-        storeTitleRenameDate(date ?? Date(), for: padID)
+        craftDestination.storeSyncedTitle(next.notes.first(where: { $0.id == padID })?.name ?? title, for: padID)
+        craftDestination.storeTitleRenameDate(date ?? Date(), for: padID)
     }
 
     /// Replace a pad's text and sidecar from a pull. Silent: the replacing
@@ -2021,7 +1839,7 @@ public final class NotesAdapter {
             self.text = text
             isReplacingText = false
         }
-        storeSidecar(sidecar, for: padID)
+        craftDestination.storeSidecar(sidecar, for: padID)
         _ = persist(document)
     }
 
@@ -2224,36 +2042,14 @@ public final class NotesAdapter {
     /// space never verified, falls back to bringing Craft forward.
     public func openCraftDocument() {
         if let selectedNoteID,
-           let docID = craftDocumentID(for: selectedNoteID),
-           let spaceID = storedCraftSpaceID(),
+           let docID = craftDestination.craftDocumentID(for: selectedNoteID),
+           let spaceID = craftDestination.craftSpaceID,
            let url = Self.craftDocumentURL(spaceID: spaceID, blockID: docID) {
             NSWorkspace.shared.open(url)
         } else {
             openCraft()
         }
     }
-
-    private func storedCraftSpaceID() -> String? {
-        guard let data = defaults.data(forKey: craftSpaceIDKey),
-              let id = try? JSONDecoder().decode(String.self, from: data),
-              !id.isEmpty
-        else { return nil }
-        return id
-    }
-
-    private func storeCraftSpaceID(_ id: String?) {
-        guard let id, !id.isEmpty,
-              let data = try? JSONEncoder().encode(id)
-        else {
-            defaults.removeObject(forKey: craftSpaceIDKey)
-            return
-        }
-        defaults.set(data, forKey: craftSpaceIDKey)
-    }
-
-    /// Observable for tests: the address the toolbar deep link uses, if a
-    /// pull has verified the space.
-    var craftSpaceID: String? { storedCraftSpaceID() }
 
     public func exportFileName(date: Date = Date()) -> String {
         NotesSupport.exportFileName(title: selectedNoteName, date: date)
