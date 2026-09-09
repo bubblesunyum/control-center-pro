@@ -306,7 +306,7 @@ private struct ShelfOverflowMenu: View {
         .disabled(isBusy)
         .opacity(isBusy ? 0.45 : 1)
         .background(
-            hiddenFilesHovered ? Color.menuRowHover : Color.clear,
+            hiddenFilesHovered && !isBusy ? Color.menuRowHover : Color.clear,
             in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
         )
         .onHover { hiddenFilesHovered = $0 }

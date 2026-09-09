@@ -73,7 +73,7 @@ struct PopoverMenuRow: View {
         .disabled(isDisabled)
         .opacity(isDisabled ? 0.45 : 1)
         .background(
-            hovered ? Color.menuRowHover : Color.clear,
+            hovered && !isDisabled ? Color.menuRowHover : Color.clear,
             in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
         )
         .onHover { hovered = $0 }
