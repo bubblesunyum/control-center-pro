@@ -227,7 +227,7 @@ private struct FocusContent: View {
                         .foregroundStyle(.primary)
                 }
                 Circle()
-                    .fill(Color.tertiary)
+                    .fill(.tertiary)
                     .frame(width: Self.pillSeparatorDiameter, height: Self.pillSeparatorDiameter)
                 HStack(spacing: Space.half) {
                     Image(systemName: "mug.fill")
