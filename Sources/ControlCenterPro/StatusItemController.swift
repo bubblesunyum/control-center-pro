@@ -15,6 +15,7 @@ final class StatusItemController {
     private let panel: ControlPanelController
     private let settingsWindow: SettingsWindowController
     private let menu: NSMenu
+    private var countdownTimer: Timer?
 
     /// What the panel anchors itself to. Read by the global shortcut, which
     /// has no click of its own to say which screen the user is on.
@@ -27,6 +28,8 @@ final class StatusItemController {
         menu = NSMenu()
         rebuildMenu()
         trackEditingChanges()
+        trackFocusCountdown()
+        updateFocusCountdown()
 
         if let button = item.button {
             button.image = NSImage(
@@ -107,6 +110,71 @@ final class StatusItemController {
                 }
             }
         }
+    }
+
+    /// The Focus countdown beside the icon while a stretch runs. The item is
+    /// icon-only otherwise — menu-bar space is spent only while it says
+    /// something. Monospaced digits keep the variable-length item from
+    /// jittering as the seconds turn over.
+    ///
+    /// The refresh timer lives here, not in the store: the store's ticker
+    /// stops with the panel, and a deactivated widget must not keep the app
+    /// awake. This timer runs only while a stretch is active — a shut panel
+    /// with nothing running still costs nothing.
+    private func trackFocusCountdown() {
+        withObservationTracking {
+            _ = FocusStore.shared.activePhase
+            _ = FocusStore.shared.pausedRemaining
+        } onChange: {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.trackFocusCountdown()
+                self.updateFocusCountdown()
+            }
+        }
+    }
+
+    private func updateFocusCountdown() {
+        let store = FocusStore.shared
+        // Drive the store's own tick: with the panel shut its ticker is
+        // stopped, and without this a deadline that passes unseen leaves the
+        // title wedged at 0:00 — remaining clamps at zero but never nils.
+        // Silent with the panel shut (the chime is a panel-open sound); the
+        // scheduled notification already announced the ending.
+        store.tick()
+        guard let remaining = store.remaining(at: Date()) else {
+            stopCountdownTimer()
+            item.length = NSStatusItem.squareLength
+            item.button?.title = ""
+            return
+        }
+        item.length = NSStatusItem.variableLength
+        if let button = item.button {
+            button.font = NSFont.monospacedDigitSystemFont(
+                ofSize: NSFont.systemFontSize, weight: .regular)
+            button.title = FocusStore.mmss(remaining)
+        }
+        // A paused stretch has no deadline coming — draw its frozen title
+        // once and stop, rather than waking every second to repaint it.
+        if store.isRunning {
+            startCountdownTimer()
+        } else {
+            stopCountdownTimer()
+        }
+    }
+
+    private func startCountdownTimer() {
+        guard countdownTimer == nil else { return }
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.updateFocusCountdown()
+            }
+        }
+    }
+
+    private func stopCountdownTimer() {
+        countdownTimer?.invalidate()
+        countdownTimer = nil
     }
 
     @objc private func handleStatusItemClick(_ sender: NSStatusBarButton) {

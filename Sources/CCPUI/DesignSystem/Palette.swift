@@ -57,6 +57,9 @@ public extension Color {
     static let widgetAccent = Color.accentColor
     /// What a completed action reads as — the drop-catcher's tick.
     static let success = Color.green
+    /// An upcoming dot in the Focus cycle — quiet against the card, where the
+    /// filled dots wear the widget accent.
+    static let cycleDotEmpty = Color.secondary.opacity(0.28)
     static let labelMuted = Color.secondary
     /// Baseline drawn behind a sparkline so its zero is readable.
     static let sparklineBaseline = Color.secondary.opacity(0.28)
@@ -66,7 +69,6 @@ public extension Color {
     /// What a selected or engaged control reads as — a chosen pad's tab, a
     /// formatting mark that is on.
     static let selectedFill = Color.accentColor.opacity(0.14)
-
     /// Pinned clipboard row — faint accent so a pinned entry reads as kept.
     static let pinnedFill = Color.accentColor.opacity(0.09)
     static let pinnedStroke = Color.accentColor.opacity(0.22)
