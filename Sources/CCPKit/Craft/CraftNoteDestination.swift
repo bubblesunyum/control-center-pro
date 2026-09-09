@@ -68,15 +68,25 @@ protocol CraftSyncStore: AnyObject {
     func dismissConflict(_ recordID: UUID, for id: UUID)
     func dropConflicts(for id: UUID)
 
+    /// Pre-replacement copies per pad (ccp-o3k), newest first. The snapshot
+    /// is what makes clearing the editor's undo stack on a replacing pull
+    /// correct rather than lossy — the pre-pull text is one menu item away,
+    /// not gone.
+    func snapshots(for id: UUID) -> [PadSnapshot]
+    func recordSnapshot(markdown: String, reason: SnapshotReason, date: Date?, for id: UUID)
+    func dropSnapshots(for id: UUID)
+
     /// The space id GET /connection reports: what the per-document deep link
     /// is addressed with. Refreshed on every pull's clock read, cleared with
     /// the credential.
     var craftSpaceID: String? { get }
     func storeCraftSpaceID(_ id: String?)
 
-    /// Every per-pad trace, in one place: deleteNote and unmapPad share it,
+    /// Every per-pad sync trace, in one place: deleteNote and unmapPad share it,
     /// so the next key never updates one and misses the other. The space id
-    /// is per-space, not per-pad, and stays.
+    /// is per-space, not per-pad, and stays. Snapshots are not sync traces —
+    /// local history, kept beside them — so they drop with the pad (deleteNote
+    /// calls dropSnapshots alongside), never with the mapping.
     func dropSyncState(for id: UUID)
 }
 
@@ -105,6 +115,10 @@ final class CraftNoteDestination: CraftSyncStore {
     // Conflict records for the popover (ccp-omt1): what each stash preserved
     // and when, per pad, newest first. The pins stay the sync's business.
     private let conflictsKey = "scratchpadCraftConflicts"
+    // Pre-replacement copies (ccp-o3k): what each pad held before a pull, a
+    // conflict merge, or a restore replaced it. Local history under sync
+    // bookkeeping's roof — it drops with the pad, never with the mapping.
+    private let snapshotsKey = "scratchpadPadSnapshots"
     // Push bookkeeping (ccp-2zi.5). The pad-to-document mapping is config,
     // like selection — never note text.
     private let craftDocumentsKey = "scratchpadCraftDocuments"
@@ -272,6 +286,29 @@ final class CraftNoteDestination: CraftSyncStore {
 
     private func conflictsMap() -> DefaultsMap<[ConflictRecord]> {
         DefaultsMap(defaults: defaults, key: conflictsKey)
+    }
+
+    /// Snapshots kept per pad. Full markdown each, but pads are short-lived
+    /// scratch text — ten copies is the bead's number, not a budget.
+    private static let maximumSnapshotsPerPad = 10
+
+    func snapshots(for id: UUID) -> [PadSnapshot] {
+        snapshotsMap().load()[id.uuidString] ?? []
+    }
+
+    func recordSnapshot(markdown: String, reason: SnapshotReason, date: Date?, for id: UUID) {
+        let snapshot = PadSnapshot(date: date, reason: reason, markdown: markdown)
+        snapshotsMap().set(
+            Array(([snapshot] + snapshots(for: id)).prefix(Self.maximumSnapshotsPerPad)),
+            for: id.uuidString)
+    }
+
+    func dropSnapshots(for id: UUID) {
+        snapshotsMap().set(nil, for: id.uuidString)
+    }
+
+    private func snapshotsMap() -> DefaultsMap<[PadSnapshot]> {
+        DefaultsMap(defaults: defaults, key: snapshotsKey)
     }
 
     var craftSpaceID: String? {

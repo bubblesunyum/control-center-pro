@@ -255,6 +255,71 @@ final class CraftPullAdapterTests: XCTestCase {
         XCTAssertFalse(adapter.isPushDirty(id), "adopted text must not re-push")
     }
 
+    func testAdoptSnapshotsPrePullTextForHistory() async throws {
+        // ccp-o3k: every replacing pull keeps the way back.
+        let name = "ccp.pull.history.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([connection, trash(), blocks("""
+            {"items":[{"id":"block-0","markdown":"ONE"}]}
+            """)])
+        let (adapter, destination) = adapter(store, transport)
+        let id = try await steadyPad(adapter, destination, text: "one")
+
+        await adapter.pullAll()
+
+        let ring = adapter.snapshots(for: id)
+        XCTAssertEqual(ring.count, 1)
+        XCTAssertEqual(ring[0].reason, .pull)
+        XCTAssertEqual(ring[0].markdown, "one")
+        let clock = ISO8601DateFormatter().date(from: "2026-09-06T19:00:00Z")
+        XCTAssertEqual(ring[0].date, clock, "dated by the server clock, never the Mac's")
+        XCTAssertEqual(adapter.padsPendingUndoClear, [id])
+    }
+
+    func testAdoptIntoEmptyPadSnapshotsNothing() async throws {
+        // Provisioned but never pushed: an empty sidecar adopts, and
+        // emptiness is not worth a snapshot — but the undo stack still turns.
+        let name = "ccp.pull.history-empty.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([connection, trash(), blocks("""
+            {"items":[{"id":"block-0","markdown":"hi"}]}
+            """)])
+        let (adapter, destination) = adapter(store, transport)
+        let id = try XCTUnwrap(adapter.selectedNoteID)
+        XCTAssertEqual(adapter.text, "")
+        destination.setCraftDocumentID("doc1", for: id)
+        destination.storeSyncedTitle(adapter.selectedNoteName, for: id)
+
+        await adapter.pullAll()
+
+        XCTAssertEqual(adapter.text, "hi")
+        XCTAssertTrue(adapter.snapshots(for: id).isEmpty)
+        XCTAssertEqual(adapter.padsPendingUndoClear, [id], "the text was still replaced")
+    }
+
+    func testIdOnlyReseedReplacesNothing() async throws {
+        // Same text under a new block id: the sidecar reseeds, but no text
+        // was replaced — no snapshot, and the undo stack stands.
+        let name = "ccp.pull.history-reseed.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([connection, trash(), blocks("""
+            {"items":[{"id":"block-9","markdown":"one"}]}
+            """)])
+        let (adapter, destination) = adapter(store, transport)
+        let id = try await steadyPad(adapter, destination, text: "one")
+
+        await adapter.pullAll()
+
+        XCTAssertEqual(adapter.text, "one")
+        XCTAssertEqual(destination.sidecar(for: id).entries.map(\.id), ["block-9"],
+                      "the reseed still lands")
+        XCTAssertTrue(adapter.snapshots(for: id).isEmpty)
+        XCTAssertTrue(adapter.padsPendingUndoClear.isEmpty)
+    }
+
     func testDirtyPadSkipsWhenRemoteDidNotMove() async throws {
         let name = "ccp.pull.skip.\(UUID().uuidString)"
         let store = try defaults(name)
@@ -326,6 +391,36 @@ final class CraftPullAdapterTests: XCTestCase {
         XCTAssertEqual(records[0].slices, ["mine edited"])
         let clock = ISO8601DateFormatter().date(from: "2026-09-06T19:00:00Z")
         XCTAssertEqual(records[0].date, clock, "dated by the server clock, never the Mac's")
+    }
+
+    func testConflictSnapshotsLocalSideForHistory() async throws {
+        // ccp-o3k: the merge snapshots the local side it replaces — the
+        // Craft stash is one way back, the menu is the other.
+        let name = "ccp.pull.history-conflict.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([connection, trash(), blocks("""
+            {"items":[{"id":"r1","markdown":"theirs"}]}
+            """), blocks("""
+            {"items":[{"id":"c1","markdown":"# Conflicted copy"},
+                       {"id":"c2","markdown":"mine edited"}]}
+            """)])
+        let (adapter, destination) = adapter(store, transport)
+        let id = try await steadyPad(adapter, destination, text: "mine", seeded: ["mine"])
+        // Re-pin the seeded id to the remote's: the clash is in the text.
+        destination.storeSidecar(BlockSidecar(entries: [
+            BlockSidecarEntry(id: "r1", fingerprint: BlockSidecar.fingerprint("mine")),
+        ]), for: id)
+        adapter.text = "mine edited"
+
+        await adapter.pullAll()
+
+        XCTAssertEqual(adapter.text, "theirs", "remote wins after the stash")
+        let ring = adapter.snapshots(for: id)
+        XCTAssertEqual(ring.count, 1)
+        XCTAssertEqual(ring[0].reason, .conflict)
+        XCTAssertEqual(ring[0].markdown, "mine edited")
+        XCTAssertEqual(adapter.padsPendingUndoClear, [id])
     }
 
     func testFailedStashPostRecordsNothing() async throws {

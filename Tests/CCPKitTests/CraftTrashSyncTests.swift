@@ -206,6 +206,26 @@ final class CraftTrashSyncTests: XCTestCase {
         XCTAssertEqual(adapter.notes.count, 2)
     }
 
+    func testUnmappedPadKeepsItsHistory() async throws {
+        // Unmapping keeps the pad local-only, still edited: its history is
+        // the way back the undo-clear depends on, so it stays while the
+        // mapping goes.
+        let name = "ccp.trash.history.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([connection, trash("doc1")])
+        let (adapter, destination) = adapter(store, transport)
+        let id = try await steadyPad(adapter, destination, text: "one")
+        destination.recordSnapshot(markdown: "older", reason: .pull, date: nil, for: id)
+        adapter.text = "one edited"
+
+        await adapter.pullAll()
+
+        XCTAssertEqual(transport.requests.count, 2, "clock plus trash — no fetch for the unmapped pad")
+        XCTAssertNil(destination.craftDocumentID(for: id), "unconfirmed pads unmap, never delete")
+        XCTAssertEqual(destination.snapshots(for: id).map(\.markdown), ["older"])
+    }
+
     func testSoleTrashedPadMintsAFreshNote() async throws {
         // deleteNote refuses the last doc; a sole trashed pad still goes,
         // with a blank note standing where it was.

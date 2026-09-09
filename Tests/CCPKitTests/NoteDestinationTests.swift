@@ -17,9 +17,12 @@ final class FakeCraftSyncStore: CraftSyncStore {
     private var syncedAts: [String: Date] = [:]
     private var stashes: [String: [String]] = [:]
     private var records: [String: [ConflictRecord]] = [:]
+    private var snapshots: [String: [PadSnapshot]] = [:]
     private var spaceID: String?
     /// Mirrors CraftNoteDestination's cap: substitution must preserve it.
     private static let maximumConflictsPerPad = 5
+    /// Same: the ring bound is seam behaviour, not backend choice.
+    private static let maximumSnapshotsPerPad = 10
 
     func sidecar(for id: UUID) -> BlockSidecar {
         sidecars[id.uuidString] ?? BlockSidecar()
@@ -115,6 +118,20 @@ final class FakeCraftSyncStore: CraftSyncStore {
 
     func dropConflicts(for id: UUID) {
         records[id.uuidString] = nil
+    }
+
+    func snapshots(for id: UUID) -> [PadSnapshot] {
+        snapshots[id.uuidString] ?? []
+    }
+
+    func recordSnapshot(markdown: String, reason: SnapshotReason, date: Date?, for id: UUID) {
+        let snapshot = PadSnapshot(date: date, reason: reason, markdown: markdown)
+        snapshots[id.uuidString] = Array(([snapshot] + snapshots(for: id))
+            .prefix(Self.maximumSnapshotsPerPad))
+    }
+
+    func dropSnapshots(for id: UUID) {
+        snapshots[id.uuidString] = nil
     }
 
     var craftSpaceID: String? { spaceID }

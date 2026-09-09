@@ -1049,6 +1049,7 @@ public final class NotesAdapter {
         guard persist(next) else { return false }
         if let filename { notesStore.deleteFile(filename) }
         dropSyncState(for: id)
+        dropHistory(for: id)
         unhide(id)
         apply(next)
         return true
@@ -1060,6 +1061,15 @@ public final class NotesAdapter {
         craftDestination.dropSyncState(for: id)
         dirtyPadIDs.remove(id)
         conflictsVersion += 1
+    }
+
+    /// History dies with the pad: snapshots are the way back into text that
+    /// no longer exists. Unmapping keeps them — the pad survives local-only,
+    /// still edited, and the undo-clear still depends on the way back.
+    private func dropHistory(for id: UUID) {
+        craftDestination.dropSnapshots(for: id)
+        padsPendingUndoClear.remove(id)
+        snapshotsVersion += 1
     }
 
     /// Settle one pad whose Craft doc is trashed (ccp-5fom). A converged pad
@@ -1581,6 +1591,76 @@ public final class NotesAdapter {
         conflictsVersion += 1
     }
 
+    // MARK: - Pad history (ccp-o3k)
+
+    /// Bumped on every snapshot record. Views read the ring through
+    /// `snapshots(for:)`, which the destination hides from observation.
+    private(set) var snapshotsVersion = 0
+
+    /// Pads whose wholesale replacement the surface has not yet answered by
+    /// clearing the editor's undo stack. A set, not a slot: one pull adopts
+    /// every mapped pad, and SwiftUI may coalesce the bumps into a single
+    /// delivery carrying only the last. Entries for background pads linger
+    /// harmlessly — the engine invalidates their stacks on switch-back, and
+    /// switching to one acknowledges it.
+    public private(set) var padsPendingUndoClear: Set<UUID> = []
+
+    /// The surface spent the replacement: the stack is dropped, the
+    /// snapshots keep the way back. Switching to a pending pad acknowledges
+    /// without clearing — the engine's switch-back invalidation owns that
+    /// stack, and a stale flag must never clear fresh keystrokes later.
+    public func acknowledgeUndoClear(for id: UUID) {
+        padsPendingUndoClear.remove(id)
+    }
+
+    /// Pre-replacement copies for a pad, newest first. Empty when no pull,
+    /// merge, or restore ever replaced its text.
+    public func snapshots(for id: UUID) -> [PadSnapshot] {
+        _ = snapshotsVersion
+        return craftDestination.snapshots(for: id)
+    }
+
+    /// Spend this before replacing: the destination keeps the ring, the bump
+    /// publishes for the menu. adoptRemote and restoreSnapshot call it on
+    /// the production path; tests seed the ring through it.
+    func recordSnapshot(markdown: String, reason: SnapshotReason, date: Date?, for id: UUID) {
+        craftDestination.recordSnapshot(markdown: markdown, reason: reason, date: date, for: id)
+        snapshotsVersion += 1
+    }
+
+    /// Restore a snapshot's text over the pad. The current text snapshots
+    /// first (as preRestore), so restoring is reversible from the same menu
+    /// — and it pushes like any other edit: the restore is visible, and the
+    /// way back is one menu item away rather than silent.
+    public func restoreSnapshot(_ snapshotID: UUID, for id: UUID) {
+        guard let snapshot = craftDestination.snapshots(for: id).first(where: { $0.id == snapshotID }),
+              var document, let index = document.notes.firstIndex(where: { $0.id == id })
+        else { return }
+        let current = document.notes[index].text
+        guard current != snapshot.markdown else { return }
+        if !current.isEmpty,
+           !craftDestination.snapshots(for: id).contains(where: { $0.markdown == current }) {
+            // A current text the ring already holds needs no backup:
+            // restoring it later lands on identical bytes, so recording
+            // would only spend the cap — and a full ring would evict genuine
+            // history for the duplicate.
+            recordSnapshot(markdown: current, reason: .preRestore, date: Date(), for: id)
+        }
+        document.notes[index].text = snapshot.markdown
+        document.notes[index].modifiedAt = Date()
+        self.document = document
+        notes = document.notes
+        if id == selectedNoteID {
+            // Through didSet: persists, marks dirty, schedules the push.
+            text = snapshot.markdown
+        } else {
+            _ = persist(document)
+            dirtyPadIDs.insert(id)
+            scheduleCraftPush()
+        }
+        padsPendingUndoClear.insert(id)
+    }
+
     /// Pull every mapped pad: one clock read, one trash listing, then one
     /// block fetch each. A failed clock verifies nothing — the pads stay
     /// exactly as they are, editable, until a retry proves Craft reachable —
@@ -1687,7 +1767,8 @@ public final class NotesAdapter {
             craftDestination.storeSyncedAt(serverTime, for: padID)
             dirtyPadIDs.remove(padID)
         case .adopt(let text, let newSidecar):
-            adoptRemote(padID: padID, text: text, sidecar: newSidecar)
+            adoptRemote(padID: padID, text: text, sidecar: newSidecar,
+                        snapshotReason: .pull, snapshotDate: serverTime)
             craftDestination.storeStashIDs(craftDestination.stashIDs(for: padID).intersection(remoteIDs), for: padID)
             craftDestination.storeSyncedAt(serverTime, for: padID)
             dirtyPadIDs.remove(padID)
@@ -1729,7 +1810,8 @@ public final class NotesAdapter {
             // pre-POST snapshot; the live state is re-read here.)
             guard self.document?.notes.first(where: { $0.id == padID })?.text == pad.text
             else { return }
-            adoptRemote(padID: padID, text: text, sidecar: sidecar)
+            adoptRemote(padID: padID, text: text, sidecar: sidecar,
+                        snapshotReason: .conflict, snapshotDate: serverTime)
             craftDestination.storeSyncedAt(serverTime, for: padID)
             dirtyPadIDs.remove(padID)
         case .skip:
@@ -1826,10 +1908,18 @@ public final class NotesAdapter {
     /// Replace a pad's text and sidecar from a pull. Silent: the replacing
     /// flag keeps the widget from re-dirtying and re-pushing what just
     /// arrived, and the persist lands now rather than on the save debounce.
-    private func adoptRemote(padID: UUID, text: String, sidecar: BlockSidecar) {
+    private func adoptRemote(padID: UUID, text: String, sidecar: BlockSidecar,
+                             snapshotReason: SnapshotReason, snapshotDate: Date?) {
         guard var document,
               let index = document.notes.firstIndex(where: { $0.id == padID })
         else { return }
+        let current = document.notes[index].text
+        let replaced = current != text
+        if replaced, !current.isEmpty {
+            // The pre-pull text survives in history, so the editor's undo
+            // stack — stranded at stale ranges by the replacement — may drop.
+            recordSnapshot(markdown: current, reason: snapshotReason, date: snapshotDate, for: padID)
+        }
         document.notes[index].text = text
         document.notes[index].modifiedAt = Date()
         self.document = document
@@ -1838,6 +1928,9 @@ public final class NotesAdapter {
             isReplacingText = true
             self.text = text
             isReplacingText = false
+        }
+        if replaced {
+            padsPendingUndoClear.insert(padID)
         }
         craftDestination.storeSidecar(sidecar, for: padID)
         _ = persist(document)

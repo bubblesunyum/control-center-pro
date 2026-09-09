@@ -27,11 +27,14 @@ struct NoteSurface: View {
                 // The panel's default keystrokes: the window falls back here
                 // on a fresh open, and the controller re-asserts it on every
                 // open after (see `PanelFocus`).
-                onCreate: { [weak panelFocus] textView in
+                onCreate: { [weak panelFocus, adapter] textView in
                     panelFocus?.notesTextView = textView
                     if textView.isEditable {
                         textView.window?.initialFirstResponder = textView
                     }
+                    // The mount a replacing pull arrived before: the delivery
+                    // stayed pending for exactly this.
+                    Self.clearStaleUndoIfPending(adapter: adapter, panelFocus: panelFocus)
                 }
             )
             // Optimistic editing (ccp-t53p): the pull reconciles around
@@ -44,6 +47,24 @@ struct NoteSurface: View {
             .frame(minHeight: Layout.noteEditorHeight, maxHeight: .infinity)
             .accessibilityLabel("Note text")
             .accessibilityHint("Editable Markdown")
+            // A pull (or restore) that replaces the visible pad wholesale
+            // strands the editor's undo stack at stale ranges — cmd-Z would
+            // walk into pre-pull text and push it as if typed. The snapshots
+            // keep the way back, so the stack drops.
+            .onChange(of: adapter.padsPendingUndoClear) {
+                Self.clearStaleUndoIfPending(adapter: adapter, panelFocus: panelFocus)
+            }
+            .onChange(of: adapter.selectedNoteID) {
+                // Clear before acknowledging: a visible pad replaced just
+                // ahead of a switch away and back still holds its flag, and
+                // the engine's switch-back baseline is already post-replace
+                // — acknowledging first would drop the flag the clear checks.
+                Self.clearStaleUndoIfPending(adapter: adapter, panelFocus: panelFocus)
+                // Then acknowledge what the engine owns: a background pad's
+                // stack is invalidated on switch-back, so a surviving flag
+                // would only clear fresh keystrokes on a later delivery.
+                if let id = adapter.selectedNoteID { adapter.acknowledgeUndoClear(for: id) }
+            }
             // The toolbar's fade: the last lines dissolve into the toolbar
             // instead of clipping hard. A mask on the content, not a scrim
             // on the backdrop — the well is near-black, so darkening it
@@ -80,6 +101,21 @@ struct NoteSurface: View {
     }
 }
 
+/// Drop the visible editor's undo stack when its pad's text was replaced
+/// wholesale underneath it. Needs the text view alive — the reporter mounts
+/// it a runloop after the editor, so an early delivery stays pending for
+/// the next check instead of missing permanently.
+extension NoteSurface {
+    fileprivate static func clearStaleUndoIfPending(adapter: NotesAdapter, panelFocus: PanelFocus?) {
+        guard let id = adapter.selectedNoteID,
+              adapter.padsPendingUndoClear.contains(id),
+              let textView = panelFocus?.notesTextView
+        else { return }
+        textView.undoManager?.removeAllActions()
+        adapter.acknowledgeUndoClear(for: id)
+    }
+}
+
 /// The skin of the inset well: the scrim alone, no lightening and no shadow.
 /// A raised surface lightens the glass and casts a shadow; a hollow darkens
 /// it and casts none.
@@ -111,6 +147,21 @@ fileprivate func notesSyncDisplay(_ status: NotesAdapter.SyncStatus) -> (symbol:
     }
 }
 
+/// The history-adjacent dates share one UTC shape, so the conflicts popover
+/// and the history menu cannot drift apart.
+fileprivate let noteHistoryDateStyle: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(identifier: "UTC")
+    formatter.dateFormat = "MMM d, HH:mm 'UTC'"
+    return formatter
+}()
+
+fileprivate func noteHistoryDateText(_ date: Date?) -> String {
+    guard let date else { return "Unknown date" }
+    return noteHistoryDateStyle.string(from: date)
+}
+
 /// The note's own toolbar, along its bottom edge.
 private struct NoteToolbar: View {
     @Bindable var adapter: NotesAdapter
@@ -122,6 +173,10 @@ private struct NoteToolbar: View {
     private var conflicts: [ConflictRecord] {
         guard let id = adapter.selectedNoteID else { return [] }
         return adapter.conflicts(for: id)
+    }
+    private var snapshots: [PadSnapshot] {
+        guard let id = adapter.selectedNoteID else { return [] }
+        return adapter.snapshots(for: id)
     }
 
     var body: some View {
@@ -139,6 +194,23 @@ private struct NoteToolbar: View {
                 .popover(isPresented: $isConflictsPresented, arrowEdge: .top) {
                     ConflictsPopover(adapter: adapter, isPresented: $isConflictsPresented)
                 }
+            }
+            // The pad's way back past a replacing pull or merge: restoring
+            // snapshots the current text first, so the menu is safe to poke
+            // at. Beside conflicts, the same family — and only while there
+            // is anything to go back to.
+            if let padID = adapter.selectedNoteID, !snapshots.isEmpty {
+                Menu {
+                    ForEach(snapshots) { snapshot in
+                        Button(padHistoryEntryTitle(snapshot)) {
+                            adapter.restoreSnapshot(snapshot.id, for: padID)
+                        }
+                    }
+                } label: {
+                    NoteToolbarIcon(symbol: "arrow.counterclockwise.circle")
+                }
+                .accessibilityLabel("Pad history")
+                .help("Pad history")
             }
             NoteToolbarButton("trash", label: "Delete") { onDeleteSelected() }
                 .disabled(!adapter.canDeleteNote)
@@ -197,19 +269,6 @@ private struct ConflictsPopover: View {
         return adapter.conflicts(for: padID)
     }
 
-    private static let dateStyle: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(identifier: "UTC")
-        formatter.dateFormat = "MMM d, HH:mm 'UTC'"
-        return formatter
-    }()
-
-    private static func dateText(_ date: Date?) -> String {
-        guard let date else { return "Unknown date" }
-        return dateStyle.string(from: date)
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             PopoverMenuSectionLabel("Conflicts")
@@ -257,7 +316,7 @@ private struct ConflictsPopover: View {
             selection = record.id
         } label: {
             VStack(alignment: .leading, spacing: 0) {
-                Text(Self.dateText(record.date))
+                Text(noteHistoryDateText(record.date))
                     .font(.caption.weight(.semibold))
                 Text("\(record.slices.count) lines")
                     .font(.caption2)
@@ -270,7 +329,7 @@ private struct ConflictsPopover: View {
         }
         .foregroundStyle(.primary)
         .buttonStyle(PopoverMenuRowStyle(isSelected: isSelected))
-        .accessibilityLabel("Conflict from \(Self.dateText(record.date))")
+        .accessibilityLabel("Conflict from \(noteHistoryDateText(record.date))")
     }
 
     private var footer: some View {
@@ -294,6 +353,48 @@ private struct ConflictsPopover: View {
     }
 }
 
+/// One history entry's title: the reason beside the date, so restoring
+/// reads as a choice rather than a guess. A plain function — the shared
+/// date helper already models the formatting, no namespace needed.
+fileprivate func padHistoryEntryTitle(_ snapshot: PadSnapshot) -> String {
+    let reason: String
+    switch snapshot.reason {
+    case .pull: reason = "Synced from Craft"
+    case .conflict: reason = "Conflict with Craft"
+    case .preRestore: reason = "Before restore"
+    }
+    return "\(reason) — \(noteHistoryDateText(snapshot.date))"
+}
+
+/// The toolbar's icon cell: caption symbol in a row-action frame, wearing
+/// the hover chip. Shared by the buttons and the history menu label, which
+/// needs its own labeled view rather than a Button.
+private struct NoteToolbarIcon: View {
+    let symbol: String
+    let tint: Color?
+    @State private var isHovered = false
+
+    // Explicit: a `let` with a default drops out of the memberwise init
+    // beside a property wrapper, so the default lives here instead.
+    init(symbol: String, tint: Color? = nil) {
+        self.symbol = symbol
+        self.tint = tint
+    }
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.caption)
+            .frame(width: Layout.rowActionSize, height: Layout.rowActionSize)
+            .contentShape(Rectangle())
+            .foregroundStyle(tint ?? (isHovered ? Color.primary : Color.secondary))
+            .background {
+                RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
+                    .fill(isHovered ? Color.controlFill : Color.clear)
+            }
+            .onHover { isHovered = $0 }
+    }
+}
+
 /// One button in the note's bottom toolbar, wearing the same hover chip as
 /// the header's plus — one step brighter, over a muted fill.
 private struct NoteToolbarButton: View {
@@ -301,8 +402,6 @@ private struct NoteToolbarButton: View {
     private let label: String
     private let tint: Color?
     private let action: () -> Void
-
-    @State private var isHovered = false
 
     init(_ symbol: String, label: String, tint: Color? = nil, action: @escaping () -> Void) {
         self.symbol = symbol
@@ -313,18 +412,9 @@ private struct NoteToolbarButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.caption)
-                .frame(width: Layout.rowActionSize, height: Layout.rowActionSize)
-                .contentShape(Rectangle())
+            NoteToolbarIcon(symbol: symbol, tint: tint)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(tint ?? (isHovered ? Color.primary : Color.secondary))
-        .background {
-            RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
-                .fill(isHovered ? Color.controlFill : Color.clear)
-        }
-        .onHover { isHovered = $0 }
         .help(label)
         .accessibilityLabel(label)
     }
