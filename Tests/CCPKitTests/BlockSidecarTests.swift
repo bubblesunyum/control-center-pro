@@ -198,7 +198,8 @@ final class BlockSidecarStorageTests: XCTestCase {
         let name = "ccp.sidecar.roundtrip.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { cleanup(name, store) }
-        let adapter = NotesAdapter(defaults: store, defaultName: "Note")
+        let dir = freshNotesDirectory()
+        let adapter = NotesAdapter(defaults: store, defaultName: "Note", notesDirectory: dir)
         let id = try XCTUnwrap(adapter.selectedNoteID)
 
         XCTAssertTrue(adapter.sidecar(for: id).entries.isEmpty)
@@ -206,7 +207,7 @@ final class BlockSidecarStorageTests: XCTestCase {
         adapter.storeSidecar(sidecar, for: id)
         XCTAssertEqual(adapter.sidecar(for: id), sidecar)
 
-        let fresh = NotesAdapter(defaults: store, defaultName: "Note")
+        let fresh = NotesAdapter(defaults: store, defaultName: "Note", notesDirectory: dir)
         XCTAssertEqual(fresh.sidecar(for: id), sidecar)
     }
 
@@ -214,7 +215,7 @@ final class BlockSidecarStorageTests: XCTestCase {
         let name = "ccp.sidecar.close.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { cleanup(name, store) }
-        let adapter = NotesAdapter(defaults: store, defaultName: "Note")
+        let adapter = NotesAdapter(defaults: store, defaultName: "Note", notesDirectory: freshNotesDirectory())
         adapter.createNote()
         let doomed = adapter.notes[0].id
 
@@ -228,7 +229,7 @@ final class BlockSidecarStorageTests: XCTestCase {
         let name = "ccp.sidecar.unreadable.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { cleanup(name, store) }
-        let adapter = NotesAdapter(defaults: store, defaultName: "Note")
+        let adapter = NotesAdapter(defaults: store, defaultName: "Note", notesDirectory: freshNotesDirectory())
         let id = try XCTUnwrap(adapter.selectedNoteID)
 
         let garbage = Data("{\"not\":\"a sidecar\"}".utf8)
@@ -243,7 +244,7 @@ final class BlockSidecarStorageTests: XCTestCase {
         let name = "ccp.sidecar.rescue.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { cleanup(name, store) }
-        let adapter = NotesAdapter(defaults: store, defaultName: "Note")
+        let adapter = NotesAdapter(defaults: store, defaultName: "Note", notesDirectory: freshNotesDirectory())
         let id = try XCTUnwrap(adapter.selectedNoteID)
 
         let garbage = Data("{\"not\":\"a sidecar\"}".utf8)
@@ -261,7 +262,7 @@ final class BlockSidecarStorageTests: XCTestCase {
         let name = "ccp.sidecar.empty.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { cleanup(name, store) }
-        let adapter = NotesAdapter(defaults: store, defaultName: "Note")
+        let adapter = NotesAdapter(defaults: store, defaultName: "Note", notesDirectory: freshNotesDirectory())
         let id = try XCTUnwrap(adapter.selectedNoteID)
 
         // What older builds wrote when the last entry dropped: valid JSON,

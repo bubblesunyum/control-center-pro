@@ -200,11 +200,12 @@ public enum NotesSupport {
 // MARK: - Adapter
 
 /// The widget's model: owns the tabbed document, publishes the selected text,
-/// and persists every edit debounced — the same contract the floating pad's
-/// service offers, without the panel, hotkey, or pin logic.
+/// and persists every edit debounced.
 ///
-/// Reads and writes the same UserDefaults keys as the upstream service so a
-/// note written in one surface is there in the other.
+/// Local truth is a folder of markdown files plus a small index in
+/// UserDefaults (selection, tab order, closed tabs, filenames, the dirty
+/// set), so the folder doubles as a vault. The old UserDefaults document blob
+/// is read once, on migration, and never written again.
 @MainActor
 @Observable
 public final class NotesAdapter {
@@ -227,7 +228,7 @@ public final class NotesAdapter {
     /// sync all stay — so this is CCP UI state under its own key, never the
     /// upstream-shared document. A failed decode reads as nothing hidden.
     public private(set) var closedNoteIDs: Set<UUID> = [] {
-        didSet { persistClosedNoteIDs() }
+        didSet { saveIndex() }
     }
 
     /// The tabs the strip draws, in document order.
@@ -319,24 +320,40 @@ public final class NotesAdapter {
 
     @ObservationIgnored private var document: NotesDocument?
     @ObservationIgnored private var lastSavedDocument: NotesDocument?
+    /// The index's filename for each pad of the last save. Renames move the
+    /// file; this is how the next save knows the old name.
+    @ObservationIgnored private var lastSavedFilenames: [UUID: String] = [:]
     @ObservationIgnored private var hasLoaded = false
     @ObservationIgnored private var isReplacingText = false
-    /// Set when the stored bytes would not decode. The first write moves them
+    /// Set when the stored index would not decode. The first write moves it
     /// aside rather than over.
-    @ObservationIgnored private var isStoredDocumentUnreadable = false
+    @ObservationIgnored private var isStoredIndexUnreadable = false
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var terminationObserver: NSObjectProtocol?
     @ObservationIgnored nonisolated(unsafe) private var credentialObserver: NSObjectProtocol?
+    @ObservationIgnored nonisolated(unsafe) private var folderObserver: NSObjectProtocol?
     // The Craft connection URL, read once per process. The credential changes
     // only through Settings, which posts craftCredentialDidChange.
     @ObservationIgnored private var cachedCraftBaseURL: URL?
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let defaultName: String
-    // The feature is called Notes; these keys are not, and must not be. They
-    // are upstream's, shared with Vorssaint's floating scratchpad, and renaming
-    // either one orphans every note already written.
+    /// Where this adapter's markdown files live. Follows the Settings folder
+    /// while the panel is up when `followsSettingsFolder`; tests hand a
+    /// temporary folder instead and it never moves under them.
+    @ObservationIgnored private var notesDirectory: URL
+    @ObservationIgnored private let followsSettingsFolder: Bool
+    private var notesStore: NotesFileStore {
+        NotesFileStore(defaults: defaults, directory: notesDirectory)
+    }
+    // The pre-files document blob: upstream's key, shared with Vorssaint's
+    // floating scratchpad. Read once, on migration, and cleared after the
+    // files verify — never written again, so the two surfaces diverge from
+    // the migration forward. Renaming any of these orphans notes that have
+    // not migrated yet.
     @ObservationIgnored private let documentKey = "scratchpadDocument"
-    @ObservationIgnored private let rescueKey = "scratchpadDocument.unreadable"
+    @ObservationIgnored private let documentRescueKey = "scratchpadDocument.unreadable"
+    // The pre-index closed-tabs key. Migrated into the index the same once.
+    @ObservationIgnored private let legacyClosedTabsKey = "scratchpadClosedTabs"
     // The Craft block-id sidecar (ccp-xgl): pad id to the (block id, hash)
     // pairing the push diffs against. Ours, not upstream's, so it lives
     // under its own key — sync bookkeeping, never note text.
@@ -376,9 +393,9 @@ public final class NotesAdapter {
     // page root's mtime.
     @ObservationIgnored private let syncedTitleKey = "scratchpadCraftTitles"
     @ObservationIgnored private let titleRenamedAtKey = "scratchpadCraftTitleRenamedAt"
-    // Which tabs the X hid (ccp-xc2j). UI state under its own key for the
-    // same reason: the document bytes are upstream's, this set is ours.
-    @ObservationIgnored private let closedTabsKey = "scratchpadClosedTabs"
+    // Which tabs the X hid (ccp-xc2j). UI state, kept in the index for the
+    // same reason: the files hold text, the index holds where the tabs are.
+    // The pre-index key survives above as the migration source only.
     // The space id GET /connection reports (ccp-xc2j). What the per-document
     // deep link is addressed with. Refreshed on every pull's clock read.
     @ObservationIgnored private let craftSpaceIDKey = "scratchpadCraftSpaceID"
@@ -395,7 +412,15 @@ public final class NotesAdapter {
     @ObservationIgnored private var needsPullAfterFlight = false
     @ObservationIgnored private var consecutivePushFailures = 0
     @ObservationIgnored private var pushThrottledUntil: Date?
-    @ObservationIgnored private var dirtyPadIDs: Set<UUID> = []
+    /// Pads with edits Craft has not confirmed. Durable in the index
+    /// (ccp-q3nd): a quit inside the push debounce used to strand mapped
+    /// edits with nothing re-marking them after relaunch. Every mutation
+    /// persists the index, so the bit survives anything but its own
+    /// clearing — and a pull that skips (remote == sidecar) leaves it
+    /// standing for the push `activate` schedules below.
+    @ObservationIgnored private var dirtyPadIDs: Set<UUID> = [] {
+        didSet { saveIndex() }
+    }
     /// Seconds of quiet before an edit pushes. Owned by the type, not a
     /// design token — the 12s focus-dim clock is a different thing (ccp-srw).
     private static let pushDebounce: TimeInterval = 3
@@ -409,25 +434,41 @@ public final class NotesAdapter {
     @ObservationIgnored internal var craftCredentialUnavailable = false
 
     public convenience init() {
-        self.init(defaults: .standard, defaultName: "Note")
+        self.init(defaults: .standard, defaultName: "Note", notesDirectory: nil)
     }
 
-    public init(defaults: UserDefaults, defaultName: String) {
+    /// - Parameter notesDirectory: where this adapter's markdown files live.
+    ///   Nil follows the Settings folder; tests pass a temporary folder so
+    ///   the files never touch the real vault.
+    public init(defaults: UserDefaults, defaultName: String, notesDirectory: URL?) {
         self.defaults = defaults
         self.defaultName = defaultName
-        closedNoteIDs = Self.decodedClosedNoteIDs(defaults.data(forKey: closedTabsKey))
+        if let notesDirectory {
+            self.notesDirectory = notesDirectory
+            followsSettingsFolder = false
+        } else {
+            self.notesDirectory = Self.resolveNotesDirectory()
+            followsSettingsFolder = true
+        }
         refreshCredentialPresence()
         loadDocument()
         observeTermination()
+        observeNotesFolderChanges()
     }
 
-    /// Test seam: in-memory document without touching defaults.
+    /// Test seam: in-memory document without touching the app's bytes. Edits
+    /// still persist, into a throwaway folder under an ephemeral suite — the
+    /// point is only that the real vault and index stay clean.
     public init(document: NotesDocument) {
-        self.defaults = .standard
+        self.defaults = UserDefaults(suiteName: "ccp.notes.ephemeral.\(UUID().uuidString)") ?? .standard
         self.defaultName = "Note"
+        self.notesDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ccp.notes.\(UUID().uuidString)")
+        followsSettingsFolder = false
         hasLoaded = true
         apply(document)
-        lastSavedDocument = document
+        lastSavedDocument = nil
+        _ = persist(document)
         observeTermination()
     }
 
@@ -436,6 +477,9 @@ public final class NotesAdapter {
             NotificationCenter.default.removeObserver(observer)
         }
         if let observer = credentialObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        if let observer = folderObserver {
             NotificationCenter.default.removeObserver(observer)
         }
     }
@@ -503,6 +547,41 @@ public final class NotesAdapter {
         }
     }
 
+    private static func resolveNotesDirectory() -> URL {
+        NotesFileStore.resolveDirectory(settings: JSONFileStore<StoredSettings>(
+            filename: "settings.json",
+            default: StoredSettings()
+        ).load())
+    }
+
+    /// Follow the Settings folder switch. The switch already moved the
+    /// files; the adapter relearns the folder and reloads from where they
+    /// moved to.
+    private func observeNotesFolderChanges() {
+        guard followsSettingsFolder else { return }
+        folderObserver = NotificationCenter.default.addObserver(
+            forName: .notesFolderDidChange,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.useNotesDirectory(Self.resolveNotesDirectory())
+            }
+        }
+    }
+
+    /// Move this adapter to a new folder: the files are already there (the
+    /// Settings switch moves them first). Flushes to the new folder first,
+    /// so unsaved keystrokes never land in the old one, then reloads.
+    func useNotesDirectory(_ url: URL) {
+        notesDirectory = url
+        flushSave()
+        document = nil
+        lastSavedDocument = nil
+        lastSavedFilenames = [:]
+        loadDocument()
+    }
     /// Pads with text but no document are one push away from provisioned.
     /// Empty pads stay local: a document does not exist until the first edit.
     /// Nothing is scheduled without a credential — an unconfigured launch
@@ -524,11 +603,16 @@ public final class NotesAdapter {
         isPanelOpen = true
         pullRetryTask?.cancel()
         pullRetryTask = nil
+        if followsSettingsFolder { notesDirectory = Self.resolveNotesDirectory() }
         loadDocument()
         // Pads written before provisioning existed (or before a credential
         // was saved) converge like any first edit — otherwise they sit
         // unmapped and clean until the user happens to type in each one.
         dirtyUnmappedNonEmptyPads()
+        // The dirty set is durable now, so a relaunch can own mapped edits
+        // the pull will skip (remote == sidecar, local moved). Push them —
+        // without this the bit stands but no round ever spends it.
+        if !dirtyPadIDs.isEmpty { scheduleCraftPush() }
         // The panel was shut: Craft may have moved under us. Pull now in
         // the background without locking the editor; a failed read changes
         // nothing, and an adopt never lands on unpushed edits without
@@ -552,29 +636,6 @@ public final class NotesAdapter {
         Task { [weak self] in await self?.flushCraftPush() }
     }
 
-    /// Notes the running build cannot read are still notes. Before the first
-    /// write lands on top of them they are copied to a key nothing else
-    /// touches, so a later build — or the user with `defaults read` — can get
-    /// them back.
-    /// A document rescued from an earlier unreadable state, if this build can
-    /// read it now. Without this the backup is only reachable by hand, which
-    /// is not a recovery path — it is a consolation.
-    private func rescuedDocument() -> NotesDocument? {
-        guard let data = defaults.data(forKey: rescueKey),
-              let document = try? JSONDecoder().decode(NotesDocument.self, from: data)
-        else { return nil }
-        defaults.removeObject(forKey: rescueKey)
-        return document
-    }
-
-    private func rescueUnreadableDocument() {
-        isStoredDocumentUnreadable = false
-        guard let stored = defaults.object(forKey: documentKey),
-              defaults.object(forKey: rescueKey) == nil
-        else { return }
-        defaults.set(stored, forKey: rescueKey)
-    }
-
     // MARK: - Document loading
 
     private func loadDocument() {
@@ -584,57 +645,182 @@ public final class NotesAdapter {
             return
         }
 
-        if let stored = defaults.object(forKey: documentKey) {
-            let data = stored as? Data
-            let mainDecoded = data.flatMap({ try? JSONDecoder().decode(NotesDocument.self, from: $0) })
-            // Try the live key first so a good main never consumes the backup.
-            // When only the rescue decodes, the live key still holds bytes we
-            // could not read — the rescue consumed its own key, so the
-            // recovered document must be re-committed and the live bytes set
-            // aside, or both copies are gone (one on quit, one on next edit).
-            let isRescued: Bool
-            let decoded: NotesDocument?
-            if let mainDecoded {
-                isRescued = false
-                decoded = mainDecoded
+        switch notesStore.loadIndex() {
+        case .index(let index, let rescued):
+            if rescued { isStoredIndexUnreadable = true }
+            loadFromIndex(index)
+        case .absent:
+            migrateAdoptOrFresh()
+        case .unreadable:
+            // Bytes we cannot read are still the user's state. Stand an
+            // empty document in front of them, and treat it as already
+            // saved so that closing the panel — which flushes — writes
+            // nothing. Only an edit the user makes on purpose is allowed
+            // to land on top, and even then the old bytes are copied aside
+            // first. Files on disk are left alone either way: the next
+            // save uniquifies around them rather than over them.
+            let placeholder = NotesDocument.initial(defaultName: defaultName)
+            apply(placeholder)
+            lastSavedDocument = placeholder
+            isStoredIndexUnreadable = true
+        }
+    }
+
+    /// Rebuild the document from a decoded index: texts come from the files,
+    /// everything else from the entries. A missing file is an empty pad, not
+    /// a missing one — the tab survives whatever happened on disk.
+    private func loadFromIndex(_ index: NotesFileIndex) {
+        let notes = index.pads.map { entry -> Note in
+            let text = notesStore.readText(filename: entry.filename) ?? ""
+            return Note(id: entry.id,
+                        name: entry.name,
+                        text: text,
+                        // An emptied pad carries no date — same rule as the
+                        // sanitise pass, applied here so a missing file does
+                        // not look like a change that must be saved back.
+                        modifiedAt: text.isEmpty ? nil : entry.modifiedAt)
+        }
+        let decoded = NotesDocument(notes: notes, selectedID: index.selectedID)
+        lastSavedFilenames = Dictionary(uniqueKeysWithValues: index.pads.map { ($0.id, $0.filename) })
+        closedNoteIDs = Set(index.pads.filter(\.closed).map(\.id))
+        dirtyPadIDs = Set(index.dirtyPadIDs)
+        let loaded = decoded.sanitized(defaultName: defaultName)
+        apply(loaded)
+        if loaded == decoded {
+            lastSavedDocument = loaded
+            // A rescue re-commits what it recovered, so the recovery
+            // survives a quit — and sets the live bytes aside first.
+            if isStoredIndexUnreadable { saveIndex() }
+        } else {
+            // Sanitising dropped or repaired a pad: save the clean state.
+            lastSavedDocument = nil
+            _ = persist(loaded)
+        }
+    }
+
+    /// No index: a legacy blob migrates once, an index-less folder of files
+    /// is adopted as a rebuild, and a true first launch starts blank.
+    private func migrateAdoptOrFresh() {
+        guard defaults.data(forKey: documentKey) != nil else {
+            let files = notesStore.markdownFiles()
+            if files.isEmpty {
+                let fresh = NotesDocument.initial(defaultName: defaultName).sanitized(defaultName: defaultName)
+                lastSavedFilenames = [:]
+                closedNoteIDs = []
+                dirtyPadIDs = []
+                apply(fresh)
+                lastSavedDocument = nil
+                _ = persist(fresh)
             } else {
-                decoded = rescuedDocument()
-                isRescued = decoded != nil
+                adoptFiles(files)
             }
-            guard let decoded else {
-                // Bytes we cannot read are still the user's notes. Stand an
-                // empty document in front of them, and treat it as already
-                // saved so that closing the panel — which flushes — writes
-                // nothing. Only an edit the user makes on purpose is allowed
-                // to land on top, and even then the old bytes are copied aside
-                // first.
-                let placeholder = NotesDocument.initial(defaultName: defaultName)
-                apply(placeholder)
-                lastSavedDocument = placeholder
-                isStoredDocumentUnreadable = true
-                return
-            }
-            let loaded = decoded.sanitized(defaultName: defaultName)
-            if isRescued {
-                isStoredDocumentUnreadable = true
-                _ = persist(loaded)
-            } else if loaded == decoded {
-                lastSavedDocument = loaded
-            } else {
-                _ = persist(loaded)
-            }
-            apply(loaded)
             return
         }
+        migrateLegacyBlob()
+    }
 
-        // No stored document: fresh install. Upstream's service would migrate
-        // a legacy `Scratchpad.txt` from `PrivateFileStore.containerURL`, but
-        // that container is bundle-id-scoped (`com.vorssaint.*` vs
-        // `com.controlcenterpro.*`), so CCP's first launch has no file to
-        // migrate — intentional not to reach into the old bundle's folder.
-        let migrated = NotesDocument.initial(defaultName: defaultName)
-        _ = persist(migrated)
-        apply(migrated)
+    /// The one-time move off the UserDefaults blob: texts into files, order
+    /// and selection into the index, closed tabs carried along. The legacy
+    /// `pads`/`notes` spellings both decode, like before. The old keys clear
+    /// only after the files read back identical — a failed migration keeps
+    /// them, so the next launch retries instead of running half-moved.
+    /// Craft bookkeeping keys are untouched throughout.
+    private func migrateLegacyBlob() {
+        let data = defaults.data(forKey: documentKey)
+        let liveDecoded = data.flatMap { NotesDocument.decoded($0, defaultName: defaultName) }
+        // Peeked, not consumed: the rescue key clears only after the files
+        // verify, so a failed migration keeps both copies for the retry.
+        let rescuedData = defaults.data(forKey: documentRescueKey)
+        let rescued = liveDecoded == nil
+            ? rescuedData.flatMap { NotesDocument.decoded($0, defaultName: defaultName) }
+            : nil
+        let decoded = liveDecoded ?? rescued ?? .initial(defaultName: defaultName)
+        closedNoteIDs = Set(Self.decodedClosedNoteIDs(defaults.data(forKey: legacyClosedTabsKey)))
+            .intersection(decoded.notes.map(\.id))
+        lastSavedFilenames = [:]
+        lastSavedDocument = nil
+        apply(decoded)
+        // Stranded edits predate the durable bit (ccp-q3nd): the old dirty
+        // set died with the process, so a mapped pad whose text or title
+        // Craft never confirmed would migrate clean and never push until
+        // the next keystroke — reading saved while Craft is stale. Unknown
+        // reads as unconfirmed, so legacy mappings without a title baseline
+        // converge on the next push rather than silently claiming clean.
+        dirtyPadIDs = Set(decoded.notes.map(\.id).filter {
+            craftDocumentID(for: $0) != nil && hasUnconfirmedEdits($0)
+        })
+        guard persist(decoded), verifyMigration(of: decoded) else { return }
+        // Two consecutive corruptions: the rescue key already holds older
+        // evidence and once-only keeps it, so the blob stays as the newer
+        // exhibit rather than being cleared. The index exists, so nothing
+        // ever migrates from it again — it is evidence, not state.
+        if liveDecoded != nil || rescued != nil || rescuedData == nil {
+            defaults.removeObject(forKey: documentKey)
+        }
+        if rescued != nil {
+            // The live bytes were unreadable: they move to the rescue key
+            // now that its previous occupant is verified into the files —
+            // evidence, not trash.
+            defaults.set(data, forKey: documentRescueKey)
+        } else if liveDecoded == nil, rescuedData == nil {
+            // Nothing decoded: keep the bytes once-only, like before.
+            defaults.set(data, forKey: documentRescueKey)
+        } else if liveDecoded != nil {
+            // Verified live supersedes whatever an old incident set aside.
+            defaults.removeObject(forKey: documentRescueKey)
+        }
+        defaults.removeObject(forKey: legacyClosedTabsKey)
+    }
+
+    /// The files just written read back identical to the migrated document:
+    /// same pads, names, texts and selection, same closed set.
+    private func verifyMigration(of document: NotesDocument) -> Bool {
+        guard case .index(let index, _) = notesStore.loadIndex() else { return false }
+        guard index.selectedID == document.selectedID,
+              index.pads.count == document.notes.count
+        else { return false }
+        for note in document.notes {
+            guard let entry = index.pads.first(where: { $0.id == note.id }),
+                  entry.name == note.name,
+                  notesStore.readText(filename: entry.filename) == note.text
+            else { return false }
+        }
+        return Set(index.pads.filter(\.closed).map(\.id)) == closedNoteIDs
+    }
+
+    /// Adopt an index-less folder as a rebuild: every markdown file becomes
+    /// a pad under a fresh id, filenames kept. The files already hold the
+    /// text, so only the index is new — and the pads provision to Craft like
+    /// any first edit.
+    private func adoptFiles(_ files: [String]) {
+        var usedNames = Set<String>()
+        var entries: [NotesFileIndexEntry] = []
+        for filename in files.prefix(NotesDocument.maximumNoteCount) {
+            let stem = NotesFileStore.displayName(for: filename)
+            var name = NotesSupport.sanitizedNoteName(stem)
+            if name.isEmpty || usedNames.contains(name) {
+                name = NotesSupport.nextNoteName(
+                    defaultName: name.isEmpty ? defaultName : name,
+                    existingNames: Array(usedNames))
+            }
+            usedNames.insert(name)
+            let id = UUID()
+            entries.append(NotesFileIndexEntry(
+                id: id, filename: filename, name: name,
+                modifiedAt: nil, closed: false))
+        }
+        let notes = entries.map { entry in
+            Note(id: entry.id, name: entry.name,
+                 text: notesStore.readText(filename: entry.filename) ?? "")
+        }
+        guard let first = notes.first else { return }
+        let adopted = NotesDocument(notes: notes, selectedID: first.id)
+        lastSavedFilenames = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0.filename) })
+        closedNoteIDs = []
+        dirtyPadIDs = []
+        apply(adopted)
+        lastSavedDocument = adopted
+        saveIndex()
     }
 
     private func scheduleSave() {
@@ -658,12 +844,103 @@ public final class NotesAdapter {
         // Equality first: an unchanged document must not trigger the rescue,
         // because the rescue clears the flag that guards the bytes.
         if document == lastSavedDocument { return true }
-        if isStoredDocumentUnreadable { rescueUnreadableDocument() }
-        guard let data = document.encoded() else { return false }
-        defaults.set(data, forKey: documentKey)
-        guard defaults.data(forKey: documentKey) == data else { return false }
+        let previous = lastSavedDocument
+        let known = lastSavedFilenames
+        // A pad keeps its file while its name stands; renames and new pads
+        // take a fresh filename that collides with nothing on disk — not
+        // even files the index has forgotten, which are evidence, never
+        // scratch space.
+        var taken = Set(known.values).union(notesStore.markdownFiles())
+        var assigned: [UUID: String] = [:]
+        for note in document.notes {
+            if let old = previous?.notes.first(where: { $0.id == note.id }),
+               old.name == note.name, let file = known[note.id] {
+                assigned[note.id] = file
+            }
+        }
+        var moves: [(from: String, to: String)] = []
+        for note in document.notes where assigned[note.id] == nil {
+            let file = NotesFileStore.filename(for: note.name, excluding: taken)
+            if let old = known[note.id], old != file { moves.append((old, file)) }
+            assigned[note.id] = file
+            taken.insert(file)
+        }
+        // Moves land before the mapping and index commit, and the rollback
+        // above only runs on thrown errors — a kill -9 between the two
+        // strands text in a correctly-named orphan. That is the loud
+        // direction, chosen on purpose: the pad reads empty while its text
+        // sits visible in the vault, rather than the index claiming a file
+        // whose content predates the rename. Crash-atomic moves want a
+        // journal; that is filed work, not this commit.
+        var moved: [(from: String, to: String)] = []
+        for move in moves {
+            do {
+                try notesStore.moveFile(from: move.from, to: move.to)
+                moved.append(move)
+            } catch {
+                // Back out the renames that already landed: the mapping and
+                // the index below still name the old files, so a half-moved
+                // folder would strand text in orphans on the next load.
+                for done in moved.reversed() {
+                    try? notesStore.moveFile(from: done.to, to: done.from)
+                }
+                return false
+            }
+        }
+        for note in document.notes {
+            guard let file = assigned[note.id] else { return false }
+            let oldText = previous?.notes.first(where: { $0.id == note.id })?.text
+            if oldText == note.text, known[note.id] != nil { continue }
+            do { try notesStore.writeText(note.text, filename: file) }
+            catch { return false }
+        }
+        // Pads the document no longer names fall out of the mapping here;
+        // their files are deleted explicitly by deleteNote, so a dropped pad
+        // anywhere else leaves an ignored orphan rather than a lost note.
+        lastSavedFilenames = assigned
         lastSavedDocument = document
+        saveIndex(for: document)
         return true
+    }
+
+    /// Writes the index for the committed document plus the live closed and
+    /// dirty sets. Reads the committed document rather than the live one:
+    /// every verb persists before it applies, so between the two the live
+    /// document is still the previous save — and a didSet firing there
+    /// (deleteNote's drops, say) must not resurrect what persist just
+    /// removed. Short-circuits before anything committed, which is also
+    /// what keeps the loading didSets quiet. Consumes the unreadable flag
+    /// on its first real write, setting the old bytes aside first.
+    private func saveIndex() {
+        guard hasLoaded, let document = lastSavedDocument else { return }
+        saveIndex(for: document)
+    }
+
+    /// The index for the document just persisted. Takes it as a parameter
+    /// rather than reading the committed one because persist advances the
+    /// mapping first — the fallback below would otherwise provisional-name
+    /// pads the mapping already knows.
+    private func saveIndex(for document: NotesDocument) {
+        // Provisional names avoid nothing on disk either: a save that lands
+        // between this index write and the persist that corrects it must
+        // still not point a pad at a stranger's file. Case falls out of
+        // filename(for:excluding:), which compares insensitively.
+        var taken = Set(lastSavedFilenames.values).union(notesStore.markdownFiles())
+        let entries = document.notes.map { note -> NotesFileIndexEntry in
+            let file: String
+            if let known = lastSavedFilenames[note.id] {
+                file = known
+            } else {
+                file = NotesFileStore.filename(for: note.name, excluding: taken)
+                taken.insert(file)
+            }
+            return NotesFileIndexEntry(id: note.id, filename: file, name: note.name,
+                                       modifiedAt: note.modifiedAt, closed: closedNoteIDs.contains(note.id))
+        }
+        notesStore.saveIndex(NotesFileIndex(selectedID: document.selectedID, pads: entries,
+                                            dirtyPadIDs: Array(dirtyPadIDs)),
+                             settingAsideUnreadable: isStoredIndexUnreadable)
+        isStoredIndexUnreadable = false
     }
 
     private func apply(_ document: NotesDocument) {
@@ -762,11 +1039,11 @@ public final class NotesAdapter {
         return selectedNoteID == id
     }
 
-    /// Delete a doc: the note, its text, and every per-pad sync trace. Mints a
-    /// fresh note when none would stay open. Nothing hidden ever resurrects:
-    /// deleting the last open tab opens a fresh blank note instead, and a
-    /// fallback that landed on a hidden tab yields to the nearest open
-    /// neighbour.
+    /// Delete a doc: the note, its text, its file, and every per-pad sync
+    /// trace. Mints a fresh note when none would stay open. Nothing hidden
+    /// ever resurrects: deleting the last open tab opens a fresh blank note
+    /// instead, and a fallback that landed on a hidden tab yields to the
+    /// nearest open neighbour.
     @discardableResult
     public func deleteNote(_ id: UUID) -> Bool {
         guard let document,
@@ -780,7 +1057,12 @@ public final class NotesAdapter {
                   let neighbour = nearestOpenNote(toDeletedIndex: deletedIndex, in: next.notes) {
             next = next.selecting(neighbour.id) ?? next
         }
+        // The filename before the persist drops it from the mapping — and
+        // the file goes after, so a crash between the two leaves an ignored
+        // orphan rather than an index entry with no text.
+        let filename = lastSavedFilenames[id]
         guard persist(next) else { return false }
+        if let filename { notesStore.deleteFile(filename) }
         dropSyncState(for: id)
         unhide(id)
         apply(next)
@@ -819,10 +1101,9 @@ public final class NotesAdapter {
         deleteNote(padID)
     }
 
-    /// Whether the pad holds changes Craft never confirmed: the in-memory
-    /// dirty bit, a block diff against the last confirmed sidecar (the bit
-    /// is forgotten on relaunch, the plan is not — same rule the pull
-    /// decides by), or a title the baseline never recorded. Unknown
+    /// Whether the pad holds changes Craft never confirmed: the durable
+    /// dirty bit, a block diff against the last confirmed sidecar (the plan
+    /// is what the pull decides by), or a title the baseline never recorded. Unknown
     /// baselines read as unconfirmed: a legacy mapping's first trash-hit
     /// keeps its text rather than deleting on a maybe.
     private func hasUnconfirmedEdits(_ padID: UUID) -> Bool {
@@ -891,24 +1172,21 @@ public final class NotesAdapter {
         unhide(document.selectedID)
     }
 
-    /// Unhide without the spurious persist a bare remove would spend on every
-    /// select: the set only writes when an id actually leaves it.
+    /// Unhide without the spurious index write a bare remove would spend on
+    /// every select: the set only writes when an id actually leaves it.
     private func unhide(_ id: UUID) {
         if closedNoteIDs.contains(id) {
             closedNoteIDs.remove(id)
         }
     }
 
+    /// The legacy closed-tabs set, for the migration only. A failed decode
+    /// reads as nothing hidden.
     private static func decodedClosedNoteIDs(_ data: Data?) -> Set<UUID> {
         guard let data,
               let ids = try? JSONDecoder().decode(Set<UUID>.self, from: data)
         else { return [] }
         return ids
-    }
-
-    private func persistClosedNoteIDs() {
-        guard let data = try? JSONEncoder().encode(closedNoteIDs) else { return }
-        defaults.set(data, forKey: closedTabsKey)
     }
 
     // MARK: - Craft block-id sidecar

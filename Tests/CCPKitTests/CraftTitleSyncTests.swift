@@ -21,8 +21,10 @@ final class CraftTitleSyncTests: XCTestCase {
         return defaults
     }
 
-    private func adapter(_ store: UserDefaults, _ transport: ScriptedTransport) -> NotesAdapter {
-        let adapter = NotesAdapter(defaults: store, defaultName: "Note")
+    private func adapter(_ store: UserDefaults, _ transport: ScriptedTransport,
+                         dir: URL? = nil) -> NotesAdapter {
+        let adapter = NotesAdapter(defaults: store, defaultName: "Note",
+                                   notesDirectory: dir ?? freshNotesDirectory())
         adapter.craftTransport = transport
         adapter.craftBaseURLOverride = base
         return adapter

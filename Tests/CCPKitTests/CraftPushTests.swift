@@ -583,8 +583,10 @@ final class CraftPushAdapterTests: XCTestCase {
         return defaults
     }
 
-    private func adapter(_ store: UserDefaults, _ transport: ScriptedTransport) -> NotesAdapter {
-        let adapter = NotesAdapter(defaults: store, defaultName: "Note")
+    private func adapter(_ store: UserDefaults, _ transport: ScriptedTransport,
+                         dir: URL? = nil) -> NotesAdapter {
+        let adapter = NotesAdapter(defaults: store, defaultName: "Note",
+                                   notesDirectory: dir ?? freshNotesDirectory())
         adapter.craftTransport = transport
         adapter.craftBaseURLOverride = base
         return adapter
@@ -878,7 +880,8 @@ final class CraftPushAdapterTests: XCTestCase {
         let name = "ccp.push.upgrade.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let first = NotesAdapter(defaults: store, defaultName: "Note")
+        let dir = freshNotesDirectory()
+        let first = NotesAdapter(defaults: store, defaultName: "Note", notesDirectory: dir)
         first.craftCredentialUnavailable = true
         first.text = "hello"
         // Let the 800ms save debounce land so the relaunch reads real bytes.
@@ -907,7 +910,7 @@ final class CraftPushAdapterTests: XCTestCase {
                 {"items":[{"id":"b1","markdown":"hello"}]}
                 """)
         }
-        let relaunched = NotesAdapter(defaults: store, defaultName: "Note")
+        let relaunched = NotesAdapter(defaults: store, defaultName: "Note", notesDirectory: dir)
         relaunched.craftTransport = transport
         relaunched.craftBaseURLOverride = base
         let id = try XCTUnwrap(relaunched.selectedNoteID)
@@ -1188,7 +1191,8 @@ final class CraftPushAdapterTests: XCTestCase {
         let name = "ccp.push.mapdrop.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let adapter = NotesAdapter(defaults: store, defaultName: "Note")
+        let adapter = NotesAdapter(defaults: store, defaultName: "Note",
+                                   notesDirectory: freshNotesDirectory())
         adapter.createNote()
         let doomed = adapter.notes[0].id
 

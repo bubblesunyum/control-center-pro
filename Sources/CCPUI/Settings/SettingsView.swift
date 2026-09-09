@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Control Center Pro contributors
 
+import AppKit
 import CCPKit
 import SwiftUI
 
-/// What the app lets you change: the combination that opens the panel, and
-/// the Craft connection Notes syncs towards.
+/// What the app lets you change: the combination that opens the panel, where
+/// Notes keeps its markdown files, and the Craft connection Notes syncs
+/// towards.
 ///
 /// A stock grouped `Form` rather than the glass vocabulary — this is an
 /// ordinary settings window and should look like every other one on the
@@ -28,6 +30,28 @@ struct SettingsView: View {
                 }
             } footer: {
                 Text(footer)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                LabeledContent("Folder") {
+                    Text(settings.notesDirectory.path)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                HStack {
+                    Button("Choose…") { chooseNotesFolder() }
+                    if settings.notesFolderPath != nil {
+                        Button("Reset to Default") { settings.setNotesDirectory(nil) }
+                    }
+                }
+            } header: {
+                Text("Notes")
+            } footer: {
+                Text("Each note is a markdown file in this folder, so a vault can point at "
+                    + "the same place. Switching moves the notes' files; tabs and sync state follow.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -96,5 +120,18 @@ struct SettingsView: View {
     private func recorderChanged(_ status: ShortcutRecorder.Status) {
         recorder = status
         status.isRecording ? hotkey.unregister() : hotkey.use(settings.panelShortcut)
+    }
+
+    private func chooseNotesFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.directoryURL = settings.notesDirectory
+        panel.prompt = "Choose"
+        panel.message = "Notes live here as markdown files — one per note."
+        if panel.runModal() == .OK, let url = panel.url {
+            settings.setNotesDirectory(url)
+        }
     }
 }

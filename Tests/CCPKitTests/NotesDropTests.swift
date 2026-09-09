@@ -20,7 +20,8 @@ final class NotesDropTests: XCTestCase {
     }
 
     private func adapter(_ defaults: UserDefaults, text: String = "") -> NotesAdapter {
-        let adapter = NotesAdapter(defaults: defaults, defaultName: "Note")
+        let adapter = NotesAdapter(defaults: defaults, defaultName: "Note",
+                                   notesDirectory: freshNotesDirectory())
         adapter.text = text
         return adapter
     }

@@ -17,8 +17,9 @@ final class NoteTabsTests: XCTestCase {
         return (defaults, name)
     }
 
-    private func adapter(_ defaults: UserDefaults) -> NotesAdapter {
-        NotesAdapter(defaults: defaults, defaultName: "Note")
+    private func adapter(_ defaults: UserDefaults, dir: URL? = nil) -> NotesAdapter {
+        NotesAdapter(defaults: defaults, defaultName: "Note",
+                     notesDirectory: dir ?? freshNotesDirectory())
     }
 
     /// Three notes, selected in the middle, texts A/B/C.
@@ -188,11 +189,12 @@ final class NoteTabsTests: XCTestCase {
     func testClosedTabsPersistAcrossLaunches() throws {
         let (defaults, name) = try store()
         defer { defaults.removePersistentDomain(forName: name) }
-        let first = adapter(defaults)
+        let dir = freshNotesDirectory()
+        let first = adapter(defaults, dir: dir)
         let ids = try three(first)
         XCTAssertTrue(first.closeTab(ids[0]))
 
-        let second = adapter(defaults)
+        let second = adapter(defaults, dir: dir)
         XCTAssertEqual(second.closedNotes.map(\.id), [ids[0]])
         XCTAssertEqual(second.openNotes.map(\.id), [ids[1], ids[2]])
     }

@@ -190,8 +190,10 @@ final class CraftPullAdapterTests: XCTestCase {
         return defaults
     }
 
-    private func adapter(_ store: UserDefaults, _ transport: ScriptedTransport) -> NotesAdapter {
-        let adapter = NotesAdapter(defaults: store, defaultName: "Note")
+    private func adapter(_ store: UserDefaults, _ transport: ScriptedTransport,
+                         dir: URL? = nil) -> NotesAdapter {
+        let adapter = NotesAdapter(defaults: store, defaultName: "Note",
+                                   notesDirectory: dir ?? freshNotesDirectory())
         adapter.craftTransport = transport
         adapter.craftBaseURLOverride = base
         return adapter
@@ -347,7 +349,7 @@ final class CraftPullAdapterTests: XCTestCase {
         let name = "ccp.pull.records.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
-        let adapter = NotesAdapter(defaults: store, defaultName: "Note")
+        let adapter = NotesAdapter(defaults: store, defaultName: "Note", notesDirectory: freshNotesDirectory())
         let id = try XCTUnwrap(adapter.selectedNoteID)
         XCTAssertEqual(adapter.conflictsVersion, 0)
 

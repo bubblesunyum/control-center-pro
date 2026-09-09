@@ -52,7 +52,7 @@ public enum CraftPull {
     }
 
     /// Decide for one pad. Confirmation is the push plan, never the dirty
-    /// bit: the bit is in-memory (a crash forgets it) and no-op pushes clear
+    /// bit: the bit is durable (a crash keeps it) and no-op pushes clear
     /// it, so neither proves Craft holds the local text. `stashIDs` are the
     /// conflict copies this pad posted: they pin the sidecar and stay out of
     /// the pad. They are tracked apart from the sidecar's policy flags on

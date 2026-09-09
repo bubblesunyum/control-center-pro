@@ -23,8 +23,10 @@ final class CraftTrashSyncTests: XCTestCase {
         return defaults
     }
 
-    private func adapter(_ store: UserDefaults, _ transport: ScriptedTransport) -> NotesAdapter {
-        let adapter = NotesAdapter(defaults: store, defaultName: "Note")
+    private func adapter(_ store: UserDefaults, _ transport: ScriptedTransport,
+                         dir: URL? = nil) -> NotesAdapter {
+        let adapter = NotesAdapter(defaults: store, defaultName: "Note",
+                                   notesDirectory: dir ?? freshNotesDirectory())
         adapter.craftTransport = transport
         adapter.craftBaseURLOverride = base
         return adapter
@@ -326,7 +328,7 @@ final class CraftTrashSyncTests: XCTestCase {
         let name = "ccp.trash.local.\(UUID().uuidString)"
         let store = try XCTUnwrap(UserDefaults(suiteName: name))
         defer { store.removePersistentDomain(forName: name) }
-        let adapter = NotesAdapter(defaults: store, defaultName: "Note")
+        let adapter = NotesAdapter(defaults: store, defaultName: "Note", notesDirectory: freshNotesDirectory())
         adapter.craftCredentialUnavailable = true
 
         XCTAssertFalse(adapter.hasCraftCredential)
