@@ -84,6 +84,9 @@ private struct FocusContent: View {
                     notificationGrantRow
                 }
             }
+            // The card stands at its height floor with room to spare — center
+            // the content so the air reads equal on every side.
+            .frame(maxHeight: .infinity, alignment: .center)
         }
         .celebrationGlow(isActive: isAwaitingAck)
         .animation(.snappy, value: descriptor.title)
@@ -361,6 +364,7 @@ private struct FocusSettingsPopover: View {
             HStack(spacing: Space.half) {
                 Image(systemName: systemImage)
                     .foregroundStyle(.secondary)
+                Text(title)
                 Spacer(minLength: Space.one)
                 Text(readout(value: Int(value.wrappedValue), offText: offText))
                     .monospacedDigit()
@@ -368,10 +372,14 @@ private struct FocusSettingsPopover: View {
                     .foregroundStyle(.primary)
             }
             .font(.caption.weight(.medium))
+            // The slider rides its own row: an empty label keeps the title
+            // from doubling beside it, and the readout above stays the name.
             Slider(value: value, in: range, step: step) {
-                Text(title)
+                EmptyView()
             }
+            .tint(Color.widgetAccent)
             .accessibilityLabel("\(title) duration")
+            .accessibilityValue(readout(value: Int(value.wrappedValue), offText: offText))
             HStack(spacing: Space.quarter) {
                 ForEach(presets, id: \.self) { preset in
                     presetChip(preset: preset, title: title, value: value, offText: offText)
