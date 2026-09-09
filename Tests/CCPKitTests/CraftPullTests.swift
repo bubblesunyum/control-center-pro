@@ -34,6 +34,17 @@ final class CraftPullTests: XCTestCase {
         XCTAssertEqual(slices.map(\.markdown), texts)
     }
 
+    /// ccp-hw0, the full local round trip: to-dos in both states survive
+    /// split → join → resplit byte-identical. The Craft side was verified
+    /// live (both states POST, read back, and re-PUT byte-identical); this
+    /// pins the local halves that must hold for that to stay true.
+    func testTaskListStatesSurviveTheJoinRoundTrip() {
+        let pad = "- [ ] open\n- [x] done\n"
+        let slices = CraftBlockSplitter.slices(in: pad)
+        let roundTripped = CraftBlockSplitter.slices(in: CraftPull.join(slices.map(\.markdown)))
+        XCTAssertEqual(roundTripped.map(\.markdown), ["- [ ] open", "- [x] done"])
+    }
+
     func testSeedPinsEveryBlockInOrderMarkingPolicyFailuresUnwritable() {
         let remote = [block("a", "plain"),
                       block("b", "<collection>nope</collection>"),
