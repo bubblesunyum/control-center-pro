@@ -238,32 +238,30 @@ private struct ShelfOverflowMenu: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PopoverMenuSectionLabel("Actions")
-            PopoverMenuRow(
-                systemImage: window.isVisible ? "xmark" : "arrow.up.forward",
-                title: window.isVisible ? "Hide shelf" : "Open shelf"
-            ) {
-                window.toggle()
-                dismiss()
-            }
-            .accessibilityHint(window.isVisible ? "Hides the floating Files window" : "Shows the floating Files window")
-            if store.selection.isEmpty {
-                PopoverMenuRow(systemImage: "trash", title: "Clear all", isDestructive: true, isDisabled: !store.hasUnpinnedItems) {
-                    store.clear()
-                    dismiss()
-                }
-                .help("Removes every unpinned item from Files")
-                .accessibilityHint("Removes every unpinned item from Files")
-            } else {
-                PopoverMenuRow(
-                    systemImage: "trash.fill",
-                    title: "Remove selected (\(store.selection.count))",
-                    isDestructive: true
+            HStack(spacing: Space.half) {
+                OverflowActionTile(
+                    systemImage: window.isVisible ? "xmark" : "arrow.up.forward",
+                    title: "shelf"
                 ) {
-                    store.removeSelected()
+                    window.toggle()
                     dismiss()
                 }
-                .help("Removes selected items from Files")
+                .accessibilityHint(window.isVisible ? "Hides the floating Files window" : "Shows the floating Files window")
+                OverflowActionTile(
+                    systemImage: store.selection.isEmpty ? "trash" : "trash.fill",
+                    title: "clear",
+                    isDestructive: true,
+                    isDisabled: store.selection.isEmpty && !store.hasUnpinnedItems
+                ) {
+                    if store.selection.isEmpty {
+                        store.clear()
+                    } else {
+                        store.removeSelected()
+                    }
+                    dismiss()
+                }
+                .help(store.selection.isEmpty ? "Removes every unpinned item from Files" : "Removes selected items from Files")
+                .accessibilityHint(store.selection.isEmpty ? "Removes every unpinned item from Files" : "Removes selected items from Files")
             }
             PopoverMenuSectionLabel("Tools")
             hiddenFilesRow
@@ -314,6 +312,42 @@ private struct ShelfOverflowMenu: View {
         .accessibilityLabel("Show hidden files")
         .accessibilityValue(isOn ? "On" : "Off")
         .accessibilityHint("Toggles Finder hidden files. Finder restarts to apply.")
+    }
+}
+
+/// One of the two action tiles atop the Files overflow menu: icon over label,
+/// half the menu wide, hover fill when enabled, dimmed and hover-dead when not.
+private struct OverflowActionTile: View {
+    let systemImage: String
+    let title: String
+    var isDestructive = false
+    var isDisabled = false
+    let action: () -> Void
+
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: Space.half) {
+                Image(systemName: systemImage)
+                    .font(.title3.weight(.medium))
+                Text(title)
+                    .font(.caption)
+            }
+            .foregroundStyle(isDestructive ? Color.red : Color.primary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Space.one)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(BareButtonStyle())
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.45 : 1)
+        .background(
+            hovered && !isDisabled ? Color.menuRowHover : Color.clear,
+            in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+        )
+        .onHover { hovered = $0 }
+        .accessibilityLabel(title)
     }
 }
 
