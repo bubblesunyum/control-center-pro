@@ -40,12 +40,17 @@ public final class NotesWidget: CCPWidget {
     /// The caret steps over a block boundary rather than into its spaces
     /// (ccp-ra2l). Same lifetime, same reason.
     private let hardBreakCaret: HardBreakCaretMonitor
+    /// Typing or moving the caret while its line is off-screen centers the
+    /// line instead of edge-revealing it (ccp-sotw). Same lifetime, same
+    /// reason — and its global observation covers the stickies too.
+    private let caretCenter: CaretCenterMonitor
 
     public init() {
         self.adapter = NotesAdapter()
         self.paragraphReturn = ParagraphReturnMonitor()
         self.markdownDelete = MarkdownDeleteMonitor()
         self.hardBreakCaret = HardBreakCaretMonitor()
+        self.caretCenter = CaretCenterMonitor()
     }
 
     /// Test seam: widget backed by an in-memory document.
@@ -54,6 +59,7 @@ public final class NotesWidget: CCPWidget {
         self.paragraphReturn = ParagraphReturnMonitor()
         self.markdownDelete = MarkdownDeleteMonitor()
         self.hardBreakCaret = HardBreakCaretMonitor()
+        self.caretCenter = CaretCenterMonitor()
     }
 
     init(adapter: NotesAdapter, monitors: EventMonitors = .system) {
@@ -61,6 +67,7 @@ public final class NotesWidget: CCPWidget {
         self.paragraphReturn = ParagraphReturnMonitor(monitors: monitors)
         self.markdownDelete = MarkdownDeleteMonitor(monitors: monitors)
         self.hardBreakCaret = HardBreakCaretMonitor()
+        self.caretCenter = CaretCenterMonitor()
     }
 
     public func makeView() -> some View {
@@ -72,9 +79,11 @@ public final class NotesWidget: CCPWidget {
         paragraphReturn.start()
         markdownDelete.start()
         hardBreakCaret.start()
+        caretCenter.start()
     }
 
     public func deactivate() {
+        caretCenter.stop()
         hardBreakCaret.stop()
         markdownDelete.stop()
         paragraphReturn.stop()
