@@ -116,11 +116,13 @@ final class StatusItemController {
     /// icon-only otherwise — menu-bar space is spent only while it says
     /// something. Monospaced digits keep the variable-length item from
     /// jittering as the seconds turn over.
-    ///
     /// The refresh timer lives here, not in the store: the store's ticker
     /// stops with the panel, and a deactivated widget must not keep the app
     /// awake. This timer runs only while a stretch is active — a shut panel
     /// with nothing running still costs nothing.
+    /// Points the countdown text drops to sit centred on the icon.
+    private static let countdownBaselineNudge: CGFloat = -1
+
     private func trackFocusCountdown() {
         withObservationTracking {
             _ = FocusStore.shared.activePhase
@@ -164,18 +166,21 @@ final class StatusItemController {
         }
         item.length = NSStatusItem.variableLength
         if let button = item.button {
-            // The countdown reads to the left of the icon, in the same
-            // monospaced digits as before so the variable-length item never
-            // jitters. One font for title and icon keeps them on the same
-            // baseline, which is what centres the row vertically.
+            // The countdown reads to the left of the icon, in monospaced
+            // digits so the variable-length item never jitters as the
+            // seconds turn over, and muted beside the bright icon. One font
+            // for title and icon keeps them near the same baseline, and the
+            // nudge finishes it: the text renders high next to the icon —
+            // half a point measured off a 2x capture, another point by eye.
             let font = NSFont.monospacedDigitSystemFont(
                 ofSize: NSFont.systemFontSize, weight: .regular)
-            if button.font?.isEqual(font) != true {
-                button.font = font
-            }
             let title = FocusStore.mmss(remaining)
             if button.title != title {
-                button.title = title
+                button.attributedTitle = NSAttributedString(string: title, attributes: [
+                    .font: font,
+                    .foregroundColor: NSColor.secondaryLabelColor,
+                    .baselineOffset: Self.countdownBaselineNudge,
+                ])
             }
             if button.imagePosition != .imageTrailing {
                 button.imagePosition = .imageTrailing
