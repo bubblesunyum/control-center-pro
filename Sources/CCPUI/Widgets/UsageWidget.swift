@@ -86,9 +86,9 @@ private struct UsageContent: View {
                 }
             }
             .padding(.bottom, Space.half)
-            // The card puts 8pt between its header and this content; top up
-            // to the 16pt the eye reads as one breath, not two.
-            .padding(.top, Space.one)
+            // The card puts 8pt between its header and this content; 4pt more
+            // keeps the sections from crowding it.
+            .padding(.top, Space.half)
         }
     }
 

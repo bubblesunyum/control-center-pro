@@ -21,7 +21,7 @@ extension View {
         modifier(SectionCaps())
     }
 
-    /// A usage row's voice: 2pt over its semantic size, still following
+    /// A usage row's voice: 1pt over its semantic size, still following
     /// Dynamic Type through `ScaledMetric` — a pinned size would leave
     /// large-text readers with rows that ignore their setting while the
     /// card's sibling states scale around them.
@@ -30,13 +30,13 @@ extension View {
     }
 }
 
-/// 2pt over `.caption` (`.large`) or `.caption2` (`.small`) at the default
+/// 1pt over `.caption` (`.large`) or `.caption2` (`.small`) at the default
 /// text size, scaling from there.
 struct UsageFont: ViewModifier {
     enum Size { case large, small }
 
-    @ScaledMetric(relativeTo: .caption) private var large = 14
-    @ScaledMetric(relativeTo: .caption2) private var small = 13
+    @ScaledMetric(relativeTo: .caption) private var large = 13
+    @ScaledMetric(relativeTo: .caption2) private var small = 12
 
     let size: Size
     let weight: Font.Weight
