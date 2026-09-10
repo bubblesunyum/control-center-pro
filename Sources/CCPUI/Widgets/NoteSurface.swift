@@ -148,7 +148,8 @@ fileprivate func notesSyncDisplay(_ status: NotesAdapter.SyncStatus) -> (symbol:
 }
 
 /// The history-adjacent dates share one UTC shape, so the sync popover's
-/// last-synced line and its two lists cannot drift apart.
+/// lists cannot drift apart. The last-synced line is the exception: it
+/// speaks the user's own clock — local zone, 12-hour, no zone label.
 fileprivate let noteHistoryDateStyle: DateFormatter = {
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -160,6 +161,18 @@ fileprivate let noteHistoryDateStyle: DateFormatter = {
 fileprivate func noteHistoryDateText(_ date: Date?) -> String {
     guard let date else { return "Unknown date" }
     return noteHistoryDateStyle.string(from: date)
+}
+
+fileprivate let noteLastSyncedStyle: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.locale = Locale.current
+    formatter.timeZone = .current
+    formatter.dateFormat = "MMM d, h:mm a"
+    return formatter
+}()
+
+fileprivate func noteLastSyncedText(_ date: Date) -> String {
+    noteLastSyncedStyle.string(from: date)
 }
 
 /// The note's own toolbar, along its bottom edge.
@@ -215,11 +228,12 @@ private struct NoteToolbar: View {
         } label: {
             Label(display.text, systemImage: display.symbol)
                 .font(.caption2)
+                .padding(Space.half)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .hoverChip(tint: conflicts.isEmpty ? nil : .yellow)
-        .popover(isPresented: $isSyncPopoverPresented, arrowEdge: .top) {
+        .popover(isPresented: $isSyncPopoverPresented, arrowEdge: .bottom) {
             SyncStatusPopover(adapter: adapter, dismiss: { isSyncPopoverPresented = false })
         }
         .help("\(display.text) — show sync status and history")
@@ -231,7 +245,7 @@ private struct NoteToolbar: View {
         guard let id = adapter.selectedNoteID,
               let date = adapter.lastSyncedAt(for: id)
         else { return "\(status), never synced" }
-        return "\(status), last synced \(noteHistoryDateText(date))"
+        return "\(status), last synced \(noteLastSyncedText(date))"
     }
 }
 
@@ -267,33 +281,44 @@ private struct SyncStatusPopover: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Last synced: \(lastSynced.map(noteHistoryDateText) ?? "Never")")
+            Text("Last synced: \(lastSynced.map(noteLastSyncedText) ?? "Never")")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
                 .padding(.horizontal, Space.one)
                 .padding(.top, Space.one)
-                .padding(.bottom, Space.half)
+                .padding(.bottom, Space.one)
             if !records.isEmpty {
                 WidgetSectionLabel("Conflicts", isCollapsed: $isConflictsCollapsed)
                     .padding(.horizontal, Space.one)
+                // The panes stay mounted across collapse toggles: unmounting
+                // and remounting a scroll view left the rebuilt one blank, so
+                // collapse rides the height cap instead.
+                conflictPanes
+                    .frame(maxHeight: isConflictsCollapsed ? 0 : Layout.syncPopoverConflictsHeight)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .clipped()
+                    .accessibilityHidden(isConflictsCollapsed)
                 if !isConflictsCollapsed {
-                    conflictPanes
                     conflictFooter
                 }
             }
             WidgetSectionLabel("Previous versions", isCollapsed: $isHistoryCollapsed)
                 .padding(.horizontal, Space.one)
-            if !isHistoryCollapsed {
-                // The old history Menu scrolled natively; the rows here cap
-                // at six visible instead of running the popover off-screen.
-                ScrollView {
+            // Same stay-mounted shape as the panes above: the rows toggle
+            // inside a permanent scroll view, and the demand is explicit so
+            // the popover regrows on expand.
+            ScrollView {
+                if !isHistoryCollapsed {
                     historyRows
                 }
-                .frame(maxHeight: Layout.syncPopoverHistoryHeight)
             }
+            .frame(maxHeight: isHistoryCollapsed ? 0 : Layout.syncPopoverHistoryHeight)
+            .fixedSize(horizontal: false, vertical: true)
+            .clipped()
+            .accessibilityHidden(isHistoryCollapsed)
         }
         .padding(Space.oneHalf)
-        .frame(minWidth: Layout.syncPopoverWidth)
+        .frame(minWidth: records.isEmpty ? Layout.shelfMenuWidth : Layout.syncPopoverWidth)
         .onAppear { conflictSelection = records.first?.id }
     }
 
