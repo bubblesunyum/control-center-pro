@@ -17,6 +17,10 @@ final class StatusItemController {
     private let menu: NSMenu
     private var countdownTimer: Timer?
     private var editPill: EditPill?
+    /// Whether a menu popUp is on screen: popUp is modal, so a second press
+    /// queued behind the first must not open a nested menu on the one shared
+    /// NSMenu (ccp-nbg3).
+    private var isPoppingMenu = false
 
     /// What the panel anchors itself to. Read by the global shortcut, which
     /// has no click of its own to say which screen the user is on.
@@ -312,7 +316,12 @@ final class StatusItemController {
             || (event.type == .leftMouseUp && event.modifierFlags.contains(.control))
 
         if isRightClick {
-            popStatusMenu(from: sender)
+            // Deferred past the button's own mouse tracking: opening popUp
+            // modally from inside the action wedged tracking, so the next
+            // press arrived as a mouse-up and missed right-click detection
+            // entirely (ccp-nbg3). The guard drops a second press queued
+            // behind the first before the modal opens.
+            Task { @MainActor [weak self] in self?.popStatusMenu(from: sender) }
         } else {
             if panel.editor.isEditing {
                 finishEditing()
@@ -330,12 +339,14 @@ final class StatusItemController {
     /// says on return (ccp-5es8). A chosen item that opens the panel reads
     /// back visible here, so this never clears a highlight that is owed.
     private func popStatusMenu(from button: NSStatusBarButton? = nil) {
-        guard let button = button ?? item.button else { return }
+        guard !isPoppingMenu, let button = button ?? item.button else { return }
+        isPoppingMenu = true
         // Ensure the menu reflects the editing state that was just entered
         // via a hold (which sets isEditing synchronously but rebuildMenu
         // is observed asynchronously).
         rebuildMenu()
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: 0), in: button)
+        isPoppingMenu = false
         button.highlight(panel.isVisible)
     }
 
