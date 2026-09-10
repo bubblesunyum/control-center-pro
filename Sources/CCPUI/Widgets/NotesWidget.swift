@@ -179,7 +179,7 @@ private struct NotesContent: View {
 ///
 /// The Files card's overflow behind its own three dots: the same
 /// ``HeaderIconButton`` trigger and the same popover language
-/// (``PopoverMenuSectionLabel``/``PopoverMenuRow``), so the two menus read as
+/// (``WidgetSectionLabel``/``PopoverMenuRow``), so the two menus read as
 /// one family.
 private struct ClosedNotesMenu: View {
     @Bindable var adapter: NotesAdapter
@@ -210,7 +210,9 @@ private struct ClosedNotesPopover: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PopoverMenuSectionLabel("Closed notes")
+            WidgetSectionLabel("Closed notes")
+                .padding(.horizontal, Space.one)
+                .padding(.top, Space.one)
             ForEach(adapter.restorableClosedNotes) { note in
                 PopoverMenuRow(systemImage: "note.text", title: note.name) {
                     _ = adapter.reopenTab(note.id)

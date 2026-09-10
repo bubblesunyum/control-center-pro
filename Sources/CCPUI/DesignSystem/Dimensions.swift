@@ -185,11 +185,16 @@ public extension Layout {
     /// The Files overflow menu: how wide the popover stands, how tall one row is.
     static let shelfMenuWidth: CGFloat = 220
     static let shelfMenuRowHeight: CGFloat = 32
-    /// The Notes conflicts popover: a list pane beside a content pane, so it
-    /// stands roughly twice as wide as a single-column menu.
-    static let conflictsPopoverWidth: CGFloat = 420
-    static let conflictsListWidth: CGFloat = 150
-    static let conflictsPopoverHeight: CGFloat = 240
+    /// The sync popover's conflict panes: a list beside its content, so the
+    /// popover stands roughly twice as wide as a single-column menu. A cap,
+    /// not a floor — the panes scroll internally past it.
+    static let syncPopoverWidth: CGFloat = 420
+    static let syncPopoverConflictListWidth: CGFloat = 150
+    static let syncPopoverConflictsHeight: CGFloat = 240
+    /// How many version rows the sync popover shows before scrolling. The
+    /// ring holds ten; uncapped, the popover runs off the bottom of a laptop
+    /// screen. Derived from the row height so the two cannot drift.
+    static let syncPopoverHistoryHeight: CGFloat = 6 * shelfMenuRowHeight
     /// The round icon buttons that sit on a widget header's trailing edge.
     /// One size so two headers never disagree about how tall their line is.
     static let headerAccessorySize: CGFloat = 28

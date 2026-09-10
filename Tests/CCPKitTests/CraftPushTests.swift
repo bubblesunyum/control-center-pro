@@ -635,6 +635,44 @@ final class CraftPushAdapterTests: XCTestCase {
                        "a push never rewrites the pad — the user's spelling stands")
     }
 
+    func testSuccessfulPushStampsLastSyncedAt() async throws {
+        // The toolbar's history popover reads this: a pushed-clean pad
+        // agrees with Craft as of now, not as of the last pull.
+        let name = "ccp.push.syncedat.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([emptyTrash(), .init(statusCode: 200, json: """
+            {"items":[{"id":"block-1","markdown":"TWO!"}]}
+            """)])
+        let (adapter, destination) = adapter(store, transport)
+        let id = try seed(adapter, destination, text: "one\n\ntwo\n")
+        XCTAssertNil(adapter.lastSyncedAt(for: id), "never agreed before the first round")
+
+        let before = Date()
+        adapter.text = "one\n\nTWO\n"
+        await adapter.flushCraftPush()
+
+        XCTAssertFalse(adapter.isPushDirty(id))
+        let stamped = try XCTUnwrap(adapter.lastSyncedAt(for: id))
+        XCTAssertGreaterThanOrEqual(stamped, before)
+        XCTAssertLessThanOrEqual(stamped, Date())
+    }
+
+    func testFailedPushLeavesLastSyncedAtUntouched() async throws {
+        let name = "ccp.push.syncedatfail.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([.init(statusCode: 500, json: "{}")])
+        let (adapter, _) = adapter(store, transport)
+        let id = try XCTUnwrap(adapter.selectedNoteID)
+
+        adapter.text = "one\n\nTWO\n"
+        await adapter.flushCraftPush()
+
+        XCTAssertTrue(adapter.isPushDirty(id))
+        XCTAssertNil(adapter.lastSyncedAt(for: id), "a failed round agrees on nothing")
+    }
+
     func testMidFlightTypingStaysDirtyForAnotherRound() async throws {
         let name = "ccp.push.midflight.\(UUID().uuidString)"
         let store = try defaults(name)

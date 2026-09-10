@@ -147,8 +147,8 @@ fileprivate func notesSyncDisplay(_ status: NotesAdapter.SyncStatus) -> (symbol:
     }
 }
 
-/// The history-adjacent dates share one UTC shape, so the conflicts popover
-/// and the history menu cannot drift apart.
+/// The history-adjacent dates share one UTC shape, so the sync popover's
+/// last-synced line and its two lists cannot drift apart.
 fileprivate let noteHistoryDateStyle: DateFormatter = {
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -167,51 +167,18 @@ private struct NoteToolbar: View {
     @Bindable var adapter: NotesAdapter
     let onDeleteSelected: () -> Void
     @State private var didCopy = false
-    @State private var isConflictsPresented = false
+    @State private var isSyncPopoverPresented = false
 
     private var isEmpty: Bool { adapter.text.isEmpty }
     private var conflicts: [ConflictRecord] {
         guard let id = adapter.selectedNoteID else { return [] }
         return adapter.conflicts(for: id)
     }
-    private var snapshots: [PadSnapshot] {
-        guard let id = adapter.selectedNoteID else { return [] }
-        return adapter.snapshots(for: id)
-    }
 
     var body: some View {
         HStack(spacing: Space.half) {
             syncStatus
             Spacer(minLength: 0)
-            if !conflicts.isEmpty {
-                NoteToolbarButton("exclamationmark.triangle.fill", label: "Conflicts",
-                                  tint: .yellow) {
-                    isConflictsPresented = true
-                }
-                // The button leaves the hierarchy with the last conflict, and
-                // a stale true would spring the popover on the NEXT conflict
-                // uninvited — so the flag resets everywhere the list empties.
-                .popover(isPresented: $isConflictsPresented, arrowEdge: .top) {
-                    ConflictsPopover(adapter: adapter, isPresented: $isConflictsPresented)
-                }
-            }
-            // The pad's way back past a replacing pull or merge: restoring
-            // snapshots the current text first, so the menu is safe to poke
-            // at. Beside conflicts, the same family — and only while there
-            // is anything to go back to.
-            if let padID = adapter.selectedNoteID, !snapshots.isEmpty {
-                Menu {
-                    ForEach(snapshots) { snapshot in
-                        Button(padHistoryEntryTitle(snapshot)) {
-                            adapter.restoreSnapshot(snapshot.id, for: padID)
-                        }
-                    }
-                } label: {
-                    NoteToolbarIcon(symbol: "arrow.counterclockwise.circle")
-                }
-                .accessibilityLabel("Pad history")
-                .help("Pad history")
-            }
             NoteToolbarButton("trash", label: "Delete") { onDeleteSelected() }
                 .disabled(!adapter.canDeleteNote)
             NoteToolbarButton(didCopy ? "checkmark" : "doc.on.doc",
@@ -225,8 +192,6 @@ private struct NoteToolbar: View {
                 }
             }
             .disabled(isEmpty)
-            NoteToolbarButton("square.and.arrow.down", label: "Export") { adapter.exportText() }
-                .disabled(isEmpty)
             NoteToolbarButton("arrow.up.forward", label: "Open in Craft") {
                 adapter.openCraftDocument()
             }
@@ -234,54 +199,125 @@ private struct NoteToolbar: View {
         .padding(.horizontal, Space.one)
         .padding(.bottom, Space.one)
         .opacity(isEmpty && conflicts.isEmpty ? 0.5 : 1)
-        // Tabbing away tears the button (and its popover) down with a stale
-        // true — the next conflict would otherwise open uninvited.
-        .onChange(of: adapter.selectedNoteID) { isConflictsPresented = false }
+        // Tabbing away tears the popover down with the note — a stale true
+        // would spring it uninvited beside the next one.
+        .onChange(of: adapter.selectedNoteID) { isSyncPopoverPresented = false }
     }
 
     /// Connection/saved state for the selected doc (ccp-5fom), on the
-    /// toolbar's leading edge where the trash used to sit. Small by design:
-    /// an icon and a word, secondary all the way.
+    /// toolbar's leading edge. Small by design: an icon and a word — and the
+    /// way into the sync popover, wearing the shared hover chip like the
+    /// buttons beside it. Yellow while conflicts wait inside.
     private var syncStatus: some View {
         let display = notesSyncDisplay(adapter.syncStatus)
-        return Label(display.text, systemImage: display.symbol)
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .help(display.text)
+        return Button {
+            isSyncPopoverPresented = true
+        } label: {
+            Label(display.text, systemImage: display.symbol)
+                .font(.caption2)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .hoverChip(tint: conflicts.isEmpty ? nil : .yellow)
+        .popover(isPresented: $isSyncPopoverPresented, arrowEdge: .top) {
+            SyncStatusPopover(adapter: adapter, dismiss: { isSyncPopoverPresented = false })
+        }
+        .help("\(display.text) — show sync status and history")
+        .accessibilityLabel("Sync status and history")
+        .accessibilityValue(syncStatusValue(display.text))
+    }
+
+    private func syncStatusValue(_ status: String) -> String {
+        guard let id = adapter.selectedNoteID,
+              let date = adapter.lastSyncedAt(for: id)
+        else { return "\(status), never synced" }
+        return "\(status), last synced \(noteHistoryDateText(date))"
     }
 }
 
-/// What the last syncs set aside: each conflict the pull stashed into Craft
-/// instead of overwriting, newest first. The popover speaks the Files
-/// overflow menu's language — section label, hover rows — with a list pane
-/// beside a content pane.
+/// The sync popover behind the toolbar's status corner: when the pad last
+/// agreed with Craft, the conflicts the pulls stashed, and the way back past
+/// a replacing pull or merge. One popover rather than a button per concern —
+/// the status label is where the eye already goes when sync is in doubt.
 ///
-/// The copies stay in Craft; dismissing forgets the record, never the pins.
-/// Recovery is selecting the text out of the content pane.
-private struct ConflictsPopover: View {
+/// Both lists collapse in place. Restoring a version snapshots the current
+/// text first (as preRestore), so the menu stays safe to poke at. The copies
+/// stay in Craft; dismissing forgets the record, never the pins. Recovery is
+/// selecting the text out of the content pane.
+private struct SyncStatusPopover: View {
     @Bindable var adapter: NotesAdapter
-    @Binding var isPresented: Bool
-    @State private var selection: UUID?
+    let dismiss: () -> Void
+    @State private var isConflictsCollapsed = false
+    @State private var isHistoryCollapsed = false
+    @State private var conflictSelection: UUID?
 
     private var padID: UUID? { adapter.selectedNoteID }
     private var records: [ConflictRecord] {
         guard let padID else { return [] }
         return adapter.conflicts(for: padID)
     }
+    private var snapshots: [PadSnapshot] {
+        guard let padID else { return [] }
+        return adapter.snapshots(for: padID)
+    }
+    private var lastSynced: Date? {
+        guard let padID else { return nil }
+        return adapter.lastSyncedAt(for: padID)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PopoverMenuSectionLabel("Conflicts")
-            panes
-            footer
+            Text("Last synced: \(lastSynced.map(noteHistoryDateText) ?? "Never")")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, Space.one)
+                .padding(.top, Space.one)
+                .padding(.bottom, Space.half)
+            if !records.isEmpty {
+                WidgetSectionLabel("Conflicts", isCollapsed: $isConflictsCollapsed)
+                    .padding(.horizontal, Space.one)
+                if !isConflictsCollapsed {
+                    conflictPanes
+                    conflictFooter
+                }
+            }
+            WidgetSectionLabel("Previous versions", isCollapsed: $isHistoryCollapsed)
+                .padding(.horizontal, Space.one)
+            if !isHistoryCollapsed {
+                // The old history Menu scrolled natively; the rows here cap
+                // at six visible instead of running the popover off-screen.
+                ScrollView {
+                    historyRows
+                }
+                .frame(maxHeight: Layout.syncPopoverHistoryHeight)
+            }
         }
         .padding(Space.oneHalf)
-        .frame(minWidth: Layout.conflictsPopoverWidth,
-               minHeight: Layout.conflictsPopoverHeight)
-        .onAppear { selection = records.first?.id }
+        .frame(minWidth: Layout.syncPopoverWidth)
+        .onAppear { conflictSelection = records.first?.id }
     }
 
-    private var panes: some View {
+    private var historyRows: some View {
+        Group {
+            if snapshots.isEmpty {
+                Text("No previous versions yet")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, Space.one)
+                    .padding(.vertical, Space.half)
+            } else if let padID {
+                ForEach(snapshots) { snapshot in
+                    PopoverMenuRow(systemImage: "arrow.counterclockwise.circle",
+                                   title: padHistoryEntryTitle(snapshot)) {
+                        adapter.restoreSnapshot(snapshot.id, for: padID)
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private var conflictPanes: some View {
         HStack(alignment: .top, spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -290,7 +326,7 @@ private struct ConflictsPopover: View {
                     }
                 }
             }
-            .frame(width: Layout.conflictsListWidth)
+            .frame(width: Layout.syncPopoverConflictListWidth)
             Divider().padding(.horizontal, Space.half)
             if let selectedRecord {
                 ScrollView {
@@ -303,15 +339,18 @@ private struct ConflictsPopover: View {
                 }
             }
         }
+        // The panes scrolled internally before; capped rather than
+        // content-sized, so a long stash cannot run the popover off-screen.
+        .frame(maxHeight: Layout.syncPopoverConflictsHeight)
     }
 
     private var selectedRecord: ConflictRecord? {
-        records.first(where: { $0.id == selection }) ?? records.first
+        records.first(where: { $0.id == conflictSelection }) ?? records.first
     }
 
     private func conflictRow(_ record: ConflictRecord, isSelected: Bool) -> some View {
         Button {
-            selection = record.id
+            conflictSelection = record.id
         } label: {
             VStack(alignment: .leading, spacing: 0) {
                 Text(noteHistoryDateText(record.date))
@@ -330,7 +369,7 @@ private struct ConflictsPopover: View {
         .accessibilityLabel("Conflict from \(noteHistoryDateText(record.date))")
     }
 
-    private var footer: some View {
+    private var conflictFooter: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Copies stay in your Craft doc.")
                 .font(.caption2)
@@ -341,10 +380,9 @@ private struct ConflictsPopover: View {
             if let selectedRecord, let padID {
                 PopoverMenuRow(systemImage: "trash", title: "Forget this copy") {
                     adapter.dismissConflict(selectedRecord.id, for: padID)
-                    // The last forget empties the list and tears this popover
-                    // down; a stale true would spring it on the next conflict.
-                    selection = adapter.conflicts(for: padID).first?.id
-                    if adapter.conflicts(for: padID).isEmpty { isPresented = false }
+                    // Stays open: the section vanishes with the last record,
+                    // and the selection retargets to whatever remains.
+                    conflictSelection = adapter.conflicts(for: padID).first?.id
                 }
             }
         }
@@ -364,13 +402,12 @@ fileprivate func padHistoryEntryTitle(_ snapshot: PadSnapshot) -> String {
     return "\(reason) — \(noteHistoryDateText(snapshot.date))"
 }
 
-/// The toolbar's icon cell: caption symbol in a row-action frame, wearing
-/// the hover chip. Shared by the buttons and the history menu label, which
-/// needs its own labeled view rather than a Button.
+/// The toolbar's icon cell: caption symbol in a row-action frame, wearing the
+/// shared hover chip. The frame and font stay here — only the hover behaviour
+/// lives in the modifier.
 private struct NoteToolbarIcon: View {
     let symbol: String
     let tint: Color?
-    @State private var isHovered = false
 
     // Explicit: a `let` with a default drops out of the memberwise init
     // beside a property wrapper, so the default lives here instead.
@@ -384,17 +421,13 @@ private struct NoteToolbarIcon: View {
             .font(.caption)
             .frame(width: Layout.rowActionSize, height: Layout.rowActionSize)
             .contentShape(Rectangle())
-            .foregroundStyle(tint ?? (isHovered ? Color.primary : Color.secondary))
-            .background {
-                RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
-                    .fill(isHovered ? Color.controlFill : Color.clear)
-            }
-            .onHover { isHovered = $0 }
+            .hoverChip(tint: tint)
     }
 }
 
-/// One button in the note's bottom toolbar, wearing the same hover chip as
-/// the header's plus — one step brighter, over a muted fill.
+/// One button in the note's bottom toolbar: an icon cell with a hover chip,
+/// help, and label. The frame and font live on the icon, the behaviour on
+/// the shared modifier.
 private struct NoteToolbarButton: View {
     private let symbol: String
     private let label: String

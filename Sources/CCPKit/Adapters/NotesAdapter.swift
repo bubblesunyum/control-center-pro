@@ -185,16 +185,6 @@ public enum NotesSupport {
     public static func requiresDeleteConfirmation(_ note: Note) -> Bool {
         !note.text.isEmpty
     }
-
-    public static func exportFileName(title: String, date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd"
-        let safeTitle = sanitizedNoteName(title)
-            .replacingOccurrences(of: "/", with: "-")
-            .replacingOccurrences(of: ":", with: "-")
-        return "\(safeTitle) \(formatter.string(from: date)).txt"
-    }
 }
 
 // MARK: - Adapter
@@ -316,6 +306,31 @@ public final class NotesAdapter {
             if craftDestination.craftDocumentID(for: selectedNoteID) == nil { return .localOnly }
         }
         return .saved
+    }
+
+    /// The last moment the pad and Craft agreed. Nil when they never have —
+    /// a local-only pad, or one whose first push is still queued. Advisory,
+    /// like the store behind it: agreement is an exact signature compare,
+    /// never the clock.
+    public func lastSyncedAt(for id: UUID) -> Date? {
+        _ = syncedAtVersion
+        return craftDestination.syncedAt(for: id)
+    }
+
+    /// Bumped on every agreement the popover shows. The agreement lives
+    /// behind the destination, which observation cannot see — views read it
+    /// through `lastSyncedAt(for:)` so the line refreshes when a push lands
+    /// while the popover stands open.
+    private(set) var syncedAtVersion = 0
+
+    /// Stamp an agreement and publish it for the popover. Pulls pass their
+    /// server time; the push stamps the local clock — no server time in
+    /// hand, and a pushed-clean pad agrees with Craft as of now. A nil clock
+    /// still verified the agreement (the exact compare passed), so the local
+    /// clock stands in: "Synced, never synced" must never be showable.
+    private func noteDidSync(_ date: Date?, for id: UUID) {
+        craftDestination.storeSyncedAt(date ?? Date(), for: id)
+        syncedAtVersion += 1
     }
 
     @ObservationIgnored private var document: NotesDocument?
@@ -1065,6 +1080,9 @@ public final class NotesAdapter {
         craftDestination.dropSyncState(for: id)
         dirtyPadIDs.remove(id)
         conflictsVersion += 1
+        // The popover reads the agreement through this, not the store — a
+        // trashed-then-unmapped pad must flip to Never while it stands open.
+        syncedAtVersion += 1
     }
 
     /// History dies with the pad: snapshots are the way back into text that
@@ -1325,17 +1343,23 @@ public final class NotesAdapter {
             // with fresh chances rather than the old round's failure.
             attempted = []
         }
+        var syncedThisRound: [UUID] = []
         for padID in attempted {
             // The credential may have switched after the sweep: remaining
             // pads stop rather than writing into the old space, and the
             // end-of-round re-dirty below retries them against the new one.
             guard craftBaseURL() == baseURL else { break }
             do {
-                // False is not failure (throw is): the pad was edited
+                // Dirty is not failure (throw is): the pad was edited
                 // mid-flight, so it stays dirty for the follow-up round.
-                let pushedClean = try await pushOnePad(padID, client: client)
-                if pushedClean {
+                switch try await pushOnePad(padID, client: client) {
+                case .wrote:
                     dirtyPadIDs.remove(padID)
+                    syncedThisRound.append(padID)
+                case .skipped:
+                    dirtyPadIDs.remove(padID)
+                case .dirty:
+                    break
                 }
             } catch {
                 failure = failure ?? error
@@ -1352,8 +1376,19 @@ public final class NotesAdapter {
             // The credential changed mid-round and this round wrote to the
             // old space. Nothing it cleared can be trusted — every attempted
             // pad goes again against the new one, where the diff either
-            // converges quiet (same space re-saved) or retries loud.
-            dirtyPadIDs.formUnion(attempted)
+            // converges quiet (same space re-saved) or retries loud. The
+            // stamps wait below for the same reason: an agreement with a
+            // space no longer connected is not an agreement. Pads deleted
+            // mid-round stay out: re-dirtying a dead UUID persists it.
+            let live = attempted.filter { id in document?.notes.contains(where: { $0.id == id }) == true }
+            dirtyPadIDs.formUnion(live)
+        } else {
+            // The round wrote to the space still connected: pads it left
+            // clean agree with Craft as of now. Re-dirtied since (a keystroke
+            // past the visit) sit out — the follow-up round stamps them.
+            for padID in syncedThisRound where !dirtyPadIDs.contains(padID) {
+                noteDidSync(Date(), for: padID)
+            }
         }
         if let failure {
             consecutivePushFailures += 1
@@ -1377,13 +1412,22 @@ public final class NotesAdapter {
     /// silently; edits re-dirty if the pad comes back. A throw keeps the pad
     /// dirty and every later round retries it.
     ///
-    /// Returns false when the pad was edited mid-flight: the stored sidecar
+    /// Dirty when the pad was edited mid-flight: the stored sidecar
     /// describes the pushed text, not the current text, so the pad stays
-    /// dirty and the already-scheduled follow-up pushes the new text.
-    private func pushOnePad(_ padID: UUID, client: CraftClient) async throws -> Bool {
+    /// dirty and the already-scheduled follow-up pushes the new text. Wrote
+    /// when Craft confirmed a write; skipped when there was nothing to
+    /// write — a skipped pad agrees on nothing, so the sync-time stamp
+    /// answers the case, not the clearing.
+    private enum PushVisit {
+        case wrote
+        case skipped
+        case dirty
+    }
+
+    private func pushOnePad(_ padID: UUID, client: CraftClient) async throws -> PushVisit {
         guard let document,
               let pad = document.notes.first(where: { $0.id == padID })
-        else { return true }
+        else { return .skipped }
         let padText = pad.text
         let slices = CraftBlockSplitter.slices(in: padText)
         var docID = craftDestination.craftDocumentID(for: padID)
@@ -1395,14 +1439,14 @@ public final class NotesAdapter {
             // blank text is what decides, not the string being empty, so a
             // whitespace-only pad provisions nothing. (No credential never
             // reaches here: pushNow returns before visiting any pad.)
-            guard !slices.isEmpty else { return true }
+            guard !slices.isEmpty else { return .skipped }
             let newID = try await provisionCraftDocument(name: pad.name, client: client)
             // The create awaited: a pad closed meanwhile must not resurrect.
             // Re-read the live document, not the pre-await snapshot — its
             // mapping, sidecar, and drops already ran in deleteNote. Store
             // nothing and push nowhere: the orphaned empty doc is trash
             // noise, but deleted text reaching Craft would be data loss.
-            guard self.document?.notes.contains(where: { $0.id == padID }) == true else { return true }
+            guard self.document?.notes.contains(where: { $0.id == padID }) == true else { return .skipped }
             craftDestination.setCraftDocumentID(newID, for: padID)
             // A new sync relationship gets fresh chances.
             consecutivePushFailures = 0
@@ -1412,14 +1456,14 @@ public final class NotesAdapter {
             craftDestination.storeSyncedTitle(pad.name, for: padID)
             docID = newID
         }
-        guard let docID else { return true }
+        guard let docID else { return .skipped }
         // Unknown baseline reads as dirty: the push converges it. (A legacy
         // mapping the pull saw first already recorded Craft's title there, so
         // this only fires for pads the push reaches before any pull.)
         let titleDirty = pad.name != craftDestination.syncedTitle(for: padID)
         let sidecar = craftDestination.sidecar(for: padID)
         let plan = sidecar.pushPlan(for: slices)
-        guard !plan.isEmpty || titleDirty else { return true }
+        guard !plan.isEmpty || titleDirty else { return .skipped }
 
         var pendingError: Error?
         var titleEcho: CraftBlock?
@@ -1476,7 +1520,7 @@ public final class NotesAdapter {
         // The pad may be gone: the push awaited, and deleteNote's drops
         // already ran. Storing now would resurrect sync state for a dead UUID
         // that pulls never visit and UUIDs never reuse — leaking forever.
-        guard self.document?.notes.contains(where: { $0.id == padID }) == true else { return true }
+        guard self.document?.notes.contains(where: { $0.id == padID }) == true else { return .skipped }
         // The echo's canonical markdown is the baseline, never what was
         // sent — by the same fixed-point rule as the block sidecar, compared
         // post-sanitise like the pull does. Recorded even on the way out: a
@@ -1490,7 +1534,11 @@ public final class NotesAdapter {
                          deletesConfirmed: deletesConfirmed)
         if let pendingError { throw pendingError }
         let current = self.document?.notes.first(where: { $0.id == padID })
-        return current?.text == padText && current?.name == pad.name
+        // Past the legs with no throw, every attempted write confirmed. The
+        // empty-plan guard above is the only no-op left standing, so reaching
+        // here always wrote.
+        guard current?.text == padText, current?.name == pad.name else { return .dirty }
+        return .wrote
     }
 
     /// Observable for tests.
@@ -1768,13 +1816,13 @@ public final class NotesAdapter {
         switch CraftPull.decide(local: pad.text, sidecar: craftDestination.sidecar(for: padID),
                                 remote: fetched.blocks, stashIDs: craftDestination.stashIDs(for: padID)) {
         case .converged:
-            craftDestination.storeSyncedAt(serverTime, for: padID)
+            noteDidSync(serverTime, for: padID)
             dirtyPadIDs.remove(padID)
         case .adopt(let text, let newSidecar):
             adoptRemote(padID: padID, text: text, sidecar: newSidecar,
                         snapshotReason: .pull, snapshotDate: serverTime)
             craftDestination.storeStashIDs(craftDestination.stashIDs(for: padID).intersection(remoteIDs), for: padID)
-            craftDestination.storeSyncedAt(serverTime, for: padID)
+            noteDidSync(serverTime, for: padID)
             dirtyPadIDs.remove(padID)
         case .conflict(let heading, let stash, let text, let seeded):
             // The stash appends at the document's end: every insert shares
@@ -1816,7 +1864,7 @@ public final class NotesAdapter {
             else { return }
             adoptRemote(padID: padID, text: text, sidecar: sidecar,
                         snapshotReason: .conflict, snapshotDate: serverTime)
-            craftDestination.storeSyncedAt(serverTime, for: padID)
+            noteDidSync(serverTime, for: padID)
             dirtyPadIDs.remove(padID)
         case .skip:
             break
@@ -2145,30 +2193,6 @@ public final class NotesAdapter {
             NSWorkspace.shared.open(url)
         } else {
             openCraft()
-        }
-    }
-
-    public func exportFileName(date: Date = Date()) -> String {
-        NotesSupport.exportFileName(title: selectedNoteName, date: date)
-    }
-
-    /// Saves `text` to a file chosen via save panel. Kept on the adapter so
-    /// the widget view does not need to know the filename format.
-    public func exportText(suggestedName: String? = nil) {
-        guard !text.isEmpty else { return }
-        flushSave()
-        let savePanel = NSSavePanel()
-        savePanel.allowedContentTypes = [.plainText]
-        savePanel.canCreateDirectories = true
-        savePanel.isExtensionHidden = false
-        savePanel.nameFieldStringValue = suggestedName ?? exportFileName()
-        let content = text
-        NSApp.activate(ignoringOtherApps: true)
-        DispatchQueue.main.async {
-            let response = savePanel.runModal()
-            if response == .OK, let url = savePanel.url {
-                try? content.write(to: url, atomically: true, encoding: .utf8)
-            }
         }
     }
 }

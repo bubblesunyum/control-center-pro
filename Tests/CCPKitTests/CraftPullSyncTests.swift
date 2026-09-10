@@ -340,6 +340,59 @@ final class CraftPullAdapterTests: XCTestCase {
         XCTAssertNil(destination.syncedAt(for: id), "a skip records nothing")
     }
 
+    func testConvergedPullStampsTheServerTime() async throws {
+        let name = "ccp.pull.syncedat.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([connection, trash(), blocks("""
+            {"items":[{"id":"block-0","markdown":"one"}]}
+            """)])
+        let (adapter, destination) = adapter(store, transport)
+        let id = try await steadyPad(adapter, destination, text: "one")
+
+        await adapter.pullAll()
+
+        let serverTime = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-09-06T19:00:00Z"))
+        XCTAssertEqual(destination.syncedAt(for: id), serverTime, "a converge agrees as of the clock it read")
+        XCTAssertEqual(adapter.lastSyncedAt(for: id), serverTime)
+    }
+
+    func testNilClockPullStampsLocalTime() async throws {
+        // The clock payload without a time still verifies the space, and the
+        // converge still proves the agreement — so the local clock stands in
+        // for the missing server time rather than leaving "Synced, never
+        // synced" on screen.
+        let name = "ccp.pull.noclock.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let timeless = ScriptedTransport.Script(statusCode: 200, json: """
+            {"space":{"name":"Test"}}
+            """)
+        let transport = ScriptedTransport([timeless, trash(), blocks("""
+            {"items":[{"id":"block-0","markdown":"one"}]}
+            """)])
+        let (adapter, destination) = adapter(store, transport)
+        // Seeded by hand: the version baseline below must be exact, and no
+        // setup round may spend it.
+        let id = try XCTUnwrap(adapter.selectedNoteID)
+        adapter.text = "one"
+        destination.storeSidecar(BlockSidecar(entries: [
+            BlockSidecarEntry(id: "block-0", fingerprint: BlockSidecar.fingerprint("one")),
+        ]), for: id)
+        destination.setCraftDocumentID("doc1", for: id)
+        destination.storeSyncedTitle(adapter.selectedNoteName, for: id)
+        let version = adapter.syncedAtVersion
+
+        let before = Date()
+        await adapter.pullAll()
+
+        XCTAssertTrue(adapter.isSyncVerified, "the space still verifies without a clock")
+        let stamped = try XCTUnwrap(adapter.lastSyncedAt(for: id))
+        XCTAssertGreaterThanOrEqual(stamped, before)
+        XCTAssertLessThanOrEqual(stamped, Date())
+        XCTAssertEqual(adapter.syncedAtVersion, version + 1, "the agreement publishes")
+    }
+
     func testDirtyPadStashesToCraftThenAdoptsOnConflict() async throws {
         let name = "ccp.pull.conflict.\(UUID().uuidString)"
         let store = try defaults(name)

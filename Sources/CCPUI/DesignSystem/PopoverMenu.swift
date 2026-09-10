@@ -3,29 +3,13 @@
 
 import SwiftUI
 
-/// The shared language of the popover menus — the Files overflow first, the
-/// Notes conflicts next: small-caps section labels, icon-led rows in a fixed
-/// column, one hover fill. One rendering so the menus read as one family;
-/// callers choose only rows.
+/// The shared language of the popover menus' rows — the Files overflow
+/// first, the Notes popovers next: icon-led rows in a fixed column, one
+/// hover fill. Section headers are ``WidgetSectionLabel``, the same component
+/// the cards use, so menus and cards read as one family; callers choose only
+/// rows. psymail's `MenuRow` is not exported by `PsymailKit`, so this is
+/// CCP's own in that shape, drawn with CCP's tokens.
 ///
-/// psymail's `MenuRow` is not exported by `PsymailKit`, so this is CCP's own
-/// in that shape, drawn with CCP's tokens.
-struct PopoverMenuSectionLabel: View {
-    private let title: String
-
-    init(_ title: String) {
-        self.title = title
-    }
-
-    var body: some View {
-        Text(title.uppercased())
-            .sectionCaps()
-            .padding(.horizontal, Space.one)
-            .padding(.top, Space.one)
-            .padding(.bottom, Space.one)
-    }
-}
-
 /// One row in a popover menu: a leading symbol in a fixed column and a title,
 /// with the row's hover fill.
 ///
