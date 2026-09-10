@@ -62,10 +62,60 @@ struct MarkdownNoteEditor: View {
     /// own autohide raises a bar only on real overflow.
     static let stickyOverscroll = OverscrollPolicy(percent: 0, maxPoints: 0, minPoints: 0)
 
-    /// A lane-width card gives a heading nowhere to be big. H1 at 1.35× is
-    /// still unmistakably a heading at 14pt, where the engine's own 2.0×
-    /// would spend four lines of the card on one word.
-    private static let headingMultipliers: [CGFloat] = [1.35, 1.2, 1.1, 1.0, 0.95, 0.9]
+    /// A lane-width card gives a heading nowhere to be big, but it has more
+    /// room than the spike assumed: the ramp was set when the pad was 148pt
+    /// tall and it is 300pt now (ccp-z0a). H1 at 1.6× reads as a heading
+    /// across a room, where the engine's own 2.0× would still spend three
+    /// lines of the card on one word. Documented in STYLE.md, which is where
+    /// a bespoke type ramp belongs.
+    private static let headingMultipliers: [CGFloat] = [1.6, 1.35, 1.15, 1.0, 0.95, 0.9]
+
+    /// Air above a heading, in multiples of that heading's own size. A
+    /// heading earns roughly a blank line above it and takes the body's
+    /// block step below — Craft's proportion, and what the engine's own
+    /// ramp (0.35 and down, barely a third of a line) never gave it.
+    private static let headingTopSpacingEm: [CGFloat] = [0.8, 0.75, 0.7, 0.6, 0.5, 0.45]
+
+    /// How far one block sits from the next, as a multiple of the step
+    /// between wrapped lines inside a block.
+    ///
+    /// The whole difference between a pad that reads as a document and one
+    /// that reads as a wall. Craft and Notion sit near here; the engine's own
+    /// default lands at 1.33 and the 0.15 spacing factor CCP shipped during
+    /// the markdown spike was the outlier, at 1.17.
+    static let blockSpacingRatio: CGFloat = 1.3
+
+    /// Points added to the line height inside a block.
+    private static let lineHeightExtraSpacing: CGFloat = 1
+
+    /// The `spacingFactor` that lands the block step on ``blockSpacingRatio``.
+    ///
+    /// The engine builds the step out of two differently-rounded halves —
+    /// `ceil(defaultLineHeight) + lineHeightExtraSpacing` for the line, and
+    /// `ceil(defaultLineHeight * spacingFactor)` for the gap after it — so
+    /// the factor has to be solved for rather than picked, or the ratio
+    /// drifts with the font size. Aiming at the middle of the half-point
+    /// band that ceils to the gap we want keeps the answer stable against
+    /// floating-point noise, which a factor aimed exactly at the boundary
+    /// would not be.
+    static func paragraphSpacingFactor(forFontSize size: CGFloat) -> CGFloat {
+        let font = NSFont.systemFont(ofSize: size)
+        // The engine's own fallback, before it has a layout manager to ask.
+        let defaultLineHeight = font.ascender - font.descender + font.leading
+        let lineHeight = ceil(defaultLineHeight) + lineHeightExtraSpacing
+        let gap = (lineHeight * (blockSpacingRatio - 1)).rounded()
+        return (gap - 0.5) / defaultLineHeight
+    }
+
+    /// What the engine will make of that factor: the line step inside a
+    /// block, and the step from one block to the next. The test's way of
+    /// asking whether the ratio actually landed.
+    static func blockRhythm(forFontSize size: CGFloat) -> (line: CGFloat, block: CGFloat) {
+        let font = NSFont.systemFont(ofSize: size)
+        let defaultLineHeight = font.ascender - font.descender + font.leading
+        let line = ceil(defaultLineHeight) + lineHeightExtraSpacing
+        return (line, line + ceil(defaultLineHeight * paragraphSpacingFactor(forFontSize: size)))
+    }
 
     var body: some View {
         NativeTextViewWrapper(
@@ -93,14 +143,25 @@ struct MarkdownNoteEditor: View {
         // Markdown is a shortcut for formatting here, not the visible text:
         // markers stay hidden even with the caret inside them (ccp-e8df).
         configuration.markers.revealMarkersOnCaret = false
-        configuration.headings = HeadingStyle(fontMultipliers: Self.headingMultipliers)
-        configuration.paragraph = ParagraphStyle(spacingFactor: 0.15,
-                                                 lineHeightExtraSpacing: 1)
+        configuration.headings = HeadingStyle(fontMultipliers: Self.headingMultipliers,
+                                              topSpacingEm: Self.headingTopSpacingEm)
+        configuration.paragraph = ParagraphStyle(spacingFactor: Self.paragraphSpacingFactor(forFontSize: Self.fontSize),
+                                                 lineHeightExtraSpacing: Self.lineHeightExtraSpacing)
+        // A rule is a section break, so it needs room on both sides or it
+        // reads as a struck-through line of the block above it. The engine
+        // draws it flush by default (ccp-z0a).
+        configuration.thematicBreak = ThematicBreakStyle(paragraphSpacingBefore: Space.oneHalf,
+                                                         paragraphSpacing: Space.oneHalf)
+        // The quote bar has to clear its own text the way the well clears
+        // the card, and lists want the same room the new block step gives.
+        configuration.blockquote = BlockquoteStyle(extraLineHeight: Space.quarter)
+        configuration.lists = ListStyle(indentPerLevel: Space.three)
         // The well reads as inset only if the text clears its edge by a
         // visible margin on every side — roomy on purpose, roomier than card
         // chrome ever is.
         configuration.textInsets = textInsets
         configuration.overscroll = overscroll
+        configuration.services = MarkdownEditorServices(syntaxHighlighter: NoteCodeAppearance())
         return configuration
     }
 
@@ -109,6 +170,10 @@ struct MarkdownNoteEditor: View {
         theme.bodyText = .labelColor
         theme.mutedText = .secondaryLabelColor
         theme.headingMarker = .tertiaryLabelColor
+        // A done item should read as done and get out of the way. The engine
+        // strikes it through but has no knob for dimming the text itself, so
+        // a quiet rule is the whole of the effect here.
+        theme.strikethroughColor = .tertiaryLabelColor
         return theme
     }
 
@@ -118,6 +183,27 @@ struct MarkdownNoteEditor: View {
             .foregroundColor: NSColor.tertiaryLabelColor,
         ])
     }
+}
+
+/// A fenced code block's font and fill, and no highlighting.
+///
+/// The engine reads a code block's appearance off its syntax highlighter,
+/// whose stock implementation returns a fully transparent background — so a
+/// code block in the pad has been drawn as plain monospace text on the well,
+/// with nothing to mark where it starts and stops. This supplies the fill and
+/// leaves the colouring alone; highlighting would mean linking
+/// `MarkdownEngineCodeBlocks` and the grammars behind it, which is a lot of
+/// weight for a pad that holds fragments.
+private struct NoteCodeAppearance: SyntaxHighlighter {
+    func codeFont(size: CGFloat) -> NSFont {
+        .monospacedSystemFont(ofSize: size, weight: .regular)
+    }
+
+    func backgroundColor() -> NSColor { NSColor(Color.noteCodeFill) }
+
+    func highlight(code: String, language: String?) -> NSAttributedString? { nil }
+
+    var appearanceDidChangeNotification: Notification.Name? { nil }
 }
 
 /// Reports the nearest AppKit text view sharing this view's container.

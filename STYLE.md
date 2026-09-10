@@ -75,6 +75,29 @@ sizes, so text honours the reader's setting. Reserve a fixed ramp for the few
 places that genuinely need a bespoke scale — a numeric readout in a stats
 graph, say — and put it here rather than inline.
 
+### The note's markdown ramp
+
+The pad is one of those places. It renders through a text engine that is
+point-size-based throughout, inside a 300pt lane, so its headings scale from a
+14pt body rather than from the reader's setting — a bespoke ramp, kept here
+because it is a decision rather than an accident (ccp-z0a).
+
+| Level | × body | Air above, × its own size |
+| --- | --- | --- |
+| H1 | 1.6 | 0.8 |
+| H2 | 1.35 | 0.75 |
+| H3 | 1.15 | 0.7 |
+| H4 | 1.0 | 0.6 |
+| H5 | 0.95 | 0.5 |
+| H6 | 0.9 | 0.45 |
+
+Below a heading there is no separate figure: it takes the body's block step,
+which is **1.3× the step between wrapped lines inside a block**. That ratio is
+the pad's vertical rhythm, and it is solved for rather than typed — the engine
+rounds the line and the gap separately, so a hard-coded spacing factor drifts
+off the ratio as soon as the font size moves. `MarkdownNoteEditor` owns both
+the ramp and the solver.
+
 ## One pattern per container
 
 Within a single card, bar, or section, everything pressable looks pressable the

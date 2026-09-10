@@ -2,6 +2,8 @@
 build/
 dist/
 .build/
+# `swift package edit` parks its symlinks here.
+Packages/
 *.dmg
 
 # Signing material: never commit private keys or notary credentials

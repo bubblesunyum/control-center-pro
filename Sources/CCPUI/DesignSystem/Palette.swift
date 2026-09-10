@@ -49,6 +49,11 @@ public extension Color {
     /// appearance, where leaning on the system background would darken in one
     /// and lighten in the other.
     static let noteInset = Ink.black32
+    /// A fenced code block inside the note well. The well is already a
+    /// hollow, so the block lifts back out of it by the smallest step the
+    /// palette has — enough to read as its own surface, never as a second
+    /// card.
+    static let noteCodeFill = Ink.white08
 
     /// What an active toggle reads as. Named so widgets ask for the meaning
     /// rather than for the system accent, which is where a different answer
