@@ -21,28 +21,24 @@ extension View {
         modifier(SectionCaps())
     }
 
-    /// A usage row's voice: 1pt over its semantic size, still following
-    /// Dynamic Type through `ScaledMetric` — a pinned size would leave
-    /// large-text readers with rows that ignore their setting while the
-    /// card's sibling states scale around them.
-    func usageFont(_ size: UsageFont.Size, weight: Font.Weight = .regular) -> some View {
-        modifier(UsageFont(size: size, weight: weight))
+    /// A usage row's voice: 1pt over `.caption2` at the default text size,
+    /// still following Dynamic Type through `ScaledMetric` — a pinned size
+    /// would leave large-text readers with rows that ignore their setting
+    /// while the card's sibling states scale around them. One size for the
+    /// title, countdown and percent alike; hierarchy is weight and color.
+    func usageFont(weight: Font.Weight = .regular) -> some View {
+        modifier(UsageFont(weight: weight))
     }
 }
 
-/// 1pt over `.caption` (`.large`) or `.caption2` (`.small`) at the default
-/// text size, scaling from there.
+/// The usage rows' single size, scaling from the default.
 struct UsageFont: ViewModifier {
-    enum Size { case large, small }
+    @ScaledMetric(relativeTo: .caption2) private var size = 12
 
-    @ScaledMetric(relativeTo: .caption) private var large = 13
-    @ScaledMetric(relativeTo: .caption2) private var small = 12
-
-    let size: Size
     let weight: Font.Weight
 
     func body(content: Content) -> some View {
-        content.font(.system(size: size == .large ? large : small, weight: weight))
+        content.font(.system(size: size, weight: weight))
     }
 }
 

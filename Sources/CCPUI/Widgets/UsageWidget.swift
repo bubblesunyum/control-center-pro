@@ -143,20 +143,20 @@ private struct UsageContent: View {
         return VStack(alignment: .leading, spacing: Space.half) {
             HStack(spacing: Space.half) {
                 Text(title)
-                    .usageFont(.large, weight: .medium)
+                    .usageFont(weight: .medium)
                     .foregroundStyle(.primary)
                 if window?.isRateLimited == true {
                     Text("Limited")
-                        .usageFont(.small, weight: .medium)
+                        .usageFont(weight: .medium)
                         .foregroundStyle(.orange)
                 }
                 Spacer()
                 Text(UsageWidget.resetText(until: window?.resetsAt, now: now))
-                    .usageFont(.large)
+                    .usageFont()
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
                 Text(UsageWidget.percentText(window?.percent))
-                    .usageFont(.large, weight: .semibold)
+                    .usageFont(weight: .semibold)
                     .monospacedDigit()
             }
             UsageBar(fraction: (window?.percent ?? 0) / 100, secondaryFraction: pace)
