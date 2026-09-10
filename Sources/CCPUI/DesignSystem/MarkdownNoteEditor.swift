@@ -33,7 +33,7 @@ struct MarkdownNoteEditor: View {
     /// a sticky sets its own tight pair — the card's grab padding is already
     /// the well, and doubling it would shrink the paper and grow the scroll
     /// range for nothing.
-    var textInsets = TextInsets(horizontal: 2 * (Space.two + Space.half), vertical: 2 * Space.two)
+    var textInsets = TextInsets(horizontal: Space.three + Space.oneHalf, vertical: Space.three + Space.half)
     /// How much empty room the engine keeps below the last line so a caret
     /// typing at the bottom of a long document isn't pinned to the edge.
     /// Sized to the viewport, so a sticky sets its own — see
@@ -84,8 +84,8 @@ struct MarkdownNoteEditor: View {
     /// that reads as a wall — and the two numbers are independent, so the
     /// text can breathe without the blocks running together, or the other
     /// way round. The engine took 1.06 and 1.24 before this.
-    static let lineHeightRatio: CGFloat = 1.4
-    static let blockSpacingRatio: CGFloat = 1.8
+    static let lineHeightRatio: CGFloat = 1.3
+    static let blockSpacingRatio: CGFloat = 2.0
 
     /// The `spacingFactor` that lands the block step on ``blockSpacingRatio``.
     ///

@@ -93,7 +93,7 @@ because it is a decision rather than an accident (ccp-z0a).
 
 Below a heading there is no separate figure: it takes the body's block step.
 The pad's vertical rhythm is two numbers, both measured against the font's own
-natural line height — **1.4× between wrapped lines inside a block, 1.8× from
+natural line height — **1.3× between wrapped lines inside a block, 2.0× from
 one block to the next** — so the text can breathe without the blocks running
 together, or the other way round. Both are solved for rather than typed: the
 engine rounds the line and the gap separately, so a hard-coded spacing factor

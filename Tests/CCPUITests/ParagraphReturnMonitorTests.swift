@@ -121,6 +121,24 @@ final class ParagraphReturnMonitorTests: XCTestCase {
         XCTAssertEqual(textView.selectedRange(), NSRange(location: 4, length: 0))
     }
 
+    func testReturnAtABoundaryReusesItInsteadOfMintingASecond() {
+        let events = FakeKeyMonitors()
+        let textView = RecordingTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        textView.string = "ab  \ncd"
+        // Where the text stops, which is where the caret monitor puts it.
+        textView.setSelectedRange(NSRange(location: 2, length: 0))
+        let monitor = ParagraphReturnMonitor(monitors: events.interface) { textView }
+
+        monitor.start()
+        XCTAssertNil(events.send(keyCode: 36, modifiers: []))
+
+        // The newline goes past this line's own spaces. Minting a second
+        // pair at the caret would have stranded them on the new line.
+        XCTAssertEqual(textView.insertions, [.init(text: "\n", range: NSRange(location: 4, length: 0))])
+        XCTAssertEqual(textView.string, "ab  \n\ncd")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 5, length: 0))
+    }
+
     func testReturnTwiceLeavesOneBlankLineAndNoSpaces() {
         let events = FakeKeyMonitors()
         let textView = RecordingTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))

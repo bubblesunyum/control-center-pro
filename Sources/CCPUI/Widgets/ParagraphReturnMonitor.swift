@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Control Center Pro contributors
 
 import AppKit
+import CCPKit
 
 /// A bare return in the pad starts a new block; shift+return stays a newline
 /// inside the same one — Craft's rule, not Markdown's (ccp-inoq, ccp-qzzt).
@@ -125,12 +126,31 @@ final class ParagraphReturnMonitor {
                                         range: NSRange,
                                         string: NSString,
                                         lineRange: NSRange) {
+        // Splitting a line that already ends in a boundary reuses it. The
+        // marker belongs to the text in front of it, so minting a second
+        // pair at the caret would push this line's own spaces down onto the
+        // new one — which is what the split looks like when it goes wrong.
+        if range.length == 0,
+           let run = HardBreak.trailingRun(in: string, lineRange: lineRange),
+           range.location >= run.location, range.location <= NSMaxRange(run) {
+            textView.insertText("\n", replacementRange: NSRange(location: NSMaxRange(run), length: 0))
+            return
+        }
         // The selection's START, not the caret: a selection is about to be
-        // replaced, so what precedes it is what survives on this line.
-        let beforeLength = max(0, min(range.location, NSMaxRange(lineRange)) - lineRange.location)
-        let before = string.substring(with: NSRange(location: lineRange.location, length: beforeLength))
-        let endsABlock = !before.trimmingCharacters(in: .whitespaces).isEmpty
+        // replaced, so what precedes it is what survives on this line. Read
+        // back to the line break rather than off `lineRange`, which at the
+        // end of the document can hand back a paragraph the caret has
+        // already left.
+        var lineStart = range.location
+        while lineStart > 0, !isLineBreak(string.character(at: lineStart - 1)) { lineStart -= 1 }
+        let before = string.substring(with: NSRange(location: lineStart,
+                                                    length: range.location - lineStart))
+        let endsABlock = !before.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         textView.insertText(endsABlock ? "  \n" : "\n", replacementRange: range)
+    }
+
+    private static func isLineBreak(_ character: unichar) -> Bool {
+        character == 0x0A || character == 0x0D
     }
 
     /// Virtual keycodes, layout-independent like the dismissal monitor's Esc —
