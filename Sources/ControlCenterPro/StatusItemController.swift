@@ -312,11 +312,7 @@ final class StatusItemController {
             || (event.type == .leftMouseUp && event.modifierFlags.contains(.control))
 
         if isRightClick {
-            // Ensure the menu reflects the editing state that was just entered
-            // via a hold (which sets isEditing synchronously but rebuildMenu
-            // is observed asynchronously).
-            rebuildMenu()
-            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: 0), in: sender)
+            popStatusMenu(from: sender)
         } else {
             if panel.editor.isEditing {
                 finishEditing()
@@ -329,10 +325,18 @@ final class StatusItemController {
 
     /// The menu from the pill: it covers the status button wholesale, so
     /// right-clicks land in here and never on the button that used to pop it.
-    private func popStatusMenu() {
-        guard let button = item.button else { return }
+    /// `popUp` blocks until dismissal, and a click-away dismissal wedges the
+    /// button's tracking highlight on — put it back to whatever the panel
+    /// says on return (ccp-5es8). A chosen item that opens the panel reads
+    /// back visible here, so this never clears a highlight that is owed.
+    private func popStatusMenu(from button: NSStatusBarButton? = nil) {
+        guard let button = button ?? item.button else { return }
+        // Ensure the menu reflects the editing state that was just entered
+        // via a hold (which sets isEditing synchronously but rebuildMenu
+        // is observed asynchronously).
         rebuildMenu()
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: 0), in: button)
+        button.highlight(panel.isVisible)
     }
 
     @objc private func editWidgets() {
