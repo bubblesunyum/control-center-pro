@@ -767,7 +767,11 @@ public final class NotesAdapter {
         for note in document.notes {
             guard let entry = index.pads.first(where: { $0.id == note.id }),
                   entry.name == note.name,
-                  notesStore.readText(filename: entry.filename) == note.text
+                  // Both sides shed: the read sheds hard-break debris and the
+                  // legacy blob is exactly where that debris lives, so an
+                  // un-shed comparison fails the migration for the only pads
+                  // that ever had any (ccp-ra2l).
+                  notesStore.readText(filename: entry.filename) == HardBreak.normalized(note.text)
             else { return false }
         }
         return Set(index.pads.filter(\.closed).map(\.id)) == closedNoteIDs

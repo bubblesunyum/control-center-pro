@@ -33,7 +33,7 @@ struct MarkdownNoteEditor: View {
     /// a sticky sets its own tight pair — the card's grab padding is already
     /// the well, and doubling it would shrink the paper and grow the scroll
     /// range for nothing.
-    var textInsets = TextInsets(horizontal: Space.two + Space.half, vertical: Space.two)
+    var textInsets = TextInsets(horizontal: 2 * (Space.two + Space.half), vertical: 2 * Space.two)
     /// How much empty room the engine keeps below the last line so a caret
     /// typing at the bottom of a long document isn't pinned to the edge.
     /// Sized to the viewport, so a sticky sets its own — see
@@ -76,17 +76,16 @@ struct MarkdownNoteEditor: View {
     /// ramp (0.35 and down, barely a third of a line) never gave it.
     private static let headingTopSpacingEm: [CGFloat] = [0.8, 0.75, 0.7, 0.6, 0.5, 0.45]
 
-    /// How far one block sits from the next, as a multiple of the step
-    /// between wrapped lines inside a block.
+    /// The pad's vertical rhythm, both measured against the font's own
+    /// natural line height: how far one wrapped line sits from the next
+    /// inside a block, and how far one block sits from the next.
     ///
     /// The whole difference between a pad that reads as a document and one
-    /// that reads as a wall. Craft and Notion sit near here; the engine's own
-    /// default lands at 1.33 and the 0.15 spacing factor CCP shipped during
-    /// the markdown spike was the outlier, at 1.17.
-    static let blockSpacingRatio: CGFloat = 1.3
-
-    /// Points added to the line height inside a block.
-    private static let lineHeightExtraSpacing: CGFloat = 1
+    /// that reads as a wall — and the two numbers are independent, so the
+    /// text can breathe without the blocks running together, or the other
+    /// way round. The engine took 1.06 and 1.24 before this.
+    static let lineHeightRatio: CGFloat = 1.4
+    static let blockSpacingRatio: CGFloat = 1.8
 
     /// The `spacingFactor` that lands the block step on ``blockSpacingRatio``.
     ///
@@ -99,22 +98,41 @@ struct MarkdownNoteEditor: View {
     /// floating-point noise, which a factor aimed exactly at the boundary
     /// would not be.
     static func paragraphSpacingFactor(forFontSize size: CGFloat) -> CGFloat {
-        let font = NSFont.systemFont(ofSize: size)
-        // The engine's own fallback, before it has a layout manager to ask.
-        let defaultLineHeight = font.ascender - font.descender + font.leading
-        let lineHeight = ceil(defaultLineHeight) + lineHeightExtraSpacing
-        let gap = (lineHeight * (blockSpacingRatio - 1)).rounded()
+        let defaultLineHeight = Self.defaultLineHeight(forFontSize: size)
+        let gap = max(1, (defaultLineHeight * blockSpacingRatio).rounded()
+            - lineHeight(forFontSize: size))
+        // Aim at the middle of the half-point band that ceils to the gap we
+        // want: a factor aimed exactly at the boundary is one rounding error
+        // away from landing a point out.
         return (gap - 0.5) / defaultLineHeight
     }
 
-    /// What the engine will make of that factor: the line step inside a
-    /// block, and the step from one block to the next. The test's way of
-    /// asking whether the ratio actually landed.
-    static func blockRhythm(forFontSize size: CGFloat) -> (line: CGFloat, block: CGFloat) {
+    /// Points the engine adds on top of its own rounded line height to reach
+    /// ``lineHeightRatio``. Never negative — a ratio tighter than the font's
+    /// own leading is not something the engine can express.
+    static func lineHeightExtraSpacing(forFontSize size: CGFloat) -> CGFloat {
+        let defaultLineHeight = Self.defaultLineHeight(forFontSize: size)
+        return max(0, (defaultLineHeight * lineHeightRatio).rounded() - ceil(defaultLineHeight))
+    }
+
+    /// The engine's own fallback line height, before it has a layout manager
+    /// to ask. Both ratios are measured against this.
+    private static func defaultLineHeight(forFontSize size: CGFloat) -> CGFloat {
         let font = NSFont.systemFont(ofSize: size)
-        let defaultLineHeight = font.ascender - font.descender + font.leading
-        let line = ceil(defaultLineHeight) + lineHeightExtraSpacing
-        return (line, line + ceil(defaultLineHeight * paragraphSpacingFactor(forFontSize: size)))
+        return font.ascender - font.descender + font.leading
+    }
+
+    private static func lineHeight(forFontSize size: CGFloat) -> CGFloat {
+        ceil(defaultLineHeight(forFontSize: size)) + lineHeightExtraSpacing(forFontSize: size)
+    }
+
+    /// What the engine will make of those factors: the step between wrapped
+    /// lines inside a block, and the step from one block to the next. The
+    /// test's way of asking whether the ratios actually landed.
+    static func blockRhythm(forFontSize size: CGFloat) -> (line: CGFloat, block: CGFloat) {
+        let line = lineHeight(forFontSize: size)
+        let gap = ceil(defaultLineHeight(forFontSize: size) * paragraphSpacingFactor(forFontSize: size))
+        return (line, line + gap)
     }
 
     var body: some View {
@@ -146,7 +164,7 @@ struct MarkdownNoteEditor: View {
         configuration.headings = HeadingStyle(fontMultipliers: Self.headingMultipliers,
                                               topSpacingEm: Self.headingTopSpacingEm)
         configuration.paragraph = ParagraphStyle(spacingFactor: Self.paragraphSpacingFactor(forFontSize: Self.fontSize),
-                                                 lineHeightExtraSpacing: Self.lineHeightExtraSpacing)
+                                                 lineHeightExtraSpacing: Self.lineHeightExtraSpacing(forFontSize: Self.fontSize))
         // A rule is a section break, so it needs room on both sides or it
         // reads as a struck-through line of the block above it. The engine
         // draws it flush by default (ccp-z0a).

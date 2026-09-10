@@ -36,6 +36,43 @@ public enum HardBreak {
         return didChange ? shed.joined(separator: "\n") : text
     }
 
+    /// The run of trailing spaces that makes `lineRange` a boundary, or nil
+    /// when the line does not end in one.
+    ///
+    /// A boundary is two or more trailing spaces with real content before
+    /// them on the same line — the same test the splitter cuts on, so a
+    /// caller can never disagree with it about where a block ends. A
+    /// whitespace-only line is a blank separator, never a boundary.
+    ///
+    /// The returned range is the spaces alone: its location is where the
+    /// visible text stops, and its end is the line's last character.
+    public static func trailingRun(in text: NSString, lineRange: NSRange) -> NSRange? {
+        var end = NSMaxRange(lineRange)
+        while end > lineRange.location, isLineBreak(text.character(at: end - 1)) { end -= 1 }
+        var contentEnd = end
+        while contentEnd > lineRange.location, text.character(at: contentEnd - 1) == space {
+            contentEnd -= 1
+        }
+        guard end - contentEnd >= marker.count else { return nil }
+        var index = lineRange.location
+        while index < contentEnd {
+            let character = text.character(at: index)
+            if character != space, character != tab { break }
+            index += 1
+        }
+        guard index < contentEnd else { return nil }
+        return NSRange(location: contentEnd, length: end - contentEnd)
+    }
+
+    private static func isLineBreak(_ character: unichar) -> Bool {
+        character == newline || character == carriageReturn
+    }
+
+    private static let space: unichar = 0x20
+    private static let tab: unichar = 0x09
+    private static let newline: unichar = 0x0A
+    private static let carriageReturn: unichar = 0x0D
+
     private static func normalizedLine(_ line: String) -> String {
         guard line.hasSuffix(" ") else { return line }
         var content = Substring(line)

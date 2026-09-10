@@ -10,23 +10,34 @@ import XCTest
 /// at one well away from it.
 @MainActor
 final class NoteBlockRhythmTests: XCTestCase {
-    private func assertRatioHolds(atFontSize size: CGFloat,
+    private func assertRatiosHold(atFontSize size: CGFloat,
                                   file: StaticString = #filePath, line: UInt = #line) {
+        let font = NSFont.systemFont(ofSize: size)
+        let natural = font.ascender - font.descender + font.leading
         let rhythm = MarkdownNoteEditor.blockRhythm(forFontSize: size)
-        let wanted = rhythm.line * MarkdownNoteEditor.blockSpacingRatio
-        // The engine ceils the gap to whole points, so the step can only land
-        // on the ratio to within that rounding.
-        XCTAssertEqual(rhythm.block, wanted, accuracy: 1,
-                       "block step \(rhythm.block) misses \(wanted) at \(size)pt",
+        // The engine rounds the line and the gap to whole points separately,
+        // so each step can only land on its ratio to within that rounding.
+        XCTAssertEqual(rhythm.line, natural * MarkdownNoteEditor.lineHeightRatio, accuracy: 1,
+                       "line step \(rhythm.line) misses its ratio at \(size)pt",
+                       file: file, line: line)
+        XCTAssertEqual(rhythm.block, natural * MarkdownNoteEditor.blockSpacingRatio, accuracy: 1,
+                       "block step \(rhythm.block) misses its ratio at \(size)pt",
                        file: file, line: line)
     }
 
-    func testTheBlockStepLandsOnTheRatioAtThePadsOwnSize() {
-        assertRatioHolds(atFontSize: MarkdownNoteEditor.fontSize)
+    func testBothStepsLandOnTheirRatiosAtThePadsOwnSize() {
+        assertRatiosHold(atFontSize: MarkdownNoteEditor.fontSize)
     }
 
-    func testTheBlockStepLandsOnTheRatioAtALargerSize() {
-        assertRatioHolds(atFontSize: 20)
+    func testBothStepsLandOnTheirRatiosAtALargerSize() {
+        assertRatiosHold(atFontSize: 20)
+    }
+
+    func testATighterRatioThanTheFontsOwnLeadingAddsNothing() {
+        // The engine cannot express a line height below its own ceil, so the
+        // solver must clamp rather than hand it a negative.
+        XCTAssertGreaterThanOrEqual(
+            MarkdownNoteEditor.lineHeightExtraSpacing(forFontSize: MarkdownNoteEditor.fontSize), 0)
     }
 
     func testABlockStandsFurtherOffThanALineDoes() {

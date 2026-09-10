@@ -37,11 +37,15 @@ public final class NotesWidget: CCPWidget {
     /// Delete skips hidden markdown markers (ccp-e8df). Same lifetime for
     /// the same reason.
     private let markdownDelete: MarkdownDeleteMonitor
+    /// The caret steps over a block boundary rather than into its spaces
+    /// (ccp-ra2l). Same lifetime, same reason.
+    private let hardBreakCaret: HardBreakCaretMonitor
 
     public init() {
         self.adapter = NotesAdapter()
         self.paragraphReturn = ParagraphReturnMonitor()
         self.markdownDelete = MarkdownDeleteMonitor()
+        self.hardBreakCaret = HardBreakCaretMonitor()
     }
 
     /// Test seam: widget backed by an in-memory document.
@@ -49,12 +53,14 @@ public final class NotesWidget: CCPWidget {
         self.adapter = NotesAdapter(document: document)
         self.paragraphReturn = ParagraphReturnMonitor()
         self.markdownDelete = MarkdownDeleteMonitor()
+        self.hardBreakCaret = HardBreakCaretMonitor()
     }
 
     init(adapter: NotesAdapter, monitors: EventMonitors = .system) {
         self.adapter = adapter
         self.paragraphReturn = ParagraphReturnMonitor(monitors: monitors)
         self.markdownDelete = MarkdownDeleteMonitor(monitors: monitors)
+        self.hardBreakCaret = HardBreakCaretMonitor()
     }
 
     public func makeView() -> some View {
@@ -65,9 +71,11 @@ public final class NotesWidget: CCPWidget {
         adapter.activate()
         paragraphReturn.start()
         markdownDelete.start()
+        hardBreakCaret.start()
     }
 
     public func deactivate() {
+        hardBreakCaret.stop()
         markdownDelete.stop()
         paragraphReturn.stop()
         adapter.deactivate()

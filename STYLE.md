@@ -91,11 +91,13 @@ because it is a decision rather than an accident (ccp-z0a).
 | H5 | 0.95 | 0.5 |
 | H6 | 0.9 | 0.45 |
 
-Below a heading there is no separate figure: it takes the body's block step,
-which is **1.3× the step between wrapped lines inside a block**. That ratio is
-the pad's vertical rhythm, and it is solved for rather than typed — the engine
-rounds the line and the gap separately, so a hard-coded spacing factor drifts
-off the ratio as soon as the font size moves. `MarkdownNoteEditor` owns both
+Below a heading there is no separate figure: it takes the body's block step.
+The pad's vertical rhythm is two numbers, both measured against the font's own
+natural line height — **1.4× between wrapped lines inside a block, 1.8× from
+one block to the next** — so the text can breathe without the blocks running
+together, or the other way round. Both are solved for rather than typed: the
+engine rounds the line and the gap separately, so a hard-coded spacing factor
+drifts off the ratio as soon as the font size moves. `MarkdownNoteEditor` owns
 the ramp and the solver.
 
 ## One pattern per container

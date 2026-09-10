@@ -54,10 +54,10 @@ final class ParagraphReturnMonitor {
     }
 
     /// The monitor's decision. A swallowed return inserts through the text
-    /// view itself, so undo behaves as if the break had always been there.
-    /// A return at a line start hardens the line above (the spaces belong to
-    /// it) and the caret lands on the new empty line with nothing to step
-    /// back over.
+    /// view itself, so undo behaves as if the break had always been there,
+    /// and the caret is left wherever the insertion puts it — see
+    /// ``insertHardBreak(in:range:string:lineRange:)`` for the one rule it
+    /// follows. Only the list paths below place the caret by hand.
     private func handle(_ event: NSEvent) -> NSEvent? {
         guard Self.isBareReturn(event),
               let textView = editor(),
