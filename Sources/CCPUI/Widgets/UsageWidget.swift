@@ -72,8 +72,8 @@ private struct UsageContent: View {
                     lastError: openCodeError
                 ) {
                     windowRow(provider: .openCode, title: "5 hours", window: openCode.snapshot.rolling, now: openCode.now)
-                    windowRow(provider: .openCode, title: "Weekly", window: openCode.snapshot.weekly, now: openCode.now)
-                    windowRow(provider: .openCode, title: "Monthly", window: openCode.snapshot.monthly, now: openCode.now)
+                    windowRow(provider: .openCode, title: "Weekly", window: openCode.snapshot.weekly, now: openCode.now, paceTotalDays: 7)
+                    windowRow(provider: .openCode, title: "Monthly", window: openCode.snapshot.monthly, now: openCode.now, paceTotalDays: 30)
                 }
                 // Claude publishes no monthly limit, so the section ends here.
                 providerSection(
@@ -82,13 +82,13 @@ private struct UsageContent: View {
                     lastError: claudeError
                 ) {
                     windowRow(provider: .claude, title: "5 hours", window: claude.snapshot.rolling, now: claude.now)
-                    windowRow(provider: .claude, title: "Weekly", window: claude.snapshot.weekly, now: claude.now)
+                    windowRow(provider: .claude, title: "Weekly", window: claude.snapshot.weekly, now: claude.now, paceTotalDays: 7)
                 }
             }
             .padding(.bottom, Space.half)
             // The card puts 8pt between its header and this content; top up
-            // to the 24pt the sections keep between each other.
-            .padding(.top, Space.two)
+            // to the 16pt the eye reads as one breath, not two.
+            .padding(.top, Space.one)
         }
     }
 
@@ -133,27 +133,33 @@ private struct UsageContent: View {
         }
     }
 
-    private func windowRow(provider: Provider, title: String, window: UsageWindow?, now: Date) -> some View {
-        VStack(alignment: .leading, spacing: Space.half) {
+    private func windowRow(provider: Provider, title: String, window: UsageWindow?, now: Date, paceTotalDays: Int? = nil) -> some View {
+        // Even-daily-pace reference, behind the main fill. Nil without a
+        // reset to split — no interval, no pace — and the 5-hour rows never
+        // ask, so they stay single-fill.
+        let pace = paceTotalDays.flatMap {
+            UsagePace.fraction(now: now, resetsAt: window?.resetsAt, totalDays: $0)
+        }
+        return VStack(alignment: .leading, spacing: Space.half) {
             HStack(spacing: Space.half) {
                 Text(title)
-                    .font(.caption.weight(.medium))
+                    .usageFont(.large, weight: .medium)
                     .foregroundStyle(.primary)
                 if window?.isRateLimited == true {
                     Text("Limited")
-                        .font(.caption2.weight(.medium))
+                        .usageFont(.small, weight: .medium)
                         .foregroundStyle(.orange)
                 }
                 Spacer()
                 Text(UsageWidget.resetText(until: window?.resetsAt, now: now))
-                    .font(.caption2)
+                    .usageFont(.small)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
                 Text(UsageWidget.percentText(window?.percent))
-                    .font(.caption.weight(.semibold))
+                    .usageFont(.large, weight: .semibold)
                     .monospacedDigit()
             }
-            UsageBar(fraction: (window?.percent ?? 0) / 100)
+            UsageBar(fraction: (window?.percent ?? 0) / 100, secondaryFraction: pace)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(provider.title) \(title) \(UsageWidget.percentText(window?.percent)), \(UsageWidget.resetText(until: window?.resetsAt, now: now))")

@@ -63,6 +63,10 @@ public extension Color {
     static let urgent = Color.orange
     /// The quiet track a progress ring fills against.
     static let ringTrack = Color.primary.opacity(0.1)
+    /// Even-pace reference behind a usage bar: where spend would sit if it
+    /// landed evenly, one day at a time. Muted against the accent fill in
+    /// either appearance, quieter than the track is dark.
+    static let paceFill = Color.secondary.opacity(0.35)
     /// What a completed action reads as — the drop-catcher's tick.
     static let success = Color.green
     static let labelMuted = Color.secondary
