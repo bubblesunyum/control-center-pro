@@ -14,8 +14,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/bubblesunyum/swift-markdown-engine",
       "state" : {
-        "revision" : "fd82ac32b1e3260ad5ca1f15ba17c13b330bd213",
-        "version" : "0.12.0-ccp.3"
+        "revision" : "fd70f35df33756f851b5efe41bef82acf46aa16b",
+        "version" : "0.12.0-ccp.4"
       }
     },
     {
