@@ -7,8 +7,8 @@ import CCPUI
 import Observation
 
 /// The menu bar item: left click toggles the panel, right click shows
-/// the menu. When edit mode is active the Done and Add controls live here
-/// rather than inside the panel (ccp-edit-menu-bar).
+/// the menu. In edit mode the item itself becomes a pill — Add on the left,
+/// the checkmark on the right — rather than an icon (ccp-xvth).
 @MainActor
 final class StatusItemController {
     private let item: NSStatusItem
@@ -16,6 +16,7 @@ final class StatusItemController {
     private let settingsWindow: SettingsWindowController
     private let menu: NSMenu
     private var countdownTimer: Timer?
+    private var editPill: EditPill?
 
     /// What the panel anchors itself to. Read by the global shortcut, which
     /// has no click of its own to say which screen the user is on.
@@ -25,21 +26,33 @@ final class StatusItemController {
         self.panel = panel
         self.settingsWindow = settingsWindow
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        // A stable name so the system tracks this item across launches —
+        // position, and whether it is shown at all. Nameless items sink into
+        // the hidden overflow with no address to bring them back by.
+        item.autosaveName = "ControlCenterPro"
         menu = NSMenu()
         rebuildMenu()
         trackEditingChanges()
         trackFocusCountdown()
+        trackPanelVisibility()
         updateFocusCountdown()
+        syncHighlight()
 
         if let button = item.button {
-            button.image = NSImage(
-                systemSymbolName: "circle.grid.2x2.fill",
-                accessibilityDescription: "Control Center Pro"
-            )
+            showPlainIcon(on: button)
             button.target = self
             button.action = #selector(handleStatusItemClick(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseDown])
         }
+    }
+
+    /// The rest-state icon. Edit mode never sets an image — the pill carries
+    /// its own checkmark — so this is both the launch icon and the restore.
+    private func showPlainIcon(on button: NSStatusBarButton) {
+        button.image = NSImage(
+            systemSymbolName: "circle.grid.2x2.fill",
+            accessibilityDescription: "Control Center Pro"
+        )
     }
 
     private func rebuildMenu() {
@@ -95,6 +108,43 @@ final class StatusItemController {
         }
     }
 
+    /// The edit-mode pill: in edit mode the item stops being an icon and
+    /// becomes Add beside the checkmark. Out of edit mode the pill comes out
+    /// and the plain icon plus countdown own the item again.
+    private func updateEditPill() {
+        guard let button = item.button else { return }
+        if panel.editor.isEditing {
+            button.image = nil
+            button.title = ""
+            guard editPill == nil else { return }
+            let pill = EditPill(
+                onDone: { [weak self] in
+                    guard let self else { return }
+                    self.finishEditing()
+                },
+                onAdd: { [weak self] in
+                    guard let self else { return }
+                    self.panel.showGallery()
+                },
+                onRightClick: { [weak self] in self?.popStatusMenu() }
+            )
+            pill.translatesAutoresizingMaskIntoConstraints = false
+            button.addSubview(pill)
+            let ideal = pill.fittingSize
+            NSLayoutConstraint.activate([
+                pill.centerXAnchor.constraint(equalTo: button.centerXAnchor),
+                pill.centerYAnchor.constraint(equalTo: button.centerYAnchor),
+                pill.widthAnchor.constraint(equalToConstant: ideal.width),
+                pill.heightAnchor.constraint(equalToConstant: ideal.height),
+            ])
+            item.length = ideal.width
+            editPill = pill
+        } else {
+            editPill?.removeFromSuperview()
+            editPill = nil
+        }
+    }
+
     private func trackEditingChanges() {
         withObservationTracking {
             _ = panel.editor.isEditing
@@ -104,10 +154,15 @@ final class StatusItemController {
                 guard let self else { return }
                 self.trackEditingChanges()
                 self.rebuildMenu()
-                if let button = self.item.button {
-                    let symbol = self.panel.editor.isEditing ? "checkmark.circle.fill" : "circle.grid.2x2.fill"
-                    button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: self.panel.editor.isEditing ? "Done editing" : "Control Center Pro")
+                self.updateEditPill()
+                // The plain icon only when the pill is out: in edit mode the
+                // pill carries its own checkmark and the image must stay nil.
+                if !self.panel.editor.isEditing, let button = self.item.button {
+                    self.showPlainIcon(on: button)
                 }
+                // Restores the item's chrome after the pill comes out; a no-op
+                // for it while editing, where the pill owns length and title.
+                self.updateFocusCountdown()
             }
         }
     }
@@ -133,6 +188,33 @@ final class StatusItemController {
                 self.trackFocusCountdown()
                 self.updateFocusCountdown()
             }
+        }
+    }
+
+    /// The menu-bar highlight stays on while the panel is up, the way a
+    /// menu-backed status item holds it while its menu tracks (ccp-9nte).
+    /// One public call each way, driven by visibility so every opener —
+    /// click, hotkey, sticky restore — reports the same state. Right-click
+    /// menus never touch visibility and keep their own tracking.
+    private func trackPanelVisibility() {
+        withObservationTracking {
+            _ = panel.isVisible
+        } onChange: {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.trackPanelVisibility()
+                self.syncHighlight()
+            }
+        }
+    }
+
+    private func syncHighlight() {
+        // A turn later: the system's mouse-up unhighlight lands after the
+        // click action runs, and setting ours first would lose to it. Read
+        // inside the hop so a reordered hop can never apply a stale value.
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.item.button?.highlight(self.panel.isVisible)
         }
     }
 
@@ -228,6 +310,14 @@ final class StatusItemController {
                 panel.toggle(from: sender)
             }
         }
+    }
+
+    /// The menu from the pill: it covers the status button wholesale, so
+    /// right-clicks land in here and never on the button that used to pop it.
+    private func popStatusMenu() {
+        guard let button = item.button else { return }
+        rebuildMenu()
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: 0), in: button)
     }
 
     @objc private func editWidgets() {
