@@ -3,7 +3,6 @@
 
 import Foundation
 @testable import CCPKit
-import Security
 import XCTest
 
 @MainActor
@@ -222,129 +221,104 @@ final class ClaudeUsageAdapterTests: XCTestCase {
         XCTAssertTrue(leftovers.isEmpty)
     }
 
-    // MARK: - Compound store
+    // MARK: - App-private store
 
-    func testCompoundPrefersKeychainOverFile() throws {
-        let compound = CompoundClaudeCredentialStore(
-            keychain: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
-                accessToken: "keychain-live")),
-            file: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
-                accessToken: "file-stale")))
-
-        XCTAssertEqual(try compound.loadCredentials()?.accessToken, "keychain-live")
+    private func appStoreURL() -> URL {
+        FileManager.default.temporaryDirectory
+            .appending(path: "ccp-claude-app-\(UUID().uuidString)")
+            .appending(path: "claude-oauth")
     }
 
-    func testCompoundFallsBackToFile() throws {
-        let compound = CompoundClaudeCredentialStore(
-            keychain: InMemoryClaudeCredentialStore(credentials: nil),
-            file: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
-                accessToken: "file-live")))
+    func testAppStoreServesItsOwnFileFirst() throws {
+        let store = AppClaudeCredentialStore(
+            fileURL: appStoreURL(),
+            legacyFile: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
+                accessToken: "legacy")),
+            silentLogin: { ClaudeOAuthCredentials(accessToken: "keychain") })
+        try store.saveCredentials(ClaudeOAuthCredentials(accessToken: "app-file"))
 
-        XCTAssertEqual(try compound.loadCredentials()?.accessToken, "file-live")
+        // Neither fallback is consulted when the app file hits.
+        XCTAssertEqual(try store.loadCredentials()?.accessToken, "app-file")
     }
 
-    func testCompoundSavesToKeychainWhenPresent() throws {
-        let keychain = InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
-            accessToken: "old"))
-        let file = InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
-            accessToken: "file"))
-        let compound = CompoundClaudeCredentialStore(keychain: keychain, file: file)
+    func testAppStoreMigratesSilentLoginOnce() throws {
+        let url = appStoreURL()
+        let store = AppClaudeCredentialStore(
+            fileURL: url,
+            legacyFile: InMemoryClaudeCredentialStore(credentials: nil),
+            silentLogin: { ClaudeOAuthCredentials(accessToken: "migrated") })
 
-        try compound.saveCredentials(ClaudeOAuthCredentials(accessToken: "new"))
-
-        XCTAssertEqual(try keychain.loadCredentials()?.accessToken, "new")
-        XCTAssertEqual(try file.loadCredentials()?.accessToken, "file")
+        XCTAssertEqual(try store.loadCredentials()?.accessToken, "migrated")
+        // Filed, so the next load never touches the keychain again.
+        let reread = AppClaudeCredentialStore(
+            fileURL: url,
+            legacyFile: InMemoryClaudeCredentialStore(credentials: nil),
+            silentLogin: { XCTFail("migration must run once"); return nil })
+        XCTAssertEqual(try reread.loadCredentials()?.accessToken, "migrated")
     }
 
-    func testCompoundSavesToFileWhenKeychainYieldsNothing() throws {
-        let keychain = InMemoryClaudeCredentialStore()
-        let file = InMemoryClaudeCredentialStore()
-        let compound = CompoundClaudeCredentialStore(keychain: keychain, file: file)
+    func testAppStoreFallsBackToLegacyFile() throws {
+        let url = appStoreURL()
+        let store = AppClaudeCredentialStore(
+            fileURL: url,
+            legacyFile: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
+                accessToken: "legacy")),
+            silentLogin: { nil })
 
-        try compound.saveCredentials(ClaudeOAuthCredentials(accessToken: "new"))
-
-        XCTAssertEqual(try file.loadCredentials()?.accessToken, "new")
+        XCTAssertEqual(try store.loadCredentials()?.accessToken, "legacy")
+        // Read-through only: a legacy login is not copied over.
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
 
-    func testCompoundDenialFallsBackToFileAndSticks() throws {
-        let keychain = DenyingClaudeCredentialStore()
-        let compound = CompoundClaudeCredentialStore(
-            keychain: keychain,
-            file: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
-                accessToken: "file-live")))
-
-        XCTAssertEqual(try compound.loadCredentials()?.accessToken, "file-live")
-        XCTAssertEqual(try compound.loadCredentials()?.accessToken, "file-live")
-        // One prompt, not one per panel open.
-        XCTAssertEqual(keychain.loadCount, 1)
-    }
-
-    func testCompoundDenialWithoutFileRethrows() {
-        let compound = CompoundClaudeCredentialStore(
-            keychain: DenyingClaudeCredentialStore(),
-            file: InMemoryClaudeCredentialStore(credentials: nil))
-
-        XCTAssertThrowsError(try compound.loadCredentials()) { error in
-            XCTAssertEqual(error as? ClaudeUsageError, .keychainDenied)
-        }
-    }
-
-    func testCompoundSaveFallsBackToFile() throws {
-        let file = InMemoryClaudeCredentialStore()
-        let compound = CompoundClaudeCredentialStore(
-            keychain: DenyingClaudeCredentialStore(), file: file)
-
-        try compound.saveCredentials(ClaudeOAuthCredentials(accessToken: "new"))
-
-        XCTAssertEqual(try file.loadCredentials()?.accessToken, "new")
-    }
-
-    // MARK: - Keychain store
-
-    func testKeychainStoreRoundTripsUnderThrowawayService() throws {
-        let service = "ccp-test-\(UUID().uuidString)"
-        defer { deleteKeychainEntry(service: service) }
-        let store = KeychainClaudeCredentialStore(service: service)
+    func testAppStoreReadsNothingAnywhere() throws {
+        let store = AppClaudeCredentialStore(
+            fileURL: appStoreURL(),
+            legacyFile: InMemoryClaudeCredentialStore(credentials: nil),
+            silentLogin: { nil })
 
         XCTAssertNil(try store.loadCredentials())
+    }
+
+    func testAppStoreRoundTripsOwnerOnly() throws {
+        let url = appStoreURL()
+        let store = AppClaudeCredentialStore(
+            fileURL: url,
+            legacyFile: InMemoryClaudeCredentialStore(credentials: nil),
+            silentLogin: { nil })
 
         try store.saveCredentials(ClaudeOAuthCredentials(
-            accessToken: "kc-access", refreshToken: "kc-refresh",
+            accessToken: "app-access", refreshToken: "app-refresh",
             expiresAt: Date(timeIntervalSince1970: 2_000_000)))
 
         let creds = try store.loadCredentials()
-        XCTAssertEqual(creds?.accessToken, "kc-access")
-        XCTAssertEqual(creds?.refreshToken, "kc-refresh")
-
-        // Update path, preserving sibling keys.
-        try store.saveCredentials(ClaudeOAuthCredentials(accessToken: "kc-access-2"))
-        XCTAssertEqual(try store.loadCredentials()?.accessToken, "kc-access-2")
-        XCTAssertEqual(try store.loadCredentials()?.refreshToken, "kc-refresh")
+        XCTAssertEqual(creds?.accessToken, "app-access")
+        XCTAssertEqual(creds?.refreshToken, "app-refresh")
+        let permissions = try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? Int
+        XCTAssertEqual(permissions, 0o600)
+        let leftovers = try FileManager.default.contentsOfDirectory(
+            at: url.deletingLastPathComponent(), includingPropertiesForKeys: nil)
+        XCTAssertEqual(leftovers.count, 1)
     }
 
-    func testKeychainStatusMapping() throws {
-        let store = KeychainClaudeCredentialStore(service: "ccp-test-unused")
+    // MARK: - Login import
 
-        XCTAssertTrue(try store.entryExists(errSecSuccess))
-        XCTAssertFalse(try store.entryExists(errSecItemNotFound))
-        for denied in [errSecAuthFailed, errSecUserCanceled] {
-            XCTAssertThrowsError(try store.entryExists(denied)) { error in
-                XCTAssertEqual(error as? ClaudeUsageError, .keychainDenied)
-            }
-        }
-        XCTAssertThrowsError(try store.entryExists(errSecInteractionNotAllowed)) { error in
-            XCTAssertEqual(error as? ClaudeUsageError, .unavailable)
-        }
+    func testImportCopiesLoginToStore() throws {
+        let store = InMemoryClaudeCredentialStore()
+        let importer = ClaudeLoginImporter(
+            readLogin: { ClaudeOAuthCredentials(accessToken: "imported") },
+            store: store)
+
+        XCTAssertTrue(try importer.importLogin())
+        XCTAssertEqual(try store.loadCredentials()?.accessToken, "imported")
     }
 
-    private func deleteKeychainEntry(service: String) {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-        ]
-        SecItemDelete(query as CFDictionary)
-    }
+    func testImportWithoutLoginIsNoop() throws {
+        let store = InMemoryClaudeCredentialStore()
+        let importer = ClaudeLoginImporter(readLogin: { nil }, store: store)
 
+        XCTAssertFalse(try importer.importLogin())
+        XCTAssertNil(try store.loadCredentials())
+    }
     // MARK: - Live source HTTP mapping
 
     func testLiveFetchDecodesHappyPath() async throws {
@@ -383,195 +357,63 @@ final class ClaudeUsageAdapterTests: XCTestCase {
         }
     }
 
-    func testExpiredTokenRefreshesProactively() async throws {
-        var usageAuth: String?
-        ClaudeStubURLProtocol.handler = { request in
-            if request.url?.absoluteString.contains("/oauth/token") == true {
-                return (200, Data(
-                    #"{"access_token":"fresh-access","refresh_token":"fresh-refresh","expires_in":3600}"#.utf8))
-            }
-            usageAuth = request.value(forHTTPHeaderField: "Authorization")
-            return (200, Data(#"{"limits":[]}"#.utf8))
-        }
-        let store = InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
-            accessToken: "stale", refreshToken: "refresh-me",
-            expiresAt: Date().addingTimeInterval(-10)))
-        let source = LiveClaudeUsageSource(credentials: store, session: ClaudeStubURLProtocol.session)
-
-        _ = try await source.fetch()
-
-        XCTAssertEqual(usageAuth, "Bearer fresh-access")
-        // The rotated refresh token is persisted, or the next refresh logs the user out.
-        XCTAssertEqual(try store.loadCredentials()?.refreshToken, "fresh-refresh")
-    }
-
-    func testRejectedTokenRefreshesOnceAndRetries() async throws {
-        var usageCalls = 0
-        var retryAuth: String?
-        ClaudeStubURLProtocol.handler = { request in
-            if request.url?.absoluteString.contains("/oauth/token") == true {
-                return (200, Data(#"{"access_token":"second-wind","expires_in":3600}"#.utf8))
-            }
-            usageCalls += 1
-            if usageCalls == 1 {
-                return (401, Data())
-            }
-            retryAuth = request.value(forHTTPHeaderField: "Authorization")
-            return (200, Data(#"{"limits":[{"kind":"session","percent":7}]}"#.utf8))
-        }
+    func testUnauthorizedReadsAsMissingCredentials() async {
+        ClaudeStubURLProtocol.handler = { _ in (401, Data()) }
         let source = LiveClaudeUsageSource(
             credentials: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
-                accessToken: "dead", refreshToken: "refresh-me",
-                expiresAt: Date().addingTimeInterval(3600))),
-            session: ClaudeStubURLProtocol.session)
-
-        let snapshot = try await source.fetch()
-
-        XCTAssertEqual(snapshot.rolling?.percent, 7)
-        XCTAssertEqual(usageCalls, 2)
-        XCTAssertEqual(retryAuth, "Bearer second-wind")
-    }
-
-    func testRetryRejectedTwiceReadsAsMissingCredentials() async {
-        ClaudeStubURLProtocol.handler = { request in
-            if request.url?.absoluteString.contains("/oauth/token") == true {
-                return (200, Data(#"{"access_token":"no-good-either","expires_in":3600}"#.utf8))
-            }
-            return (401, Data())
-        }
-        let source = LiveClaudeUsageSource(
-            credentials: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
-                accessToken: "dead", refreshToken: "refresh-me",
+                accessToken: "revoked",
                 expiresAt: Date().addingTimeInterval(3600))),
             session: ClaudeStubURLProtocol.session)
 
         do {
             _ = try await source.fetch()
-            XCTFail("a twice-rejected token must not fetch")
+            XCTFail("a revoked token must not fetch")
         } catch let error as ClaudeUsageError {
-            // The grant is gone — only a fresh login fixes it, not waiting.
+            // Re-import re-syncs; there is no refresh to attempt.
             XCTAssertEqual(error, .missingCredentials)
         } catch {
             XCTFail("wrong error: \(error)")
         }
     }
 
-    func testRefreshSkipsSaveWhenLoginRotatedMidFlight() async throws {
-        var usageAuth: String?
-        ClaudeStubURLProtocol.handler = { request in
-            if request.url?.absoluteString.contains("/oauth/token") == true {
-                return (200, Data(#"{"access_token":"minted","expires_in":3600}"#.utf8))
-            }
-            usageAuth = request.value(forHTTPHeaderField: "Authorization")
+    func testExpiredCredentialsSkipNetwork() async {
+        var calls = 0
+        ClaudeStubURLProtocol.handler = { _ in
+            calls += 1
             return (200, Data(#"{"limits":[]}"#.utf8))
-        }
-        let stale = ClaudeOAuthCredentials(
-            accessToken: "stale", refreshToken: "stale-refresh",
-            expiresAt: Date().addingTimeInterval(-10))
-        let rotated = ClaudeOAuthCredentials(
-            accessToken: "just-logged-in", refreshToken: "fresh",
-            expiresAt: Date().addingTimeInterval(3600))
-        // Proactive re-read, then the pre-save guard: both see the rotation.
-        let store = ScriptedClaudeCredentialStore(loads: [stale, stale, rotated])
-        let source = LiveClaudeUsageSource(credentials: store, session: ClaudeStubURLProtocol.session)
-
-        _ = try await source.fetch()
-
-        // The minted token serves this fetch, but nothing overwrites the login.
-        XCTAssertEqual(usageAuth, "Bearer minted")
-        XCTAssertTrue(store.saved.isEmpty)
-    }
-
-    func testRefreshSkipsSaveWhenLoggedOutMidFlight() async throws {
-        ClaudeStubURLProtocol.handler = { request in
-            if request.url?.absoluteString.contains("/oauth/token") == true {
-                return (200, Data(#"{"access_token":"minted","expires_in":3600}"#.utf8))
-            }
-            return (200, Data(#"{"limits":[]}"#.utf8))
-        }
-        let stale = ClaudeOAuthCredentials(
-            accessToken: "stale", refreshToken: "stale-refresh",
-            expiresAt: Date().addingTimeInterval(-10))
-        let store = ScriptedClaudeCredentialStore(loads: [stale, stale, nil])
-        let source = LiveClaudeUsageSource(credentials: store, session: ClaudeStubURLProtocol.session)
-
-        _ = try await source.fetch()
-
-        // No resurrection: the logout stands, the mint dies with the fetch.
-        XCTAssertTrue(store.saved.isEmpty)
-    }
-
-    func testRefreshBlipFallsBackToLoadedToken() async throws {
-        var usageCalls = 0
-        ClaudeStubURLProtocol.handler = { request in
-            if request.url?.absoluteString.contains("/oauth/token") == true {
-                return (500, Data())
-            }
-            usageCalls += 1
-            return (200, Data(#"{"limits":[{"kind":"session","percent":11}]}"#.utf8))
         }
         let source = LiveClaudeUsageSource(
             credentials: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
-                accessToken: "still-good", refreshToken: "refresh-me",
+                accessToken: "stale",
                 expiresAt: Date().addingTimeInterval(-10))),
             session: ClaudeStubURLProtocol.session)
 
-        let snapshot = try await source.fetch()
-
-        XCTAssertEqual(snapshot.rolling?.percent, 11)
-        XCTAssertEqual(usageCalls, 1)
-    }
-
-    func testProactiveRefreshPrefersRotatedFile() async throws {
-        var tokenCalls = 0
-        var usageAuth: String?
-        ClaudeStubURLProtocol.handler = { request in
-            if request.url?.absoluteString.contains("/oauth/token") == true {
-                tokenCalls += 1
-                return (200, Data(#"{"access_token":"should-not-happen","expires_in":3600}"#.utf8))
-            }
-            usageAuth = request.value(forHTTPHeaderField: "Authorization")
-            return (200, Data(#"{"limits":[]}"#.utf8))
-        }
-        // First load is stale-expired; anything after is what Claude Code
-        // rotated in while this fetch was starting.
-        let store = ScriptedClaudeCredentialStore(loads: [
-            ClaudeOAuthCredentials(
-                accessToken: "stale", refreshToken: "consumed-elsewhere",
-                expiresAt: Date().addingTimeInterval(-10)),
-            ClaudeOAuthCredentials(
-                accessToken: "rotated", refreshToken: "fresh",
-                expiresAt: Date().addingTimeInterval(3600)),
-        ])
-        let source = LiveClaudeUsageSource(credentials: store, session: ClaudeStubURLProtocol.session)
-
-        _ = try await source.fetch()
-
-        XCTAssertEqual(usageAuth, "Bearer rotated")
-        XCTAssertEqual(tokenCalls, 0)
-    }
-
-    func testDeadRefreshTokenReadsAsMissingCredentials() async {
-        ClaudeStubURLProtocol.handler = { request in
-            if request.url?.absoluteString.contains("/oauth/token") == true {
-                return (400, Data(#"{"error":"invalid_grant"}"#.utf8))
-            }
-            return (401, Data())
-        }
-        let source = LiveClaudeUsageSource(
-            credentials: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
-                accessToken: "dead", refreshToken: "also-dead",
-                expiresAt: Date().addingTimeInterval(3600))),
-            session: ClaudeStubURLProtocol.session)
-
         do {
             _ = try await source.fetch()
-            XCTFail("a dead refresh must not fetch")
+            XCTFail("expired creds must not fetch")
         } catch let error as ClaudeUsageError {
             XCTAssertEqual(error, .missingCredentials)
         } catch {
             XCTFail("wrong error: \(error)")
         }
+        XCTAssertEqual(calls, 0)
+    }
+
+    func testUnknownExpiryStillTriesNetwork() async throws {
+        // Legacy logins predate expiresAt — the endpoint arbitrates those.
+        var calls = 0
+        ClaudeStubURLProtocol.handler = { _ in
+            calls += 1
+            return (200, Data(#"{"limits":[]}"#.utf8))
+        }
+        let source = LiveClaudeUsageSource(
+            credentials: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
+                accessToken: "legacy")),
+            session: ClaudeStubURLProtocol.session)
+
+        _ = try await source.fetch()
+
+        XCTAssertEqual(calls, 1)
     }
 
     func testServerErrorReadsAsUnavailable() async {
@@ -677,39 +519,5 @@ final class FakeClaudeUsageSource: ClaudeUsageSource {
         fetchCount += 1
         if let nextError { throw nextError }
         return nextSnapshot
-    }
-}
-
-/// Refuses every access: stands in for a dismissed keychain prompt.
-final class DenyingClaudeCredentialStore: ClaudeCredentialStore {
-    private(set) var loadCount = 0
-
-    func loadCredentials() throws -> ClaudeOAuthCredentials? {
-        loadCount += 1
-        throw ClaudeUsageError.keychainDenied
-    }
-
-    func saveCredentials(_ credentials: ClaudeOAuthCredentials) throws {
-        throw ClaudeUsageError.keychainDenied
-    }
-}
-
-/// Replays a script of credentials, one per load, and records saves: stands
-/// in for Claude Code rotating the login mid-fetch.
-final class ScriptedClaudeCredentialStore: ClaudeCredentialStore {
-    private var loads: [ClaudeOAuthCredentials?]
-    private(set) var saved: [ClaudeOAuthCredentials] = []
-
-    init(loads: [ClaudeOAuthCredentials?]) {
-        self.loads = loads
-    }
-
-    func loadCredentials() throws -> ClaudeOAuthCredentials? {
-        if loads.count > 1 { return loads.removeFirst() }
-        return loads.first ?? saved.last
-    }
-
-    func saveCredentials(_ credentials: ClaudeOAuthCredentials) throws {
-        saved.append(credentials)
     }
 }

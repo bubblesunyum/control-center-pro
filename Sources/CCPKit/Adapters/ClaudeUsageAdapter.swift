@@ -32,9 +32,6 @@ public enum ClaudeUsageError: Sendable, Equatable, Error {
     /// No usable OAuth anywhere — the user hasn't run `claude auth login`,
     /// or the refresh token is dead.
     case missingCredentials
-    /// The login keychain entry exists but reads are denied — the user
-    /// dismissed the access prompt instead of choosing Always Allow.
-    case keychainDenied
     /// The endpoint was unreachable, answered something unusable, or OAuth is
     /// disallowed for the account's organization.
     case unavailable
@@ -76,8 +73,15 @@ public struct ClaudeOAuthCredentials: Sendable, Equatable {
         )
     }
 
-    /// Merges fresh tokens into an existing credentials dict, preserving
-    /// sibling keys — notably `mcpOAuth`, which shares the keychain entry.
+    /// Whether the grant is spent. Unknown expiry counts as live — legacy
+    /// logins predate the field, and the endpoint is the arbiter for those.
+    var isExpired: Bool {
+        guard let expiresAt else { return false }
+        return Date() > expiresAt.addingTimeInterval(-60)
+    }
+
+    /// Merges fresh tokens into an existing credentials dict, preserving any
+    /// other keys already present.
     func merging(into json: [String: Any]) -> [String: Any] {
         var json = json
         var oauth = json["claudeAiOauth"] as? [String: Any] ?? [:]
@@ -102,10 +106,10 @@ public protocol ClaudeCredentialStore: Sendable {
     func saveCredentials(_ credentials: ClaudeOAuthCredentials) throws
 }
 
-/// Reads the key the file holds. Legacy path — current installs keep OAuth
-/// in the login keychain and never write this file, so the compound tries
-/// the keychain first. Throws nothing on a missing or unparsable file —
-/// that is just "not connected", which the widget shows inline.
+/// Reads the key the file holds. Legacy path — the app's own store serves
+/// first and tries this file only after its prompt-free migration misses.
+/// Throws nothing on a missing or unparsable file — that is just "not
+/// connected", which the widget shows inline.
 public struct FileClaudeCredentialStore: ClaudeCredentialStore {
     private let credentialsFile: URL
 
@@ -179,13 +183,15 @@ public final class InMemoryClaudeCredentialStore: ClaudeCredentialStore, @unchec
     }
 }
 
-/// The login keychain entry Claude Code's native builds maintain.
+/// One-shot reads of the login Claude Code keeps in the login keychain.
 ///
-/// `claude auth login` writes OAuth here under this exact service and never
-/// touches the credentials file, so a file-only read misses every current
-/// login. The first read prompts once — Always Allow keeps later panel opens
-/// silent; a dismissal surfaces as `.keychainDenied` instead of a login nag.
-public struct KeychainClaudeCredentialStore: ClaudeCredentialStore {
+/// Deliberately NOT a ClaudeCredentialStore: nothing on the fetch path may
+/// hold one. Every access can re-prompt — dev builds re-signed on every
+/// compile arrive as strangers — so ambient reads nag once per panel open
+/// (see never-ambient-login-keychain-reads). The silent read backs the app
+/// file's first-launch migration; the explicit read backs the Import button,
+/// which is the only moment a system dialog is contextual.
+public struct ClaudeKeychainLogin: Sendable {
     public static let service = "Claude Code-credentials"
 
     private let service: String
@@ -194,80 +200,34 @@ public struct KeychainClaudeCredentialStore: ClaudeCredentialStore {
         self.service = service
     }
 
-    public func loadCredentials() throws -> ClaudeOAuthCredentials? {
+    /// Reads without ever prompting: with `kSecUseAuthenticationUIFail` a
+    /// build the keychain doesn't trust fails fast with
+    /// `errSecInteractionNotAllowed` instead of showing Allow. Nil on any
+    /// failure — the caller falls through to its next source.
+    public func loadSilently() -> ClaudeOAuthCredentials? {
+        var query = baseQuery
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
         var item: CFTypeRef?
-        guard try entryExists(SecItemCopyMatching(query(returningData: true), &item)) else {
-            return nil
-        }
-        guard let data = item as? Data,
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+              let data = item as? Data,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let credentials = ClaudeOAuthCredentials(oauthJSON: json)
         else { return nil }
         return credentials
     }
 
-    public func saveCredentials(_ credentials: ClaudeOAuthCredentials) throws {
-        // One read decides update-vs-add, so a second lookup can't disagree
-        // with the first under per-access confirmation.
+    /// Reads with the system prompt. Call only from the Import button —
+    /// never ambiently. Nil when there is no login or the read fails.
+    public func loadWithPrompt() -> ClaudeOAuthCredentials? {
         var item: CFTypeRef?
-        let found = try entryExists(SecItemCopyMatching(query(returningData: true), &item))
-        var json: [String: Any] = [:]
-        if found,
-           let data = item as? Data,
-           let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        {
-            json = raw
-        }
-        let data = try JSONSerialization.data(
-            withJSONObject: credentials.merging(into: json))
-        if found {
-            _ = try entryExists(SecItemUpdate(
-                query(returningData: false),
-                [kSecValueData as String: data] as CFDictionary
-            ))
-        } else {
-            var add = baseQuery
-            add[kSecAttrAccount as String] = NSUserName()
-            add[kSecValueData as String] = data
-            let status = SecItemAdd(add as CFDictionary, nil)
-            if status == errSecDuplicateItem {
-                // Created between our read and our add — re-read for a
-                // current merge base so the retry preserves whatever the
-                // winner wrote (notably mcpOAuth), then update instead.
-                var current: CFTypeRef?
-                var base: [String: Any] = [:]
-                if SecItemCopyMatching(query(returningData: true), &current) == errSecSuccess,
-                   let currentData = current as? Data,
-                   let raw = try? JSONSerialization.jsonObject(with: currentData) as? [String: Any]
-                {
-                    base = raw
-                }
-                let retryData = try JSONSerialization.data(
-                    withJSONObject: credentials.merging(into: base))
-                _ = try entryExists(SecItemUpdate(
-                    query(returningData: false),
-                    [kSecValueData as String: retryData] as CFDictionary
-                ))
-            } else {
-                _ = try entryExists(status)
-            }
-        }
-    }
-
-    /// Maps a Security result to entry-exists. One owner so load and save
-    /// can't disagree on what denial means — writes reuse it too, since a
-    /// denied or failed write reads as the widget's errors either way.
-    func entryExists(_ status: OSStatus) throws -> Bool {
-        switch status {
-        case errSecSuccess:
-            return true
-        case errSecItemNotFound:
-            return false
-        case errSecAuthFailed, errSecUserCanceled:
-            throw ClaudeUsageError.keychainDenied
-        default:
-            throw ClaudeUsageError.unavailable
-        }
+        guard SecItemCopyMatching(query(returningData: true), &item) == errSecSuccess,
+              let data = item as? Data,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let credentials = ClaudeOAuthCredentials(oauthJSON: json)
+        else { return nil }
+        return credentials
     }
 
     private var baseQuery: [String: Any] {
@@ -285,81 +245,116 @@ public struct KeychainClaudeCredentialStore: ClaudeCredentialStore {
     }
 }
 
-/// Keychain, then file — in that load order, deliberately.
+/// Our own copy of the Claude OAuth, in one owner-only file under
+/// Application Support — the FileCraftCredentialStore shape, not the login
+/// keychain.
 ///
-/// Current Claude Code keeps OAuth in the login keychain and the file is the
-/// legacy shape, so when both yield a login the keychain is the live one and
-/// wins. Saves go back to whichever side yields usable creds, keeping load
-/// and save on the same origin even when one side holds an unparsable entry.
-//
-// Unchecked Sendable: both wrapped stores are Sendable and skipKeychain sits
-// behind the lock — fetches run off the main actor, so the flag needs it.
-public final class CompoundClaudeCredentialStore: ClaudeCredentialStore, @unchecked Sendable {
-    private let keychain: ClaudeCredentialStore
-    private let file: ClaudeCredentialStore
-    private let lock = NSLock()
-    private var skipKeychain = false
+/// A login-keychain item is ACL'd to the build that created it, and dev
+/// builds are re-signed on every compile, so each launch arrived as a
+/// stranger and macOS asked the user to vouch for it — twice per panel open.
+/// A 0600 file in the app's own container is isolated by the OS and encrypted
+/// at rest under FileVault, and never prompts.
+///
+/// The copy arrives once: the first load with no file tries a prompt-free
+/// keychain read and files what it finds; otherwise the Import button copies
+/// it behind one explicit prompt. Refreshes write back here — Claude Code's
+/// own entry is never written.
+public struct AppClaudeCredentialStore: ClaudeCredentialStore {
+    private let fileURL: URL
+    private let legacyFile: ClaudeCredentialStore
+    private let silentLogin: @Sendable () -> ClaudeOAuthCredentials?
 
     public init(
-        keychain: ClaudeCredentialStore = KeychainClaudeCredentialStore(),
-        file: ClaudeCredentialStore = FileClaudeCredentialStore()
+        fileURL: URL? = nil,
+        legacyFile: ClaudeCredentialStore = FileClaudeCredentialStore(),
+        silentLogin: @Sendable @escaping () -> ClaudeOAuthCredentials? = {
+            ClaudeKeychainLogin().loadSilently()
+        }
     ) {
-        self.keychain = keychain
-        self.file = file
+        self.fileURL = fileURL ?? URL.applicationSupport.appendingPathComponent("claude-oauth")
+        self.legacyFile = legacyFile
+        self.silentLogin = silentLogin
     }
 
     public func loadCredentials() throws -> ClaudeOAuthCredentials? {
-        if !isSkipped {
-            do {
-                if let credentials = try keychain.loadCredentials() {
-                    return credentials
-                }
-            } catch ClaudeUsageError.keychainDenied {
-                // A dismissal re-prompts on every access, so stick the skip
-                // for the process — but only past a working file. With no
-                // file either, the denial itself is the honest error and the
-                // next open re-prompts, which is the only recovery path.
-                if let fileCredentials = try file.loadCredentials() {
-                    setSkipped()
-                    return fileCredentials
-                }
-                throw ClaudeUsageError.keychainDenied
-            } catch {
-                if let fileCredentials = try file.loadCredentials() {
-                    return fileCredentials
-                }
-                throw ClaudeUsageError.unavailable
-            }
+        if let data = try? Data(contentsOf: fileURL),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let credentials = ClaudeOAuthCredentials(oauthJSON: json)
+        {
+            return credentials
         }
-        return try file.loadCredentials()
+        if let migrated = silentLogin(), !migrated.isExpired {
+            // An already-expired migration is never cemented: it would shadow
+            // a still-valid legacy login with a dead copy on every load after.
+            try? saveCredentials(migrated)
+            return migrated
+        }
+        return try legacyFile.loadCredentials()
     }
 
     public func saveCredentials(_ credentials: ClaudeOAuthCredentials) throws {
-        if !isSkipped {
-            do {
-                if try keychain.loadCredentials() != nil {
-                    try keychain.saveCredentials(credentials)
-                    return
-                }
-            } catch ClaudeUsageError.keychainDenied {
-                setSkipped()
-            } catch {
-                // A failing keychain must not strand a working file.
-            }
+        let data = try JSONSerialization.data(
+            withJSONObject: credentials.merging(into: [:]))
+        try writeOwnerOnly(data)
+        // Only a read-back proves the bytes landed: a throw after a
+        // successful write would report "nothing was stored" while the next
+        // launch reads the file as configured.
+        guard (try? Data(contentsOf: fileURL)) == data else {
+            throw AppClaudeCredentialError.unwritten
         }
-        try file.saveCredentials(credentials)
     }
 
-    private var isSkipped: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return skipKeychain
+    /// Owner-only from birth, never world-readable in between: the temp file
+    /// is created 0600 and renamed over the target. A crash mid-swap loses
+    /// the credential (fail-safe: re-import) rather than exposing it.
+    private func writeOwnerOnly(_ data: Data) throws {
+        let directory = fileURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        let tmp = directory.appendingPathComponent(UUID().uuidString)
+        do {
+            guard FileManager.default.createFile(atPath: tmp.path, contents: data,
+                                                 attributes: [.posixPermissions: 0o600]) else {
+                throw AppClaudeCredentialError.unwritten
+            }
+            try? FileManager.default.removeItem(at: fileURL)
+            try FileManager.default.moveItem(at: tmp, to: fileURL)
+        } catch {
+            try? FileManager.default.removeItem(at: tmp)
+            throw error
+        }
+    }
+}
+
+public enum AppClaudeCredentialError: Error {
+    case unwritten
+}
+
+/// One-shot copy of Claude Code's login into our private store. Runs only
+/// from the Import button — never on the fetch path.
+public struct ClaudeLoginImporter: Sendable {
+    private let readLogin: @Sendable () -> ClaudeOAuthCredentials?
+    private let store: ClaudeCredentialStore
+
+    public init(
+        readLogin: @Sendable @escaping () -> ClaudeOAuthCredentials? = {
+            ClaudeKeychainLogin().loadWithPrompt()
+        },
+        store: ClaudeCredentialStore = AppClaudeCredentialStore()
+    ) {
+        self.readLogin = readLogin
+        self.store = store
     }
 
-    private func setSkipped() {
-        lock.lock()
-        defer { lock.unlock() }
-        skipKeychain = true
+    /// Copies the login; false when there was none to copy.
+    @discardableResult
+    public func importLogin() throws -> Bool {
+        guard let login = readLogin() else { return false }
+        try store.saveCredentials(login)
+        return true
     }
 }
 
@@ -377,15 +372,12 @@ public protocol ClaudeUsageSource: AnyObject, Sendable {
 /// `/usage` and the status line show.
 public final class LiveClaudeUsageSource: ClaudeUsageSource {
     private static let usageEndpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
-    private static let tokenEndpoint = URL(string: "https://console.anthropic.com/v1/oauth/token")!
-    /// Claude Code's public OAuth client — one id for every client, safe to ship.
-    private static let clientID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 
     private let credentials: ClaudeCredentialStore
     private let session: URLSession
 
     public init(
-        credentials: ClaudeCredentialStore = CompoundClaudeCredentialStore(),
+        credentials: ClaudeCredentialStore = AppClaudeCredentialStore(),
         session: URLSession = .shared
     ) {
         self.credentials = credentials
@@ -393,54 +385,16 @@ public final class LiveClaudeUsageSource: ClaudeUsageSource {
     }
 
     public func fetch() async throws -> ClaudeUsageSnapshot {
-        guard var creds = try credentials.loadCredentials(), !creds.accessToken.isEmpty else {
+        guard let creds = try credentials.loadCredentials(), !creds.accessToken.isEmpty,
+              !creds.isExpired
+        else {
+            // No refresh here, deliberately: refresh tokens are single-use,
+            // so minting from our copy would invalidate Claude Code's own and
+            // log the user out of their real tool. An expired copy just reads
+            // as logged-out until the next import re-syncs to the live login.
             throw ClaudeUsageError.missingCredentials
         }
-        // Refresh proactively when expired — the access token lives ~an hour.
-        // A blipped token endpoint must not sink the fetch: the loaded token
-        // may still be good, so only a dead refresh token reads as logged-out.
-        if isExpired(creds) {
-            creds = try await freshCredentials(creds)
-        }
-        do {
-            return try await requestUsage(token: creds.accessToken)
-        } catch FetchFailure.unauthorized {
-            let token = try await refreshAfterRejection(creds)
-            do {
-                return try await requestUsage(token: token)
-            } catch FetchFailure.unauthorized {
-                // The minted token is rejected too — the grant is gone.
-                throw ClaudeUsageError.missingCredentials
-            }
-        }
-    }
-
-    /// Current credentials, refreshing when expired. Re-reads first: Claude
-    /// Code rotates on its own schedule, and refreshing over its write with a
-    /// consumed refresh token would log the user out. The re-read never sinks
-    /// the fetch — a dismissal just means refreshing from the in-hand creds.
-    private func freshCredentials(_ creds: ClaudeOAuthCredentials) async throws -> ClaudeOAuthCredentials {
-        if let latest = try? credentials.loadCredentials(),
-           latest.accessToken != creds.accessToken, !latest.accessToken.isEmpty
-        {
-            return latest
-        }
-        do {
-            return try await refresh(creds)
-        } catch ClaudeUsageError.unavailable {
-            return creds
-        }
-    }
-
-    /// One recovery round after a 401: prefer whatever is on disk now — it may
-    /// be newer than what this fetch loaded — and refresh only from there.
-    private func refreshAfterRejection(_ creds: ClaudeOAuthCredentials) async throws -> String {
-        if let latest = try? credentials.loadCredentials(),
-           latest.accessToken != creds.accessToken, !latest.accessToken.isEmpty
-        {
-            return latest.accessToken
-        }
-        return try await refresh(creds).accessToken
+        return try await requestUsage(token: creds.accessToken)
     }
 
     private func requestUsage(token: String) async throws -> ClaudeUsageSnapshot {
@@ -462,7 +416,8 @@ public final class LiveClaudeUsageSource: ClaudeUsageSource {
             case 200..<300:
                 data = body
             case 401:
-                throw FetchFailure.unauthorized
+                // Revoked or rotated elsewhere — re-import re-syncs.
+                throw ClaudeUsageError.missingCredentials
             default:
                 // Only 401 means the token is bad. A 403 of any shape — a
                 // proxy's HTML page, OAuth disallowed for the organization —
@@ -470,8 +425,6 @@ public final class LiveClaudeUsageSource: ClaudeUsageSource {
                 // the user through re-login to no effect.
                 throw ClaudeUsageError.unavailable
             }
-        } catch let failure as FetchFailure {
-            throw failure
         } catch let error as ClaudeUsageError {
             throw error
         } catch {
@@ -482,83 +435,6 @@ public final class LiveClaudeUsageSource: ClaudeUsageSource {
         } catch {
             throw ClaudeUsageError.unavailable
         }
-    }
-
-    /// One refresh round trip, persisted. A dead refresh token reads as
-    /// "log in again", not "offline".
-    private func refresh(_ creds: ClaudeOAuthCredentials) async throws -> ClaudeOAuthCredentials {
-        guard let refreshToken = creds.refreshToken, !refreshToken.isEmpty else {
-            throw ClaudeUsageError.missingCredentials
-        }
-        var request = URLRequest(
-            url: Self.tokenEndpoint,
-            cachePolicy: .reloadIgnoringLocalCacheData,
-            timeoutInterval: 15
-        )
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: [
-            "grant_type": "refresh_token",
-            "refresh_token": refreshToken,
-            "client_id": Self.clientID,
-        ])
-        let payload: [String: Any]
-        let access: String
-        do {
-            let (body, response) = try await session.data(for: request)
-            guard (response as? HTTPURLResponse)?.statusCode == 200,
-                  let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
-                  let token = json["access_token"] as? String, !token.isEmpty
-            else {
-                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-                throw RefreshFailure(status: status)
-            }
-            payload = json
-            access = token
-        } catch let failure as RefreshFailure {
-            // The refresh token itself is rejected — only a fresh login fixes it.
-            if failure.status == 400 || failure.status == 401 {
-                throw ClaudeUsageError.missingCredentials
-            }
-            throw ClaudeUsageError.unavailable
-        } catch let error as ClaudeUsageError {
-            throw error
-        } catch {
-            throw ClaudeUsageError.unavailable
-        }
-        var refreshed = creds
-        refreshed.accessToken = access
-        // Refresh tokens rotate: dropping the new one logs the user out.
-        if let next = payload["refresh_token"] as? String, !next.isEmpty {
-            refreshed.refreshToken = next
-        }
-        if let lifetime = payload["expires_in"] as? Double {
-            refreshed.expiresAt = Date().addingTimeInterval(lifetime)
-        } else if let lifetime = payload["expires_in"] as? Int {
-            refreshed.expiresAt = Date().addingTimeInterval(Double(lifetime))
-        }
-        // Best effort — and never over a newer login or a logout: a
-        // `claude auth login` (or logout) landing mid-refresh wins, while our
-        // minted tokens still serve this fetch. An unverifiable re-read also
-        // skips the save rather than risking it. A failed write just means
-        // the next fetch refreshes again.
-        do {
-            guard let current = try credentials.loadCredentials() else {
-                return refreshed
-            }
-            guard current.accessToken == creds.accessToken else {
-                return refreshed
-            }
-        } catch {
-            return refreshed
-        }
-        try? credentials.saveCredentials(refreshed)
-        return refreshed
-    }
-
-    private func isExpired(_ creds: ClaudeOAuthCredentials) -> Bool {
-        guard let expiresAt = creds.expiresAt else { return false }
-        return Date() > expiresAt.addingTimeInterval(-60)
     }
 
     /// Tolerantly decoded: unknown `kind`s and model-scoped weeklies are
@@ -603,14 +479,6 @@ public final class LiveClaudeUsageSource: ClaudeUsageSource {
         UsageDateFormatter.withFractional.date(from: raw)
             ?? UsageDateFormatter.withoutFractional.date(from: raw)
     }
-}
-
-private enum FetchFailure: Error {
-    case unauthorized
-}
-
-private struct RefreshFailure: Error {
-    var status: Int
 }
 
 // MARK: - Adapter

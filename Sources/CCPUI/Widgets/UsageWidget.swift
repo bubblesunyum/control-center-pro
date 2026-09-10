@@ -65,7 +65,7 @@ private struct UsageContent: View {
             // The countdowns tick off each adapter's 30s ticker, which lives
             // and dies with activate()/deactivate() — the hosting graph is
             // never torn down, so a view-owned timer would tick while shut.
-            VStack(alignment: .leading, spacing: Space.oneHalf) {
+            VStack(alignment: .leading, spacing: Space.three) {
                 providerSection(
                     provider: .openCode,
                     lastUpdated: openCode.lastUpdated,
@@ -108,7 +108,12 @@ private struct UsageContent: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: Space.one) {
             ProviderHeader(provider: provider)
-            if lastUpdated == nil, let lastError {
+            if lastError == .missingLogin {
+                // Logged-out beats stale: rows from a dead grant read as live
+                // numbers, and for Claude this is where the Import button
+                // lives — including the hourly expiry after a prior success.
+                errorRow(.missingLogin, provider: provider)
+            } else if lastUpdated == nil, let lastError {
                 errorRow(lastError, provider: provider)
             } else if lastUpdated == nil {
                 Text("Loading…")
@@ -151,28 +156,78 @@ private struct UsageContent: View {
         .accessibilityLabel("\(provider.title) \(title) \(UsageWidget.percentText(window?.percent)), \(UsageWidget.resetText(until: window?.resetsAt, now: now))")
     }
 
+    @ViewBuilder
     private func errorRow(_ error: ProviderError, provider: Provider) -> some View {
-        let message: String
-        let accessibilityMessage: String
         switch (provider, error) {
-        case (.openCode, .missingLogin):
-            message = "Connect Go with /connect in OpenCode"
-            accessibilityMessage = "OpenCode Go not connected"
         case (.claude, .missingLogin):
-            message = "Connect with claude auth login in a terminal"
-            accessibilityMessage = "Claude not connected"
-        case (_, .keychainAccess):
-            message = "Choose Always Allow in the keychain prompt"
-            accessibilityMessage = "\(provider.title) keychain access needed"
+            ClaudeImportPrompt(
+                importLogin: { try ClaudeLoginImporter().importLogin() },
+                refresh: { await claude.refresh() }
+            )
+        case (.openCode, .missingLogin):
+            Text("Connect Go with /connect in OpenCode")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("OpenCode Go not connected")
         case (_, .unreachable):
-            message = "Couldn't load usage"
-            accessibilityMessage = "\(provider.title) usage unavailable"
+            Text("Couldn't load usage")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("\(provider.title) usage unavailable")
         }
-        return Text(message)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .accessibilityLabel(accessibilityMessage)
     }
+}
+
+/// The Claude empty state: one explicit import behind a button, with the
+/// failure naming its own recovery.
+private struct ClaudeImportPrompt: View {
+    let importLogin: () throws -> Bool
+    let refresh: () async -> Void
+
+    @State private var issue: ImportIssue?
+
+    var body: some View {
+        // The one explicit keychain moment: a single prompt behind this
+        // button copies the login into our private store, and the fetch
+        // path never touches the keychain again.
+        VStack(alignment: .leading, spacing: Space.half) {
+            Button("Import from Claude Code") {
+                Task { @MainActor in
+                    do {
+                        if try importLogin() {
+                            issue = nil
+                            await refresh()
+                        } else {
+                            issue = .noLogin
+                        }
+                    } catch {
+                        issue = .saveFailed
+                    }
+                }
+            }
+            .buttonStyle(.link)
+            .accessibilityLabel("Import Claude login from Claude Code")
+            Text(caption)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    private var caption: String {
+        switch issue {
+        case .noLogin:
+            "No Claude login found — run claude auth login first, then import again"
+        case .saveFailed:
+            "Couldn't save the login — check disk space, then import again"
+        case nil:
+            "Requires claude auth login in a terminal first"
+        }
+    }
+}
+
+private enum ImportIssue {
+    case noLogin
+    case saveFailed
 }
 
 private enum Provider {
@@ -203,7 +258,6 @@ private enum Provider {
 
 private enum ProviderError {
     case missingLogin
-    case keychainAccess
     case unreachable
 
     init(_ error: OpenCodeUsageError) {
@@ -211,14 +265,7 @@ private enum ProviderError {
     }
 
     init(_ error: ClaudeUsageError) {
-        switch error {
-        case .missingCredentials:
-            self = .missingLogin
-        case .keychainDenied:
-            self = .keychainAccess
-        case .unavailable:
-            self = .unreachable
-        }
+        self = error == .missingCredentials ? .missingLogin : .unreachable
     }
 }
 
