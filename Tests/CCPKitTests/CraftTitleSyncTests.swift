@@ -329,7 +329,8 @@ final class CraftTitleSyncTests: XCTestCase {
 
         await adapter.flushCraftPush()
 
-        XCTAssertEqual(transport.requests.count, 3, "sweep, failed title PUT, content PUT still attempts")
+        XCTAssertEqual(transport.requests.count, 4,
+                       "sweep, failed title PUT, content PUT still attempts, read-back")
         XCTAssertEqual(transport.requests[2].httpMethod, "PUT",
                        "the content leg still attempts behind the failed title")
         XCTAssertEqual(destination.base(for: id), .fixture("one"),

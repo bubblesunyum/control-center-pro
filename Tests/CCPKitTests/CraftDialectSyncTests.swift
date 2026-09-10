@@ -31,15 +31,16 @@ final class CraftDialectSyncTests: XCTestCase {
         return (adapter, destination)
     }
 
-    /// A pad mapped to an empty Craft doc, with its first push already
-    /// landed — the steady state every later round starts from.
+    /// A pad whose first push provisioned its document and landed — the
+    /// steady state every later round starts from. The document is created by
+    /// the push, as in production: a pad handed a document id it never wrote
+    /// to is the migration case, and that one waits for a pull.
     private func syncedPad(_ adapter: NotesAdapter, _ destination: CraftNoteDestination,
                            text: String) async throws -> UUID {
         let id = try XCTUnwrap(adapter.selectedNoteID)
-        destination.setCraftDocumentID("doc1", for: id)
-        destination.storeSyncedTitle(adapter.selectedNoteName, for: id)
         adapter.text = text
         await adapter.flushCraftPush()
+        XCTAssertEqual(destination.craftDocumentID(for: id), "doc1", "the push provisioned")
         return id
     }
 
@@ -140,5 +141,168 @@ final class CraftDialectSyncTests: XCTestCase {
 
         XCTAssertEqual(adapter.text, "an *italic* word, from Craft")
         XCTAssertFalse(transport.blocks.contains { $0.markdown.contains("Conflicted copy") })
+    }
+}
+
+/// Upgrading from the superseded sidecar (ccp-c2x5): a mapped pad has no base
+/// until a pull seeds one, and planning from nothing would post the whole pad
+/// into a document that already holds it.
+@MainActor
+final class CraftBaseMigrationTests: XCTestCase {
+    private let base = URL(string: "https://connect.craft.do/links/test/api/v1")!
+
+    private func defaults(_ name: String) throws -> UserDefaults {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defaults.removePersistentDomain(forName: name)
+        return defaults
+    }
+
+    private func adapter(_ store: UserDefaults, _ transport: NormalisingCraftTransport)
+        -> (NotesAdapter, CraftNoteDestination) {
+        let destination = CraftNoteDestination(defaults: store)
+        let adapter = NotesAdapter(defaults: store, defaultName: "Note",
+                                   notesDirectory: freshNotesDirectory(),
+                                   destination: destination)
+        adapter.craftTransport = transport
+        adapter.craftBaseURLOverride = base
+        return (adapter, destination)
+    }
+
+    /// A pad whose first push provisioned its document and landed.
+    private func syncedPad(_ adapter: NotesAdapter, _ destination: CraftNoteDestination,
+                           text: String) async throws -> UUID {
+        let id = try XCTUnwrap(adapter.selectedNoteID)
+        adapter.text = text
+        await adapter.flushCraftPush()
+        return id
+    }
+
+    func testAMappedPadWithNoBaseWaitsForThePullInsteadOfReposting() async throws {
+        let name = "ccp.migrate.wait.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = NormalisingCraftTransport(blocks: [.init(id: "old", markdown: "my note")])
+        let (adapter, destination) = adapter(store, transport)
+        let id = try XCTUnwrap(adapter.selectedNoteID)
+        // What an upgrade looks like: a mapping, a title, and no base.
+        destination.setCraftDocumentID("doc1", for: id)
+        destination.storeSyncedTitle(adapter.selectedNoteName, for: id)
+        adapter.text = "my note, edited"
+
+        await adapter.flushCraftPush()
+
+        XCTAssertTrue(transport.writes.isEmpty,
+                      "nothing may be written before there is a base to diff against")
+        XCTAssertEqual(transport.blocks.map(\.markdown), ["my note"])
+        XCTAssertTrue(adapter.isPushDirty(id), "the edit is held, not dropped")
+
+        // The pull records what each side holds and moves neither: which one
+        // leads is not knowable, so the next real edit decides.
+        await adapter.pullAll()
+        XCTAssertEqual(adapter.text, "my note, edited")
+        XCTAssertEqual(transport.blocks.map(\.markdown), ["my note"])
+
+        // And that edit lands in place, against the seeded base.
+        adapter.text = "my note, edited twice"
+        await adapter.flushCraftPush()
+
+        XCTAssertEqual(transport.blocks.map(\.markdown), ["my note, edited twice"],
+                       "the edit lands in place — no second copy")
+    }
+
+    func testAFailedRoundDiffsAgainstWhatCraftReallyHolds() async throws {
+        // The DELETE fails, so Craft keeps a block the pad dropped. The base
+        // records Craft's text as both sides, so the pad reads as leading and
+        // the next round removes it — rather than replaying a plan that half
+        // happened, which would repost what the POST already landed.
+        let name = "ccp.migrate.partial.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = NormalisingCraftTransport()
+        let (adapter, destination) = adapter(store, transport)
+        let id = try XCTUnwrap(adapter.selectedNoteID)
+        destination.setCraftDocumentID("doc1", for: id)
+        destination.storeSyncedTitle(adapter.selectedNoteName, for: id)
+        adapter.text = "one\n\ntwo\n\nthree"
+        destination.storeBase(.fixture("one\n\ntwo\n\nthree"), for: id)
+        // Seed Craft with the same three blocks under the base's ids.
+        transport.blocks = ["one", "two", "three"].enumerated().map {
+            .init(id: "block-\($0.offset)", markdown: $0.element)
+        }
+        transport.failDelete = true
+
+        adapter.text = "one\n\nTWO"
+        await adapter.flushCraftPush()
+
+        XCTAssertEqual(transport.blocks.map(\.markdown), ["one", "TWO", "three"],
+                       "the update landed; the delete did not")
+        XCTAssertEqual(destination.base(for: id).localText, "one  \nTWO  \nthree",
+                       "a failed round records what Craft really holds, on both sides")
+
+        transport.failDelete = false
+        await adapter.flushCraftPush()
+
+        XCTAssertEqual(transport.blocks.map(\.markdown), ["one", "TWO"],
+                       "the retry removes the orphan instead of reposting")
+    }
+
+    func testARetryingPushDoesNotRecordTheSameConflictTwice() async throws {
+        // Review finding: a stalled push leaves the pad unmerged into Craft,
+        // and every panel reopen used to re-derive the same merge and append
+        // another conflict record. The base's remote side advances at the
+        // merge, so the second pull has nothing left to integrate.
+        let name = "ccp.migrate.reconflict.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = NormalisingCraftTransport()
+        let (adapter, destination) = adapter(store, transport)
+        let id = try XCTUnwrap(adapter.selectedNoteID)
+        destination.setCraftDocumentID("doc1", for: id)
+        destination.storeSyncedTitle(adapter.selectedNoteName, for: id)
+        adapter.text = "mine"
+        // Agreed on "one"; since then the panel typed "mine" and Craft moved
+        // the same block to "theirs".
+        destination.storeBase(.fixture("one"), for: id)
+        transport.blocks = [.init(id: "block-0", markdown: "theirs")]
+
+        await adapter.pullAll()
+        XCTAssertEqual(adapter.text, "mine", "the panel wins the block both sides changed")
+        XCTAssertEqual(adapter.conflicts(for: id).count, 1)
+
+        // The push never lands; the panel is opened again.
+        await adapter.pullAll()
+
+        XCTAssertEqual(adapter.conflicts(for: id).count, 1,
+                       "one disagreement is one record, however often it is seen")
+        XCTAssertEqual(adapter.snapshots(for: id).filter { $0.reason == .conflict }.count, 1)
+    }
+
+    func testABlockAddedInCraftDuringThePushIsNotBuried() async throws {
+        // Review finding: the read-back that records the agreement sees the
+        // whole document, so a block someone added in Craft while the round
+        // was away would enter the base as already-agreed and never reach
+        // the pad. Only blocks this round knew or created may be agreed to.
+        let name = "ccp.migrate.foreign.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = NormalisingCraftTransport()
+        let (adapter, destination) = adapter(store, transport)
+        let id = try await syncedPad(adapter, destination, text: "one")
+
+        // Someone writes in Craft between our PUT and the read-back.
+        transport.onWrite = { [weak transport] in
+            transport?.blocks.append(.init(id: "foreign", markdown: "added in Craft"))
+            transport?.onWrite = nil
+        }
+        adapter.text = "ONE"
+        await adapter.flushCraftPush()
+
+        XCTAssertFalse(destination.base(for: id).blocks.contains { $0.id == "foreign" },
+                       "a block this round never touched is not something to agree to")
+
+        await adapter.pullAll()
+
+        XCTAssertTrue(adapter.text.contains("added in Craft"),
+                      "it reaches the pad on the next pull, the ordinary way")
     }
 }

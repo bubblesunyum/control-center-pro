@@ -26,6 +26,11 @@ final class NormalisingCraftTransport: CraftTransport, @unchecked Sendable {
     private(set) var requests: [(method: String, path: String)] = []
     /// True while Craft should respell; off reproduces the old echoing fake.
     var normalises = true
+    /// Makes DELETE /blocks fail, for the half-applied-round cases.
+    var failDelete = false
+    /// Runs after a write is applied, for the races that happen in Craft
+    /// while a round is away.
+    var onWrite: (() -> Void)?
 
     private var nextID = 0
 
@@ -84,10 +89,17 @@ final class NormalisingCraftTransport: CraftTransport, @unchecked Sendable {
         requests.append((method, path))
         let body = request.httpBody
             .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
+        if failDelete, method == "DELETE" {
+            return (Data("{}".utf8),
+                    HTTPURLResponse(url: url, statusCode: 500, httpVersion: nil,
+                                    headerFields: nil)!)
+        }
         if method != "GET", let sent = body["blocks"] as? [[String: Any]] {
             writtenMarkdown.append(sent.compactMap { $0["markdown"] as? String })
         }
-        return (Data(json(method: method, path: path, url: url, body: body).utf8),
+        let payload = json(method: method, path: path, url: url, body: body)
+        if method != "GET" { onWrite?() }
+        return (Data(payload.utf8),
                 HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
     }
 
@@ -97,6 +109,12 @@ final class NormalisingCraftTransport: CraftTransport, @unchecked Sendable {
             return #"{"space":{"name":"Test","id":"space1"},"utc":{"time":"2026-09-06T19:00:00Z"}}"#
         case ("GET", "documents"):
             return #"{"items":[]}"#
+        case ("POST", "documents"):
+            if let sent = (body["documents"] as? [[String: Any]])?.first,
+               let name = sent["title"] as? String {
+                title = name
+            }
+            return #"{"items":[{"id":"doc1","title":\#(quoted(title))}]}"#
         case ("GET", "blocks"):
             return page()
         case ("PUT", "blocks"):

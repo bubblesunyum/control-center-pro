@@ -940,47 +940,11 @@ final class CraftPushAdapterTests: XCTestCase {
         adapter.deactivate()
     }
 
-    func testPartialFailureRecordsNothingAndTheRetryFinishes() async throws {
-        let name = "ccp.push.partial.\(UUID().uuidString)"
-        let store = try defaults(name)
-        defer { store.removePersistentDomain(forName: name) }
-        // PUT ok, DELETE 500s. Then everything ok.
-        let transport = ScriptedTransport([
-            emptyTrash(),
-            .init(statusCode: 200, json: """
-                {"items":[{"id":"block-1","markdown":"TWO!"}]}
-                """),
-            .init(statusCode: 500, json: "{}"),
-            emptyTrash(),
-            .init(statusCode: 200, json: """
-                {"items":[{"id":"block-1","markdown":"TWO!"}]}
-                """),
-            .init(statusCode: 200, json: "{}"),
-            .init(statusCode: 200, json: """
-                {"items":[{"id":"block-0","markdown":"one"},{"id":"block-1","markdown":"TWO!"}]}
-                """),
-        ])
-        let (adapter, destination) = adapter(store, transport)
-        let id = try seed(adapter, destination, text: "one\n\ntwo\n\nthree\n")
-        let before = destination.base(for: id)
-
-        adapter.text = "one\n\nTWO\n"
-        // Drop "three": update plus delete in one plan.
-        await adapter.flushCraftPush()
-
-        XCTAssertEqual(destination.base(for: id), before,
-                       "half a round is not an agreement — nothing is recorded")
-        XCTAssertTrue(adapter.isPushDirty(id))
-
-        await adapter.flushCraftPush()
-
-        XCTAssertEqual(destination.base(for: id).blocks.map(\.id), ["block-0", "block-1"],
-                       "the retry replans the same diff and finishes it")
-        XCTAssertEqual(destination.base(for: id).localText, "one\n\nTWO\n")
-        XCTAssertFalse(adapter.isPushDirty(id))
-        XCTAssertEqual(transport.requests.count, 7,
-                       "sweep, PUT, DELETE-fail, then sweep, PUT, DELETE-ok, read-back")
-    }
+    // A half-applied round (the PUT lands, the DELETE 500s) is covered by
+    // CraftBaseMigrationTests against a Craft that keeps a real document:
+    // what the base records after a failure, and that the retry removes the
+    // orphan rather than reposting, are both statements about the document's
+    // actual state and read as nothing against a script.
 
     func testMixedAnchorsPostOneBatchEach() async throws {
         let name = "ccp.push.groups.\(UUID().uuidString)"

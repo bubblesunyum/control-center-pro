@@ -1438,6 +1438,7 @@ public final class NotesAdapter {
         let padText = pad.text
         let slices = CraftBlockSplitter.slices(in: padText)
         var docID = craftDestination.craftDocumentID(for: padID)
+        var justProvisioned = false
         if docID == nil {
             // Lazy provisioning (ccp-0gek): no local pad without a Craft doc.
             // The doc is created EMPTY on first push and the content follows
@@ -1462,8 +1463,15 @@ public final class NotesAdapter {
             // baseline starts converged — no rename PUT follows.
             craftDestination.storeSyncedTitle(pad.name, for: padID)
             docID = newID
+            justProvisioned = true
         }
         guard let docID else { return .skipped }
+        // A document we did not just create, with no agreement on record:
+        // there is nothing to diff against, and planning from nothing posts
+        // the whole pad into a document that already holds it. Wait for the
+        // pull to seed the base. Only an upgrade from the superseded sidecar
+        // reaches this, and only until the first pull (ccp-c2x5).
+        guard justProvisioned || !craftDestination.base(for: padID).isEmpty else { return .dirty }
         // Unknown baseline reads as dirty: the push converges it. (A legacy
         // mapping the pull saw first already recorded Craft's title there, so
         // this only fires for pads the push reaches before any pull.)
@@ -1474,6 +1482,7 @@ public final class NotesAdapter {
 
         var pendingError: Error?
         var titleEcho: CraftBlock?
+        var createdIDs: Set<String> = []
         if titleDirty {
             // Its own leg, not the head of the content pipeline: a failed
             // title must not starve the text behind it. Backpressure is the
@@ -1498,8 +1507,13 @@ public final class NotesAdapter {
             // (ccp-gfe5).
             for group in postGroups(for: plan) {
                 let headSibling = group.first?.afterID == nil ? base.blocks.first?.id : nil
-                _ = try await client.postBlocks(group, documentID: docID,
-                                                headSiblingID: headSibling)
+                let echo = try await client.postBlocks(group, documentID: docID,
+                                                       headSiblingID: headSibling)
+                // The echo is used for one thing only: which ids this round
+                // brought into being. Attributing echoes back to the slices
+                // that caused them is what the read-back exists to avoid —
+                // but a plain set of ids survives splits and reordering.
+                createdIDs.formUnion(echo.map(\.id))
             }
             if !plan.deletes.isEmpty {
                 try await client.deleteBlocks(plan.deletes)
@@ -1522,13 +1536,16 @@ public final class NotesAdapter {
             let confirmed = NotesSupport.sanitizedNoteName(titleEcho.markdown)
             if !confirmed.isEmpty { craftDestination.storeSyncedTitle(confirmed, for: padID) }
         }
-        // Only a round that landed whole records an agreement. A partial
-        // round leaves the base exactly as it was, so the next one replans
-        // the same diff and finishes it — the writes are idempotent, and a
-        // base describing half a push is the thing that used to strand
-        // orphaned blocks nothing would ever delete.
+        // Recorded whether or not the round landed whole: what the read-back
+        // shows is what Craft holds, and a POST that succeeded inside a
+        // failed round must never be replayed. A failed round records
+        // Craft's text as *our* side too, so the pad reads as leading and the
+        // next round diffs against reality instead of against a plan that
+        // half happened.
+        await recordBase(padID: padID, pushed: pendingError == nil ? padText : nil,
+                         docID: docID, client: client,
+                         known: Set(base.blocks.map(\.id)).union(createdIDs))
         if let pendingError { throw pendingError }
-        await recordBase(padID: padID, pushed: padText, docID: docID, client: client)
         let current = self.document?.notes.first(where: { $0.id == padID })
         // Past the legs with no throw, every attempted write confirmed. The
         // empty-plan guard above is the only no-op left standing, so reaching
@@ -1547,14 +1564,27 @@ public final class NotesAdapter {
     /// Craft answers here *is* what Craft holds, however the round went, so a
     /// half-applied push simply leaves a base the next diff finishes from.
     /// A failed read records nothing and the pad stays dirty.
-    private func recordBase(padID: UUID, pushed: String, docID: String,
-                            client: CraftClient) async {
+    /// `pushed` is the pad text the round sent, or nil when the round failed
+    /// — in which case Craft's own text stands in for both sides, so the pad
+    /// reads as leading and the retry diffs against what is really there.
+    /// `known` names every block this round either started with or created.
+    /// Anything else in the document appeared in Craft while the round was
+    /// away — a second client, the web app — and agreeing to it here would
+    /// bury it: the next pull would compare a fetch against a base that
+    /// already contains it, read no move, and never join it into the pad.
+    /// Left out of the base, it reads as a remote move on the next pull and
+    /// reaches the pad the ordinary way.
+    private func recordBase(padID: UUID, pushed: String?, docID: String,
+                            client: CraftClient, known: Set<String>) async {
         guard let fetched = try? await client.fetchDocument(documentID: docID),
               self.document?.notes.contains(where: { $0.id == padID }) == true
         else { return }
         let blocks = PadSyncBase.remote(fetched.blocks,
                                         excluding: craftDestination.stashIDs(for: padID))
-        craftDestination.storeBase(PadSyncBase(localText: pushed, blocks: blocks), for: padID)
+            .filter { known.contains($0.id) }
+        let base = PadSyncBase(localText: pushed ?? CraftPull.join(blocks.map(\.markdown)),
+                               blocks: blocks)
+        craftDestination.storeBase(base, for: padID)
     }
 
     /// Observable for tests.
@@ -1831,10 +1861,12 @@ public final class NotesAdapter {
                         snapshotReason: .pull, snapshotDate: serverTime)
             noteDidSync(serverTime, for: padID)
             dirtyPadIDs.remove(padID)
-        case .merged(let text, let hadConflict, let remoteText):
-            // Both sides moved and the two edits combined. The base is left
-            // alone on purpose: neither side holds this text yet, and the
-            // push that follows records what Craft ends up with.
+        case .merged(let text, let hadConflict, let remoteText, let base):
+            // Both sides moved and the two edits combined. Only the base's
+            // remote side advances: Craft's move is in the pad now, but the
+            // merged text is not in Craft until the push lands, which is what
+            // keeps the pad reading as leading.
+            craftDestination.storeBase(base, for: padID)
             if hadConflict {
                 // A block each side changed differently. Ours stands — it is
                 // what the user was looking at — and Craft's version stays

@@ -121,7 +121,7 @@ final class CraftPullTests: XCTestCase {
     // MARK: - Both sides moved
 
     func testDisjointEditsMergeWithoutAConflict() {
-        guard case .merged(let text, let hadConflict, _) = CraftPull.decide(
+        guard case .merged(let text, let hadConflict, _, _) = CraftPull.decide(
             local: "ONE  \ntwo", base: base(["one", "two"]),
             remote: [block("a", "one"), block("b", "TWO")])
         else { return XCTFail("expected merged") }
@@ -130,7 +130,7 @@ final class CraftPullTests: XCTestCase {
     }
 
     func testTheSameBlockChangedBothWaysKeepsThePanelAndFlags() {
-        guard case .merged(let text, let hadConflict, let remoteText) = CraftPull.decide(
+        guard case .merged(let text, let hadConflict, let remoteText, _) = CraftPull.decide(
             local: "mine", base: base(["one"]), remote: [block("a", "theirs")])
         else { return XCTFail("expected merged") }
         XCTAssertEqual(text, "mine", "the panel's text is what the user last saw")
@@ -144,7 +144,7 @@ final class CraftPullTests: XCTestCase {
         let recorded = PadSyncBase(localText: "an _italic_ word  \ntwo",
                                    blocks: [BaseBlock(id: "a", markdown: "an *italic* word"),
                                             BaseBlock(id: "b", markdown: "two")])
-        guard case .merged(_, let hadConflict, _) = CraftPull.decide(
+        guard case .merged(_, let hadConflict, _, _) = CraftPull.decide(
             local: "an _italic_ word, edited  \ntwo", base: recorded,
             remote: [block("a", "an *italic* word"), block("b", "TWO")])
         else { return XCTFail("expected merged") }
@@ -160,7 +160,7 @@ final class CraftPullTests: XCTestCase {
     }
 
     func testClearedPadKeepsTheClearWhenCraftAlsoMoved() {
-        guard case .merged(let text, _, _) = CraftPull.decide(
+        guard case .merged(let text, _, _, _) = CraftPull.decide(
             local: "", base: base(["one"]), remote: [block("a", "ONE")])
         else { return XCTFail("expected merged") }
         XCTAssertEqual(text, "", "clearing the pad is an edit like any other")
