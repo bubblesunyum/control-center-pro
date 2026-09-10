@@ -220,3 +220,36 @@ The surface is `Psymail` and `PsymailScreen` (psy-0ke), plus the older
 psymail type is internal, which is what keeps the seam one file wide:
 `Sources/CCPKit/Adapters/MailAdapter.swift` is the only place in CCP that names
 PsymailKit at all.
+
+## The MarkdownEngine fork's seams (ccp-aa5, ccp-e8df, ccp-z0a)
+
+`swift-markdown-engine` is not vendored the way the Vorssaint engines are — it
+started as a library CCP consumed unchanged, and it is carried as a URL
+dependency pinned exact to a tag of our own fork
+(`bubblesunyum/swift-markdown-engine`, Apache-2.0, forked from `nodes-app`).
+Upstream keeps its public surface small by policy, so every divergence is a
+seam we opened deliberately and each is one commit on the fork:
+
+- **`0.12.0-ccp.2` — the block AST is public.** The pad's Craft sync splits on
+  blocks, so it needs the parse the styler already has rather than a second
+  parser of its own.
+- **`0.12.0-ccp.3` — `markers.revealMarkersOnCaret` and `ThematicBreakStyle`.**
+  The opt-out lets the pad hide markdown markers under the caret the way Craft
+  does; the divider was styled with a bare `NSMutableParagraphStyle()`, so it
+  had no margin above or below and no knob to give it one.
+- **`0.12.0-ccp.4` — `ParagraphStyle.softBreakSpacing`.** AppKit lands
+  `paragraphSpacing` after *every* newline, so a soft break inside a paragraph
+  was drawn as far from its neighbour as two paragraphs are. Set, a line inside
+  a paragraph or blockquote that ends in a lone newline takes that spacing
+  instead; a CommonMark hard break still ends something and keeps the body
+  step. `nil` — the default — leaves every other embedder pixel-identical.
+
+Each seam is a config struct plus one call site, which is what keeps a merge
+from upstream cheap. `Sources/CCPUI/DesignSystem/MarkdownNoteEditor.swift` is
+the only view in CCP that names MarkdownEngine at all.
+
+**Building against an unpushed fork commit:** `swift package edit
+swift-markdown-engine --path ../swift-markdown-engine` parks a symlink in
+`Packages/` (gitignored) and drops the entry from `Package.resolved`. Undo it
+with `swift package unedit swift-markdown-engine` once the tag is pushed, and
+neither `Package.resolved` nor the override should ever reach a commit.

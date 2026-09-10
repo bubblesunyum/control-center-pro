@@ -85,4 +85,26 @@ final class HardBreakCaretMonitorTests: XCTestCase {
         monitor.stop()
         XCTAssertFalse(monitor.isWatching)
     }
+    // MARK: - An empty block's marker
+
+    func testClickIntoAnEmptyBlocksMarkerLandsAtItsStart() {
+        let text = "ab  \n  \ncd" as NSString
+        XCTAssertEqual(HardBreakCaretMonitor.landing(in: text, selection: NSRange(location: 7, length: 0),
+                                                     previous: NSRange(location: 0, length: 0)),
+                       5)
+    }
+
+    func testArrowThroughAnEmptyBlocksMarkerCarriesOnToTheNextLine() {
+        let text = "ab  \n  \ncd" as NSString
+        XCTAssertEqual(HardBreakCaretMonitor.landing(in: text, selection: NSRange(location: 6, length: 0),
+                                                     previous: NSRange(location: 5, length: 0)),
+                       8)
+    }
+
+    func testATypedSpaceIsTheUsersOwnIndent() {
+        // Three spaces are no longer the marker, so the caret stays put.
+        let text = "ab  \n   \ncd" as NSString
+        XCTAssertNil(HardBreakCaretMonitor.landing(in: text, selection: NSRange(location: 6, length: 0),
+                                                   previous: NSRange(location: 5, length: 0)))
+    }
 }

@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Control Center Pro contributors
 
 import AppKit
+import CCPKit
 import MarkdownEngine
 
 /// Delete and forward-delete skip hidden markdown markers. With
@@ -20,6 +21,10 @@ import MarkdownEngine
 ///   content character, never a marker.
 /// - Emptying a span's content takes its markers with it in the same
 ///   keystroke — no invisible `****` left behind for a second backspace.
+/// - At a block's start, backspace takes the whole boundary before it — the
+///   two spaces as well as the newline — so the two blocks join as one line
+///   rather than meeting across invisible spaces. An empty block goes whole
+///   instead, leaving the boundaries around it alone.
 /// - At the content start of a converted heading/list/quote line, backspace
 ///   removes the hidden prefix AND the newline in one step, joining up to
 ///   the previous line as plain text — as if the prefix was never typed.
@@ -80,9 +85,16 @@ final class MarkdownDeleteMonitor {
               let deletion = Self.deletionRange(string: string, range: range,
                                                forward: event.keyCode == Self.forwardDeleteKeyCode)
         else { return event }
+        // Read before the edit; the landing sits ahead of the deletion, so
+        // the offset survives it.
+        let landing = Self.landingAfterEmptyBlock(string: string, caret: range.location,
+                                                  deletion: deletion)
         // An empty range is a swallowed no-op (nothing visible to delete);
         // anything else replaces with "" so undo restores it whole.
         textView.insertText("", replacementRange: deletion)
+        if let landing {
+            textView.setSelectedRange(NSRange(location: landing, length: 0))
+        }
         return nil
     }
 
@@ -105,6 +117,9 @@ final class MarkdownDeleteMonitor {
         let blocks = DocumentAST.parse(string as String)
         if range.length == 0 {
             let caret = range.location
+            if !forward, let boundary = boundaryDeletion(string: string, caret: caret) {
+                return boundary
+            }
             let prefixes = blockPrefixes(string: string, blocks: blocks)
             if !forward,
                let join = blockPrefixJoin(string: string, prefixes: prefixes, caret: caret) {
@@ -348,6 +363,64 @@ final class MarkdownDeleteMonitor {
             guard hops < 8 else { break }
         }
         return NSRange(location: fallbackCaret, length: 0)
+    }
+
+    // MARK: - Block boundaries
+
+    /// Backspace at the very start of a block, where the block above ends in
+    /// a boundary.
+    ///
+    /// A boundary is two spaces and a newline, and the spaces render as
+    /// nothing, so a stock backspace deletes only the newline and the joined
+    /// text lands two spaces adrift of what it joined — the boundary half
+    /// still there, invisible, where a block used to begin. Taking it whole
+    /// joins the two blocks into one, which is what backspace means there.
+    ///
+    /// An EMPTY block goes whole instead, and it has to: it is deleted, not
+    /// joined to anything, and taking the boundary above it would leave its
+    /// own newline behind as the separator. A lone newline is a SOFT break,
+    /// so the block below would be sucked up into the block above — the two
+    /// blocks either side of the one just deleted merging into one. The
+    /// block's own line goes and every boundary stays where it was. This
+    /// holds whether or not the empty block still carries its marker, which
+    /// it does not once the note has been read back (``HardBreak/normalized``
+    /// sheds a space-only line, and Craft strips trailing spaces on write).
+    static func boundaryDeletion(string: NSString, caret: Int) -> NSRange? {
+        guard caret > 0, caret <= string.length else { return nil }
+        let line = string.paragraphRange(for: NSRange(location: caret, length: 0))
+        guard line.location == caret else { return nil }
+        let previous = string.paragraphRange(for: NSRange(location: caret - 1, length: 0))
+        // An empty block ABOVE goes whole, and before anything else. Its
+        // marker is not a boundary — nothing precedes it — so the join below
+        // would decline, AppKit would take the newline alone, and the marker
+        // would be left as visible indentation in front of this block.
+        if restOfLineIsBlank(string: string, from: previous.location, line: previous) {
+            return previous
+        }
+        guard let run = HardBreak.trailingRun(in: string, lineRange: previous) else { return nil }
+        if restOfLineIsBlank(string: string, from: line.location, line: line),
+           lineContentEnd(string: string, line: line) < NSMaxRange(line) {
+            return line
+        }
+        return NSRange(location: run.location, length: caret - run.location)
+    }
+
+    /// Where the caret belongs once an empty block is gone: the end of the
+    /// block above, which is what backspace just reached back to.
+    ///
+    /// The deletion leaves the caret where the block used to start, so
+    /// without this the block BELOW appears to rise into the space while the
+    /// caret sits still — the text moves and the caret does not, which reads
+    /// as the wrong thing having been deleted.
+    static func landingAfterEmptyBlock(string: NSString, caret: Int, deletion: NSRange) -> Int? {
+        // The caret's OWN block, not an empty one above it: deleting the block
+        // above leaves this block's text where the caret already is, and
+        // reaching back to the one before that would land in another block.
+        guard deletion.length > 0, deletion.location > 0, deletion.location == caret,
+              string.paragraphRange(for: NSRange(location: deletion.location, length: 0)) == deletion
+        else { return nil }
+        let previous = string.paragraphRange(for: NSRange(location: deletion.location - 1, length: 0))
+        return HardBreak.trailingRun(in: string, lineRange: previous)?.location
     }
 
     // MARK: - Block prefixes

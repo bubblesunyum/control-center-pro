@@ -121,7 +121,7 @@ final class ParagraphReturnMonitorTests: XCTestCase {
         XCTAssertEqual(textView.selectedRange(), NSRange(location: 4, length: 0))
     }
 
-    func testReturnAtABoundaryReusesItInsteadOfMintingASecond() {
+    func testReturnAtABoundaryMintsABlockBetween() {
         let events = FakeKeyMonitors()
         let textView = RecordingTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
         textView.string = "ab  \ncd"
@@ -132,10 +132,23 @@ final class ParagraphReturnMonitorTests: XCTestCase {
         monitor.start()
         XCTAssertNil(events.send(keyCode: 36, modifiers: []))
 
-        // The newline goes past this line's own spaces. Minting a second
-        // pair at the caret would have stranded them on the new line.
-        XCTAssertEqual(textView.insertions, [.init(text: "\n", range: NSRange(location: 4, length: 0))])
-        XCTAssertEqual(textView.string, "ab  \n\ncd")
+        XCTAssertEqual(textView.string, "ab  \n  \ncd",
+                       "a new block opens between the two that were there")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 5, length: 0),
+                       "the caret starts the new block, ahead of its own boundary")
+    }
+
+    func testReturnAtTheLastBoundaryStillOpensALine() {
+        let events = FakeKeyMonitors()
+        let textView = RecordingTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        textView.string = "ab"
+        textView.setSelectedRange(NSRange(location: 2, length: 0))
+        let monitor = ParagraphReturnMonitor(monitors: events.interface) { textView }
+
+        monitor.start()
+        XCTAssertNil(events.send(keyCode: 36, modifiers: []))
+
+        XCTAssertEqual(textView.string, "ab  \n", "the block is minted at the document end too")
         XCTAssertEqual(textView.selectedRange(), NSRange(location: 5, length: 0))
     }
 
@@ -225,7 +238,7 @@ final class ParagraphReturnMonitorTests: XCTestCase {
         XCTAssertTrue(textView.insertions.isEmpty)
     }
 
-    func testShiftReturnFallsThroughToASoftBreak() {
+    func testShiftReturnIsANewlineInsideTheBlock() {
         let events = FakeKeyMonitors()
         let textView = RecordingTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
         textView.string = "ab"
@@ -233,10 +246,12 @@ final class ParagraphReturnMonitorTests: XCTestCase {
         let monitor = ParagraphReturnMonitor(monitors: events.interface) { textView }
 
         monitor.start()
-        let event = events.send(keyCode: 36, modifiers: .shift)
-        XCTAssertNotNil(event, "shift+return stays a soft newline in the same block")
-        XCTAssertEqual(textView.string, "ab", "nothing inserted on the way through")
-        XCTAssertTrue(textView.insertions.isEmpty)
+        XCTAssertNil(events.send(keyCode: 36, modifiers: .shift), "consumed, not passed on")
+        // A newline, never AppKit's U+2028: the pads are a plain markdown
+        // vault, and a line separator is not a line break to anything that
+        // reads them.
+        XCTAssertEqual(textView.insertions, [.init(text: "\n", range: NSRange(location: 2, length: 0))])
+        XCTAssertEqual(textView.string, "ab\n", "no boundary spaces — the block goes on")
     }
 
     func testCommandReturnStaysUpstreams() {
@@ -389,10 +404,8 @@ final class ParagraphReturnMonitorTests: XCTestCase {
     func testShiftReturnInAListStaysSoft() {
         let (events, textView) = listMonitor(text: "- Buy", caret: 5)
 
-        XCTAssertNotNil(events.send(keyCode: 36, modifiers: .shift),
-                        "a soft continuation never mints")
-        XCTAssertEqual(textView.string, "- Buy")
-        XCTAssertTrue(textView.insertions.isEmpty)
+        XCTAssertNil(events.send(keyCode: 36, modifiers: .shift))
+        XCTAssertEqual(textView.string, "- Buy\n", "a soft continuation never mints a marker")
     }
 
     func testProseThatLooksListyIsLeftAlone() {
@@ -404,5 +417,33 @@ final class ParagraphReturnMonitorTests: XCTestCase {
             XCTAssertNil(events.send(keyCode: 36, modifiers: []), "still a hard break: \(text)")
             XCTAssertEqual(textView.string, "\(text)  \n", "kept verbatim: \(text)")
         }
+    }
+    func testReturnInsideAnEmptyBlocksMarkerLeavesTheNewBlockEmpty() {
+        let events = FakeKeyMonitors()
+        let textView = RecordingTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        textView.string = "ab  \n  \ncd"
+        textView.setSelectedRange(NSRange(location: 7, length: 0))
+        let monitor = ParagraphReturnMonitor(monitors: events.interface) { textView }
+
+        monitor.start()
+        XCTAssertNil(events.send(keyCode: 36, modifiers: []))
+
+        XCTAssertEqual(textView.string, "ab  \n\n  \ncd",
+                       "the marker goes down with the caret, not onto the block just opened")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 6, length: 0))
+    }
+    func testShiftReturnOnAnEmptyBlockDoesNothing() {
+        let events = FakeKeyMonitors()
+        let textView = RecordingTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        textView.string = "ab  \n  \ncd"
+        textView.setSelectedRange(NSRange(location: 5, length: 0))
+        let monitor = ParagraphReturnMonitor(monitors: events.interface) { textView }
+
+        monitor.start()
+        XCTAssertNil(events.send(keyCode: 36, modifiers: [.shift]))
+
+        XCTAssertEqual(textView.string, "ab  \n  \ncd",
+                       "a blank line has no content to break, and two empty lines are two blocks")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 5, length: 0))
     }
 }

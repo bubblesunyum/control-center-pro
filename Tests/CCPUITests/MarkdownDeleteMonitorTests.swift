@@ -465,4 +465,91 @@ final class MarkdownDeleteMonitorTests: XCTestCase {
         XCTAssertNotNil(events.send(keyCode: 51, modifiers: []))
         XCTAssertTrue(textView.insertions.isEmpty)
     }
+
+    // MARK: - Block boundaries
+
+    func testBackspaceAtABlockStartTakesTheWholeBoundary() {
+        let text = "alpha  \nbeta" as NSString
+        XCTAssertEqual(MarkdownDeleteMonitor.boundaryDeletion(string: text, caret: 8),
+                       NSRange(location: 5, length: 3))
+    }
+
+    func testBackspaceAfterASoftBreakIsLeftToAppKit() {
+        let text = "alpha\nbeta" as NSString
+        XCTAssertNil(MarkdownDeleteMonitor.boundaryDeletion(string: text, caret: 6))
+    }
+
+    func testBackspaceInsideALineIsLeftToAppKit() {
+        let text = "alpha  \nbeta" as NSString
+        XCTAssertNil(MarkdownDeleteMonitor.boundaryDeletion(string: text, caret: 10))
+    }
+
+    func testBackspaceOntoAnEmptyFirstLineTakesTheLine() {
+        // Spaces with nothing before them are a blank line, not a boundary —
+        // so the line goes whole, rather than AppKit taking its newline and
+        // leaving the spaces as indentation in front of "beta".
+        let text = "  \nbeta" as NSString
+        XCTAssertEqual(MarkdownDeleteMonitor.boundaryDeletion(string: text, caret: 3),
+                       NSRange(location: 0, length: 3))
+    }
+    func testBackspaceDeletesAnEmptyBlockWithoutMergingTheOnesAroundIt() {
+        let text = "ab  \n  \ncd" as NSString
+        XCTAssertEqual(MarkdownDeleteMonitor.boundaryDeletion(string: text, caret: 5),
+                       NSRange(location: 5, length: 3), "the empty block's own line, and nothing else")
+    }
+
+    func testBackspaceDeletesAnEmptyBlockThatHasLostItsMarker() {
+        // A space-only line is shed on read, so a saved empty block is bare.
+        let text = "ab  \n\ncd" as NSString
+        XCTAssertEqual(MarkdownDeleteMonitor.boundaryDeletion(string: text, caret: 5),
+                       NSRange(location: 5, length: 1))
+    }
+
+    func testBackspaceOnABlankLastLineTakesTheBoundaryAbove() {
+        // Nothing below to keep apart, so the block above simply reopens.
+        let text = "ab  \n  " as NSString
+        XCTAssertEqual(MarkdownDeleteMonitor.boundaryDeletion(string: text, caret: 5),
+                       NSRange(location: 2, length: 3))
+    }
+    func testDeletingAnEmptyBlockLeavesTheCaretAtTheEndOfTheOneAbove() {
+        let events = FakeKeyMonitors()
+        let textView = RecordingTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        textView.string = "ab  \n  \ncd"
+        textView.setSelectedRange(NSRange(location: 5, length: 0))
+        let monitor = MarkdownDeleteMonitor(monitors: events.interface) { textView }
+        liveMonitors.append(monitor)
+
+        monitor.start()
+        XCTAssertNil(events.send(keyCode: 51, modifiers: []))
+        XCTAssertEqual(textView.string, "ab  \ncd")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 2, length: 0),
+                       "the end of the block above, not the start of the one that rose")
+    }
+
+    func testAnOrdinaryJoinKeepsTheCaretWhereItDeleted() {
+        let text = "ab  \ncd" as NSString
+        XCTAssertNil(MarkdownDeleteMonitor.landingAfterEmptyBlock(
+            string: text, caret: 5, deletion: NSRange(location: 2, length: 3)))
+    }
+    func testBackspaceAtABlockBelowAnEmptyOneDeletesTheEmptyBlock() {
+        let events = FakeKeyMonitors()
+        let textView = RecordingTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        textView.string = "ab  \n  \ncd"
+        textView.setSelectedRange(NSRange(location: 8, length: 0))
+        let monitor = MarkdownDeleteMonitor(monitors: events.interface) { textView }
+        liveMonitors.append(monitor)
+
+        monitor.start()
+        XCTAssertNil(events.send(keyCode: 51, modifiers: []))
+        XCTAssertEqual(textView.string, "ab  \ncd",
+                       "the marker above must not survive as indentation in front of this block")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 5, length: 0),
+                       "the caret stays with its own block, which just moved up")
+    }
+
+    func testBackspaceBelowAnEmptyBlockThatLostItsMarker() {
+        let text = "ab  \n\ncd" as NSString
+        XCTAssertEqual(MarkdownDeleteMonitor.boundaryDeletion(string: text, caret: 6),
+                       NSRange(location: 5, length: 1))
+    }
 }

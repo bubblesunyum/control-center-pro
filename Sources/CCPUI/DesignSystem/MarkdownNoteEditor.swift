@@ -33,7 +33,8 @@ struct MarkdownNoteEditor: View {
     /// a sticky sets its own tight pair — the card's grab padding is already
     /// the well, and doubling it would shrink the paper and grow the scroll
     /// range for nothing.
-    var textInsets = TextInsets(horizontal: Space.three + Space.oneHalf, vertical: Space.three + Space.half)
+    var textInsets = TextInsets(horizontal: Space.three + Space.one + Space.quarter,
+                                vertical: Space.three + Space.quarter)
     /// How much empty room the engine keeps below the last line so a caret
     /// typing at the bottom of a long document isn't pinned to the edge.
     /// Sized to the viewport, so a sticky sets its own — see
@@ -163,8 +164,12 @@ struct MarkdownNoteEditor: View {
         configuration.markers.revealMarkersOnCaret = false
         configuration.headings = HeadingStyle(fontMultipliers: Self.headingMultipliers,
                                               topSpacingEm: Self.headingTopSpacingEm)
-        configuration.paragraph = ParagraphStyle(spacingFactor: Self.paragraphSpacingFactor(forFontSize: Self.fontSize),
-                                                 lineHeightExtraSpacing: Self.lineHeightExtraSpacing(forFontSize: Self.fontSize))
+        configuration.paragraph = ParagraphStyle(
+            spacingFactor: Self.paragraphSpacingFactor(forFontSize: Self.fontSize),
+            lineHeightExtraSpacing: Self.lineHeightExtraSpacing(forFontSize: Self.fontSize),
+            // Shift+return is a new line, not a new block, so it steps like
+            // a wrapped line and not like a boundary.
+            softBreakSpacing: 0)
         // A rule is a section break, so it needs room on both sides or it
         // reads as a struck-through line of the block above it. The engine
         // draws it flush by default (ccp-z0a).

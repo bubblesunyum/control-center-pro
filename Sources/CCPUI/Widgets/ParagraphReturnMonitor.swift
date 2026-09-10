@@ -2,7 +2,6 @@
 // Copyright (C) 2026 Control Center Pro contributors
 
 import AppKit
-import CCPKit
 
 /// A bare return in the pad starts a new block; shift+return stays a newline
 /// inside the same one — Craft's rule, not Markdown's (ccp-inoq, ccp-qzzt).
@@ -57,9 +56,12 @@ final class ParagraphReturnMonitor {
     /// The monitor's decision. A swallowed return inserts through the text
     /// view itself, so undo behaves as if the break had always been there,
     /// and the caret is left wherever the insertion puts it — see
-    /// ``insertHardBreak(in:range:string:lineRange:)`` for the one rule it
+    /// ``insertHardBreak(in:range:string:)`` for the one rule it
     /// follows. Only the list paths below place the caret by hand.
     private func handle(_ event: NSEvent) -> NSEvent? {
+        if Self.isSoftReturn(event) {
+            return Self.insertSoftBreak(event) { editor() }
+        }
         guard Self.isBareReturn(event),
               let textView = editor(),
               // The pad's own view, never a field editor: single-line fields
@@ -81,7 +83,7 @@ final class ParagraphReturnMonitor {
         switch Self.lineReturn(line: line as NSString,
                                caret: range.location - lineRange.location) {
         case .plain:
-            Self.insertHardBreak(in: textView, range: range, string: string, lineRange: lineRange)
+            Self.insertHardBreak(in: textView, range: range, string: string)
         case .insert(let suffix):
             textView.insertText(suffix, replacementRange: range)
         case .replace(let lineRelative, let text, let caretOffset):
@@ -106,8 +108,57 @@ final class ParagraphReturnMonitor {
     /// would also veto on CapsLock and swallow keypad Enter under its
     /// numeric-pad flag, both of which still mean return here.
     private static func isBareReturn(_ event: NSEvent) -> Bool {
-        (event.keyCode == Self.returnKeyCode || event.keyCode == Self.keypadEnterKeyCode)
+        isReturnKey(event)
             && event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty
+    }
+
+    /// Shift and nothing else: a new line inside the block, not a new block.
+    private static func isSoftReturn(_ event: NSEvent) -> Bool {
+        isReturnKey(event)
+            && event.modifierFlags.intersection([.command, .control, .option, .shift]) == .shift
+    }
+
+    private static func isReturnKey(_ event: NSEvent) -> Bool {
+        event.keyCode == Self.returnKeyCode || event.keyCode == Self.keypadEnterKeyCode
+    }
+
+    /// A plain newline, typed in — unless there is nothing on the line to
+    /// break.
+    ///
+    /// The editor's text view is rich text, where AppKit's own
+    /// `insertLineBreak:` writes U+2028 — invisible in the pad, but a
+    /// line separator is not a newline: the pad's files are a plain markdown
+    /// vault read by other tools, and Craft never sees a line break there at
+    /// all. A newline is a soft break, which the styler draws at the line
+    /// step and the splitter keeps inside one block, which is exactly what
+    /// shift+return means.
+    ///
+    /// On an empty block it means nothing the vault can hold. A soft break
+    /// lives inside a paragraph, and a line with no text on it is a BLANK
+    /// line, which ends a paragraph in every markdown there is — so two
+    /// empty lines are always two blocks, never one block with a line break
+    /// in it, whatever we write. Rather than insert a line and draw it a
+    /// block-step down, the key does nothing: there is no content here to
+    /// break, and the layout never claims otherwise.
+    private static func insertSoftBreak(_ event: NSEvent,
+                                        editor: () -> NSTextView?) -> NSEvent? {
+        guard let textView = editor(),
+              !textView.isFieldEditor,
+              textView.isEditable,
+              !textView.hasMarkedText(),
+              NSApp?.modalWindow == nil
+        else { return event }
+        let string = textView.string as NSString
+        let range = textView.selectedRange()
+        guard range.length > 0 || !isBlankLine(string, at: range.location) else { return nil }
+        textView.insertText("\n", replacementRange: range)
+        return nil
+    }
+
+    /// Whitespace and nothing else, on the line holding `location`.
+    private static func isBlankLine(_ string: NSString, at location: Int) -> Bool {
+        let line = string.paragraphRange(for: NSRange(location: min(location, string.length), length: 0))
+        return string.substring(with: line).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// A bare return splits the current block at the caret, and the caret
@@ -124,29 +175,28 @@ final class ParagraphReturnMonitor {
     /// trailing spaces anywhere.
     private static func insertHardBreak(in textView: NSTextView,
                                         range: NSRange,
-                                        string: NSString,
-                                        lineRange: NSRange) {
-        // Splitting a line that already ends in a boundary reuses it. The
-        // marker belongs to the text in front of it, so minting a second
-        // pair at the caret would push this line's own spaces down onto the
-        // new one — which is what the split looks like when it goes wrong.
-        if range.length == 0,
-           let run = HardBreak.trailingRun(in: string, lineRange: lineRange),
-           range.location >= run.location, range.location <= NSMaxRange(run) {
-            textView.insertText("\n", replacementRange: NSRange(location: NSMaxRange(run), length: 0))
-            return
-        }
+                                        string: NSString) {
         // The selection's START, not the caret: a selection is about to be
         // replaced, so what precedes it is what survives on this line. Read
-        // back to the line break rather than off `lineRange`, which at the
-        // end of the document can hand back a paragraph the caret has
-        // already left.
+        // back to the line break rather than off the caret's paragraph range,
+        // which at the end of the document can hand back a paragraph the
+        // caret has already left.
         var lineStart = range.location
         while lineStart > 0, !isLineBreak(string.character(at: lineStart - 1)) { lineStart -= 1 }
         let before = string.substring(with: NSRange(location: lineStart,
                                                     length: range.location - lineStart))
-        let endsABlock = !before.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        textView.insertText(endsABlock ? "  \n" : "\n", replacementRange: range)
+        guard !before.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            // Nothing but whitespace before the caret, so this line is an
+            // empty block waiting for text and the marker on it belongs to
+            // whatever gets typed there. Opening the line ABOVE the marker
+            // carries it down with the caret and leaves the block that was
+            // just opened genuinely empty — inserting at the caret would
+            // strand the spaces on it instead.
+            let target = range.length == 0 ? NSRange(location: lineStart, length: 0) : range
+            textView.insertText("\n", replacementRange: target)
+            return
+        }
+        textView.insertText("  \n", replacementRange: range)
     }
 
     private static func isLineBreak(_ character: unichar) -> Bool {
