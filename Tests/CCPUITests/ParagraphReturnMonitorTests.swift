@@ -29,18 +29,35 @@ final class ParagraphReturnMonitorTests: XCTestCase {
     func testBareReturnBecomesAHardBreakAtTheCaret() {
         let events = FakeKeyMonitors()
         let textView = RecordingTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
-        textView.string = "ab\ncd"
-        textView.setSelectedRange(NSRange(location: 3, length: 0))
+        textView.string = "abcd"
+        textView.setSelectedRange(NSRange(location: 2, length: 0))
         let monitor = ParagraphReturnMonitor(monitors: events.interface) { textView }
 
         monitor.start()
         XCTAssertNil(events.send(keyCode: 36, modifiers: []), "a bare return is consumed")
 
-        // At a line start the spaces harden the line above; the caret lands
-        // on the new empty line, not the pushed text.
         XCTAssertEqual(textView.insertions, [.init(text: "  \n", range: NSRange(location: 2, length: 0))])
-        XCTAssertEqual(textView.string, "ab  \n\ncd")
+        XCTAssertEqual(textView.string, "ab  \ncd")
         XCTAssertEqual(textView.selectedRange(), NSRange(location: 5, length: 0))
+    }
+
+    func testReturnAtALineStartLeavesTheLineAboveAlone() {
+        let events = FakeKeyMonitors()
+        let textView = RecordingTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        textView.string = "ab\ncd"
+        textView.setSelectedRange(NSRange(location: 3, length: 0))
+        let monitor = ParagraphReturnMonitor(monitors: events.interface) { textView }
+
+        monitor.start()
+        XCTAssertNil(events.send(keyCode: 36, modifiers: []))
+
+        // Nothing precedes the caret on this line, so there is nothing to
+        // harden: the line above keeps its own newline and gains no spaces
+        // (ccp-ra2l).
+        XCTAssertEqual(textView.insertions, [.init(text: "\n", range: NSRange(location: 3, length: 0))])
+        XCTAssertEqual(textView.string, "ab\n\ncd")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 4, length: 0),
+                       "the caret rides down with the pushed text, like every line editor")
     }
 
     func testReturnAtLineEndLeavesTheCaretInTheNewBlock() {
@@ -73,8 +90,6 @@ final class ParagraphReturnMonitorTests: XCTestCase {
     }
 
     func testReturnAboveABlankLineOpensANewLine() {
-        // The boundary already exists: minting spaces would land the caret
-        // on the next block, prepending to it.
         let events = FakeKeyMonitors()
         let textView = RecordingTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
         textView.string = "ab\n\ncd"
@@ -86,11 +101,10 @@ final class ParagraphReturnMonitorTests: XCTestCase {
 
         XCTAssertEqual(textView.insertions, [.init(text: "\n", range: NSRange(location: 4, length: 0))])
         XCTAssertEqual(textView.string, "ab\n\n\ncd")
-        XCTAssertEqual(textView.selectedRange(), NSRange(location: 4, length: 0),
-                       "the caret waits on the new empty line, not the pushed text")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 5, length: 0))
     }
 
-    func testReturnOnAnEmptyLineHardensTheLineAbove() {
+    func testReturnOnABlankLineAddsExactlyOneLine() {
         let events = FakeKeyMonitors()
         let textView = RecordingTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
         textView.string = "ab\n\ncd"
@@ -100,9 +114,27 @@ final class ParagraphReturnMonitorTests: XCTestCase {
         monitor.start()
         XCTAssertNil(events.send(keyCode: 36, modifiers: []))
 
-        XCTAssertEqual(textView.insertions, [.init(text: "  \n", range: NSRange(location: 2, length: 0))])
-        XCTAssertEqual(textView.string, "ab  \n\n\ncd")
-        XCTAssertEqual(textView.selectedRange(), NSRange(location: 5, length: 0))
+        // One line, no spaces. Re-hardening the line above is what used to
+        // mint a SECOND blank line and four trailing spaces (ccp-ra2l).
+        XCTAssertEqual(textView.insertions, [.init(text: "\n", range: NSRange(location: 3, length: 0))])
+        XCTAssertEqual(textView.string, "ab\n\n\ncd")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 4, length: 0))
+    }
+
+    func testReturnTwiceLeavesOneBlankLineAndNoSpaces() {
+        let events = FakeKeyMonitors()
+        let textView = RecordingTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        textView.string = "ab"
+        textView.setSelectedRange(NSRange(location: 2, length: 0))
+        let monitor = ParagraphReturnMonitor(monitors: events.interface) { textView }
+
+        monitor.start()
+        XCTAssertNil(events.send(keyCode: 36, modifiers: []))
+        XCTAssertNil(events.send(keyCode: 36, modifiers: []))
+
+        XCTAssertEqual(textView.string, "ab  \n\n",
+                       "the second return opens a line, it does not re-harden the first")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 6, length: 0))
     }
 
     func testReturnInAnEmptyPadLeavesATypableLine() {
@@ -115,8 +147,9 @@ final class ParagraphReturnMonitorTests: XCTestCase {
         monitor.start()
         XCTAssertNil(events.send(keyCode: 36, modifiers: []))
 
-        XCTAssertEqual(textView.string, "  \n")
-        XCTAssertEqual(textView.selectedRange(), NSRange(location: 3, length: 0))
+        XCTAssertEqual(textView.string, "\n",
+                       "two spaces before any content is an indent, never a boundary")
+        XCTAssertEqual(textView.selectedRange(), NSRange(location: 1, length: 0))
     }
 
     func testBareReturnReplacesASelection() {

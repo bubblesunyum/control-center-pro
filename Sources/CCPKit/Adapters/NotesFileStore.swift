@@ -140,9 +140,14 @@ public struct NotesFileStore {
     /// The pad's text, or nil when the file is missing or unreadable. Both
     /// read as empty upstream — the pad survives either way, and the file
     /// itself is left alone for the next write to set aside.
+    ///
+    /// Trailing-space debris left by the old return key is shed on the way
+    /// through (see ``HardBreak/normalized(_:)``). A read never writes, so the
+    /// file keeps its bytes until the user's own next edit saves the clean
+    /// text over them.
     public func readText(filename: String) -> String? {
         guard let data = try? Data(contentsOf: directory.appendingPathComponent(filename)) else { return nil }
-        return String(data: data, encoding: .utf8)
+        return String(data: data, encoding: .utf8).map(HardBreak.normalized)
     }
 
     /// Writes one pad's text atomically. A file whose bytes are not text is

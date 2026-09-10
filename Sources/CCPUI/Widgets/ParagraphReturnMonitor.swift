@@ -80,7 +80,7 @@ final class ParagraphReturnMonitor {
         switch Self.lineReturn(line: line as NSString,
                                caret: range.location - lineRange.location) {
         case .plain:
-            Self.insertHardBreak(in: textView, range: range, string: string)
+            Self.insertHardBreak(in: textView, range: range, string: string, lineRange: lineRange)
         case .insert(let suffix):
             textView.insertText(suffix, replacementRange: range)
         case .replace(let lineRelative, let text, let caretOffset):
@@ -109,40 +109,28 @@ final class ParagraphReturnMonitor {
             && event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty
     }
 
-    /// A bare return is a hard break: two spaces plus a newline, inserted
-    /// through the text view. At a line start the spaces belong to the line
-    /// above — inserting at the caret would strand them on the new line,
-    /// where the first typed character turns them into a leading indent
-    /// instead of a boundary. Above a blank line there is nothing to
-    /// harden and the boundary already exists, so a plain newline opens the
-    /// new line (minting spaces there would land the caret on the NEXT
-    /// block, prepending to it).
-    private static func insertHardBreak(in textView: NSTextView, range: NSRange, string: NSString) {
-        if range.length == 0, isLineStart(string, at: range.location), range.location > 0 {
-            if previousLineHasContent(string, caret: range.location) {
-                textView.insertText("  \n", replacementRange: NSRange(location: range.location - 1,
-                                                                      length: 0))
-            } else {
-                textView.insertText("\n", replacementRange: range)
-                // The caret rides down with the pushed text; step it back
-                // onto the new empty line or typing prepends to the block
-                // below.
-                textView.setSelectedRange(NSRange(location: range.location, length: 0))
-            }
-        } else {
-            textView.insertText("  \n", replacementRange: range)
-        }
-    }
-
-    private static func isLineStart(_ string: NSString, at location: Int) -> Bool {
-        location == 0
-            || string.substring(with: NSRange(location: location - 1, length: 1)) == "\n"
-    }
-
-    /// The line above the caret holds non-whitespace content.
-    private static func previousLineHasContent(_ string: NSString, caret: Int) -> Bool {
-        let line = string.paragraphRange(for: NSRange(location: caret - 1, length: 0))
-        return !string.substring(with: line).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    /// A bare return splits the current block at the caret, and the caret
+    /// follows the pushed text — Craft's rule, and every line editor's.
+    ///
+    /// Only the half-line BEFORE the caret decides the break. Content there
+    /// is a block that just ended, so it takes the hard break (two spaces
+    /// plus the newline) and the boundary lands where the text actually
+    /// stops. Nothing there is nothing to harden: the line above already
+    /// ends in its own newline, and reaching back over it to harden it a
+    /// second time is what used to mint a blank line the user never asked
+    /// for — and, on a line that was already blank, a second one (ccp-ra2l).
+    /// A plain newline opens the empty line above instead and leaves no
+    /// trailing spaces anywhere.
+    private static func insertHardBreak(in textView: NSTextView,
+                                        range: NSRange,
+                                        string: NSString,
+                                        lineRange: NSRange) {
+        // The selection's START, not the caret: a selection is about to be
+        // replaced, so what precedes it is what survives on this line.
+        let beforeLength = max(0, min(range.location, NSMaxRange(lineRange)) - lineRange.location)
+        let before = string.substring(with: NSRange(location: lineRange.location, length: beforeLength))
+        let endsABlock = !before.trimmingCharacters(in: .whitespaces).isEmpty
+        textView.insertText(endsABlock ? "  \n" : "\n", replacementRange: range)
     }
 
     /// Virtual keycodes, layout-independent like the dismissal monitor's Esc —
