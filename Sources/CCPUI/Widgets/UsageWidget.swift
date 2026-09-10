@@ -152,7 +152,7 @@ private struct UsageContent: View {
                 }
                 Spacer()
                 Text(UsageWidget.resetText(until: window?.resetsAt, now: now))
-                    .usageFont(.small)
+                    .usageFont(.large)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
                 Text(UsageWidget.percentText(window?.percent))
