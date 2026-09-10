@@ -210,10 +210,7 @@ final class CraftPullAdapterTests: XCTestCase {
                            seeded: [String]? = nil) async throws -> UUID {
         let id = try XCTUnwrap(adapter.selectedNoteID)
         adapter.text = text
-        destination.storeSidecar(BlockSidecar(entries: (seeded ?? [text]).enumerated().map { index, markdown in
-            BlockSidecarEntry(id: "block-\(index)",
-                              fingerprint: BlockSidecar.fingerprint(markdown))
-        }), for: id)
+        destination.storeBase(.fixture(text, blocks: seeded ?? [text]), for: id)
         destination.setCraftDocumentID("doc1", for: id)
         // Steady means title-converged too, or the flush below spends a
         // rename PUT and never comes back clean.
@@ -248,9 +245,9 @@ final class CraftPullAdapterTests: XCTestCase {
 
         XCTAssertEqual(transport.requests.count, 3, "clock, trash plus one fetch, no writes")
         XCTAssertEqual(adapter.text, "ONE")
-        XCTAssertEqual(destination.sidecar(for: id).entries.map(\.id), ["block-0"])
-        XCTAssertEqual(destination.sidecar(for: id).entries[0].fingerprint,
-                       BlockSidecar.fingerprint("ONE"))
+        XCTAssertEqual(destination.base(for: id).blocks.map(\.id), ["block-0"])
+        XCTAssertEqual(destination.base(for: id).blocks[0].markdown,
+                       "ONE")
         XCTAssertNotNil(destination.syncedAt(for: id))
         XCTAssertFalse(adapter.isPushDirty(id), "adopted text must not re-push")
     }
@@ -314,7 +311,7 @@ final class CraftPullAdapterTests: XCTestCase {
         await adapter.pullAll()
 
         XCTAssertEqual(adapter.text, "one")
-        XCTAssertEqual(destination.sidecar(for: id).entries.map(\.id), ["block-9"],
+        XCTAssertEqual(destination.base(for: id).blocks.map(\.id), ["block-9"],
                       "the reseed still lands")
         XCTAssertTrue(adapter.snapshots(for: id).isEmpty)
         XCTAssertTrue(adapter.padsPendingUndoClear.isEmpty)
@@ -335,7 +332,7 @@ final class CraftPullAdapterTests: XCTestCase {
         await adapter.pullAll()
 
         XCTAssertEqual(adapter.text, "one edited", "local edits stand")
-        XCTAssertEqual(destination.sidecar(for: id).entries.map(\.id), ["block-0"])
+        XCTAssertEqual(destination.base(for: id).blocks.map(\.id), ["block-0"])
         XCTAssertTrue(adapter.isPushDirty(id), "the push still owns these edits")
         XCTAssertNil(destination.syncedAt(for: id), "a skip records nothing")
     }
@@ -376,9 +373,7 @@ final class CraftPullAdapterTests: XCTestCase {
         // setup round may spend it.
         let id = try XCTUnwrap(adapter.selectedNoteID)
         adapter.text = "one"
-        destination.storeSidecar(BlockSidecar(entries: [
-            BlockSidecarEntry(id: "block-0", fingerprint: BlockSidecar.fingerprint("one")),
-        ]), for: id)
+        destination.storeBase(.fixture("one"), for: id)
         destination.setCraftDocumentID("doc1", for: id)
         destination.storeSyncedTitle(adapter.selectedNoteName, for: id)
         let version = adapter.syncedAtVersion
@@ -393,107 +388,31 @@ final class CraftPullAdapterTests: XCTestCase {
         XCTAssertEqual(adapter.syncedAtVersion, version + 1, "the agreement publishes")
     }
 
-    func testDirtyPadStashesToCraftThenAdoptsOnConflict() async throws {
+    func testAConflictKeepsThePanelAndPreservesCraftsVersion() async throws {
+        // Both sides changed the same block. The panel's text is what the
+        // user was last looking at, so it stands; Craft's version is kept in
+        // the popover and in history rather than written back into the user's
+        // Craft document as a copy of their own typing (ccp-c2x5).
         let name = "ccp.pull.conflict.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([connection, trash(), blocks("""
             {"items":[{"id":"r1","markdown":"theirs"}]}
-            """), blocks("""
-            {"items":[{"id":"c1","markdown":"# Conflicted copy"},
-                       {"id":"c2","markdown":"mine edited"}]}
             """)])
         let (adapter, destination) = adapter(store, transport)
         let id = try await steadyPad(adapter, destination, text: "mine", seeded: ["mine"])
-        // Re-pin the seeded id to the remote's: the clash is in the text.
-        destination.storeSidecar(BlockSidecar(entries: [
-            BlockSidecarEntry(id: "r1", fingerprint: BlockSidecar.fingerprint("mine")),
-        ]), for: id)
-        adapter.text = "mine edited"
-        XCTAssertTrue(adapter.isPushDirty(id))
-
-        await adapter.pullAll()
-
-        XCTAssertEqual(transport.requests.count, 4, "clock, trash, fetch, stash — no PUT, no DELETE")
-        let post = transport.requests[3]
-        XCTAssertEqual(post.httpMethod, "POST")
-        let body = try transport.jsonBody(of: 3)
-        let posted = try XCTUnwrap(body["blocks"] as? [[String: String]])
-        XCTAssertEqual(posted.count, 2, "heading plus the local blocks")
-        XCTAssertTrue(try XCTUnwrap(posted[0]["markdown"]).hasPrefix("# Conflicted copy"),
-                      "the stash is labelled and dated")
-        XCTAssertTrue(try XCTUnwrap(posted[0]["markdown"]).contains("2026-09-06"),
-                      "dated by the server clock the pull brought")
-        XCTAssertEqual(posted[1]["markdown"], "mine edited")
-        let position = try XCTUnwrap(body["position"] as? [String: String])
-        XCTAssertEqual(position["position"], "after")
-        XCTAssertEqual(position["siblingId"], "r1", "the stash appends behind the remote")
-
-        XCTAssertEqual(adapter.text, "theirs", "remote wins after the stash")
-        let entries = destination.sidecar(for: id).entries
-        XCTAssertEqual(entries.map(\.id), ["r1", "c1", "c2"])
-        XCTAssertTrue(entries[0].isWritable)
-        XCTAssertFalse(entries[1].isWritable, "stash pins never ride a push")
-        XCTAssertFalse(entries[2].isWritable)
-        XCTAssertEqual(destination.stashIDs(for: id), ["c1", "c2"])
-        XCTAssertFalse(adapter.isPushDirty(id))
-        XCTAssertNotNil(destination.syncedAt(for: id))
-
-        let records = adapter.conflicts(for: id)
-        XCTAssertEqual(records.count, 1, "the landed stash is listed")
-        XCTAssertEqual(records[0].slices, ["mine edited"])
-        let clock = ISO8601DateFormatter().date(from: "2026-09-06T19:00:00Z")
-        XCTAssertEqual(records[0].date, clock, "dated by the server clock, never the Mac's")
-    }
-
-    func testConflictSnapshotsLocalSideForHistory() async throws {
-        // ccp-o3k: the merge snapshots the local side it replaces — the
-        // Craft stash is one way back, the menu is the other.
-        let name = "ccp.pull.history-conflict.\(UUID().uuidString)"
-        let store = try defaults(name)
-        defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([connection, trash(), blocks("""
-            {"items":[{"id":"r1","markdown":"theirs"}]}
-            """), blocks("""
-            {"items":[{"id":"c1","markdown":"# Conflicted copy"},
-                       {"id":"c2","markdown":"mine edited"}]}
-            """)])
-        let (adapter, destination) = adapter(store, transport)
-        let id = try await steadyPad(adapter, destination, text: "mine", seeded: ["mine"])
-        // Re-pin the seeded id to the remote's: the clash is in the text.
-        destination.storeSidecar(BlockSidecar(entries: [
-            BlockSidecarEntry(id: "r1", fingerprint: BlockSidecar.fingerprint("mine")),
-        ]), for: id)
+        destination.storeBase(.fixture("mine", ids: ["r1"]), for: id)
         adapter.text = "mine edited"
 
         await adapter.pullAll()
 
-        XCTAssertEqual(adapter.text, "theirs", "remote wins after the stash")
-        let ring = adapter.snapshots(for: id)
-        XCTAssertEqual(ring.count, 1)
-        XCTAssertEqual(ring[0].reason, .conflict)
-        XCTAssertEqual(ring[0].markdown, "mine edited")
-        XCTAssertEqual(adapter.padsPendingUndoClear, [id])
-    }
-
-    func testFailedStashPostRecordsNothing() async throws {
-        let name = "ccp.pull.stashfail.\(UUID().uuidString)"
-        let store = try defaults(name)
-        defer { store.removePersistentDomain(forName: name) }
-        let transport = ScriptedTransport([connection, trash(), blocks("""
-            {"items":[{"id":"r1","markdown":"theirs"}]}
-            """), ScriptedTransport.Script(statusCode: 500, json: "{}")])
-        let (adapter, destination) = adapter(store, transport)
-        let id = try await steadyPad(adapter, destination, text: "mine", seeded: ["mine"])
-        destination.storeSidecar(BlockSidecar(entries: [
-            BlockSidecarEntry(id: "r1", fingerprint: BlockSidecar.fingerprint("mine")),
-        ]), for: id)
-        adapter.text = "mine edited"
-
-        await adapter.pullAll()
-
-        XCTAssertEqual(adapter.conflicts(for: id), [], "a stash that never landed lists nothing")
-        XCTAssertEqual(adapter.text, "mine edited")
+        XCTAssertEqual(transport.requests.count, 3, "clock, trash, one fetch — and no writes")
+        XCTAssertEqual(adapter.text, "mine edited", "the panel keeps what was typed in it")
+        XCTAssertEqual(adapter.conflicts(for: id).map(\.slices), [["theirs"]])
+        XCTAssertEqual(adapter.snapshots(for: id).first?.markdown, "theirs",
+                       "Craft's version is restorable")
+        XCTAssertEqual(adapter.snapshots(for: id).first?.reason, .conflict)
+        XCTAssertTrue(adapter.isPushDirty(id), "the merged text still owes Craft a push")
     }
 
     func testConflictRecordsCapDismissAndDropWithTheNote() async throws {
@@ -553,21 +472,15 @@ final class CraftPullAdapterTests: XCTestCase {
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([connection, trash(), blocks("""
             {"items":[{"id":"r1","markdown":"theirs"}]}
-            """), blocks("""
-            {"items":[{"id":"c1","markdown":"# Conflicted copy"},
-                       {"id":"c2","markdown":"mine edited"}]}
             """)])
         let (adapter, destination) = adapter(store, transport)
         let id = try await steadyPad(adapter, destination, text: "mine", seeded: ["mine"])
-        destination.storeSidecar(BlockSidecar(entries: [
-            BlockSidecarEntry(id: "r1", fingerprint: BlockSidecar.fingerprint("mine")),
-        ]), for: id)
+        destination.storeBase(.fixture("mine", ids: ["r1"]), for: id)
         adapter.text = "mine edited"
 
         await adapter.pullAll()
-        XCTAssertFalse(adapter.conflicts(for: id).isEmpty, "a stash to drop")
-        XCTAssertFalse(destination.stashIDs(for: id).isEmpty)
-        XCTAssertNotNil(destination.syncedAt(for: id))
+        XCTAssertFalse(adapter.conflicts(for: id).isEmpty, "a conflict to drop")
+        XCTAssertFalse(destination.base(for: id).isEmpty)
 
         adapter.createNote()
         XCTAssertTrue(adapter.deleteNote(id))
@@ -575,7 +488,7 @@ final class CraftPullAdapterTests: XCTestCase {
         XCTAssertEqual(adapter.conflicts(for: id), [])
         XCTAssertEqual(destination.stashIDs(for: id), [])
         XCTAssertNil(destination.syncedAt(for: id))
-        XCTAssertEqual(destination.sidecar(for: id).entries, [])
+        XCTAssertEqual(destination.base(for: id).blocks, [])
         XCTAssertNil(destination.craftDocumentID(for: id))
         XCTAssertNil(destination.syncedTitle(for: id), "title baselines leave with the note")
         XCTAssertNil(destination.titleRenameDate(for: id))
@@ -594,49 +507,45 @@ final class CraftPullAdapterTests: XCTestCase {
         await adapter.pullAll()
 
         XCTAssertEqual(adapter.text, "one edited")
-        XCTAssertEqual(destination.sidecar(for: id).entries.map(\.id), ["block-0"])
+        XCTAssertEqual(destination.base(for: id).blocks.map(\.id), ["block-0"])
         XCTAssertTrue(adapter.isPushDirty(id), "a failed read must not clear unpushed edits")
         XCTAssertNil(destination.syncedAt(for: id))
     }
 
-    func testHandMappedPadStashesInsteadOfWiping() async throws {
-        // The review's wipe: typed text in a freshly mapped pad was never
-        // confirmed, so a clean dirty bit must not read as permission.
-        let name = "ccp.pull.handmap.\(UUID().uuidString)"
+    func testHandMappedPadKeepsBothSidesAndStartsRemembering() async throws {
+        // A pad mapped onto a Craft document that already held text, with no
+        // agreement on record. Adopting would wipe local text Craft never
+        // confirmed; pushing would wipe Craft's. Record what each side holds
+        // and let the next real edit decide.
+        let name = "ccp.pull.handmapped.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([connection, trash(), blocks("""
             {"items":[{"id":"r1","markdown":"theirs"}]}
-            """), blocks("""
-            {"items":[{"id":"c1","markdown":"# Conflicted copy"},
-                       {"id":"c2","markdown":"my notes"}]}
             """)])
         let (adapter, destination) = adapter(store, transport)
         let id = try XCTUnwrap(adapter.selectedNoteID)
         adapter.text = "my notes"
         destination.setCraftDocumentID("doc1", for: id)
+        destination.storeSyncedTitle(adapter.selectedNoteName, for: id)
 
         await adapter.pullAll()
 
-        XCTAssertEqual(transport.requests.count, 4, "clock, trash, fetch, stash")
-        XCTAssertEqual(adapter.text, "theirs")
-        let entries = destination.sidecar(for: id).entries
-        XCTAssertEqual(entries.map(\.id), ["r1", "c1", "c2"])
-        XCTAssertFalse(entries[1].isWritable)
-        XCTAssertFalse(entries[2].isWritable)
+        XCTAssertEqual(transport.requests.count, 3, "clock, trash, fetch — and no writes")
+        XCTAssertEqual(adapter.text, "my notes", "unconfirmed local text is never wiped")
+        XCTAssertEqual(destination.base(for: id).localText, "my notes")
+        XCTAssertEqual(destination.base(for: id).blocks.map(\.markdown), ["theirs"])
+        XCTAssertTrue(adapter.conflicts(for: id).isEmpty, "nothing was lost, so nothing to report")
     }
 
-    func testKeystrokesDuringTheFetchLandInTheStash() async throws {
-        // The race: deciding on pre-fetch text strands mid-fetch keystrokes
-        // between the stash and the adopt.
+    func testKeystrokesDuringTheFetchAreNotLost() async throws {
+        // The race: deciding on pre-fetch text would strand keystrokes typed
+        // while the fetch was away — in neither the pad nor Craft.
         let name = "ccp.pull.race.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([connection, trash(), blocks("""
             {"items":[{"id":"block-0","markdown":"THEIRS"}]}
-            """), blocks("""
-            {"items":[{"id":"c1","markdown":"# Conflicted copy"},
-                       {"id":"c2","markdown":"one plus my edit"}]}
             """)])
         let (adapter, destination) = adapter(store, transport)
         let id = try await steadyPad(adapter, destination, text: "one")
@@ -650,47 +559,10 @@ final class CraftPullAdapterTests: XCTestCase {
 
         await adapter.pullAll()
 
-        XCTAssertEqual(adapter.text, "THEIRS")
-        let posted = try transport.jsonBody(of: 3)
-        let stashed = try XCTUnwrap(posted["blocks"] as? [[String: String]])
-        XCTAssertEqual(stashed.last?["markdown"], "one plus my edit",
-                       "the stash carries the fresh text, not the pre-fetch snapshot")
-        XCTAssertFalse(destination.sidecar(for: id).entries.last?.isWritable ?? true)
-    }
-
-    func testSecondPullLeavesTheStashInCraft() async throws {
-        // The echo: the round after a conflict must converge, not join the
-        // stash back into the pad.
-        let name = "ccp.pull.echo.\(UUID().uuidString)"
-        let store = try defaults(name)
-        defer { store.removePersistentDomain(forName: name) }
-        let fetch = blocks("""
-            {"items":[{"id":"r1","markdown":"theirs"},
-                       {"id":"c1","markdown":"# Conflicted copy — 2026-09-06 19:00 UTC"},
-                       {"id":"c2","markdown":"mine edited"}]}
-            """)
-        let transport = ScriptedTransport([connection, trash(), blocks("""
-            {"items":[{"id":"r1","markdown":"theirs"}]}
-            """), blocks("""
-            {"items":[{"id":"c1","markdown":"# Conflicted copy — 2026-09-06 19:00 UTC"},
-                       {"id":"c2","markdown":"mine edited"}]}
-            """), connection, trash(), fetch])
-        let (adapter, destination) = adapter(store, transport)
-        let id = try await steadyPad(adapter, destination, text: "mine", seeded: ["mine"])
-        destination.storeSidecar(BlockSidecar(entries: [
-            BlockSidecarEntry(id: "r1", fingerprint: BlockSidecar.fingerprint("mine")),
-        ]), for: id)
-        adapter.text = "mine edited"
-
-        await adapter.pullAll()
-        XCTAssertEqual(adapter.text, "theirs")
-        XCTAssertEqual(transport.requests.count, 4)
-
-        await adapter.pullAll()
-        XCTAssertEqual(adapter.text, "theirs", "the stash stays in Craft, out of the pad")
-        XCTAssertEqual(destination.sidecar(for: id).entries.map(\.id), ["r1", "c1", "c2"])
-        XCTAssertEqual(destination.sidecar(for: id).entries.filter { !$0.isWritable }.count, 2)
-        XCTAssertEqual(transport.requests.count, 7, "clock, trash plus fetch, no writes")
+        XCTAssertEqual(adapter.text, "one plus my edit",
+                       "keystrokes newer than the fetch win the block they touched")
+        XCTAssertEqual(adapter.conflicts(for: id).map(\.slices), [["THEIRS"]],
+                       "and Craft's version is reported, not silently dropped")
     }
 
     func testConvergedClearsDirtyWithoutTouchingText() async throws {
@@ -712,53 +584,6 @@ final class CraftPullAdapterTests: XCTestCase {
         XCTAssertEqual(adapter.text, "one")
         XCTAssertFalse(adapter.isPushDirty(id))
         XCTAssertNotNil(destination.syncedAt(for: id))
-    }
-
-    func testKeystrokesDuringTheStashPostAreNotAdoptedOver() async throws {
-        // The second race: deciding on fresh text but adopting after the
-        // stash POST strands keystrokes typed while the POST is away. The
-        // pull leaves the text — the posted stash is their safety copy.
-        let name = "ccp.pull.postrace.\(UUID().uuidString)"
-        let store = try defaults(name)
-        defer { store.removePersistentDomain(forName: name) }
-        let stashed = blocks("""
-            {"items":[{"id":"r1","markdown":"theirs"},
-                      {"id":"c1","markdown":"# Conflicted copy"},
-                      {"id":"c2","markdown":"mine edited"}]}
-            """)
-        let transport = ScriptedTransport([connection, trash(), blocks("""
-            {"items":[{"id":"r1","markdown":"theirs"}]}
-            """), blocks("""
-            {"items":[{"id":"c1","markdown":"# Conflicted copy"},
-                       {"id":"c2","markdown":"mine edited"}]}
-            """), connection, trash(), stashed])
-        let (adapter, destination) = adapter(store, transport)
-        let id = try await steadyPad(adapter, destination, text: "mine", seeded: ["mine"])
-        destination.storeSidecar(BlockSidecar(entries: [
-            BlockSidecarEntry(id: "r1", fingerprint: BlockSidecar.fingerprint("mine")),
-        ]), for: id)
-        adapter.text = "mine edited"
-        transport.onRequest = {
-            // The stash POST (request three) is away: keep typing.
-            await MainActor.run {
-                if transport.requests.count == 4 { adapter.text = "mine edited!" }
-            }
-        }
-
-        await adapter.pullAll()
-
-        XCTAssertEqual(adapter.text, "mine edited!", "fresh keystrokes stand")
-        XCTAssertTrue(adapter.isPushDirty(id), "their dirty bit stands with them")
-        XCTAssertEqual(destination.stashIDs(for: id), ["c1", "c2"],
-                       "the posted copy is pinned even though the adopt aborted")
-        XCTAssertEqual(destination.sidecar(for: id).entries.map(\.id), ["r1", "c1", "c2"],
-                       "the sidecar advances past the stash so the next pull reads it as confirmed")
-        XCTAssertEqual(destination.sidecar(for: id).entries.filter { !$0.isWritable }.count, 2)
-
-        await adapter.pullAll()
-
-        XCTAssertEqual(adapter.text, "mine edited!", "the next pull skips; the stash is no second move")
-        XCTAssertEqual(transport.requests.count, 7, "clock, trash plus fetch, no second stash")
     }
 
     func testUnmappedPadMakesNoBlockRequests() async throws {        let name = "ccp.pull.unmapped.\(UUID().uuidString)"
@@ -838,7 +663,8 @@ final class CraftPullAdapterTests: XCTestCase {
             """)]
         await adapter.flushCraftPush()
 
-        XCTAssertEqual(transport.requests.count, 5, "trash sweep plus the deferred PUT")
+        XCTAssertEqual(transport.requests.count, 6,
+                       "trash sweep plus the deferred PUT and its read-back")
         let body = try transport.jsonBody(of: 4)
         XCTAssertEqual(body["blocks"] as? [[String: String]],
                        [["id": "block-0", "markdown": "one edited"]])
@@ -851,6 +677,8 @@ final class CraftPullAdapterTests: XCTestCase {
         defer { store.removePersistentDomain(forName: name) }
         let put = Latch()
         let transport = ScriptedTransport([trash(), blocks("""
+            {"items":[{"id":"block-0","markdown":"one edited"}]}
+            """), blocks("""
             {"items":[{"id":"block-0","markdown":"one edited"}]}
             """)])
         transport.onRequest = {
@@ -870,7 +698,7 @@ final class CraftPullAdapterTests: XCTestCase {
         put.release()
         await push
         await Task.yield()
-        let noUnwatchedPull = await becomesTrue { transport.requests.count > 2 }
+        let noUnwatchedPull = await becomesTrue { transport.requests.count > 3 }
         XCTAssertFalse(noUnwatchedPull, "no pull starts unwatched while the panel is shut")
 
         transport.scripts += [connection, trash(), blocks("""
@@ -878,7 +706,8 @@ final class CraftPullAdapterTests: XCTestCase {
             """)]
         await adapter.pullAll()
 
-        XCTAssertEqual(transport.requests.count, 5, "clock, trash plus fetch once the push has landed")
+        XCTAssertEqual(transport.requests.count, 6,
+                       "clock, trash plus fetch once the push and its read-back have landed")
         XCTAssertEqual(adapter.text, "one edited")
         XCTAssertFalse(adapter.isPushDirty(id), "the converged pull stands cleared")
     }

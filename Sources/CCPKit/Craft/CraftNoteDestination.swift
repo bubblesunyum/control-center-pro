@@ -8,7 +8,7 @@ import Foundation
 ///
 /// One pad syncs to potentially several destinations at once, and each backend
 /// owns its own bookkeeping keys. This is the Craft backend's store: everything
-/// the push/pull engine remembers about Craft — sidecars, document ids, title
+/// the push/pull engine remembers about Craft — sync bases, document ids, title
 /// baselines, stash pins, conflict records, the space id — lives behind it,
 /// under unchanged keys and the unchanged persisted format. Craft-shaped on
 /// purpose: a vault backend is paths and files with no ids at all, so no
@@ -23,12 +23,12 @@ import Foundation
 /// storage, so a second implementation can prove this seam now while the
 /// operation shape stays deferred.
 protocol CraftSyncStore: AnyObject {
-    /// The block-id sidecar for a pad, or empty when it never synced. Bytes
-    /// that do not decode read as never-synced — a failed decode is bytes we
-    /// do not understand, never bytes we may replace.
-    func sidecar(for id: UUID) -> BlockSidecar
-    func storeSidecar(_ sidecar: BlockSidecar, for id: UUID)
-    func dropSidecar(for id: UUID)
+    /// The two texts a pad last agreed on with Craft, or empty when it never
+    /// synced. Bytes that do not decode read as never-synced — a failed
+    /// decode is bytes we do not understand, never bytes we may replace.
+    func base(for id: UUID) -> PadSyncBase
+    func storeBase(_ base: PadSyncBase, for id: UUID)
+    func dropBase(for id: UUID)
 
     /// The Craft document a pad syncs to, if one was provisioned.
     func craftDocumentID(for id: UUID) -> String?
@@ -48,17 +48,18 @@ protocol CraftSyncStore: AnyObject {
     func storeTitleRenameDate(_ date: Date?, for id: UUID)
     func dropTitleRenameDate(for id: UUID)
 
-    /// The last server moment a pad agreed with Craft. Advisory — moved
-    /// detection is an exact signature compare, never the clock. A failed
-    /// decode reads as never-synced.
+    /// The last server moment a pad agreed with Craft. Advisory — what moved
+    /// is decided against the recorded base, never the clock. A failed decode
+    /// reads as never-synced.
     func syncedAt(for id: UUID) -> Date?
     func storeSyncedAt(_ date: Date?, for id: UUID)
     func dropSyncedAt(for id: UUID)
 
-    /// Conflict-copy block ids for a pad, pruned to blocks Craft still holds.
-    /// Pins for copies that live in Craft and stay out of the pad.
+    /// Legacy conflict-copy block ids: sections an older build appended to
+    /// the Craft document. Read-only now — nothing is ever added — so the
+    /// copies already in users' documents stay out of the pad without being
+    /// deleted from Craft. Empties as the user clears them there.
     func stashIDs(for id: UUID) -> Set<String>
-    func storeStashIDs(_ ids: Set<String>, for id: UUID)
     func dropStashIDs(for id: UUID)
 
     /// Conflict records for the popover: what each stash preserved and when,
@@ -96,21 +97,20 @@ protocol CraftSyncStore: AnyObject {
 final class CraftNoteDestination: CraftSyncStore {
     private let defaults: UserDefaults
 
-    // The Craft block-id sidecar (ccp-xgl): pad id to the (block id, hash)
-    // pairing the push diffs against. Ours, not upstream's, so it lives
-    // under its own key — sync bookkeeping, never note text.
-    private let sidecarKey = "scratchpadCraftSidecars"
-    private let sidecarsRescueKey = "scratchpadCraftSidecars.unreadable"
-    private var isStoredSidecarsUnreadable = false
+    // The sync base (ccp-c2x5): pad id to the pair of texts — ours and
+    // Craft's — that last agreed. Ours, not upstream's, so it lives under its
+    // own key: sync bookkeeping, never note text. A new key, so the
+    // superseded `scratchpadCraftSidecars` bytes are simply left alone and a
+    // pad with no base seeds from its next fetch.
+    private let baseKey = "scratchpadCraftBases"
+    private let basesRescueKey = "scratchpadCraftBases.unreadable"
+    private var isStoredBasesUnreadable = false
     // Pull bookkeeping (ccp-2zi.6): the last server moment each pad agreed
     // with Craft.
     private let syncedAtKey = "scratchpadCraftSyncedAt"
-    // Conflict copies a pad posted (ccp-2zi.6): Craft block ids that pin the
-    // sidecar and stay out of the pad. Apart from the sidecar's policy flags
-    // on purpose — a policy-unwritable block the user fixes in Craft must
-    // rejoin the pad, while a stash copy must never come back. No legacy
-    // state to migrate: the pull never ran before this bead, so no sidecar
-    // in the wild carries conflict pins yet.
+    // Conflict copies an older build posted into the Craft document
+    // (ccp-2zi.6, superseded by ccp-c2x5). Kept as a read-only exclusion
+    // list so those sections stay out of the pad; nothing writes to it now.
     private let stashKey = "scratchpadCraftStash"
     // Conflict records for the popover (ccp-omt1): what each stash preserved
     // and when, per pad, newest first. The pins stay the sync's business.
@@ -137,38 +137,38 @@ final class CraftNoteDestination: CraftSyncStore {
         self.defaults = defaults
     }
 
-    func sidecar(for id: UUID) -> BlockSidecar {
-        storedSidecars()[id.uuidString] ?? BlockSidecar()
+    func base(for id: UUID) -> PadSyncBase {
+        storedBases()[id.uuidString] ?? PadSyncBase()
     }
 
-    func storeSidecar(_ sidecar: BlockSidecar, for id: UUID) {
-        if isStoredSidecarsUnreadable { rescueUnreadableSidecars() }
-        sidecarMap().set(sidecar, for: id.uuidString)
+    func storeBase(_ base: PadSyncBase, for id: UUID) {
+        if isStoredBasesUnreadable { rescueUnreadableBases() }
+        baseMap().set(base, for: id.uuidString)
     }
 
-    func dropSidecar(for id: UUID) {
-        guard storedSidecars()[id.uuidString] != nil else { return }
-        sidecarMap().set(nil, for: id.uuidString)
+    func dropBase(for id: UUID) {
+        guard storedBases()[id.uuidString] != nil else { return }
+        baseMap().set(nil, for: id.uuidString)
     }
 
-    private func sidecarMap() -> DefaultsMap<BlockSidecar> {
-        DefaultsMap(defaults: defaults, key: sidecarKey)
+    private func baseMap() -> DefaultsMap<PadSyncBase> {
+        DefaultsMap(defaults: defaults, key: baseKey)
     }
 
-    private func storedSidecars() -> [String: BlockSidecar] {
-        if sidecarMap().hasUndecodableBytes { isStoredSidecarsUnreadable = true }
-        return sidecarMap().load()
+    private func storedBases() -> [String: PadSyncBase] {
+        if baseMap().hasUndecodableBytes { isStoredBasesUnreadable = true }
+        return baseMap().load()
     }
 
     /// Bytes we cannot read are still some later build's recovery path. Copied
     /// aside before the healing write lands on top, like the document — and
     /// only once, so a second corruption never eats the first copy.
-    private func rescueUnreadableSidecars() {
-        isStoredSidecarsUnreadable = false
-        guard let stored = defaults.object(forKey: sidecarKey),
-              defaults.object(forKey: sidecarsRescueKey) == nil
+    private func rescueUnreadableBases() {
+        isStoredBasesUnreadable = false
+        guard let stored = defaults.object(forKey: baseKey),
+              defaults.object(forKey: basesRescueKey) == nil
         else { return }
-        defaults.set(stored, forKey: sidecarsRescueKey)
+        defaults.set(stored, forKey: basesRescueKey)
     }
 
     func craftDocumentID(for id: UUID) -> String? {
@@ -250,10 +250,6 @@ final class CraftNoteDestination: CraftSyncStore {
         Set(stashMap().load()[id.uuidString] ?? [])
     }
 
-    func storeStashIDs(_ ids: Set<String>, for id: UUID) {
-        stashMap().set(ids.isEmpty ? nil : Array(ids), for: id.uuidString)
-    }
-
     func dropStashIDs(for id: UUID) {
         stashMap().set(nil, for: id.uuidString)
     }
@@ -273,7 +269,7 @@ final class CraftNoteDestination: CraftSyncStore {
             for: id.uuidString)
     }
 
-    /// Forgetting drops one record. The Craft-side copy and its sidecar pins
+    /// Forgetting drops one record. The Craft-side copy and its pins
     /// stay: forgetting must never re-echo the copy into the pad.
     func dismissConflict(_ recordID: UUID, for id: UUID) {
         let kept = conflicts(for: id).filter { $0.id != recordID }
@@ -330,7 +326,7 @@ final class CraftNoteDestination: CraftSyncStore {
     }
 
     func dropSyncState(for id: UUID) {
-        dropSidecar(for: id)
+        dropBase(for: id)
         dropCraftDocumentID(for: id)
         dropSyncedTitle(for: id)
         dropTitleRenameDate(for: id)

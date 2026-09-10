@@ -29,8 +29,8 @@ final class CraftBlockSplitterTests: XCTestCase {
         let slices = CraftBlockSplitter.slices(in: text)
         XCTAssertEqual(slices.map(\.markdown), ["- [ ] open", "- [x] done"])
         XCTAssertEqual(slices.map(\.markdown).joined(separator: "\n") + "\n", text)
-        XCTAssertNotEqual(BlockSidecar.fingerprint(slices[0].markdown),
-                          BlockSidecar.fingerprint(slices[1].markdown))
+        XCTAssertNotEqual(slices[0].markdown, slices[1].markdown,
+                          "the two states must not cut to the same block")
     }
 
     func testSoftWrappedLinesStayOneBlock() {

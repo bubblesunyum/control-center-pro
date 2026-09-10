@@ -305,9 +305,7 @@ final class NotesDocumentStorageTests: XCTestCase {
         first.craftBaseURLOverride = base
         let id = try XCTUnwrap(first.selectedNoteID)
         first.text = "before"
-        destination.storeSidecar(BlockSidecar(entries: [
-            BlockSidecarEntry(id: "block-0", fingerprint: BlockSidecar.fingerprint("before")),
-        ]), for: id)
+        destination.storeBase(.fixture("before"), for: id)
         destination.setCraftDocumentID("doc1", for: id)
         destination.storeSyncedTitle(first.selectedNoteName, for: id)
         await first.flushCraftPush()
@@ -502,11 +500,8 @@ final class NotesDocumentStorageTests: XCTestCase {
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
         store.set(storedJSON(key: "pads", id: padID, text: "after"), forKey: "scratchpadDocument")
-        let sidecar = BlockSidecar(entries: [
-            BlockSidecarEntry(id: "block-0", fingerprint: BlockSidecar.fingerprint("before")),
-        ])
-        store.set(try JSONEncoder().encode([padID.uuidString: sidecar]),
-                  forKey: "scratchpadCraftSidecars")
+        store.set(try JSONEncoder().encode([padID.uuidString: PadSyncBase.fixture("before")]),
+                  forKey: "scratchpadCraftBases")
         store.set(try JSONEncoder().encode([padID.uuidString: "doc1"]),
                   forKey: "scratchpadCraftDocuments")
         store.set(try JSONEncoder().encode([padID.uuidString: "Note 1"]),

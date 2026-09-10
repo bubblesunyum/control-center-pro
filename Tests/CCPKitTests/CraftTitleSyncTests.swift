@@ -39,10 +39,7 @@ final class CraftTitleSyncTests: XCTestCase {
                            text: String) async throws -> UUID {
         let id = try XCTUnwrap(adapter.selectedNoteID)
         adapter.text = text
-        destination.storeSidecar(BlockSidecar(entries: [text].enumerated().map { index, markdown in
-            BlockSidecarEntry(id: "block-\(index)",
-                              fingerprint: BlockSidecar.fingerprint(markdown))
-        }), for: id)
+        destination.storeBase(.fixture(text, blocks: [text]), for: id)
         destination.setCraftDocumentID("doc1", for: id)
         destination.storeSyncedTitle(adapter.selectedNoteName, for: id)
         await adapter.flushCraftPush()
@@ -87,7 +84,8 @@ final class CraftTitleSyncTests: XCTestCase {
         XCTAssertTrue(adapter.isPushDirty(id), "a rename dirties like an edit")
         await adapter.flushCraftPush()
 
-        XCTAssertEqual(transport.requests.count, 2, "sweep plus one title PUT, no block writes")
+        XCTAssertEqual(transport.requests.count, 3,
+                       "sweep, one title PUT, and the read-back — no block writes")
         XCTAssertEqual(transport.requests[1].httpMethod, "PUT")
         XCTAssertTrue(transport.requests[1].url?.absoluteString.hasSuffix("/blocks") ?? false)
         let body = try transport.jsonBody(of: 1)
@@ -96,7 +94,7 @@ final class CraftTitleSyncTests: XCTestCase {
         XCTAssertEqual(destination.syncedTitle(for: id), "Renamed")
         XCTAssertFalse(adapter.isPushDirty(id))
         XCTAssertEqual(adapter.text, "one", "a title push never touches the text")
-        XCTAssertEqual(destination.sidecar(for: id).entries.map(\.id), ["block-0"])
+        XCTAssertEqual(destination.base(for: id).blocks.map(\.id), ["block-0"])
     }
 
     func testFailedTitlePutKeepsTheBaselineAndTheDirtyBit() async throws {
@@ -135,7 +133,8 @@ final class CraftTitleSyncTests: XCTestCase {
         await adapter.flushCraftPush()
 
         XCTAssertEqual(destination.craftDocumentID(for: id), "doc-new")
-        XCTAssertEqual(transport.requests.count, 2, "create plus content post — no rename PUT")
+        XCTAssertEqual(transport.requests.count, 3,
+                       "create, content post, read-back — no rename PUT")
         XCTAssertEqual(transport.requests[0].httpMethod, "POST")
         XCTAssertTrue(transport.requests[0].url?.absoluteString.hasSuffix("/documents") ?? false)
         let create = try transport.jsonBody(of: 0)
@@ -178,7 +177,8 @@ final class CraftTitleSyncTests: XCTestCase {
 
         await adapter.flushCraftPush()
 
-        XCTAssertEqual(transport.requests.count, 5, "clock, trash, fetch, sweep, title PUT")
+        XCTAssertEqual(transport.requests.count, 6,
+                       "clock, trash, fetch, sweep, title PUT, read-back")
         let body = try transport.jsonBody(of: 4)
         XCTAssertEqual(body["blocks"] as? [[String: String]],
                        [["id": "doc1", "markdown": "Mine"]])
@@ -256,10 +256,7 @@ final class CraftTitleSyncTests: XCTestCase {
         let (adapter, destination) = adapter(store, transport)
         let id = try XCTUnwrap(adapter.selectedNoteID)
         adapter.text = "mine"
-        destination.storeSidecar(BlockSidecar(entries: [
-            BlockSidecarEntry(id: "block-0",
-                              fingerprint: BlockSidecar.fingerprint("mine")),
-        ]), for: id)
+        destination.storeBase(.fixture("mine"), for: id)
         destination.setCraftDocumentID("doc1", for: id)
         XCTAssertNil(destination.syncedTitle(for: id))
 
@@ -274,7 +271,8 @@ final class CraftTitleSyncTests: XCTestCase {
 
         await adapter.flushCraftPush()
 
-        XCTAssertEqual(transport.requests.count, 5, "clock, trash, fetch, sweep, title PUT")
+        XCTAssertEqual(transport.requests.count, 6,
+                       "clock, trash, fetch, sweep, title PUT, read-back")
         let body = try transport.jsonBody(of: 4)
         XCTAssertEqual(body["blocks"] as? [[String: String]],
                        [["id": "doc1", "markdown": "Note 1"]])
@@ -332,8 +330,10 @@ final class CraftTitleSyncTests: XCTestCase {
         await adapter.flushCraftPush()
 
         XCTAssertEqual(transport.requests.count, 3, "sweep, failed title PUT, content PUT still attempts")
-        XCTAssertEqual(destination.sidecar(for: id).entries[0].fingerprint,
-                       BlockSidecar.fingerprint("TWO!"), "the content leg lands")
+        XCTAssertEqual(transport.requests[2].httpMethod, "PUT",
+                       "the content leg still attempts behind the failed title")
+        XCTAssertEqual(destination.base(for: id), .fixture("one"),
+                       "a round with a failed leg records no agreement")
         XCTAssertEqual(destination.syncedTitle(for: id), "Note 1", "the failed title records nothing")
         XCTAssertTrue(adapter.isPushDirty(id), "the rename retries next round")
     }
@@ -354,7 +354,7 @@ final class CraftTitleSyncTests: XCTestCase {
         await adapter.flushCraftPush()
 
         XCTAssertNil(destination.craftDocumentID(for: id))
-        XCTAssertEqual(destination.sidecar(for: id).entries, [], "no resurrection for a dead UUID")
+        XCTAssertEqual(destination.base(for: id).blocks, [], "no resurrection for a dead UUID")
         XCTAssertNil(destination.syncedTitle(for: id))
     }
 
@@ -378,7 +378,8 @@ final class CraftTitleSyncTests: XCTestCase {
 
         await adapter.flushCraftPush()
 
-        XCTAssertEqual(transport.requests.count, 5, "clock, trash, fetch, sweep, title PUT")
+        XCTAssertEqual(transport.requests.count, 6,
+                       "clock, trash, fetch, sweep, title PUT, read-back")
         XCTAssertEqual(destination.syncedTitle(for: id), "Mine")
         XCTAssertFalse(adapter.isPushDirty(id))
     }

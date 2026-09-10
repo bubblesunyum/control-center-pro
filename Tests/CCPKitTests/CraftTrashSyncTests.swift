@@ -42,10 +42,7 @@ final class CraftTrashSyncTests: XCTestCase {
                            text: String) async throws -> UUID {
         let id = try XCTUnwrap(adapter.selectedNoteID)
         adapter.text = text
-        destination.storeSidecar(BlockSidecar(entries: [text].enumerated().map { index, markdown in
-            BlockSidecarEntry(id: "block-\(index)",
-                              fingerprint: BlockSidecar.fingerprint(markdown))
-        }), for: id)
+        destination.storeBase(.fixture(text, blocks: [text]), for: id)
         destination.setCraftDocumentID("doc1", for: id)
         destination.storeSyncedTitle(adapter.selectedNoteName, for: id)
         await adapter.flushCraftPush()
@@ -116,7 +113,7 @@ final class CraftTrashSyncTests: XCTestCase {
         XCTAssertFalse(adapter.notes.contains(where: { $0.id == id }), "the trashed pad is gone")
         XCTAssertEqual(adapter.notes.map(\.id), [survivor])
         XCTAssertNil(destination.craftDocumentID(for: id), "the mapping leaves with the note")
-        XCTAssertEqual(destination.sidecar(for: id).entries, [])
+        XCTAssertEqual(destination.base(for: id).blocks, [])
         XCTAssertNil(destination.syncedTitle(for: id))
         XCTAssertFalse(adapter.isPushDirty(id))
         XCTAssertTrue(adapter.isSyncVerified, "a proving pull verifies")
@@ -187,9 +184,7 @@ final class CraftTrashSyncTests: XCTestCase {
         adapter.createNote()
         let clean = try XCTUnwrap(adapter.selectedNoteID)
         adapter.text = "two"
-        destination.storeSidecar(BlockSidecar(entries: [
-            BlockSidecarEntry(id: "block-0", fingerprint: BlockSidecar.fingerprint("two")),
-        ]), for: clean)
+        destination.storeBase(.fixture("two"), for: clean)
         destination.setCraftDocumentID("doc2", for: clean)
         destination.storeSyncedTitle(adapter.selectedNoteName, for: clean)
         await adapter.flushCraftPush()
@@ -200,7 +195,7 @@ final class CraftTrashSyncTests: XCTestCase {
 
         XCTAssertEqual(adapter.notes.first(where: { $0.id == doomed })?.text, "one edited")
         XCTAssertNil(destination.craftDocumentID(for: doomed), "unconfirmed pads unmap, never delete")
-        XCTAssertEqual(destination.sidecar(for: doomed).entries, [])
+        XCTAssertEqual(destination.base(for: doomed).blocks, [])
         XCTAssertFalse(adapter.isPushDirty(doomed), "local-only pads owe no push")
         XCTAssertEqual(destination.craftDocumentID(for: clean), "doc2", "the clean neighbour stands")
         XCTAssertEqual(adapter.notes.count, 2)

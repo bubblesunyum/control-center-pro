@@ -1113,18 +1113,15 @@ public final class NotesAdapter {
         deleteNote(padID)
     }
 
-    /// Whether the pad holds changes Craft never confirmed: the durable
-    /// dirty bit, a block diff against the last confirmed sidecar (the plan
-    /// is what the pull decides by), or a title the baseline never recorded. Unknown
-    /// baselines read as unconfirmed: a legacy mapping's first trash-hit
-    /// keeps its text rather than deleting on a maybe.
+    /// Whether the pad holds changes Craft never confirmed: text that differs
+    /// from the recorded base, or a title the baseline never recorded.
+    /// Unknown baselines read as unconfirmed — a legacy mapping's first
+    /// trash-hit keeps its text rather than deleting on a maybe.
     private func hasUnconfirmedEdits(_ padID: UUID) -> Bool {
-        if dirtyPadIDs.contains(padID) { return true }
         guard let document,
               let pad = document.notes.first(where: { $0.id == padID })
         else { return false }
-        let slices = CraftBlockSplitter.slices(in: pad.text)
-        if !craftDestination.sidecar(for: padID).pushPlan(for: slices).isEmpty { return true }
+        if padTextMoved(padID, text: pad.text) { return true }
         guard let baseline = craftDestination.syncedTitle(for: padID) else {
             // No baseline — a legacy mapping or never converged: keep the
             // text on a maybe rather than deleting.
@@ -1133,19 +1130,29 @@ public final class NotesAdapter {
         return pad.name != baseline
     }
 
+    /// Whether the pad's text differs from what Craft last confirmed. Derived,
+    /// never stored: a bit can go stale against the text it describes, and
+    /// this cannot (ccp-c2x5).
+    private func padTextMoved(_ padID: UUID, text: String) -> Bool {
+        let base = craftDestination.base(for: padID)
+        guard !base.isEmpty else { return !CraftBlockSplitter.slices(in: text).isEmpty }
+        return text != base.localText
+    }
+
     /// Whether a push round would spend any request on this pad — the trash
     /// sweep's gate, so no-op rounds cost nothing (and no scripts). Mirrors
     /// pushOnePad's own checks without provisioning: an unmapped pad with
     /// syncable slices would create, a mapped pad writes when its title or
-    /// its blocks differ.
+    /// its text differ.
     private func padNeedsPush(_ padID: UUID) -> Bool {
         guard let document,
               let pad = document.notes.first(where: { $0.id == padID })
         else { return false }
-        let slices = CraftBlockSplitter.slices(in: pad.text)
-        guard craftDestination.craftDocumentID(for: padID) != nil else { return !slices.isEmpty }
+        guard craftDestination.craftDocumentID(for: padID) != nil else {
+            return !CraftBlockSplitter.slices(in: pad.text).isEmpty
+        }
         if pad.name != craftDestination.syncedTitle(for: padID) { return true }
-        return !craftDestination.sidecar(for: padID).pushPlan(for: slices).isEmpty
+        return padTextMoved(padID, text: pad.text)
     }
 
     /// Drop every per-pad sync trace and keep the note: text, tab and
@@ -1461,15 +1468,12 @@ public final class NotesAdapter {
         // mapping the pull saw first already recorded Craft's title there, so
         // this only fires for pads the push reaches before any pull.)
         let titleDirty = pad.name != craftDestination.syncedTitle(for: padID)
-        let sidecar = craftDestination.sidecar(for: padID)
-        let plan = sidecar.pushPlan(for: slices)
+        let base = craftDestination.base(for: padID)
+        let plan = BlockPushPlan.plan(from: base, to: slices.map(\.markdown))
         guard !plan.isEmpty || titleDirty else { return .skipped }
 
         var pendingError: Error?
         var titleEcho: CraftBlock?
-        var putEcho: [CraftBlock] = []
-        var echoByInsert: [Int: [CraftBlock]] = [:]
-        var deletesConfirmed = plan.deletes.isEmpty
         if titleDirty {
             // Its own leg, not the head of the content pipeline: a failed
             // title must not starve the text behind it. Backpressure is the
@@ -1486,30 +1490,19 @@ public final class NotesAdapter {
         }
         do {
             if !plan.updates.isEmpty {
-                putEcho = try await client.updateBlocks(plan.updates)
+                _ = try await client.updateBlocks(plan.updates)
             }
             // One batch per anchor group, in plan order; abort the rest on
-            // the first throw. Echoes stay keyed by plan-insert index, so a
-            // split can never shift a later insert's attribution. Anchorless
-            // groups carry the sidecar's head into postBlocks, which posts
-            // at the end and moves before it (ccp-gfe5).
+            // the first throw. Anchorless groups carry the base's head into
+            // postBlocks, which posts at the end and moves before it
+            // (ccp-gfe5).
             for group in postGroups(for: plan) {
-                let headSibling = group.first?.insert.afterID == nil
-                    ? sidecar.entries.first?.id : nil
-                let echo = try await client.postBlocks(group.map(\.insert),
-                                                       documentID: docID,
-                                                       headSiblingID: headSibling)
-                for (i, member) in group.enumerated() where i < echo.count {
-                    echoByInsert[member.index, default: []].append(echo[i])
-                }
-                if echo.count > group.count, let last = group.last {
-                    echoByInsert[last.index, default: []]
-                        .append(contentsOf: echo.dropFirst(group.count))
-                }
+                let headSibling = group.first?.afterID == nil ? base.blocks.first?.id : nil
+                _ = try await client.postBlocks(group, documentID: docID,
+                                                headSiblingID: headSibling)
             }
             if !plan.deletes.isEmpty {
                 try await client.deleteBlocks(plan.deletes)
-                deletesConfirmed = true
             }
         } catch {
             // Backpressure wins the error: the retry delay answers the
@@ -1522,17 +1515,20 @@ public final class NotesAdapter {
         // that pulls never visit and UUIDs never reuse — leaking forever.
         guard self.document?.notes.contains(where: { $0.id == padID }) == true else { return .skipped }
         // The echo's canonical markdown is the baseline, never what was
-        // sent — by the same fixed-point rule as the block sidecar, compared
+        // sent — the same fixed-point rule the base keeps, compared
         // post-sanitise like the pull does. Recorded even on the way out: a
         // later content failure must not un-confirm a title Craft holds.
         if let titleEcho {
             let confirmed = NotesSupport.sanitizedNoteName(titleEcho.markdown)
             if !confirmed.isEmpty { craftDestination.storeSyncedTitle(confirmed, for: padID) }
         }
-        storePushOutcome(padID: padID, sidecar: sidecar, text: padText, slices: slices,
-                         putEcho: putEcho, postEchoByInsert: echoByInsert,
-                         deletesConfirmed: deletesConfirmed)
+        // Only a round that landed whole records an agreement. A partial
+        // round leaves the base exactly as it was, so the next one replans
+        // the same diff and finishes it — the writes are idempotent, and a
+        // base describing half a push is the thing that used to strand
+        // orphaned blocks nothing would ever delete.
         if let pendingError { throw pendingError }
+        await recordBase(padID: padID, pushed: padText, docID: docID, client: client)
         let current = self.document?.notes.first(where: { $0.id == padID })
         // Past the legs with no throw, every attempted write confirmed. The
         // empty-plan guard above is the only no-op left standing, so reaching
@@ -1541,21 +1537,31 @@ public final class NotesAdapter {
         return .wrote
     }
 
+    /// Read the document back and record it, with the text that was pushed,
+    /// as the new agreement.
+    ///
+    /// One request replaces the whole business of attributing write echoes to
+    /// the blocks that caused them — which is where the sidecar's hardest
+    /// bugs lived, since a POST can split one sent block into several and a
+    /// partial failure leaves the echoes lying about what landed. Whatever
+    /// Craft answers here *is* what Craft holds, however the round went, so a
+    /// half-applied push simply leaves a base the next diff finishes from.
+    /// A failed read records nothing and the pad stays dirty.
+    private func recordBase(padID: UUID, pushed: String, docID: String,
+                            client: CraftClient) async {
+        guard let fetched = try? await client.fetchDocument(documentID: docID),
+              self.document?.notes.contains(where: { $0.id == padID }) == true
+        else { return }
+        let blocks = PadSyncBase.remote(fetched.blocks,
+                                        excluding: craftDestination.stashIDs(for: padID))
+        craftDestination.storeBase(PadSyncBase(localText: pushed, blocks: blocks), for: padID)
+    }
+
     /// Observable for tests.
     func isPushDirty(_ id: UUID) -> Bool { dirtyPadIDs.contains(id) }
 
     /// Observable for tests: a failed push leaves a retry scheduled.
     var hasScheduledRetry: Bool { pushRetryTask != nil }
-
-    private func storePushOutcome(padID: UUID, sidecar: BlockSidecar, text: String,
-                                  slices: [CraftBlockSlice],
-                                  putEcho: [CraftBlock], postEchoByInsert: [Int: [CraftBlock]],
-                                  deletesConfirmed: Bool) {
-        let newSidecar = sidecar.applyingPush(text: text, slices: slices,
-                                           putEcho: putEcho, postEchoByInsert: postEchoByInsert,
-                                           deletesConfirmed: deletesConfirmed)
-        craftDestination.storeSidecar(newSidecar, for: padID)
-    }
 
     /// One POST batch per anchor group, in plan order. Anchorless inserts
     /// (head of the pad) post at the end and move before the sidecar's head
@@ -1569,10 +1575,9 @@ public final class NotesAdapter {
     /// block the sidecar never saw. Provisioning must only ever map
     /// empty-or-pull-seeded docs; the pull seed heals the order the one time
     /// this fires.
-    private func postGroups(for plan: BlockPushPlan) -> [[(index: Int, insert: BlockInsert)]] {
+    private func postGroups(for plan: BlockPushPlan) -> [[BlockInsert]] {
         guard !plan.inserts.isEmpty else { return [] }
-        let indexed = plan.inserts.enumerated().map { (index: $0.offset, insert: $0.element) }
-        return groupedInserts(indexed)
+        return groupedInserts(plan.inserts)
     }
 
     private static let pushRetryDelays: [TimeInterval] = [30, 120, 300]
@@ -1601,13 +1606,12 @@ public final class NotesAdapter {
     }
 
     /// Order-preserving group-by for batching inserts per anchor.
-    private func groupedInserts(_ inserts: [(index: Int, insert: BlockInsert)])
-        -> [[(index: Int, insert: BlockInsert)]] {
+    private func groupedInserts(_ inserts: [BlockInsert]) -> [[BlockInsert]] {
         var order: [String?] = []
-        var groups: [String?: [(index: Int, insert: BlockInsert)]] = [:]
-        for member in inserts {
-            if groups[member.insert.afterID] == nil { order.append(member.insert.afterID) }
-            groups[member.insert.afterID, default: []].append(member)
+        var groups: [String?: [BlockInsert]] = [:]
+        for insert in inserts {
+            if groups[insert.afterID] == nil { order.append(insert.afterID) }
+            groups[insert.afterID, default: []].append(insert)
         }
         return order.compactMap { groups[$0] }
     }
@@ -1812,67 +1816,45 @@ public final class NotesAdapter {
         guard let document,
               let pad = document.notes.first(where: { $0.id == padID })
         else { return }
-        let remoteIDs = Set(fetched.blocks.map(\.id))
-        switch CraftPull.decide(local: pad.text, sidecar: craftDestination.sidecar(for: padID),
-                                remote: fetched.blocks, stashIDs: craftDestination.stashIDs(for: padID)) {
+        switch CraftPull.decide(local: pad.text, base: craftDestination.base(for: padID),
+                                remote: fetched.blocks,
+                                stashIDs: craftDestination.stashIDs(for: padID)) {
         case .converged:
             noteDidSync(serverTime, for: padID)
             dirtyPadIDs.remove(padID)
-        case .adopt(let text, let newSidecar):
-            adoptRemote(padID: padID, text: text, sidecar: newSidecar,
+        case .seed(let base):
+            // First sight of this pad, or the first pull since the base
+            // replaced the sidecar: start remembering, move nothing.
+            craftDestination.storeBase(base, for: padID)
+        case .adopt(let text, let base):
+            adoptRemote(padID: padID, text: text, base: base,
                         snapshotReason: .pull, snapshotDate: serverTime)
-            craftDestination.storeStashIDs(craftDestination.stashIDs(for: padID).intersection(remoteIDs), for: padID)
             noteDidSync(serverTime, for: padID)
             dirtyPadIDs.remove(padID)
-        case .conflict(let heading, let stash, let text, let seeded):
-            // The stash appends at the document's end: every insert shares
-            // the last remote id as its anchor, so the batch lands in array
-            // order behind it (the same batching the push relies on). Into
-            // an empty document the anchorless batch takes start+pageId,
-            // where there is no head block to merge into.
-            let inserts = [Self.conflictHeading(heading, at: serverTime)] + stash
-            let echo = try await client.postBlocks(
-                inserts.map { BlockInsert(afterID: fetched.blocks.last?.id, markdown: $0) },
-                documentID: docID)
-            // Recorded before the re-read below: the copy exists in Craft
-            // whatever the user typed meanwhile, and the next pull must
-            // already know to keep it out of the pad.
-            let stashed = craftDestination.stashIDs(for: padID).intersection(remoteIDs).union(echo.map(\.id))
-            craftDestination.storeStashIDs(stashed, for: padID)
-            // The popover lists what was preserved and when; recorded only
-            // for the copy that actually landed.
-            recordConflict(slices: stash, date: serverTime, for: padID)
-            // The stash pins unwritable: it lives in Craft, never in the
-            // pad, so the next push must route around it rather than
-            // delete what it cannot see.
-            var sidecar = seeded
-            for item in echo {
-                sidecar.entries.append(BlockSidecarEntry(
-                    id: item.id, fingerprint: BlockSidecar.fingerprint(item.markdown),
-                    isWritable: false))
+        case .merged(let text, let hadConflict, let remoteText):
+            // Both sides moved and the two edits combined. The base is left
+            // alone on purpose: neither side holds this text yet, and the
+            // push that follows records what Craft ends up with.
+            if hadConflict {
+                // A block each side changed differently. Ours stands — it is
+                // what the user was looking at — and Craft's version stays
+                // reachable two ways: the popover lists it, and history can
+                // restore it. Neither writes anything back into the user's
+                // Craft document, which is what the predecessor did with the
+                // panel's own text (ccp-c2x5).
+                recordConflict(slices: [remoteText], date: serverTime, for: padID)
+                recordSnapshot(markdown: remoteText, reason: .conflict,
+                               date: serverTime, for: padID)
             }
-            // The sidecar advances even when the text cannot: the POST just
-            // changed Craft, and a sidecar predating the stash reads those
-            // blocks as a second remote move and posts the stash again.
-            craftDestination.storeSidecar(sidecar, for: padID)
-            // Re-read after the POST: adopting now would overwrite keystrokes
-            // newer than the stash and clear their dirty bit. Leave the text —
-            // the stash just posted is their safety copy, and the next pull
-            // stashes the fresh text the same way. (`document` above is the
-            // pre-POST snapshot; the live state is re-read here.)
-            guard self.document?.notes.first(where: { $0.id == padID })?.text == pad.text
-            else { return }
-            adoptRemote(padID: padID, text: text, sidecar: sidecar,
-                        snapshotReason: .conflict, snapshotDate: serverTime)
-            noteDidSync(serverTime, for: padID)
-            dirtyPadIDs.remove(padID)
+            adoptRemote(padID: padID, text: text, base: nil,
+                        snapshotReason: .pull, snapshotDate: serverTime)
+            dirtyPadIDs.insert(padID)
+            scheduleCraftPush()
         case .skip:
             break
         }
-        // Title runs after the content decision landed (a throwing stash
-        // leaves the title for the next pull), and even when the content
-        // skipped: the two move independently. A content adopt that cleared
-        // the dirty bit is safe — a still-dirty title re-adds it below.
+        // Title runs after the content decision landed, and even when the
+        // content skipped: the two move independently.
         reconcileTitle(padID: padID, remoteTitle: fetched.title,
                        remoteModified: fetched.modifiedAt, serverTime: serverTime)
     }
@@ -1957,10 +1939,12 @@ public final class NotesAdapter {
         craftDestination.storeTitleRenameDate(date ?? Date(), for: padID)
     }
 
-    /// Replace a pad's text and sidecar from a pull. Silent: the replacing
-    /// flag keeps the widget from re-dirtying and re-pushing what just
-    /// arrived, and the persist lands now rather than on the save debounce.
-    private func adoptRemote(padID: UUID, text: String, sidecar: BlockSidecar,
+    /// Replace a pad's text from a pull, and record the new agreement when
+    /// the pull established one — a merge does not, since neither side holds
+    /// the merged text until the push lands. Silent: the replacing flag keeps
+    /// the widget from re-dirtying and re-pushing what just arrived, and the
+    /// persist lands now rather than on the save debounce.
+    private func adoptRemote(padID: UUID, text: String, base: PadSyncBase?,
                              snapshotReason: SnapshotReason, snapshotDate: Date?) {
         guard var document,
               let index = document.notes.firstIndex(where: { $0.id == padID })
@@ -1984,21 +1968,11 @@ public final class NotesAdapter {
         if replaced {
             padsPendingUndoClear.insert(padID)
         }
-        craftDestination.storeSidecar(sidecar, for: padID)
+        if let base { craftDestination.storeBase(base, for: padID) }
         _ = persist(document)
     }
 
-    /// The stash heading, dated by the server clock when the pull brought
-    /// one. The date is a label, never a comparison — an unknown clock dates
-    /// nothing rather than stamping Mac time Craft never saw.
-    static func conflictHeading(_ base: String, at serverTime: Date?) -> String {
-        guard let serverTime else { return base }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(identifier: "UTC")
-        formatter.dateFormat = "yyyy-MM-dd HH:mm 'UTC'"
-        return "\(base) — \(formatter.string(from: serverTime))"
-    }
+
 
     // MARK: - Actions
 

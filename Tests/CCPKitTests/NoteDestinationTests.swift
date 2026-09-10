@@ -10,7 +10,7 @@ import XCTest
 /// unchanged against it — if the fake substitutes cleanly across a push and
 /// a pull, the adapter depends on the seam rather than on Craft.
 final class FakeCraftSyncStore: CraftSyncStore {
-    private var sidecars: [String: BlockSidecar] = [:]
+    private var bases: [String: PadSyncBase] = [:]
     private var documents: [String: String] = [:]
     private var titles: [String: String] = [:]
     private var renameDates: [String: Date] = [:]
@@ -24,16 +24,16 @@ final class FakeCraftSyncStore: CraftSyncStore {
     /// Same: the ring bound is seam behaviour, not backend choice.
     private static let maximumSnapshotsPerPad = 10
 
-    func sidecar(for id: UUID) -> BlockSidecar {
-        sidecars[id.uuidString] ?? BlockSidecar()
+    func base(for id: UUID) -> PadSyncBase {
+        bases[id.uuidString] ?? PadSyncBase()
     }
 
-    func storeSidecar(_ sidecar: BlockSidecar, for id: UUID) {
-        sidecars[id.uuidString] = sidecar
+    func storeBase(_ base: PadSyncBase, for id: UUID) {
+        bases[id.uuidString] = base
     }
 
-    func dropSidecar(for id: UUID) {
-        sidecars[id.uuidString] = nil
+    func dropBase(for id: UUID) {
+        bases[id.uuidString] = nil
     }
 
     func craftDocumentID(for id: UUID) -> String? {
@@ -141,7 +141,7 @@ final class FakeCraftSyncStore: CraftSyncStore {
     }
 
     func dropSyncState(for id: UUID) {
-        dropSidecar(for: id)
+        dropBase(for: id)
         dropCraftDocumentID(for: id)
         dropSyncedTitle(for: id)
         dropTitleRenameDate(for: id)
@@ -169,23 +169,22 @@ final class CraftNoteDestinationTests: XCTestCase {
         let id = UUID()
         let date = Date(timeIntervalSince1970: 1_000_000)
 
-        let sidecar = BlockSidecar(entries: [BlockSidecarEntry(id: "b1", fingerprint: "f")])
-        destination.storeSidecar(sidecar, for: id)
+        let base = PadSyncBase.fixture("one", ids: ["b1"])
+        destination.storeBase(base, for: id)
         destination.setCraftDocumentID("doc-1", for: id)
         destination.storeSyncedTitle("Title", for: id)
         destination.storeTitleRenameDate(date, for: id)
         destination.storeSyncedAt(date, for: id)
-        destination.storeStashIDs(["a", "b"], for: id)
+        store.set(["a", "b"], forKey: "scratchpadCraftStash.\(id.uuidString)")
         destination.recordConflict(slices: ["kept"], date: date, for: id)
         destination.storeCraftSpaceID("space-1")
 
-        XCTAssertEqual(destination.sidecar(for: id), sidecar)
+        XCTAssertEqual(destination.base(for: id), base)
         XCTAssertEqual(destination.craftDocumentID(for: id), "doc-1")
         XCTAssertEqual(destination.mappedPadIDs, [id])
         XCTAssertEqual(destination.syncedTitle(for: id), "Title")
         XCTAssertEqual(destination.titleRenameDate(for: id), date)
         XCTAssertEqual(destination.syncedAt(for: id), date)
-        XCTAssertEqual(destination.stashIDs(for: id), ["a", "b"])
         XCTAssertEqual(destination.conflicts(for: id).map(\.slices), [["kept"]])
         XCTAssertEqual(destination.conflicts(for: id).first?.date, date)
         XCTAssertEqual(destination.craftSpaceID, "space-1")
@@ -198,8 +197,7 @@ final class CraftNoteDestinationTests: XCTestCase {
         let id = UUID()
         do {
             let first = CraftNoteDestination(defaults: store)
-            first.storeSidecar(
-                BlockSidecar(entries: [BlockSidecarEntry(id: "b1", fingerprint: "f")]), for: id)
+            first.storeBase(.fixture("one", ids: ["b1"]), for: id)
             first.setCraftDocumentID("doc-1", for: id)
             first.storeSyncedTitle("Title", for: id)
             first.recordConflict(slices: ["kept"], date: nil, for: id)
@@ -207,7 +205,7 @@ final class CraftNoteDestinationTests: XCTestCase {
         }
 
         let relaunched = CraftNoteDestination(defaults: store)
-        XCTAssertEqual(relaunched.sidecar(for: id).entries.map(\.id), ["b1"])
+        XCTAssertEqual(relaunched.base(for: id).blocks.map(\.id), ["b1"])
         XCTAssertEqual(relaunched.craftDocumentID(for: id), "doc-1")
         XCTAssertEqual(relaunched.syncedTitle(for: id), "Title")
         XCTAssertEqual(relaunched.conflicts(for: id).map(\.slices), [["kept"]])
@@ -221,19 +219,17 @@ final class CraftNoteDestinationTests: XCTestCase {
         let destination = CraftNoteDestination(defaults: store)
         let id = UUID()
         let date = Date()
-        destination.storeSidecar(
-            BlockSidecar(entries: [BlockSidecarEntry(id: "b1", fingerprint: "f")]), for: id)
+        destination.storeBase(.fixture("one", ids: ["b1"]), for: id)
         destination.setCraftDocumentID("doc-1", for: id)
         destination.storeSyncedTitle("Title", for: id)
         destination.storeTitleRenameDate(date, for: id)
         destination.storeSyncedAt(date, for: id)
-        destination.storeStashIDs(["a"], for: id)
         destination.recordConflict(slices: ["kept"], date: nil, for: id)
         destination.storeCraftSpaceID("space-1")
 
         destination.dropSyncState(for: id)
 
-        XCTAssertTrue(destination.sidecar(for: id).entries.isEmpty)
+        XCTAssertTrue(destination.base(for: id).blocks.isEmpty)
         XCTAssertNil(destination.craftDocumentID(for: id))
         XCTAssertTrue(destination.mappedPadIDs.isEmpty)
         XCTAssertNil(destination.syncedTitle(for: id))
@@ -287,25 +283,22 @@ final class NoteDestinationSeamTests: XCTestCase {
         defer { store.removePersistentDomain(forName: name) }
         let transport = ScriptedTransport([emptyTrash(), .init(statusCode: 200, json: """
             {"items":[{"id":"block-1","markdown":"TWO!"}]}
+            """), .init(statusCode: 200, json: """
+            {"items":[{"id":"block-0","markdown":"one"},{"id":"block-1","markdown":"TWO!"}]}
             """)])
         let fake = FakeCraftSyncStore()
         let adapter = adapter(store, transport, destination: fake)
         let id = try XCTUnwrap(adapter.selectedNoteID)
-        fake.storeSidecar(
-            BlockSidecar(entries: CraftBlockSplitter.slices(in: "one\n\ntwo\n").enumerated().map { index, slice in
-                BlockSidecarEntry(id: "block-\(index)",
-                                  fingerprint: BlockSidecar.fingerprint(slice.markdown))
-            }), for: id)
+        fake.storeBase(.fixture("one\n\ntwo\n"), for: id)
         fake.setCraftDocumentID("doc1", for: id)
         fake.storeSyncedTitle(adapter.selectedNoteName, for: id)
 
         adapter.text = "one\n\nTWO\n"
         await adapter.flushCraftPush()
 
-        XCTAssertEqual(transport.requests.count, 2, "trash sweep plus one PUT")
-        XCTAssertEqual(fake.sidecar(for: id).entries[1].fingerprint,
-                       BlockSidecar.fingerprint("TWO!"),
-                       "the confirmed echo lands in the fake, through the seam")
+        XCTAssertEqual(transport.requests.count, 3, "trash sweep, one PUT, one read-back")
+        XCTAssertEqual(fake.base(for: id).blocks.map(\.markdown), ["one", "TWO!"],
+                       "what Craft holds lands in the fake, through the seam")
         XCTAssertEqual(fake.craftDocumentID(for: id), "doc1")
         XCTAssertFalse(adapter.isPushDirty(id))
     }
@@ -321,9 +314,7 @@ final class NoteDestinationSeamTests: XCTestCase {
         let adapter = adapter(store, transport, destination: fake)
         let id = try XCTUnwrap(adapter.selectedNoteID)
         adapter.text = "one"
-        fake.storeSidecar(
-            BlockSidecar(entries: [BlockSidecarEntry(
-                id: "block-0", fingerprint: BlockSidecar.fingerprint("one"))]), for: id)
+        fake.storeBase(.fixture("one"), for: id)
         fake.setCraftDocumentID("doc1", for: id)
         fake.storeSyncedTitle(adapter.selectedNoteName, for: id)
         await adapter.flushCraftPush()
@@ -333,7 +324,7 @@ final class NoteDestinationSeamTests: XCTestCase {
 
         XCTAssertEqual(transport.requests.count, 3, "clock, trash plus one fetch, no writes")
         XCTAssertEqual(adapter.text, "ONE")
-        XCTAssertEqual(fake.sidecar(for: id).entries.map(\.id), ["block-0"])
+        XCTAssertEqual(fake.base(for: id).blocks.map(\.id), ["block-0"])
         XCTAssertNotNil(fake.syncedAt(for: id))
         XCTAssertFalse(adapter.isPushDirty(id), "adopted text must not re-push")
     }
