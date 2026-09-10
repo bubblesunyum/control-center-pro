@@ -286,7 +286,7 @@ private struct SyncStatusPopover: View {
                 .foregroundStyle(.primary)
                 .padding(.horizontal, Space.one)
                 .padding(.top, Space.one)
-                .padding(.bottom, Space.one)
+                .padding(.bottom, Space.two)
             if !records.isEmpty {
                 WidgetSectionLabel("Conflicts", isCollapsed: $isConflictsCollapsed)
                     .padding(.horizontal, Space.one)
