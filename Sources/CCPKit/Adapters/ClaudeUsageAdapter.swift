@@ -3,6 +3,7 @@
 
 import Foundation
 import Observation
+import Security
 
 // MARK: - Public snapshot
 
@@ -28,9 +29,12 @@ public struct ClaudeUsageSnapshot: Sendable, Equatable {
 // MARK: - Error
 
 public enum ClaudeUsageError: Sendable, Equatable, Error {
-    /// No usable OAuth in `~/.claude/.credentials.json` — the user hasn't run
-    /// `claude auth login`, or the refresh token is dead.
+    /// No usable OAuth anywhere — the user hasn't run `claude auth login`,
+    /// or the refresh token is dead.
     case missingCredentials
+    /// The login keychain entry exists but reads are denied — the user
+    /// dismissed the access prompt instead of choosing Always Allow.
+    case keychainDenied
     /// The endpoint was unreachable, answered something unusable, or OAuth is
     /// disallowed for the account's organization.
     case unavailable
@@ -50,20 +54,58 @@ public struct ClaudeOAuthCredentials: Sendable, Equatable {
         self.refreshToken = refreshToken
         self.expiresAt = expiresAt
     }
+
+    /// Parses the `claudeAiOauth` dict both the credentials file and the
+    /// login keychain hold. Nil when the login is absent or misshapen —
+    /// "not connected", never an error.
+    init?(oauthJSON json: [String: Any]) {
+        guard let oauth = json["claudeAiOauth"] as? [String: Any],
+              let access = oauth["accessToken"] as? String,
+              !access.isEmpty
+        else { return nil }
+        var expiresAt: Date?
+        if let millis = oauth["expiresAt"] as? Double {
+            expiresAt = Date(timeIntervalSince1970: millis / 1000)
+        } else if let millis = oauth["expiresAt"] as? Int {
+            expiresAt = Date(timeIntervalSince1970: Double(millis) / 1000)
+        }
+        self.init(
+            accessToken: access,
+            refreshToken: oauth["refreshToken"] as? String,
+            expiresAt: expiresAt
+        )
+    }
+
+    /// Merges fresh tokens into an existing credentials dict, preserving
+    /// sibling keys — notably `mcpOAuth`, which shares the keychain entry.
+    func merging(into json: [String: Any]) -> [String: Any] {
+        var json = json
+        var oauth = json["claudeAiOauth"] as? [String: Any] ?? [:]
+        oauth["accessToken"] = accessToken
+        if let refreshToken {
+            oauth["refreshToken"] = refreshToken
+        }
+        if let expiresAt {
+            oauth["expiresAt"] = Int(expiresAt.timeIntervalSince1970 * 1000)
+        }
+        json["claudeAiOauth"] = oauth
+        return json
+    }
 }
 
 /// Where the Claude OAuth comes from.
 ///
-/// The seam a test stands a fake in for: the real one needs the user's
-/// login on disk.
+/// The seam a test stands a fake in for: the real ones need the user's
+/// login on disk or in the keychain.
 public protocol ClaudeCredentialStore: Sendable {
     func loadCredentials() throws -> ClaudeOAuthCredentials?
     func saveCredentials(_ credentials: ClaudeOAuthCredentials) throws
 }
 
-/// Reads the login Claude Code saved. Throws nothing on a missing or
-/// unparsable file — that is just "not connected", which the widget shows
-/// inline. Honors `CLAUDE_CONFIG_DIR` like Claude Code itself.
+/// Reads the key the file holds. Legacy path — current installs keep OAuth
+/// in the login keychain and never write this file, so the compound tries
+/// the keychain first. Throws nothing on a missing or unparsable file —
+/// that is just "not connected", which the widget shows inline.
 public struct FileClaudeCredentialStore: ClaudeCredentialStore {
     private let credentialsFile: URL
 
@@ -82,34 +124,16 @@ public struct FileClaudeCredentialStore: ClaudeCredentialStore {
 
     public func loadCredentials() throws -> ClaudeOAuthCredentials? {
         guard let data = try? Data(contentsOf: credentialsFile),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let oauth = json["claudeAiOauth"] as? [String: Any],
-              let access = oauth["accessToken"] as? String,
-              !access.isEmpty
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return nil }
-        let refresh = oauth["refreshToken"] as? String
-        var expiresAt: Date?
-        if let millis = oauth["expiresAt"] as? Double {
-            expiresAt = Date(timeIntervalSince1970: millis / 1000)
-        } else if let millis = oauth["expiresAt"] as? Int {
-            expiresAt = Date(timeIntervalSince1970: Double(millis) / 1000)
-        }
-        return ClaudeOAuthCredentials(accessToken: access, refreshToken: refresh, expiresAt: expiresAt)
+        return ClaudeOAuthCredentials(oauthJSON: json)
     }
 
     public func saveCredentials(_ credentials: ClaudeOAuthCredentials) throws {
         var json: [String: Any] =
             (try? Data(contentsOf: credentialsFile))
             .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
-        var oauth = json["claudeAiOauth"] as? [String: Any] ?? [:]
-        oauth["accessToken"] = credentials.accessToken
-        if let refresh = credentials.refreshToken {
-            oauth["refreshToken"] = refresh
-        }
-        if let expiresAt = credentials.expiresAt {
-            oauth["expiresAt"] = Int(expiresAt.timeIntervalSince1970 * 1000)
-        }
-        json["claudeAiOauth"] = oauth
+        json = credentials.merging(into: json)
         let data = try JSONSerialization.data(withJSONObject: json)
         let dir = credentialsFile.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -155,6 +179,190 @@ public final class InMemoryClaudeCredentialStore: ClaudeCredentialStore, @unchec
     }
 }
 
+/// The login keychain entry Claude Code's native builds maintain.
+///
+/// `claude auth login` writes OAuth here under this exact service and never
+/// touches the credentials file, so a file-only read misses every current
+/// login. The first read prompts once — Always Allow keeps later panel opens
+/// silent; a dismissal surfaces as `.keychainDenied` instead of a login nag.
+public struct KeychainClaudeCredentialStore: ClaudeCredentialStore {
+    public static let service = "Claude Code-credentials"
+
+    private let service: String
+
+    public init(service: String = Self.service) {
+        self.service = service
+    }
+
+    public func loadCredentials() throws -> ClaudeOAuthCredentials? {
+        var item: CFTypeRef?
+        guard try entryExists(SecItemCopyMatching(query(returningData: true), &item)) else {
+            return nil
+        }
+        guard let data = item as? Data,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let credentials = ClaudeOAuthCredentials(oauthJSON: json)
+        else { return nil }
+        return credentials
+    }
+
+    public func saveCredentials(_ credentials: ClaudeOAuthCredentials) throws {
+        // One read decides update-vs-add, so a second lookup can't disagree
+        // with the first under per-access confirmation.
+        var item: CFTypeRef?
+        let found = try entryExists(SecItemCopyMatching(query(returningData: true), &item))
+        var json: [String: Any] = [:]
+        if found,
+           let data = item as? Data,
+           let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        {
+            json = raw
+        }
+        let data = try JSONSerialization.data(
+            withJSONObject: credentials.merging(into: json))
+        if found {
+            _ = try entryExists(SecItemUpdate(
+                query(returningData: false),
+                [kSecValueData as String: data] as CFDictionary
+            ))
+        } else {
+            var add = baseQuery
+            add[kSecAttrAccount as String] = NSUserName()
+            add[kSecValueData as String] = data
+            let status = SecItemAdd(add as CFDictionary, nil)
+            if status == errSecDuplicateItem {
+                // Created between our read and our add — re-read for a
+                // current merge base so the retry preserves whatever the
+                // winner wrote (notably mcpOAuth), then update instead.
+                var current: CFTypeRef?
+                var base: [String: Any] = [:]
+                if SecItemCopyMatching(query(returningData: true), &current) == errSecSuccess,
+                   let currentData = current as? Data,
+                   let raw = try? JSONSerialization.jsonObject(with: currentData) as? [String: Any]
+                {
+                    base = raw
+                }
+                let retryData = try JSONSerialization.data(
+                    withJSONObject: credentials.merging(into: base))
+                _ = try entryExists(SecItemUpdate(
+                    query(returningData: false),
+                    [kSecValueData as String: retryData] as CFDictionary
+                ))
+            } else {
+                _ = try entryExists(status)
+            }
+        }
+    }
+
+    /// Maps a Security result to entry-exists. One owner so load and save
+    /// can't disagree on what denial means — writes reuse it too, since a
+    /// denied or failed write reads as the widget's errors either way.
+    func entryExists(_ status: OSStatus) throws -> Bool {
+        switch status {
+        case errSecSuccess:
+            return true
+        case errSecItemNotFound:
+            return false
+        case errSecAuthFailed, errSecUserCanceled:
+            throw ClaudeUsageError.keychainDenied
+        default:
+            throw ClaudeUsageError.unavailable
+        }
+    }
+
+    private var baseQuery: [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+        ]
+    }
+
+    private func query(returningData: Bool) -> CFDictionary {
+        var query = baseQuery
+        query[kSecReturnData as String] = returningData
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        return query as CFDictionary
+    }
+}
+
+/// Keychain, then file — in that load order, deliberately.
+///
+/// Current Claude Code keeps OAuth in the login keychain and the file is the
+/// legacy shape, so when both yield a login the keychain is the live one and
+/// wins. Saves go back to whichever side yields usable creds, keeping load
+/// and save on the same origin even when one side holds an unparsable entry.
+//
+// Unchecked Sendable: both wrapped stores are Sendable and skipKeychain sits
+// behind the lock — fetches run off the main actor, so the flag needs it.
+public final class CompoundClaudeCredentialStore: ClaudeCredentialStore, @unchecked Sendable {
+    private let keychain: ClaudeCredentialStore
+    private let file: ClaudeCredentialStore
+    private let lock = NSLock()
+    private var skipKeychain = false
+
+    public init(
+        keychain: ClaudeCredentialStore = KeychainClaudeCredentialStore(),
+        file: ClaudeCredentialStore = FileClaudeCredentialStore()
+    ) {
+        self.keychain = keychain
+        self.file = file
+    }
+
+    public func loadCredentials() throws -> ClaudeOAuthCredentials? {
+        if !isSkipped {
+            do {
+                if let credentials = try keychain.loadCredentials() {
+                    return credentials
+                }
+            } catch ClaudeUsageError.keychainDenied {
+                // A dismissal re-prompts on every access, so stick the skip
+                // for the process — but only past a working file. With no
+                // file either, the denial itself is the honest error and the
+                // next open re-prompts, which is the only recovery path.
+                if let fileCredentials = try file.loadCredentials() {
+                    setSkipped()
+                    return fileCredentials
+                }
+                throw ClaudeUsageError.keychainDenied
+            } catch {
+                if let fileCredentials = try file.loadCredentials() {
+                    return fileCredentials
+                }
+                throw ClaudeUsageError.unavailable
+            }
+        }
+        return try file.loadCredentials()
+    }
+
+    public func saveCredentials(_ credentials: ClaudeOAuthCredentials) throws {
+        if !isSkipped {
+            do {
+                if try keychain.loadCredentials() != nil {
+                    try keychain.saveCredentials(credentials)
+                    return
+                }
+            } catch ClaudeUsageError.keychainDenied {
+                setSkipped()
+            } catch {
+                // A failing keychain must not strand a working file.
+            }
+        }
+        try file.saveCredentials(credentials)
+    }
+
+    private var isSkipped: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return skipKeychain
+    }
+
+    private func setSkipped() {
+        lock.lock()
+        defer { lock.unlock() }
+        skipKeychain = true
+    }
+}
+
 // MARK: - Source
 
 /// Where Claude quota numbers come from.
@@ -177,7 +385,7 @@ public final class LiveClaudeUsageSource: ClaudeUsageSource {
     private let session: URLSession
 
     public init(
-        credentials: ClaudeCredentialStore = FileClaudeCredentialStore(),
+        credentials: ClaudeCredentialStore = CompoundClaudeCredentialStore(),
         session: URLSession = .shared
     ) {
         self.credentials = credentials
@@ -209,9 +417,10 @@ public final class LiveClaudeUsageSource: ClaudeUsageSource {
 
     /// Current credentials, refreshing when expired. Re-reads first: Claude
     /// Code rotates on its own schedule, and refreshing over its write with a
-    /// consumed refresh token would log the user out.
+    /// consumed refresh token would log the user out. The re-read never sinks
+    /// the fetch — a dismissal just means refreshing from the in-hand creds.
     private func freshCredentials(_ creds: ClaudeOAuthCredentials) async throws -> ClaudeOAuthCredentials {
-        if let latest = try credentials.loadCredentials(),
+        if let latest = try? credentials.loadCredentials(),
            latest.accessToken != creds.accessToken, !latest.accessToken.isEmpty
         {
             return latest
@@ -226,7 +435,7 @@ public final class LiveClaudeUsageSource: ClaudeUsageSource {
     /// One recovery round after a 401: prefer whatever is on disk now — it may
     /// be newer than what this fetch loaded — and refresh only from there.
     private func refreshAfterRejection(_ creds: ClaudeOAuthCredentials) async throws -> String {
-        if let latest = try credentials.loadCredentials(),
+        if let latest = try? credentials.loadCredentials(),
            latest.accessToken != creds.accessToken, !latest.accessToken.isEmpty
         {
             return latest.accessToken
@@ -328,8 +537,21 @@ public final class LiveClaudeUsageSource: ClaudeUsageSource {
         } else if let lifetime = payload["expires_in"] as? Int {
             refreshed.expiresAt = Date().addingTimeInterval(Double(lifetime))
         }
-        // Best effort — a failed write still leaves this fetch working; the
-        // next one re-reads and refreshes again.
+        // Best effort — and never over a newer login or a logout: a
+        // `claude auth login` (or logout) landing mid-refresh wins, while our
+        // minted tokens still serve this fetch. An unverifiable re-read also
+        // skips the save rather than risking it. A failed write just means
+        // the next fetch refreshes again.
+        do {
+            guard let current = try credentials.loadCredentials() else {
+                return refreshed
+            }
+            guard current.accessToken == creds.accessToken else {
+                return refreshed
+            }
+        } catch {
+            return refreshed
+        }
         try? credentials.saveCredentials(refreshed)
         return refreshed
     }

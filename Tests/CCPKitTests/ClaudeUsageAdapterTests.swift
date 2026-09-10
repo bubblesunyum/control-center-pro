@@ -3,6 +3,7 @@
 
 import Foundation
 @testable import CCPKit
+import Security
 import XCTest
 
 @MainActor
@@ -221,6 +222,129 @@ final class ClaudeUsageAdapterTests: XCTestCase {
         XCTAssertTrue(leftovers.isEmpty)
     }
 
+    // MARK: - Compound store
+
+    func testCompoundPrefersKeychainOverFile() throws {
+        let compound = CompoundClaudeCredentialStore(
+            keychain: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
+                accessToken: "keychain-live")),
+            file: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
+                accessToken: "file-stale")))
+
+        XCTAssertEqual(try compound.loadCredentials()?.accessToken, "keychain-live")
+    }
+
+    func testCompoundFallsBackToFile() throws {
+        let compound = CompoundClaudeCredentialStore(
+            keychain: InMemoryClaudeCredentialStore(credentials: nil),
+            file: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
+                accessToken: "file-live")))
+
+        XCTAssertEqual(try compound.loadCredentials()?.accessToken, "file-live")
+    }
+
+    func testCompoundSavesToKeychainWhenPresent() throws {
+        let keychain = InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
+            accessToken: "old"))
+        let file = InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
+            accessToken: "file"))
+        let compound = CompoundClaudeCredentialStore(keychain: keychain, file: file)
+
+        try compound.saveCredentials(ClaudeOAuthCredentials(accessToken: "new"))
+
+        XCTAssertEqual(try keychain.loadCredentials()?.accessToken, "new")
+        XCTAssertEqual(try file.loadCredentials()?.accessToken, "file")
+    }
+
+    func testCompoundSavesToFileWhenKeychainYieldsNothing() throws {
+        let keychain = InMemoryClaudeCredentialStore()
+        let file = InMemoryClaudeCredentialStore()
+        let compound = CompoundClaudeCredentialStore(keychain: keychain, file: file)
+
+        try compound.saveCredentials(ClaudeOAuthCredentials(accessToken: "new"))
+
+        XCTAssertEqual(try file.loadCredentials()?.accessToken, "new")
+    }
+
+    func testCompoundDenialFallsBackToFileAndSticks() throws {
+        let keychain = DenyingClaudeCredentialStore()
+        let compound = CompoundClaudeCredentialStore(
+            keychain: keychain,
+            file: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
+                accessToken: "file-live")))
+
+        XCTAssertEqual(try compound.loadCredentials()?.accessToken, "file-live")
+        XCTAssertEqual(try compound.loadCredentials()?.accessToken, "file-live")
+        // One prompt, not one per panel open.
+        XCTAssertEqual(keychain.loadCount, 1)
+    }
+
+    func testCompoundDenialWithoutFileRethrows() {
+        let compound = CompoundClaudeCredentialStore(
+            keychain: DenyingClaudeCredentialStore(),
+            file: InMemoryClaudeCredentialStore(credentials: nil))
+
+        XCTAssertThrowsError(try compound.loadCredentials()) { error in
+            XCTAssertEqual(error as? ClaudeUsageError, .keychainDenied)
+        }
+    }
+
+    func testCompoundSaveFallsBackToFile() throws {
+        let file = InMemoryClaudeCredentialStore()
+        let compound = CompoundClaudeCredentialStore(
+            keychain: DenyingClaudeCredentialStore(), file: file)
+
+        try compound.saveCredentials(ClaudeOAuthCredentials(accessToken: "new"))
+
+        XCTAssertEqual(try file.loadCredentials()?.accessToken, "new")
+    }
+
+    // MARK: - Keychain store
+
+    func testKeychainStoreRoundTripsUnderThrowawayService() throws {
+        let service = "ccp-test-\(UUID().uuidString)"
+        defer { deleteKeychainEntry(service: service) }
+        let store = KeychainClaudeCredentialStore(service: service)
+
+        XCTAssertNil(try store.loadCredentials())
+
+        try store.saveCredentials(ClaudeOAuthCredentials(
+            accessToken: "kc-access", refreshToken: "kc-refresh",
+            expiresAt: Date(timeIntervalSince1970: 2_000_000)))
+
+        let creds = try store.loadCredentials()
+        XCTAssertEqual(creds?.accessToken, "kc-access")
+        XCTAssertEqual(creds?.refreshToken, "kc-refresh")
+
+        // Update path, preserving sibling keys.
+        try store.saveCredentials(ClaudeOAuthCredentials(accessToken: "kc-access-2"))
+        XCTAssertEqual(try store.loadCredentials()?.accessToken, "kc-access-2")
+        XCTAssertEqual(try store.loadCredentials()?.refreshToken, "kc-refresh")
+    }
+
+    func testKeychainStatusMapping() throws {
+        let store = KeychainClaudeCredentialStore(service: "ccp-test-unused")
+
+        XCTAssertTrue(try store.entryExists(errSecSuccess))
+        XCTAssertFalse(try store.entryExists(errSecItemNotFound))
+        for denied in [errSecAuthFailed, errSecUserCanceled] {
+            XCTAssertThrowsError(try store.entryExists(denied)) { error in
+                XCTAssertEqual(error as? ClaudeUsageError, .keychainDenied)
+            }
+        }
+        XCTAssertThrowsError(try store.entryExists(errSecInteractionNotAllowed)) { error in
+            XCTAssertEqual(error as? ClaudeUsageError, .unavailable)
+        }
+    }
+
+    private func deleteKeychainEntry(service: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+
     // MARK: - Live source HTTP mapping
 
     func testLiveFetchDecodesHappyPath() async throws {
@@ -332,6 +456,51 @@ final class ClaudeUsageAdapterTests: XCTestCase {
         }
     }
 
+    func testRefreshSkipsSaveWhenLoginRotatedMidFlight() async throws {
+        var usageAuth: String?
+        ClaudeStubURLProtocol.handler = { request in
+            if request.url?.absoluteString.contains("/oauth/token") == true {
+                return (200, Data(#"{"access_token":"minted","expires_in":3600}"#.utf8))
+            }
+            usageAuth = request.value(forHTTPHeaderField: "Authorization")
+            return (200, Data(#"{"limits":[]}"#.utf8))
+        }
+        let stale = ClaudeOAuthCredentials(
+            accessToken: "stale", refreshToken: "stale-refresh",
+            expiresAt: Date().addingTimeInterval(-10))
+        let rotated = ClaudeOAuthCredentials(
+            accessToken: "just-logged-in", refreshToken: "fresh",
+            expiresAt: Date().addingTimeInterval(3600))
+        // Proactive re-read, then the pre-save guard: both see the rotation.
+        let store = ScriptedClaudeCredentialStore(loads: [stale, stale, rotated])
+        let source = LiveClaudeUsageSource(credentials: store, session: ClaudeStubURLProtocol.session)
+
+        _ = try await source.fetch()
+
+        // The minted token serves this fetch, but nothing overwrites the login.
+        XCTAssertEqual(usageAuth, "Bearer minted")
+        XCTAssertTrue(store.saved.isEmpty)
+    }
+
+    func testRefreshSkipsSaveWhenLoggedOutMidFlight() async throws {
+        ClaudeStubURLProtocol.handler = { request in
+            if request.url?.absoluteString.contains("/oauth/token") == true {
+                return (200, Data(#"{"access_token":"minted","expires_in":3600}"#.utf8))
+            }
+            return (200, Data(#"{"limits":[]}"#.utf8))
+        }
+        let stale = ClaudeOAuthCredentials(
+            accessToken: "stale", refreshToken: "stale-refresh",
+            expiresAt: Date().addingTimeInterval(-10))
+        let store = ScriptedClaudeCredentialStore(loads: [stale, stale, nil])
+        let source = LiveClaudeUsageSource(credentials: store, session: ClaudeStubURLProtocol.session)
+
+        _ = try await source.fetch()
+
+        // No resurrection: the logout stands, the mint dies with the fetch.
+        XCTAssertTrue(store.saved.isEmpty)
+    }
+
     func testRefreshBlipFallsBackToLoadedToken() async throws {
         var usageCalls = 0
         ClaudeStubURLProtocol.handler = { request in
@@ -366,7 +535,7 @@ final class ClaudeUsageAdapterTests: XCTestCase {
         }
         // First load is stale-expired; anything after is what Claude Code
         // rotated in while this fetch was starting.
-        let store = ScriptedClaudeCredentialStore(credentials: [
+        let store = ScriptedClaudeCredentialStore(loads: [
             ClaudeOAuthCredentials(
                 accessToken: "stale", refreshToken: "consumed-elsewhere",
                 expiresAt: Date().addingTimeInterval(-10)),
@@ -511,22 +680,36 @@ final class FakeClaudeUsageSource: ClaudeUsageSource {
     }
 }
 
-/// Replays a script of credentials, one per load: stands in for Claude Code
-/// rotating the file mid-fetch.
-final class ScriptedClaudeCredentialStore: ClaudeCredentialStore {
-    private var remaining: [ClaudeOAuthCredentials?]
-    private var saved: ClaudeOAuthCredentials?
-
-    init(credentials: [ClaudeOAuthCredentials?]) {
-        self.remaining = credentials
-    }
+/// Refuses every access: stands in for a dismissed keychain prompt.
+final class DenyingClaudeCredentialStore: ClaudeCredentialStore {
+    private(set) var loadCount = 0
 
     func loadCredentials() throws -> ClaudeOAuthCredentials? {
-        if remaining.count > 1 { return remaining.removeFirst() }
-        return remaining.first ?? saved
+        loadCount += 1
+        throw ClaudeUsageError.keychainDenied
     }
 
     func saveCredentials(_ credentials: ClaudeOAuthCredentials) throws {
-        saved = credentials
+        throw ClaudeUsageError.keychainDenied
+    }
+}
+
+/// Replays a script of credentials, one per load, and records saves: stands
+/// in for Claude Code rotating the login mid-fetch.
+final class ScriptedClaudeCredentialStore: ClaudeCredentialStore {
+    private var loads: [ClaudeOAuthCredentials?]
+    private(set) var saved: [ClaudeOAuthCredentials] = []
+
+    init(loads: [ClaudeOAuthCredentials?]) {
+        self.loads = loads
+    }
+
+    func loadCredentials() throws -> ClaudeOAuthCredentials? {
+        if loads.count > 1 { return loads.removeFirst() }
+        return loads.first ?? saved.last
+    }
+
+    func saveCredentials(_ credentials: ClaudeOAuthCredentials) throws {
+        saved.append(credentials)
     }
 }

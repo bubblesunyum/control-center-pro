@@ -38,6 +38,6 @@ final class UsageFormattingTests: XCTestCase {
 
     func testDescriptorIsGenericUsage() {
         XCTAssertEqual(UsageWidget.descriptor.id, "ai-usage")
-        XCTAssertEqual(UsageWidget.descriptor.title, "Usage")
+        XCTAssertEqual(UsageWidget.descriptor.title, "AI Usage")
     }
 }

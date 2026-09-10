@@ -15,7 +15,7 @@ import SwiftUI
 public final class UsageWidget: CCPWidget {
     public static let descriptor = WidgetDescriptor(
         id: "ai-usage",
-        title: "Usage",
+        title: "AI Usage",
         symbolName: "chart.bar",
         size: .compact
     )
@@ -65,7 +65,7 @@ private struct UsageContent: View {
             // The countdowns tick off each adapter's 30s ticker, which lives
             // and dies with activate()/deactivate() — the hosting graph is
             // never torn down, so a view-owned timer would tick while shut.
-            VStack(alignment: .leading, spacing: Space.one) {
+            VStack(alignment: .leading, spacing: Space.oneHalf) {
                 providerSection(
                     provider: .openCode,
                     lastUpdated: openCode.lastUpdated,
@@ -161,6 +161,9 @@ private struct UsageContent: View {
         case (.claude, .missingLogin):
             message = "Connect with claude auth login in a terminal"
             accessibilityMessage = "Claude not connected"
+        case (_, .keychainAccess):
+            message = "Choose Always Allow in the keychain prompt"
+            accessibilityMessage = "\(provider.title) keychain access needed"
         case (_, .unreachable):
             message = "Couldn't load usage"
             accessibilityMessage = "\(provider.title) usage unavailable"
@@ -200,6 +203,7 @@ private enum Provider {
 
 private enum ProviderError {
     case missingLogin
+    case keychainAccess
     case unreachable
 
     init(_ error: OpenCodeUsageError) {
@@ -207,25 +211,38 @@ private enum ProviderError {
     }
 
     init(_ error: ClaudeUsageError) {
-        self = error == .missingCredentials ? .missingLogin : .unreachable
+        switch error {
+        case .missingCredentials:
+            self = .missingLogin
+        case .keychainDenied:
+            self = .keychainAccess
+        case .unavailable:
+            self = .unreachable
+        }
     }
 }
 
-/// A provider's nameplate: small-caps label, a hairline filling the row, and
-/// the link out to that provider's own usage page.
+/// A provider's nameplate: small-caps label with a chevron, the whole thing
+/// opening that provider's own usage page.
 private struct ProviderHeader: View {
     let provider: Provider
 
     var body: some View {
-        HStack(spacing: Space.half) {
-            Text(provider.title.uppercased())
-                .sectionCaps()
-            VStack { Divider() }
-                .accessibilityHidden(true)
-            HeaderIconButton(systemImage: "arrow.up.forward", label: provider.linkLabel) {
-                NSWorkspace.shared.open(provider.linkURL)
+        Button {
+            NSWorkspace.shared.open(provider.linkURL)
+        } label: {
+            HStack(spacing: Space.half) {
+                Text(provider.title.uppercased())
+                    .sectionCaps()
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(provider.linkLabel)
+        .accessibilityAddTraits(.isLink)
     }
 }
 
