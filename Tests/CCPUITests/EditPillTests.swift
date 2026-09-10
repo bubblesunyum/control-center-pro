@@ -151,11 +151,31 @@ final class EditPillTests: XCTestCase {
         XCTAssertEqual(menus, 1 + pill.buttons.count)
     }
 
-    private func mouse(_ type: NSEvent.EventType) -> NSEvent {
+    /// Ctrl-click keeps the status item's own contract on the pill: a menu,
+    /// never Done or Add (ccp-kxfi).
+    func testControlClickPopsMenuFromBackgroundAndButtons() {
+        var done = 0
+        var added = 0
+        var menus = 0
+        let pill = EditPill(onDone: { done += 1 }, onAdd: { added += 1 }, onRightClick: { menus += 1 })
+        pill.frame = CGRect(origin: .zero, size: pill.fittingSize)
+        pill.layoutSubtreeIfNeeded()
+
+        pill.mouseDown(with: mouse(.leftMouseDown, flags: .control))
+        for button in pill.buttons {
+            button.mouseDown(with: mouse(.leftMouseDown, flags: .control))
+        }
+
+        XCTAssertEqual(menus, 1 + pill.buttons.count)
+        XCTAssertEqual(done, 0)
+        XCTAssertEqual(added, 0)
+    }
+
+    private func mouse(_ type: NSEvent.EventType, flags: NSEvent.ModifierFlags = []) -> NSEvent {
         NSEvent.mouseEvent(
             with: type,
             location: .zero,
-            modifierFlags: [],
+            modifierFlags: flags,
             timestamp: 0,
             windowNumber: 0,
             context: nil,

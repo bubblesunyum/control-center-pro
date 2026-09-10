@@ -22,6 +22,7 @@ public final class EditPill: NSView {
     private let doneButton = PillButton()
     private let addButton = PillButton()
     private let addWell = NSView()
+    private var colorsObserver: Any?
 
     public init(
         onDone: @escaping @MainActor () -> Void,
@@ -34,7 +35,17 @@ public final class EditPill: NSView {
         super.init(frame: .zero)
 
         addWell.wantsLayer = true
-        addWell.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+        paintWell()
+        // An accent switch arrives as a system-colors note, not an
+        // appearance change — without this the well keeps a stale accent
+        // while light/dark repaints fine (ccp-ifm8).
+        colorsObserver = NotificationCenter.default.addObserver(
+            forName: NSColor.systemColorsDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.paintWell() }
+        }
         addButton.image = Self.pillIcon(named: "plus", description: "Add widget")
         // White-on-accent, not white-on-unknown: the fill is the pill's own
         // saturated color in every appearance, so the glyph holds contrast
@@ -92,6 +103,27 @@ public final class EditPill: NSView {
         addWell.layer?.cornerRadius = addWell.bounds.height / 2
     }
 
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // The pill is built and torn down with each edit session; drop the
+        // colors watch with it.
+        if window == nil, let colorsObserver {
+            NotificationCenter.default.removeObserver(colorsObserver)
+            self.colorsObserver = nil
+        }
+    }
+
+    /// controlAccentColor resolves once into a static CGColor — re-resolve
+    /// here or the well keeps a stale accent across changes (ccp-ifm8).
+    override public func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        paintWell()
+    }
+
+    private func paintWell() {
+        addWell.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+    }
+
     /// Clicks on the item itself — the gaps and insets around the buttons —
     /// finish, the same as clicking the status button's own background today.
     /// The buttons eat their own presses first (they stay the hit views
@@ -110,7 +142,13 @@ public final class EditPill: NSView {
     }
 
     override public func mouseDown(with event: NSEvent) {
-        onDone()
+        // Ctrl-click is a right-click on the status item itself; match that
+        // contract here or the pill answers Done for a menu press (ccp-kxfi).
+        if event.modifierFlags.contains(.control) {
+            onRightClick()
+        } else {
+            onDone()
+        }
     }
 
     /// The pill covers the status button wholesale, so its menu would
@@ -156,6 +194,15 @@ public final class EditPill: NSView {
 /// to swallow background clicks.
 private final class PillButton: NSButton {
     var onRightClick: (@MainActor () -> Void)?
+
+    override func mouseDown(with event: NSEvent) {
+        // Same ctrl-click contract as the pill background (ccp-kxfi).
+        if event.modifierFlags.contains(.control) {
+            rightMouseDown(with: event)
+            return
+        }
+        super.mouseDown(with: event)
+    }
 
     override func rightMouseDown(with event: NSEvent) {
         guard let onRightClick else { super.rightMouseDown(with: event); return }

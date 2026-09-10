@@ -137,7 +137,11 @@ final class StatusItemController {
                 pill.widthAnchor.constraint(equalToConstant: ideal.width),
                 pill.heightAnchor.constraint(equalToConstant: ideal.height),
             ])
-            item.length = ideal.width
+            // Length from the laid-out width, not the pre-layout estimate: if
+            // the solve ever grows past fittingSize the item grows with it
+            // instead of clipping the pill (ccp-tk62).
+            pill.layoutSubtreeIfNeeded()
+            item.length = ceil(pill.bounds.width)
             editPill = pill
         } else {
             editPill?.removeFromSuperview()
@@ -216,6 +220,16 @@ final class StatusItemController {
             guard let self else { return }
             self.item.button?.highlight(self.panel.isVisible)
         }
+    }
+
+    /// Highlight our state now and once more a turn later. The system's own
+    /// mouse-up unhighlight lands on one side of the click action or the
+    /// other depending on release — setting on both sides means no ordering
+    /// can show an off frame in between (ccp-ip27). The visibility observer
+    /// still owns every non-click opener.
+    private func syncHighlightSoon() {
+        item.button?.highlight(panel.isVisible)
+        syncHighlight()
     }
 
     private func updateFocusCountdown() {
@@ -308,6 +322,7 @@ final class StatusItemController {
                 finishEditing()
             } else {
                 panel.toggle(from: sender)
+                syncHighlightSoon()
             }
         }
     }
