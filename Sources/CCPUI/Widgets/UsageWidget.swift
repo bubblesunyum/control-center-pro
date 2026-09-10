@@ -86,6 +86,9 @@ private struct UsageContent: View {
                 }
             }
             .padding(.bottom, Space.half)
+            // The card puts 8pt between its header and this content; top up
+            // to the 24pt the sections keep between each other.
+            .padding(.top, Space.two)
         }
     }
 
