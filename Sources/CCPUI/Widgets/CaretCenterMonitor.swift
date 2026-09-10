@@ -117,6 +117,11 @@ final class CaretCenterMonitor {
         let views = pending.allObjects
         pending.removeAllObjects()
         for textView in views {
+            // Settle estimated heights above the caret (a table image stands
+            // in as one text line, ~250pt short) before trusting the verdict
+            // or aiming off it. Once per arming, never per keystroke — the
+            // event-time check stays O(line).
+            settleCaretLayout(for: textView)
             guard !textView.isFieldEditor,
                   textView.isEditable,
                   !textView.hasMarkedText(),
@@ -166,20 +171,85 @@ private func defaultCaretMeasure(_ textView: NSTextView) -> CaretCenterMonitor.S
           let document = scrollView.documentView
     else { return nil }
     let caret = textView.selectedRange()
-    guard caret.length == 0, caret.location <= (textView.string as NSString).length else { return nil }
-    // The one geometry API that works on either TextKit generation; the
-    // engine's text view is TextKit 2, where `layoutManager` is nil.
-    let screenRect = textView.firstRect(forCharacterRange: NSRange(location: caret.location, length: 0),
-                                        actualRange: nil)
-    guard !screenRect.isNull, !screenRect.isInfinite, screenRect.height > 0 else { return nil }
-    let windowRect = window.convertFromScreen(screenRect)
-    let documentRect = document.convert(windowRect, from: nil)
+    guard caret.length == 0 else { return nil }
+    // Deliberately NOT `firstRect(forCharacterRange:)`: it answers a zero
+    // rect on this view (probed 2026-09-10), which is also why AppKit's own
+    // edge reveal never fires here. Fragment enumeration is what the engine
+    // itself trusts for caret geometry.
+    guard let line = caretLineRect(for: textView) else { return nil }
+    // Already document coordinates: the lift inside `caretLineRect`
+    // accounts for the container's inset, and both views are flipped, so no
+    // axis work remains.
+    guard line.height > 0 else { return nil }
     let visible = scrollView.contentView.bounds
-    return CaretCenterMonitor.Snapshot(caretMinY: documentRect.minY,
-                                       caretMaxY: documentRect.maxY,
+    return CaretCenterMonitor.Snapshot(caretMinY: line.minY,
+                                       caretMaxY: line.maxY,
                                        visibleMinY: visible.minY,
                                        visibleHeight: visible.height,
                                        contentHeight: document.frame.height)
+}
+
+/// The caret's line in document coordinates: its text segment where there is
+/// one, else its layout fragment. The true location is tried first, then one
+/// char back — a caret at the document end has no fragment of its own (the
+/// engine steps back for the same reason).
+private func caretLineRect(for textView: NSTextView) -> CGRect? {
+    // The engine's view is TextKit 2, where `layoutManager` is nil.
+    guard let layout = textView.textLayoutManager,
+          let content = layout.textContentManager
+    else { return nil }
+    let caret = textView.selectedRange()
+    guard caret.length == 0 else { return nil }
+    let start = content.documentRange.location
+    var locations: [NSTextLocation] = []
+    if let at = content.location(start, offsetBy: caret.location) { locations.append(at) }
+    if caret.location > 0, let back = content.location(start, offsetBy: caret.location - 1) {
+        locations.append(back)
+    }
+    for location in locations {
+        let range = NSTextRange(location: location)
+        layout.ensureLayout(for: range)
+        var lineRect: CGRect?
+        layout.enumerateTextSegments(in: range, type: .standard, options: []) { _, rect, _, _ in
+            if rect.height > 0 { lineRect = rect }
+            return false
+        }
+        if let lineRect { return lift(lineRect, for: textView) }
+    }
+    for location in locations {
+        var fragmentRect: CGRect?
+        layout.enumerateTextLayoutFragments(from: location,
+                                            options: [.ensuresLayout, .ensuresExtraLineFragment]) { fragment in
+            fragmentRect = fragment.layoutFragmentFrame
+            return false
+        }
+        if let fragmentRect { return lift(fragmentRect, for: textView) }
+    }
+    return nil
+}
+
+/// Segment and fragment frames are container-local; the container sits one
+/// `textContainerOrigin` inside its (flipped, like the document) text view,
+/// so the lift lands in document coordinates.
+private func lift(_ rect: CGRect, for textView: NSTextView) -> CGRect {
+    rect.offsetBy(dx: textView.textContainerOrigin.x, dy: textView.textContainerOrigin.y)
+}
+
+/// Lay out everything above the caret so estimated heights (a table image
+/// stands in as one text line, ~250pt short) can't skew the flush's verdict
+/// or target. The event-time check deliberately skips this: a skewed verdict
+/// there self-heals on the next keystroke, while a doc-start layout per
+/// keystroke would not be cheap.
+private func settleCaretLayout(for textView: NSTextView) {
+    guard let layout = textView.textLayoutManager,
+          let content = layout.textContentManager
+    else { return }
+    let caret = textView.selectedRange()
+    guard caret.length == 0,
+          let at = content.location(content.documentRange.location, offsetBy: caret.location),
+          let whole = NSTextRange(location: content.documentRange.location, end: at)
+    else { return }
+    layout.ensureLayout(for: whole)
 }
 
 /// A smooth vertical glide to `originY`, keeping the horizontal position.
