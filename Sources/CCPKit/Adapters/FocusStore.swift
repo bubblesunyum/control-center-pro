@@ -107,11 +107,26 @@ public final class FocusStore {
         return min(max((total - remaining) / total, 0), 1)
     }
 
+    /// How many focuses completed since the day turned over. The day turns
+    /// over at 6AM, not midnight — a round finished after midnight still
+    /// belongs to yesterday.
     public var completedFocusToday: Int {
-        sessions.filter {
+        let now = clock.now()
+        return sessions.filter {
             $0.kind == .focus && $0.completed
-                && $0.endedAt.map(Calendar.current.isDateInToday) == true
+                && $0.endedAt.map({ isSameFocusDay($0, as: now) }) == true
         }.count
+    }
+
+    /// The hour the day turns over for the count above.
+    static let dayTurnoverHour = 6
+
+    private func isSameFocusDay(_ date: Date, as now: Date) -> Bool {
+        let offset = -Double(Self.dayTurnoverHour) * 3600
+        return Calendar.current.isDate(
+            date.addingTimeInterval(offset),
+            inSameDayAs: now.addingTimeInterval(offset)
+        )
     }
 
     /// mm:ss, shared by the card and the menu-bar countdown.

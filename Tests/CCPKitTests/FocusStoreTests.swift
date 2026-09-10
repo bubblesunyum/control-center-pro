@@ -59,6 +59,12 @@ final class FocusStoreTests: XCTestCase {
         notifier: FakeFocusNotifier? = nil
     ) -> (FocusStore, ManualFocusClock, FakeFocusNotifier) {
         let clock = clock ?? ManualFocusClock()
+        // Midday, not whenever the suite happens to run: the count's day
+        // turns over at 6AM, so a real-now clock would flake every test
+        // that completes a round between midnight and six.
+        clock.nowDate = Calendar.current.date(
+            bySettingHour: 12, minute: 0, second: 0, of: clock.nowDate
+        ) ?? clock.nowDate
         let notifier = notifier ?? FakeFocusNotifier()
         let store = FocusStore(
             in: directory ?? freshDirectory(), clock: clock, notifier: notifier)
@@ -270,6 +276,31 @@ final class FocusStoreTests: XCTestCase {
         XCTAssertEqual(store.completedFocusToday, 0)
         XCTAssertEqual(store.sessions.count, 1)
         XCTAssertFalse(store.sessions[0].completed)
+    }
+
+    // MARK: - Day boundary
+
+    func testDayTurnsOverAt6AM() {
+        let (store, clock, _) = makeStore()
+        store.updateSettings(FocusSettings(focusMinutes: 5, shortBreakMinutes: 5))
+        let calendar = Calendar.current
+        func at(_ hour: Int, _ minute: Int) {
+            clock.nowDate = calendar.date(
+                bySettingHour: hour, minute: minute, second: 0, of: clock.nowDate)!
+        }
+        // A round ending at 5:59 belongs to yesterday.
+        at(5, 54)
+        store.start(.focus)
+        at(6, 0)
+        store.tick()
+        XCTAssertEqual(store.completedFocusToday, 0)
+
+        // A round ending at 6:01 belongs to today, alongside nothing else.
+        at(5, 56)
+        store.start(.focus)
+        at(6, 2)
+        store.tick()
+        XCTAssertEqual(store.completedFocusToday, 1)
     }
 
     // MARK: - Persistence
