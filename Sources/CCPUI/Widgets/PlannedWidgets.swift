@@ -36,7 +36,7 @@ final class AudioMixerWidget: PlaceholderWidget {
 /// to one and forgotten in the other is a first launch missing a card. Only
 /// first launch reads it — once the arrangement is on disk, that file wins.
 public let standardLayout = PanelLayout([
-    ["system-stats", "opencode-usage", "clipboard"],
+    ["system-stats", "ai-usage", "clipboard"],
     ["mail"],
     ["quick-toggles", "now-playing", "audio-mixer", "focus"],
     ["shelf", "scratchpad"],
@@ -47,7 +47,7 @@ public let standardLayout = PanelLayout([
 public func makeStandardRegistry() -> WidgetRegistry {
     let registry = WidgetRegistry()
     registry.register(SystemStatsWidget.self)
-    registry.register(OpenCodeUsageWidget.self)
+    registry.register(UsageWidget.self)
     registry.register(QuickTogglesWidget.self)
     registry.register(NowPlayingWidget.self)
     registry.register(AudioMixerWidget.self)

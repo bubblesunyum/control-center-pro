@@ -6,8 +6,11 @@ import Observation
 
 // MARK: - Public snapshot
 
-/// One quota window from the Go plan usage endpoint.
-public struct OpenCodeUsageWindow: Sendable, Equatable {
+/// One quota window: a used percentage against a reset.
+///
+/// Provider-agnostic — both the OpenCode and Claude snapshots are rows of
+/// these, which is why the name says nothing about either.
+public struct UsageWindow: Sendable, Equatable {
     /// Used percentage, 0...100 as reported.
     public var percent: Double
     public var resetsAt: Date?
@@ -20,16 +23,19 @@ public struct OpenCodeUsageWindow: Sendable, Equatable {
     }
 }
 
+/// The name this struct shipped under, when OpenCode was the only provider.
+public typealias OpenCodeUsageWindow = UsageWindow
+
 /// What the OpenCode usage card shows at one instant.
 public struct OpenCodeUsageSnapshot: Sendable, Equatable {
-    public var rolling: OpenCodeUsageWindow?
-    public var weekly: OpenCodeUsageWindow?
-    public var monthly: OpenCodeUsageWindow?
+    public var rolling: UsageWindow?
+    public var weekly: UsageWindow?
+    public var monthly: UsageWindow?
 
     public init(
-        rolling: OpenCodeUsageWindow? = nil,
-        weekly: OpenCodeUsageWindow? = nil,
-        monthly: OpenCodeUsageWindow? = nil
+        rolling: UsageWindow? = nil,
+        weekly: UsageWindow? = nil,
+        monthly: UsageWindow? = nil
     ) {
         self.rolling = rolling
         self.weekly = weekly
@@ -166,8 +172,8 @@ public final class LiveOpenCodeUsageSource: OpenCodeUsageSource {
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
             let raw = try container.decode(String.self)
-            if let date = OpenCodeUsageDateFormatter.withFractional.date(from: raw)
-                ?? OpenCodeUsageDateFormatter.withoutFractional.date(from: raw)
+            if let date = UsageDateFormatter.withFractional.date(from: raw)
+                ?? UsageDateFormatter.withoutFractional.date(from: raw)
             {
                 return date
             }
@@ -183,7 +189,8 @@ public final class LiveOpenCodeUsageSource: OpenCodeUsageSource {
     }
 }
 
-private enum OpenCodeUsageDateFormatter {
+/// Shared with the Claude source: resets arrive in the same shapes there.
+enum UsageDateFormatter {
     static let withFractional: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -232,8 +239,8 @@ private struct Payload: Decodable {
             self.status = try? container.decode(String.self, forKey: .status)
         }
 
-        var window: OpenCodeUsageWindow {
-            OpenCodeUsageWindow(
+        var window: UsageWindow {
+            UsageWindow(
                 percent: percent,
                 resetsAt: resetsAt,
                 isRateLimited: status == "rate-limited"
@@ -366,10 +373,10 @@ public final class OpenCodeUsageAdapter {
     }
 
     private func precise(
-        _ window: OpenCodeUsageWindow?,
+        _ window: UsageWindow?,
         spend: Double,
         def: OpenCodeUsageWindowDef
-    ) -> OpenCodeUsageWindow? {
+    ) -> UsageWindow? {
         guard var window else { return nil }
         window.percent = spend / def.limitDollars * 100
         return window
