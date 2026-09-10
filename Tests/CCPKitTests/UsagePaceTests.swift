@@ -58,4 +58,25 @@ final class UsagePaceTests: XCTestCase {
             UsagePace.fraction(now: reset.addingTimeInterval(-9 * day), resetsAt: reset, totalDays: 7) ?? -1,
             0, accuracy: 1e-9)
     }
+
+    func testTwoHoursIntoFive() {
+        let hour: TimeInterval = 3600
+        let reset = Date(timeIntervalSince1970: 1_000_000)
+        let now = reset.addingTimeInterval(-3 * hour)
+
+        XCTAssertEqual(UsagePace.fraction(now: now, resetsAt: reset, totalHours: 5) ?? -1, 0.4, accuracy: 1e-9)
+    }
+
+    func testMidHourDoesNotAdvanceStep() {
+        let hour: TimeInterval = 3600
+        let reset = Date(timeIntervalSince1970: 1_000_000)
+        let now = reset.addingTimeInterval(-3 * hour + 30 * 60)
+
+        XCTAssertEqual(UsagePace.fraction(now: now, resetsAt: reset, totalHours: 5) ?? -1, 0.4, accuracy: 1e-9)
+    }
+
+    func testHourlyPaceHidesWithoutReset() {
+        XCTAssertNil(UsagePace.fraction(now: Date(), resetsAt: nil, totalHours: 5))
+        XCTAssertNil(UsagePace.fraction(now: Date(), resetsAt: Date(), totalHours: 0))
+    }
 }

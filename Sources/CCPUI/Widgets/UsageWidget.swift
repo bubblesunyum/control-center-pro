@@ -71,9 +71,9 @@ private struct UsageContent: View {
                     lastUpdated: openCode.lastUpdated,
                     lastError: openCodeError
                 ) {
-                    windowRow(provider: .openCode, title: "5 hours", window: openCode.snapshot.rolling, now: openCode.now)
-                    windowRow(provider: .openCode, title: "Weekly", window: openCode.snapshot.weekly, now: openCode.now, paceTotalDays: 7)
-                    windowRow(provider: .openCode, title: "Monthly", window: openCode.snapshot.monthly, now: openCode.now, paceTotalDays: 30)
+                    windowRow(provider: .openCode, title: "5 hours", window: openCode.snapshot.rolling, now: openCode.now, paceHours: 5)
+                    windowRow(provider: .openCode, title: "Weekly", window: openCode.snapshot.weekly, now: openCode.now, paceDays: 7)
+                    windowRow(provider: .openCode, title: "Monthly", window: openCode.snapshot.monthly, now: openCode.now, paceDays: 30)
                 }
                 // Claude publishes no monthly limit, so the section ends here.
                 providerSection(
@@ -81,8 +81,8 @@ private struct UsageContent: View {
                     lastUpdated: claude.lastUpdated,
                     lastError: claudeError
                 ) {
-                    windowRow(provider: .claude, title: "5 hours", window: claude.snapshot.rolling, now: claude.now)
-                    windowRow(provider: .claude, title: "Weekly", window: claude.snapshot.weekly, now: claude.now, paceTotalDays: 7)
+                    windowRow(provider: .claude, title: "5 hours", window: claude.snapshot.rolling, now: claude.now, paceHours: 5)
+                    windowRow(provider: .claude, title: "Weekly", window: claude.snapshot.weekly, now: claude.now, paceDays: 7)
                 }
             }
             .padding(.bottom, Space.half)
@@ -133,12 +133,13 @@ private struct UsageContent: View {
         }
     }
 
-    private func windowRow(provider: Provider, title: String, window: UsageWindow?, now: Date, paceTotalDays: Int? = nil) -> some View {
-        // Even-daily-pace reference, behind the main fill. Nil without a
-        // reset to split — no interval, no pace — and the 5-hour rows never
-        // ask, so they stay single-fill.
-        let pace = paceTotalDays.flatMap {
+    private func windowRow(provider: Provider, title: String, window: UsageWindow?, now: Date, paceDays: Int? = nil, paceHours: Int? = nil) -> some View {
+        // Even-pace reference, behind the main fill. Nil without a reset to
+        // split — no interval, no pace.
+        let pace = paceDays.flatMap {
             UsagePace.fraction(now: now, resetsAt: window?.resetsAt, totalDays: $0)
+        } ?? paceHours.flatMap {
+            UsagePace.fraction(now: now, resetsAt: window?.resetsAt, totalHours: $0)
         }
         return VStack(alignment: .leading, spacing: Space.half) {
             HStack(spacing: Space.half) {
