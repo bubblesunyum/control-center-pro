@@ -18,7 +18,7 @@ public final class FocusWidget: CCPWidget {
         id: "focus",
         title: "Focus",
         symbolName: "timer",
-        size: .regular
+        size: .compact
     )
 
     private let store: FocusStore
@@ -42,16 +42,13 @@ private struct FocusContent: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isDurationsEditorPresented = false
     @State private var isAcknowledged = false
+    @State private var isTransportHovered = false
+    @State private var isIntervalsHovered = false
 
-    private var todayCount: Int? {
-        let count = store.completedFocusToday
-        return count > 0 ? count : nil
-    }
-
-    /// The card title names the phase — "Focus" or "Focus Break" — so the
-    /// labelled status row the card used to wear is gone. A derived copy of
-    /// the static descriptor: identity and icon stay intrinsic, only the
-    /// title follows the clock.
+    /// The phase's name — "Focus" or "Focus Break". The card wears no
+    /// header, so this never draws; VoiceOver and the crown badge read it.
+    /// A derived copy of the static descriptor: identity and icon stay
+    /// intrinsic, only the title follows the clock.
     private var descriptor: WidgetDescriptor {
         let base = FocusWidget.descriptor
         return WidgetDescriptor(
@@ -75,18 +72,19 @@ private struct FocusContent: View {
     }
 
     var body: some View {
-        WidgetCard(descriptor, count: todayCount, accessory: {
-            intervalPill
-        }) {
+        // No header — the card is just the transport. WidgetCard's inset
+        // and centring, without its title row.
+        GlassCard {
             VStack(alignment: .leading, spacing: Space.one) {
                 mainRow
                 if store.notificationStatus == .denied {
                     notificationGrantRow
                 }
             }
-            // The card stands at its height floor with room to spare — center
-            // the content so the air reads equal on every side.
-            .frame(maxHeight: .infinity, alignment: .center)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            // Roomier than the 12pt card standard: 1.5x, so the ring and its
+            // crown badge get air.
+            .padding(Space.oneHalf * 1.5)
         }
         // A tap anywhere quiet answers the celebration — buttons keep their
         // own actions, and answering twice is a no-op either way.
@@ -106,9 +104,10 @@ private struct FocusContent: View {
 
     // MARK: - Rows
 
-    /// The transport: pause/play rides bare in the ring's center, reset and
-    /// skip hold the trailing edge. One arrangement in every state, so the
-    /// row never reflows.
+    /// The transport: pause/play rides bare in the ring's center. Beside
+    /// the ring, one column holds the countdown centered with reset and
+    /// skip in a row, and the intervals pill underneath it. One arrangement
+    /// in every state, so the row never reflows.
     private var mainRow: some View {
         HStack(spacing: Space.two) {
             ZStack {
@@ -117,30 +116,52 @@ private struct FocusContent: View {
                     tint: progressTint,
                     isBreathing: store.isRunning
                 )
-                // Bare glyph on empty glass: adaptive primary, white in dark
-                // and black in light, since a fixed white vanishes on light
-                // glass. The whole ring is the target.
+                // Glyph on empty glass with the ring as its target; the hover
+                // chip is a circle inset to clear the track. Adaptive
+                // primary, white in dark and black in light, since a fixed
+                // white vanishes on light glass.
                 Button(action: centerAction) {
                     Image(systemName: centerIcon)
                         .font(.callout.weight(.bold))
                         .foregroundStyle(.primary)
+                        .frame(width: Self.transportDiameter, height: Self.transportDiameter)
+                        .background(Circle().fill(isTransportHovered ? Color.controlFill : Color.clear))
                         .frame(width: Self.ringDiameter, height: Self.ringDiameter)
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(centerLabel)
+                .onHover { isTransportHovered = $0 }
             }
             .frame(width: Self.ringDiameter, height: Self.ringDiameter)
-            Text(countdownText)
-                .font(.title.weight(.semibold))
-                .monospacedDigit()
-                .contentTransition(.numericText())
-                .foregroundStyle(isLastMinute ? Color.urgent : Color.primary)
-                .scaleEffect(heartbeat && !reduceMotion ? 1.05 : 1)
-                .animation(.easeInOut(duration: 0.45), value: heartbeat)
-                .accessibilityLabel("\(descriptor.title)\(store.isPaused ? ", paused" : ""), \(countdownText) remaining")
-            Spacer(minLength: Space.half)
-            controls
+            // The day's completed focuses ride the track's crown, over the
+            // arc's meeting point: a top-hugging overlay plus a fixed rise
+            // that plants the badge centre on the track. Hit-testing passes
+            // through to the transport beneath.
+            .overlay(alignment: .top) {
+                // Always on, even at zero — the crown reads 0 until the
+                // day's first round completes.
+                RingCountBadge(count: store.completedFocusToday)
+                    .offset(y: Self.crownNudge)
+                    .allowsHitTesting(false)
+            }
+            // The pill tucks 6pt under the timer row, tighter than the card's
+            // 8pt rhythm.
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: Space.two) {
+                    Text(countdownText)
+                        .font(.title.weight(.semibold))
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                        .foregroundStyle(isLastMinute ? Color.urgent : Color.primary)
+                        .scaleEffect(heartbeat && !reduceMotion ? 1.05 : 1)
+                        .animation(.easeInOut(duration: 0.45), value: heartbeat)
+                        .accessibilityLabel("\(descriptor.title)\(store.isPaused ? ", paused" : ""), \(countdownText) remaining")
+                    Spacer(minLength: Space.half)
+                    controls
+                }
+                intervalPill
+            }
         }
     }
 
@@ -163,6 +184,13 @@ private struct FocusContent: View {
     }
 
     private static let ringDiameter: CGFloat = 56
+    /// Hover chip behind the transport glyph: a circle that clears the
+    /// track ringing it.
+    private static let transportDiameter: CGFloat = 44
+    /// Points the crown badge rises to centre on the track: its centre
+    /// starts about half its height inside the ring, the crown sits ~3pt
+    /// down from the edge.
+    private static let crownNudge: CGFloat = -7
 
     /// The last-minute heartbeat: flips every second under a minute to go,
     /// which replays the pop. Running phases only — breaks, pauses and the
@@ -191,24 +219,20 @@ private struct FocusContent: View {
 
     // MARK: - Controls
 
-    /// What the trailing edge holds: reset and skip while running, reset
-    /// while paused, nothing otherwise. Transport lives in the ring, so the
-    /// row never reflows between states.
-    @ViewBuilder
+    /// The trailing transport, laid out in every state so the row never
+    /// changes height as buttons come and go: reset while running or
+    /// paused, skip while running. Absent buttons hold their frame
+    /// invisibly — swapping in place, dead to hits and VoiceOver.
     private var controls: some View {
         HStack(spacing: Space.quarter) {
-            if store.isRunning {
-                MediaButton(systemImage: "arrow.counterclockwise", label: "Reset timer") {
-                    store.reset()
-                }
-                MediaButton(systemImage: "forward.fill", label: "Skip this phase") {
-                    store.skip()
-                }
-            } else if store.isPaused {
-                MediaButton(systemImage: "arrow.counterclockwise", label: "Reset timer") {
-                    store.reset()
-                }
+            MediaButton(systemImage: "arrow.counterclockwise", label: "Reset timer") {
+                store.reset()
             }
+            .visible(when: store.isRunning || store.isPaused)
+            MediaButton(systemImage: "forward", label: "Skip this phase") {
+                store.skip()
+            }
+            .visible(when: store.isRunning)
         }
     }
 
@@ -221,40 +245,65 @@ private struct FocusContent: View {
 
     // MARK: - Durations
 
-    /// Both intervals in one pill on the header's trailing edge: tapping it
-    /// opens the editor. A zero break reads as Off — that is the off switch.
+    /// Both intervals in one pill: tapping it opens the editor. A zero
+    /// break reads as Off — that is the off switch.
+    /// The live pill hugs its content — no fixed text widths. The popover
+    /// still never moves: it anchors to the wrapper, which is sized by a
+    /// hidden widest-case twin ("120 min" / "30 min") so its frame is
+    /// constant while the live pill breathes inside it, leading-aligned,
+    /// so its leading edge stays flush with the countdown number above.
+    /// Measuring beats a magic width — it tracks type size — and a stable
+    /// frame beats a clever anchor: corner anchors shove a wide popover
+    /// sideways, top anchors lay it over the pill.
     private var intervalPill: some View {
-        Button { isDurationsEditorPresented = true } label: {
-            HStack(spacing: Space.one) {
-                HStack(spacing: Space.half) {
-                    Image(systemName: "timer")
-                    Text("\(store.settings.focusMinutes) min")
-                        .monospacedDigit()
-                        .foregroundStyle(.primary)
-                        .frame(minWidth: Self.pillValueWidth, alignment: .trailing)
-                }
-                Circle()
-                    .fill(.tertiary)
-                    .frame(width: Self.pillSeparatorDiameter, height: Self.pillSeparatorDiameter)
-                HStack(spacing: Space.half) {
-                    Image(systemName: "mug.fill")
-                    Text(store.settings.breaksEnabled ? "\(store.settings.shortBreakMinutes) min" : "Off")
-                        .monospacedDigit()
-                        .foregroundStyle(.primary)
-                        .frame(minWidth: Self.pillValueWidth, alignment: .trailing)
-                }
+        ZStack(alignment: .leading) {
+            pillCapsule(focusText: "120 min", breakText: "30 min")
+                .hidden()
+                .accessibilityHidden(true)
+            Button { isDurationsEditorPresented = true } label: {
+                pillCapsule(
+                    focusText: "\(store.settings.focusMinutes) min",
+                    breakText: store.settings.breaksEnabled
+                        ? "\(store.settings.shortBreakMinutes) min" : "Off",
+                    isHovered: isIntervalsHovered
+                )
             }
-            .font(.caption.weight(.medium))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, Space.one)
-            .padding(.vertical, Space.half)
-            .background(Capsule().fill(Color.controlFill))
+            .buttonStyle(.plain)
+            .accessibilityLabel(intervalPillLabel)
+            .onHover { isIntervalsHovered = $0 }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(intervalPillLabel)
         .popover(isPresented: $isDurationsEditorPresented, arrowEdge: .top) {
             FocusSettingsPopover(store: store)
         }
+    }
+
+    /// The pill's look, shared by the live pill and its hidden measuring
+    /// twin — one layout, so the twin can never drift from what it sizes.
+    /// Hovering brightens the icons in the shared quiet-until-hover
+    /// language; the twin never hovers.
+    private func pillCapsule(focusText: String, breakText: String, isHovered: Bool = false) -> some View {
+        HStack(spacing: Space.one) {
+            HStack(spacing: Space.half) {
+                Image(systemName: "timer")
+                Text(focusText)
+                    .monospacedDigit()
+                    .foregroundStyle(.primary)
+            }
+            Circle()
+                .fill(.tertiary)
+                .frame(width: Self.pillSeparatorDiameter, height: Self.pillSeparatorDiameter)
+            HStack(spacing: Space.half) {
+                Image(systemName: "mug")
+                Text(breakText)
+                    .monospacedDigit()
+                    .foregroundStyle(.primary)
+            }
+        }
+        .font(.caption.weight(.medium))
+        .foregroundStyle(isHovered ? .primary : .secondary)
+        .padding(.horizontal, Space.one)
+        .padding(.vertical, Space.half)
+        .background(Capsule().fill(Color.controlFill))
     }
 
     private var intervalPillLabel: String {
@@ -266,17 +315,17 @@ private struct FocusContent: View {
     }
 
     private static let pillSeparatorDiameter: CGFloat = 3
-    /// Wide enough for the longest readout ("120 min") so dragging a value
-    /// never resizes the pill — and never walks the popover anchored to it.
-    private static let pillValueWidth: CGFloat = 48
 
     // MARK: - Progress
 
+    /// Countdown, not fill-up: the ring starts full and drains as the
+    /// stretch runs out. Idle and between phases read full — nothing has
+    /// run down yet.
     private var progressFraction: Double {
         if store.activePhase != nil {
-            return store.fractionElapsed(at: store.now) ?? 0
+            return 1 - (store.fractionElapsed(at: store.now) ?? 0)
         }
-        return store.pendingNext != nil ? 1 : 0
+        return 1
     }
 
     private var progressTint: Color {
@@ -328,10 +377,10 @@ private struct FocusSettingsPopover: View {
                 value: sliderBinding(for: \.focusMinutes),
                 range: doubleRange(FocusSettings.focusRange),
                 step: 5,
-                presets: [15, 25, 50]
+                presets: [15, 25, 54]
             )
             sliderRow(
-                systemImage: "mug.fill",
+                systemImage: "mug",
                 title: "Break",
                 value: sliderBinding(for: \.shortBreakMinutes),
                 range: doubleRange(FocusSettings.shortBreakRange),
@@ -349,7 +398,7 @@ private struct FocusSettingsPopover: View {
             get: { Double(store.settings[keyPath: keyPath]) },
             set: {
                 var next = store.settings
-                next[keyPath: keyPath] = Int($0)
+                next[keyPath: keyPath] = Int($0.rounded())
                 store.updateSettings(next)
             }
         )
@@ -380,17 +429,13 @@ private struct FocusSettingsPopover: View {
                     .foregroundStyle(.primary)
             }
             .font(.caption.weight(.medium))
-            // The slider rides its own row. Hand-rolled, on purpose: the
-            // native one draws its own blue track and dark knob on this
-            // system and ignores tint, so it can never wear our accent or a
-            // visible grabber. This one can.
-            DurationSlider(
-                value: value,
-                range: range,
-                step: step,
-                label: "\(title) duration",
-                valueText: readout(value: Int(value.wrappedValue), offText: offText)
-            )
+            // Bare slider: the row above already names it, and the native
+            // label would print a second title beside the track.
+            Slider(value: value, in: range, step: step) {
+                EmptyView()
+            }
+            .accessibilityLabel("\(title) duration")
+            .accessibilityValue(readout(value: Int(value.wrappedValue), offText: offText))
             HStack(spacing: Space.quarter) {
                 ForEach(presets, id: \.self) { preset in
                     presetChip(preset: preset, title: title, value: value, offText: offText)
@@ -422,77 +467,39 @@ private struct FocusSettingsPopover: View {
     }
 }
 
-/// A chunky duration slider: accent fill, white grabber, step snapping.
-/// Native Slider is one line, but it brings its own colors on this system.
-private struct DurationSlider: View {
-    @Binding var value: Double
-    let range: ClosedRange<Double>
-    let step: Double
-    let label: String
-    let valueText: String
-
-    @State private var isDragging = false
+/// The day-count on the ring's crown: solid white with dark digits, so it
+/// reads over the arc at any fraction. Deliberately not the header badges'
+/// translucent wash.
+private struct RingCountBadge: View {
+    let count: Int
 
     var body: some View {
-        GeometryReader { proxy in
-            let travel = max(proxy.size.width - Self.knobDiameter, 1)
-            let fraction = (value - range.lowerBound) / (range.upperBound - range.lowerBound)
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(Color.controlFill)
-                    .frame(height: Self.trackHeight)
-                Capsule()
-                    .fill(Color.widgetAccent)
-                    .frame(width: Self.knobDiameter + travel * fraction, height: Self.trackHeight)
-                Circle()
-                    .fill(.white)
-                    .shadow(color: .cardShadow, radius: 2, y: 1)
-                    .frame(width: Self.knobDiameter, height: Self.knobDiameter)
-                    .offset(x: travel * fraction)
-                    .scaleEffect(isDragging && !reduceMotion ? 1.15 : 1)
-                    .animation(.bouncy(duration: 0.3), value: isDragging)
-            }
-            .frame(height: Self.knobDiameter)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { drag in
-                        isDragging = true
-                        value = snapped(
-                            range.lowerBound + min(max(
-                                (drag.location.x - Self.knobDiameter / 2) / travel, 0), 1)
-                                * (range.upperBound - range.lowerBound)
-                        )
-                    }
-                    .onEnded { _ in
-                        isDragging = false
-                    }
-            )
-        }
-        .frame(height: Self.knobDiameter)
-        .accessibilityLabel(label)
-        .accessibilityValue(valueText)
-        .accessibilityAdjustableAction { direction in
-            switch direction {
-            case .increment: value = snapped(min(value + step, range.upperBound))
-            case .decrement: value = snapped(max(value - step, range.lowerBound))
-            @unknown default: break
-            }
-        }
+        Text("\(count)")
+            .font(.caption2.weight(.bold))
+            .monospacedDigit()
+            .foregroundStyle(.black)
+            .padding(.horizontal, Space.half)
+            .padding(.vertical, Space.quarter / 2)
+            .background(Capsule().fill(.white))
+            .accessibilityLabel("\(count) in Focus today")
     }
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private func snapped(_ raw: Double) -> Double {
-        (raw / step).rounded() * step
-    }
-
-    private static let knobDiameter: CGFloat = 22
-    private static let trackHeight: CGFloat = 8
 }
 
-/// One round media button: quiet circle until the pointer lands. Same size
-/// and language everywhere, so the row never reflows as the timer moves.
+/// Lays out but hides: keeps the frame while invisible, dead to hits,
+/// keyboard focus and VoiceOver.
+private extension View {
+    func visible(when visible: Bool) -> some View {
+        self
+            .opacity(visible ? 1 : 0)
+            .allowsHitTesting(visible)
+            .accessibilityHidden(!visible)
+            .disabled(!visible)
+    }
+}
+
+/// One transport button: quiet until the pointer lands, then the hover
+/// chip every icon button wears. Same size and language everywhere, so
+/// the row never reflows as the timer moves.
 private struct MediaButton: View {
     let systemImage: String
     let label: String
@@ -506,7 +513,10 @@ private struct MediaButton: View {
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(isHovered ? .primary : .secondary)
                 .frame(width: Self.diameter, height: Self.diameter)
-                .background(Circle().fill(isHovered ? Color.controlFill : Color.clear))
+                .background(
+                    RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
+                        .fill(isHovered ? Color.controlFill : Color.clear)
+                )
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
