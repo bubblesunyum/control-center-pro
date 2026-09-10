@@ -114,16 +114,23 @@ and **both task-list states**, `- [ ]` and `- [x]`, which arrive with
 
 Two consequences, and they decide the sync's shape:
 
-1. **Hash Craft's markdown, never your own.** Our text is not a fixed point: a
-   pad containing `_italics_` would read as changed on every sync and the loop
-   would never quiet. Craft's normalised form *is* a fixed point — re-PUTting 18
-   blocks exactly as returned changed nothing, and the following GET agreed with
-   the write response for all of them.
-2. **Build the block-id sidecar from the write response, not from what you
-   sent.** Every write response echoes both the canonical markdown and the
-   assigned ids, so no extra GET is needed. This is correctness rather than
-   thrift: because a POST can split one sent block into several, pairing sent
-   slices to returned ids positionally goes wrong from the first split onward.
+1. **Record both spellings and never compare across them.** Our text is not a
+   fixed point: a pad containing `_italics_` would read as changed on every
+   sync and the loop would never quiet. Craft's normalised form *is* a fixed
+   point — re-PUTting 18 blocks exactly as returned changed nothing, and the
+   following GET agreed with the write response for all of them. So the sync
+   keeps *both* texts that last agreed (`PadSyncBase`) and asks each side's
+   question in that side's own dialect. Hashing only Craft's form is not
+   enough on its own: whatever answers "has the pad changed?" must then be
+   compared against our form, and a diff that spans the two dialects can never
+   come back equal for a respelled block (ccp-c2x5).
+2. **Read the document back after a write; do not reconstruct it from
+   echoes.** Every write response does echo the canonical markdown and the
+   assigned ids, but a POST can split one sent block into several and a
+   partial round leaves the echoes describing less than the document holds —
+   so attributing echoes back to the blocks that caused them is where the
+   hardest bugs live. One `GET /blocks` after the write legs says what Craft
+   actually holds, whatever happened, for one extra request.
 
 `POST /blocks` takes `position` in the **body**, not the query string; in the
 query string it 400s with `invalid_union`.

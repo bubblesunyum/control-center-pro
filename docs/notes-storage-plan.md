@@ -5,6 +5,14 @@
 
 Status: **approved with edits, not started.** Written 2026-09-08 (ccp-2zi.4).
 
+> **Superseded in part, 2026-09-10 (ccp-c2x5).** Everywhere this document says
+> *sidecar*, the sync now keeps a `PadSyncBase` — the two texts, ours and
+> Craft's, that last agreed — and decides by string equality within each
+> dialect. `BlockSidecar` and its fingerprints are gone, the conflict copy is
+> no longer written into the user's Craft document, and both sides moving is a
+> three-way merge. The storage seam and the build order below still stand; the
+> conflict analysis in §4 describes the design that was replaced.
+
 This is the build order for the notes storage and Craft sync work, the
 reasoning behind it, and the two questions still open. It is self-contained —
 you do not need the session that produced it.
