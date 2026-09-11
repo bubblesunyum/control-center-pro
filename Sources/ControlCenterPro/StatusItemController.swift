@@ -9,18 +9,20 @@ import Observation
 /// The menu bar item: left click toggles the panel, right click shows
 /// the menu. In edit mode the item itself becomes a pill — Add on the left,
 /// the checkmark on the right — rather than an icon (ccp-xvth).
+///
+/// Right-click is the platform's own menu tracking, not ours: the menu is
+/// assigned to the item and dropped with a synthetic click, so AppKit owns
+/// the tracking and highlight for its duration. The right-vs-left decision
+/// reads only the event — what each side then does may touch the panel, but
+/// the menu never toggles it and the toggle never shows it (ccp-lusi).
 @MainActor
-final class StatusItemController {
+final class StatusItemController: NSObject, NSMenuDelegate {
     private let item: NSStatusItem
     private let panel: ControlPanelController
     private let settingsWindow: SettingsWindowController
     private let menu: NSMenu
     private var countdownTimer: Timer?
     private var editPill: EditPill?
-    /// Whether a menu popUp is on screen: popUp is modal, so a second press
-    /// queued behind the first must not open a nested menu on the one shared
-    /// NSMenu (ccp-nbg3).
-    private var isPoppingMenu = false
 
     /// What the panel anchors itself to. Read by the global shortcut, which
     /// has no click of its own to say which screen the user is on.
@@ -35,6 +37,8 @@ final class StatusItemController {
         // the hidden overflow with no address to bring them back by.
         item.autosaveName = "ControlCenterPro"
         menu = NSMenu()
+        super.init()
+        menu.delegate = self
         rebuildMenu()
         trackEditingChanges()
         trackFocusCountdown()
@@ -46,7 +50,12 @@ final class StatusItemController {
             showPlainIcon(on: button)
             button.target = self
             button.action = #selector(handleStatusItemClick(_:))
-            button.sendAction(on: [.leftMouseUp, .rightMouseDown])
+            // Up on both sides, the way upstream listens
+            // (Vorssaint/App/StatusItemController): a menu shown modally from
+            // inside Down-phase tracking wedged the tracking, so the press
+            // behind it arrived as a mouse-up and misread as a left click
+            // (ccp-nbg3). Up-phase dispatch never runs inside tracking.
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
     }
 
@@ -130,7 +139,7 @@ final class StatusItemController {
                     guard let self else { return }
                     self.panel.showGallery()
                 },
-                onRightClick: { [weak self] in self?.popStatusMenu() }
+                onRightClick: { [weak self] in self?.presentMenu() }
             )
             pill.translatesAutoresizingMaskIntoConstraints = false
             button.addSubview(pill)
@@ -312,16 +321,14 @@ final class StatusItemController {
             return
         }
 
-        let isRightClick = event.type == .rightMouseDown
+        // Dispatch only: the right-vs-left decision reads the event, never
+        // panel state. The menu items below are where the menu is allowed
+        // to touch the panel.
+        let isRightClick = event.type == .rightMouseUp
             || (event.type == .leftMouseUp && event.modifierFlags.contains(.control))
 
         if isRightClick {
-            // Deferred past the button's own mouse tracking: opening popUp
-            // modally from inside the action wedged tracking, so the next
-            // press arrived as a mouse-up and missed right-click detection
-            // entirely (ccp-nbg3). The guard drops a second press queued
-            // behind the first before the modal opens.
-            Task { @MainActor [weak self] in self?.popStatusMenu(from: sender) }
+            presentMenu()
         } else {
             if panel.editor.isEditing {
                 finishEditing()
@@ -332,22 +339,30 @@ final class StatusItemController {
         }
     }
 
-    /// The menu from the pill: it covers the status button wholesale, so
-    /// right-clicks land in here and never on the button that used to pop it.
-    /// `popUp` blocks until dismissal, and a click-away dismissal wedges the
-    /// button's tracking highlight on — put it back to whatever the panel
-    /// says on return (ccp-5es8). A chosen item that opens the panel reads
-    /// back visible here, so this never clears a highlight that is owed.
-    private func popStatusMenu(from button: NSStatusBarButton? = nil) {
-        guard !isPoppingMenu, let button = button ?? item.button else { return }
-        isPoppingMenu = true
-        // Ensure the menu reflects the editing state that was just entered
-        // via a hold (which sets isEditing synchronously but rebuildMenu
-        // is observed asynchronously).
+    /// Drop the menu the way a menu-backed status item does: assign it and
+    /// synthetically click, so AppKit owns the tracking and the highlight
+    /// while it is up. While the menu is assigned the button's action is not
+    /// used (per `NSStatusItem.menu`), so a second press cannot re-enter
+    /// here until the menu closes and the delegate clears it (ccp-nbg3).
+    /// The pill calls this too: it covers the button wholesale, so
+    /// right-clicks land in it and never on the button (ccp-lusi). Its
+    /// Down-phase firing stays — a direct event override runs in no button
+    /// tracking, which is the only thing Up-phase dispatch exists to avoid.
+    private func presentMenu() {
+        // The editing state may have changed synchronously (e.g. entering
+        // edit via hold) while the observer rebuilding below is async.
         rebuildMenu()
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: 0), in: button)
-        isPoppingMenu = false
-        button.highlight(panel.isVisible)
+        item.menu = menu
+        item.button?.performClick(nil)
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        guard menu === self.menu else { return }
+        item.menu = nil
+        // The menu owned the highlight while tracking; put back whatever the
+        // panel says (ccp-5es8). A chosen item that opened the panel reads
+        // back visible here, so this never clears a highlight that is owed.
+        item.button?.highlight(panel.isVisible)
     }
 
     @objc private func editWidgets() {
