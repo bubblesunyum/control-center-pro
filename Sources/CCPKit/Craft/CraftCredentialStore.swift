@@ -167,30 +167,13 @@ public struct FileCraftCredentialStore: CraftCredentialStore {
         }
     }
 
-    /// Owner-only from birth, never world-readable in between. `.atomic`
-    /// renames a default-mode temp file into place and chmods after, which
-    /// leaves a 0644 window a crash makes permanent — so the temp file is
-    /// created 0600 and renamed over the target instead. A crash mid-swap
-    /// loses the credential (fail-safe: the user re-enters it) rather than
-    /// exposing it.
+    /// The shared owner-only writer; the store's own error keeps the
+    /// throw site's type stable for callers matching on it.
     private func writeOwnerOnly(_ data: Data) throws {
-        let directory = fileURL.deletingLastPathComponent()
-        try FileManager.default.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o700]
-        )
-        let tmp = directory.appendingPathComponent(UUID().uuidString)
         do {
-            guard FileManager.default.createFile(atPath: tmp.path, contents: data,
-                                                 attributes: [.posixPermissions: 0o600]) else {
-                throw FileCraftCredentialError.unwritten
-            }
-            try? FileManager.default.removeItem(at: fileURL)
-            try FileManager.default.moveItem(at: tmp, to: fileURL)
-        } catch {
-            try? FileManager.default.removeItem(at: tmp)
-            throw error
+            try OwnerOnlyFileWriter.write(data, to: fileURL)
+        } catch OwnerOnlyFileWriter.Error.unwritten {
+            throw FileCraftCredentialError.unwritten
         }
     }
 

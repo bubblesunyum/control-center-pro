@@ -313,27 +313,13 @@ public struct AppClaudeCredentialStore: ClaudeCredentialStore {
         }
     }
 
-    /// Owner-only from birth, never world-readable in between: the temp file
-    /// is created 0600 and renamed over the target. A crash mid-swap loses
-    /// the credential (fail-safe: re-import) rather than exposing it.
+    /// The shared owner-only writer; the store's own error keeps the
+    /// throw site's type stable for callers matching on it.
     private func writeOwnerOnly(_ data: Data) throws {
-        let directory = fileURL.deletingLastPathComponent()
-        try FileManager.default.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o700]
-        )
-        let tmp = directory.appendingPathComponent(UUID().uuidString)
         do {
-            guard FileManager.default.createFile(atPath: tmp.path, contents: data,
-                                                 attributes: [.posixPermissions: 0o600]) else {
-                throw AppClaudeCredentialError.unwritten
-            }
-            try? FileManager.default.removeItem(at: fileURL)
-            try FileManager.default.moveItem(at: tmp, to: fileURL)
-        } catch {
-            try? FileManager.default.removeItem(at: tmp)
-            throw error
+            try OwnerOnlyFileWriter.write(data, to: fileURL)
+        } catch OwnerOnlyFileWriter.Error.unwritten {
+            throw AppClaudeCredentialError.unwritten
         }
     }
 }
@@ -418,27 +404,13 @@ public struct FileClaudeStaticTokenStore: ClaudeStaticTokenStore {
         }
     }
 
-    /// Owner-only from birth, never world-readable in between: the temp file
-    /// is created 0600 and renamed over the target. A crash mid-swap loses
-    /// the token (fail-safe: re-paste) rather than exposing it.
+    /// The shared owner-only writer; the store's own error keeps the
+    /// throw site's type stable for callers matching on it.
     private func writeOwnerOnly(_ data: Data) throws {
-        let directory = fileURL.deletingLastPathComponent()
-        try FileManager.default.createDirectory(
-            at: directory,
-            withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o700]
-        )
-        let tmp = directory.appendingPathComponent(UUID().uuidString)
         do {
-            guard FileManager.default.createFile(atPath: tmp.path, contents: data,
-                                                 attributes: [.posixPermissions: 0o600]) else {
-                throw ClaudeStaticTokenError.unwritten
-            }
-            try? FileManager.default.removeItem(at: fileURL)
-            try FileManager.default.moveItem(at: tmp, to: fileURL)
-        } catch {
-            try? FileManager.default.removeItem(at: tmp)
-            throw error
+            try OwnerOnlyFileWriter.write(data, to: fileURL)
+        } catch OwnerOnlyFileWriter.Error.unwritten {
+            throw ClaudeStaticTokenError.unwritten
         }
     }
 }
