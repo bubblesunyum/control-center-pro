@@ -281,9 +281,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             // for title and icon keeps them near the same baseline, and the
             // nudge finishes it: the text renders high next to the icon —
             // half a point measured off a 2x capture, another point by eye.
+            // NSButton exposes no image/title gap, so the point of air
+            // beside the icon is a hair space: constant-width, so the
+            // no-jitter contract holds (ccp-y5xb).
             let font = NSFont.monospacedDigitSystemFont(
                 ofSize: NSFont.systemFontSize, weight: .regular)
-            let title = FocusStore.mmss(remaining)
+            let title = FocusStore.mmss(remaining) + "\u{200A}"
             if button.title != title {
                 button.attributedTitle = NSAttributedString(string: title, attributes: [
                     .font: font,
