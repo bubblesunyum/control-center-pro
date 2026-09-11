@@ -275,6 +275,9 @@ public final class OpenCodeUsageAdapter {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var ticker: Timer?
     @ObservationIgnored private let cacheTTL: Duration
+    /// Last endpoint verdict, success or refusal — same backoff shape as the
+    /// Claude half: a refusal must not refetch on every panel open.
+    @ObservationIgnored private var lastAttempt: Date?
 
     public static let defaultCacheTTL = Duration.seconds(60)
 
@@ -322,11 +325,13 @@ public final class OpenCodeUsageAdapter {
     public var isFetching: Bool { task != nil }
 
     /// One fetch, published on main. Useful for tests and for pull-to-refresh
-    /// if the widget ever grows one.
+    /// if the widget ever grows one. Explicit, so it always runs — the
+    /// backoff lives in activate(), not here.
     public func refresh() async {
         do {
             let snapshot = try await source.fetch()
             guard !Task.isCancelled else { return }
+            lastAttempt = Date()
             self.snapshot = snapshot
             self.lastUpdated = Date()
             self.lastError = nil
@@ -335,9 +340,13 @@ public final class OpenCodeUsageAdapter {
             return
         } catch let error as OpenCodeUsageError {
             guard !Task.isCancelled else { return }
+            // Same verdict rule as the Claude half: only a refusal backs
+            // off, so a reconnect takes effect on the next open.
+            if error == .unavailable { lastAttempt = Date() }
             self.lastError = error
         } catch {
             guard !Task.isCancelled else { return }
+            lastAttempt = Date()
             self.lastError = .unavailable
         }
     }
@@ -383,8 +392,8 @@ public final class OpenCodeUsageAdapter {
     }
 
     private var isStale: Bool {
-        guard let lastUpdated else { return true }
-        let elapsed = Date().timeIntervalSince(lastUpdated)
+        guard let lastAttempt else { return true }
+        let elapsed = Date().timeIntervalSince(lastAttempt)
         let (seconds, attoseconds) = cacheTTL.components
         let threshold = Double(seconds) + Double(attoseconds) / 1_000_000_000_000_000_000
         return elapsed >= threshold

@@ -564,6 +564,16 @@ public final class LiveClaudeUsageSource: ClaudeUsageSource {
                 return try await requestUsage(token: token)
             } catch let error as ClaudeUsageError where error == .missingCredentials {
                 throw ClaudeUsageError.invalidToken
+            } catch let error as ClaudeUsageError where error == .unavailable {
+                // A paste the endpoint won't answer — 429, outage — must not
+                // brick the card while a live import sits unused. One attempt
+                // with the OAuth copy before reporting unreachable. A 401
+                // stays a rejection: falling back would hide "paste a fresh
+                // one" behind numbers from the other credential.
+                if let snapshot = await oauthFallback() {
+                    return snapshot
+                }
+                throw error
             }
         }
         guard let creds = try credentials.loadCredentials(), !creds.accessToken.isEmpty,
@@ -590,6 +600,17 @@ public final class LiveClaudeUsageSource: ClaudeUsageSource {
             try? credentials.saveCredentials(fallback)
             return snapshot
         }
+    }
+
+    /// One attempt with the imported OAuth copy when the pasted token gets
+    /// no answer. Nil when there is no live import or it fails too — the
+    /// caller then reports the paste's own error. Never writes: the paste
+    /// stays stored even when the import serves.
+    private func oauthFallback() async -> ClaudeUsageSnapshot? {
+        guard let creds = try? credentials.loadCredentials(),
+              !creds.accessToken.isEmpty, !creds.isExpired
+        else { return nil }
+        return try? await requestUsage(token: creds.accessToken)
     }
 
     private func requestUsage(token: String) async throws -> ClaudeUsageSnapshot {
@@ -700,6 +721,13 @@ public final class ClaudeUsageAdapter {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var ticker: Timer?
     @ObservationIgnored private let cacheTTL: Duration
+    /// Last endpoint verdict, success or refusal. A refusal backs off behind
+    /// the same TTL as fresh data — otherwise every panel open refetches,
+    /// which sustains a rate limit indefinitely. Missing or rejected
+    /// credentials and cancelled fetches record nothing, so recovery stays
+    /// prompt. Display still keys off lastUpdated, so a failed fetch never
+    /// reads as fresh data.
+    @ObservationIgnored private var lastAttempt: Date?
 
     public static let defaultCacheTTL = Duration.seconds(60)
 
@@ -745,11 +773,13 @@ public final class ClaudeUsageAdapter {
     public var isFetching: Bool { task != nil }
 
     /// One fetch, published on main. Useful for tests and for pull-to-refresh
-    /// if the widget ever grows one.
+    /// if the widget ever grows one. Explicit, so it always runs — the
+    /// backoff lives in activate(), not here.
     public func refresh() async {
         do {
             let snapshot = try await source.fetch()
             guard !Task.isCancelled else { return }
+            lastAttempt = Date()
             self.snapshot = snapshot
             self.lastUpdated = Date()
             self.lastError = nil
@@ -757,16 +787,24 @@ public final class ClaudeUsageAdapter {
             return
         } catch let error as ClaudeUsageError {
             guard !Task.isCancelled else { return }
+            // Only an endpoint verdict backs off: a refusal consumed
+            // budget, while a missing or rejected credential made no useful
+            // request — the next open retries those promptly, so a fresh
+            // paste or import takes effect. Cancelled fetches record
+            // nothing, so shutting the panel mid-fetch never suppresses the
+            // reopen.
+            if error == .unavailable { lastAttempt = Date() }
             self.lastError = error
         } catch {
             guard !Task.isCancelled else { return }
+            lastAttempt = Date()
             self.lastError = .unavailable
         }
     }
 
     private var isStale: Bool {
-        guard let lastUpdated else { return true }
-        let elapsed = Date().timeIntervalSince(lastUpdated)
+        guard let lastAttempt else { return true }
+        let elapsed = Date().timeIntervalSince(lastAttempt)
         let (seconds, attoseconds) = cacheTTL.components
         let threshold = Double(seconds) + Double(attoseconds) / 1_000_000_000_000_000_000
         return elapsed >= threshold

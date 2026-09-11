@@ -89,6 +89,36 @@ final class ClaudeUsageAdapterTests: XCTestCase {
         adapter.deactivate()
     }
 
+    func testActivateBacksOffAfterFailure() async {
+        let source = FakeClaudeUsageSource(error: .unavailable)
+        let adapter = ClaudeUsageAdapter(source: source)
+
+        adapter.activate()
+        _ = await becomesTrue { source.fetchCount >= 1 }
+        adapter.activate()
+
+        // A failed fetch still counts as an attempt: the next open must not
+        // hammer an endpoint that just rate-limited us.
+        XCTAssertEqual(source.fetchCount, 1)
+        adapter.deactivate()
+    }
+
+    func testActivateRetriesMissingCredentialsPromptly() async {
+        let source = FakeClaudeUsageSource(error: .missingCredentials)
+        let adapter = ClaudeUsageAdapter(source: source, cacheTTL: .milliseconds(20))
+
+        adapter.activate()
+        _ = await becomesTrue { source.fetchCount >= 1 }
+        try? await Task.sleep(for: .milliseconds(40))
+        adapter.activate()
+        _ = await becomesTrue { source.fetchCount >= 2 }
+
+        // No endpoint verdict, no backoff: a fresh paste or import takes
+        // effect on the next open.
+        XCTAssertEqual(source.fetchCount, 2)
+        adapter.deactivate()
+    }
+
     func testIdleWithPanelShutFetchesNothing() async {
         let source = FakeClaudeUsageSource()
         let adapter = ClaudeUsageAdapter(source: source)
@@ -545,6 +575,45 @@ final class ClaudeUsageAdapterTests: XCTestCase {
         do {
             _ = try await source.fetch()
             XCTFail("a 500 must not decode")
+        } catch let error as ClaudeUsageError {
+            XCTAssertEqual(error, .unavailable)
+        } catch {
+            XCTFail("wrong error: \(error)")
+        }
+    }
+
+    func testStaticTokenRateLimitFallsBackToImportedCopy() async throws {
+        ClaudeStubURLProtocol.handler = { request in
+            if request.value(forHTTPHeaderField: "Authorization") == "Bearer pasted" {
+                return (429, Data(
+                    #"{"error":{"type":"rate_limit_error"}}"#.utf8))
+            }
+            return (200, Data(
+                #"{"limits":[{"kind":"session","percent":11}]}"#.utf8))
+        }
+        let source = LiveClaudeUsageSource(
+            credentials: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
+                accessToken: "imported",
+                expiresAt: Date().addingTimeInterval(3600))),
+            staticToken: InMemoryClaudeStaticTokenStore(token: "pasted"),
+            session: ClaudeStubURLProtocol.session)
+
+        let snapshot = try await source.fetch()
+
+        // A limited paste must not brick the card while the import is live.
+        XCTAssertEqual(snapshot.rolling?.percent, 11)
+    }
+
+    func testStaticTokenRateLimitWithNoLiveImportReadsAsUnavailable() async {
+        ClaudeStubURLProtocol.handler = { _ in (429, Data()) }
+        let source = LiveClaudeUsageSource(
+            credentials: InMemoryClaudeCredentialStore(credentials: nil),
+            staticToken: InMemoryClaudeStaticTokenStore(token: "pasted"),
+            session: ClaudeStubURLProtocol.session)
+
+        do {
+            _ = try await source.fetch()
+            XCTFail("a limited paste with no import must not fetch")
         } catch let error as ClaudeUsageError {
             XCTAssertEqual(error, .unavailable)
         } catch {

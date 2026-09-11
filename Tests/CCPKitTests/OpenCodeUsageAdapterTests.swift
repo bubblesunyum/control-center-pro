@@ -92,6 +92,36 @@ final class OpenCodeUsageAdapterTests: XCTestCase {
         adapter.deactivate()
     }
 
+    func testActivateBacksOffAfterFailure() async {
+        let source = FakeOpenCodeUsageSource(error: .unavailable)
+        let adapter = OpenCodeUsageAdapter(source: source, spend: nil)
+
+        adapter.activate()
+        _ = await becomesTrue { source.fetchCount >= 1 }
+        adapter.activate()
+
+        // Same shape as the Claude half: a failed fetch still counts as an
+        // attempt, so the next open waits out the TTL instead of hammering.
+        XCTAssertEqual(source.fetchCount, 1)
+        adapter.deactivate()
+    }
+
+    func testActivateRetriesMissingCredentialsPromptly() async {
+        let source = FakeOpenCodeUsageSource(error: .missingCredentials)
+        let adapter = OpenCodeUsageAdapter(source: source, spend: nil, cacheTTL: .milliseconds(20))
+
+        adapter.activate()
+        _ = await becomesTrue { source.fetchCount >= 1 }
+        try? await Task.sleep(for: .milliseconds(40))
+        adapter.activate()
+        _ = await becomesTrue { source.fetchCount >= 2 }
+
+        // No endpoint verdict, no backoff: a reconnect takes effect on the
+        // next open.
+        XCTAssertEqual(source.fetchCount, 2)
+        adapter.deactivate()
+    }
+
     func testIdleWithPanelShutFetchesNothing() async {
         let source = FakeOpenCodeUsageSource()
         let adapter = OpenCodeUsageAdapter(source: source, spend: nil)
