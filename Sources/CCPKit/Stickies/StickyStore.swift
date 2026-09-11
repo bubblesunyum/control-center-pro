@@ -52,17 +52,45 @@ public final class StickyStore {
     /// Archived stickies, most recently archived first.
     public var archived: [Sticky] { stickies.filter(\.isArchived).reversed() }
 
-    /// A new sticky on top, at the given panel-space point.
+    /// A new sticky on top, at the given panel-space point — measured from
+    /// the trailing edge, like every other sticky position.
     @discardableResult
-    public func add(x: Double = 0, y: Double = 0) -> Sticky {
-        let sticky = Sticky(x: x, y: y)
+    public func add(trailingX: Double = 0, y: Double = 0) -> Sticky {
+        let sticky = Sticky(trailingX: trailingX, y: y)
         stickies.append(sticky)
         return sticky
     }
 
-    public func move(_ id: UUID, toX x: Double, toY y: Double) {
+    public func move(_ id: UUID, toTrailingX trailingX: Double, toY y: Double) {
         guard let index = stickies.firstIndex(where: { $0.id == id }) else { return }
-        stickies[index] = stickies[index].movedTo(x: x, y: y)
+        stickies[index] = stickies[index].movedTo(trailingX: trailingX, y: y)
+    }
+
+    /// A move expressed in leading-space travel: the finger's own units.
+    /// The trailing offset absorbs `-dx` here, once, so no gesture negates.
+    public func moveBy(_ id: UUID, dx: Double, dy: Double) {
+        guard let index = stickies.firstIndex(where: { $0.id == id }) else { return }
+        let sticky = stickies[index]
+        stickies[index] = sticky.movedTo(trailingX: sticky.trailingX - dx, y: sticky.y + dy)
+    }
+
+    /// The one-time conversion of pre-trailing stickies: every stored value
+    /// was a distance from the leading edge at the last seat, so the current
+    /// seat width turns each into a distance from the trailing edge — every
+    /// note lands exactly where it already is. Archived notes convert too,
+    /// so an unarchive never restores a mirrored position. One write, so one
+    /// render and one debounced persist. Same width twice is the involution
+    /// (harmless); zero width converts nothing and reports failure, so the
+    /// caller retries at the next seat instead of recording garbage.
+    @discardableResult
+    public func migrateToTrailingAnchoring(inWidth width: Double) -> Bool {
+        guard width > 0 else { return false }
+        stickies = stickies.map { sticky in
+            var converted = sticky
+            converted.convertToTrailingAnchoring(inWidth: width)
+            return converted
+        }
+        return true
     }
 
     /// A resize commit. One write, on release — the drag itself steers a

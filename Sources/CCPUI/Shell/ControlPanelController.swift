@@ -232,8 +232,13 @@ public final class ControlPanelController {
     /// A new sticky at the window's center, opening the panel first when it
     /// is down — a note nobody can see is a note nobody wrote.
     public func newSticky() {
+        // Migrate before adding: the window may still hold the last seat
+        // while the file predates trailing storage, and that width is the
+        // correct one for the conversion — the centre below is the fixed
+        // point either way.
+        migrateStickiesIfNeeded()
         let size = window.frame.size
-        let sticky = StickyStore.shared.add(x: size.width / 2, y: size.height / 2)
+        let sticky = StickyStore.shared.add(trailingX: size.width / 2, y: size.height / 2)
         // Before showing: the open below must not run the Notes path first
         // (yanking its caret to the end) only for the newborn to steal focus
         // on arrival. The pending claim suppresses it; the card answers once.
@@ -323,23 +328,58 @@ public final class ControlPanelController {
         editor.displayWidth = visible.width
 
         window.setFrame(visible, display: true)
+        migrateStickiesIfNeeded()
         reclaimStickies()
+    }
+
+    /// Whether the one-time leading-to-trailing conversion has run. Outside
+    /// the file on purpose: the bytes are identical either way, so only an
+    /// external marker disambiguates — and one an old build never touches
+    /// survives a downgrade round-trip.
+    private static let trailingMigrationKey = "ccp.stickiesTrailingMigration.v1"
+
+    /// Convert pre-trailing stickies once, at the first seat with a known
+    /// width. The flag sets only after the converted bytes are synchronously
+    /// on disk: the store debounces its own writes, so flagging first would
+    /// let a crash in the window permanently mirror the desk. Skipped
+    /// mid-drag and at zero width — both retry at the next seat. Downgrade
+    /// is view-only-safe: an old build mirrors the desk, and any note it
+    /// writes misplaces on re-upgrade.
+    private func migrateStickiesIfNeeded() {
+        guard !StickyStore.shared.isDragging else { return }
+        guard !UserDefaults.standard.bool(forKey: Self.trailingMigrationKey) else { return }
+        guard StickyStore.shared.migrateToTrailingAnchoring(inWidth: window.frame.size.width) else { return }
+        StickyStore.shared.flush()
+        UserDefaults.standard.set(true, forKey: Self.trailingMigrationKey)
     }
 
     /// Pull any sticky whose grab strip left the window back to reachability.
     /// Drifts off-screen are allowed, stranded notes are not: without a
-    /// reachable pixel the only recovery is hand-editing the file. Runs on
-    /// seat changes, never mid-drag.
+    /// reachable pixel the only recovery is hand-editing the file. Archived
+    /// notes reclaim too, so a restore never surfaces a stranded note. Runs
+    /// on seat changes, never mid-drag. Width changes need nothing beyond
+    /// this: trailing offsets re-resolve against the new seat on their own.
     private func reclaimStickies() {
+        guard !StickyStore.shared.isDragging else { return }
+        let width = window.frame.size.width
+        guard width > 0 else { return }
         let bounds = CGRect(origin: .zero, size: window.frame.size)
-        for sticky in StickyStore.shared.visible {
+        for sticky in StickyStore.shared.stickies {
+            let leading = sticky.leadingX(inWidth: width)
             let clamped = StickyCard.clampedCenter(
-                CGPoint(x: sticky.x, y: sticky.y),
+                CGPoint(x: leading, y: sticky.y),
                 size: CGSize(width: sticky.width, height: sticky.height),
                 in: bounds
             )
-            if clamped.x != sticky.x || clamped.y != sticky.y {
-                StickyStore.shared.move(sticky.id, toX: clamped.x, toY: clamped.y)
+            // Compare in leading space: the trailing round-trip is not the
+            // identity for fractional positions, and a phantom diff would
+            // rewrite the file on every open.
+            if clamped.x != leading || clamped.y != sticky.y {
+                StickyStore.shared.move(
+                    sticky.id,
+                    toTrailingX: Sticky.trailingX(fromLeading: clamped.x, inWidth: width),
+                    toY: clamped.y
+                )
             }
         }
     }
@@ -486,7 +526,7 @@ public final class ControlPanelController {
         ) }
         if hitRects.contains(where: { toScreen($0).contains(screenPoint) }) { return true }
         return stickies.contains { sticky in
-            toScreen(StickyCard.frame(of: sticky))
+            toScreen(StickyCard.frame(of: sticky, inWidth: windowFrame.size.width))
                 .contains(screenPoint)
         }
     }

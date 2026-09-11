@@ -7,9 +7,13 @@ import Foundation
 /// size in `.panel` coordinate space. Draw order is array order — a sticky
 /// never changes its depth, so there is no z-index to store.
 ///
-/// Positions are plain x/y rather than a geometry type: this is persisted
+/// Positions are plain numbers rather than a geometry type: this is persisted
 /// data, and what survives a relaunch is two numbers, not a framework value.
-/// The on-disk keys are pinned — renaming one orphans every saved sticky.
+/// The horizontal position measures from the trailing edge, like the lanes:
+/// a display-width change moves every widget but no sticky, so the desk's
+/// relative layout survives the monitor switch.
+/// The on-disk keys are pinned — renaming one orphans every saved sticky,
+/// so `trailingX` still travels as `"x"` (see `CodingKeys`).
 public struct Sticky: Codable, Equatable, Identifiable, Sendable {
     /// What a sticky measures when it has never been resized, and what notes
     /// written before size existed decode to. The whole card, the paper
@@ -26,7 +30,7 @@ public struct Sticky: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var text: String
     public var color: StickyColor
-    public var x: Double
+    public var trailingX: Double
     public var y: Double
     public var width: Double
     public var height: Double
@@ -36,7 +40,7 @@ public struct Sticky: Codable, Equatable, Identifiable, Sendable {
         id: UUID = UUID(),
         text: String = "",
         color: StickyColor = .yellow,
-        x: Double = 0,
+        trailingX: Double = 0,
         y: Double = 0,
         width: Double = defaultWidth,
         height: Double = defaultHeight,
@@ -45,15 +49,21 @@ public struct Sticky: Codable, Equatable, Identifiable, Sendable {
         self.id = id
         self.text = text
         self.color = color
-        self.x = x
+        self.trailingX = trailingX
         self.y = y
         self.width = width
         self.height = height
         self.isArchived = isArchived
     }
 
+    // `trailingX` travels as `"x"`: the bytes predate the trailing-edge flip,
+    // and a key change would orphan every saved sticky. The values themselves
+    // convert once, at the first seat — see
+    // `StickyStore.migrateToTrailingAnchoring` — so the same key carries the
+    // new meaning afterwards.
     private enum CodingKeys: String, CodingKey {
-        case id, text, color, x, y, width, height, isArchived
+        case id, text, color, y, width, height, isArchived
+        case trailingX = "x"
     }
 
     public init(from decoder: Decoder) throws {
@@ -63,7 +73,7 @@ public struct Sticky: Codable, Equatable, Identifiable, Sendable {
         id = try container.decode(UUID.self, forKey: .id)
         text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
         color = try container.decodeIfPresent(StickyColor.self, forKey: .color) ?? .yellow
-        x = try container.decodeIfPresent(Double.self, forKey: .x) ?? 0
+        trailingX = try container.decodeIfPresent(Double.self, forKey: .trailingX) ?? 0
         y = try container.decodeIfPresent(Double.self, forKey: .y) ?? 0
         // Lenient where the older keys are strict: a mistyped size must fall
         // back to the default, never cost the note — and anything that loads
@@ -94,11 +104,27 @@ public struct Sticky: Codable, Equatable, Identifiable, Sendable {
         return unmarked.isEmpty ? "New Sticky" : String(unmarked.prefix(40))
     }
 
-    func movedTo(x: Double, y: Double) -> Sticky {
+    func movedTo(trailingX: Double, y: Double) -> Sticky {
         var copy = self
-        copy.x = x
+        copy.trailingX = trailingX
         copy.y = y
         return copy
+    }
+
+    /// The drawn centre for a seat width — the inverse of the stored
+    /// trailing offset. The one flip every reader (desk, drag guard,
+    /// hit-test, reclaim, migration) shares, so the minus lives once, on
+    /// the type that owns the bytes.
+    public func leadingX(inWidth width: Double) -> Double {
+        width - trailingX
+    }
+
+    public static func trailingX(fromLeading leadingX: Double, inWidth width: Double) -> Double {
+        width - leadingX
+    }
+
+    public mutating func convertToTrailingAnchoring(inWidth width: Double) {
+        trailingX = width - trailingX
     }
 
     /// The one resize rule: every resize path lands here, so the minimum

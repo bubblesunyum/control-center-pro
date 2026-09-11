@@ -13,6 +13,9 @@ import SwiftUI
 /// lets through).
 struct StickyDesk: View {
     let store: StickyStore = .shared
+    /// This render's seat width, from the panel — the same value the drag
+    /// guard resolves against, so the guard always matches what is drawn.
+    let seatWidth: CGFloat
 
     var body: some View {
         ZStack {
@@ -22,7 +25,7 @@ struct StickyDesk: View {
             Color.clear.allowsHitTesting(false)
             ForEach(store.visible) { sticky in
                 StickyCard(sticky: sticky, store: store)
-                    .position(x: sticky.x, y: sticky.y)
+                    .position(x: sticky.leadingX(inWidth: seatWidth), y: sticky.y)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

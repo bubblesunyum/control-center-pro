@@ -24,12 +24,12 @@ final class StickyStoreTests: XCTestCase {
         let first = store.add()
         _ = store.add()
 
-        store.move(first.id, toX: 300, toY: 400)
+        store.move(first.id, toTrailingX: 300, toY: 400)
 
         // Depth is array order and never re-sorts: the moved sticky stays
         // below, where it was created.
         XCTAssertEqual(store.visible.map(\.id).first, first.id)
-        XCTAssertEqual(store.visible.first?.x, 300)
+        XCTAssertEqual(store.visible.first?.trailingX, 300)
         XCTAssertEqual(store.visible.first?.y, 400)
     }
 
@@ -59,7 +59,7 @@ final class StickyStoreTests: XCTestCase {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         let first = StickyStore(directory: directory)
-        let sticky = first.add(x: 12, y: 34)
+        let sticky = first.add(trailingX: 12, y: 34)
         first.resize(sticky.id, width: 320, height: 240)
         first.flush()
 
@@ -98,7 +98,7 @@ final class StickyStoreTests: XCTestCase {
         _ = store.add()
         let unknown = UUID()
 
-        store.move(unknown, toX: 1, toY: 1)
+        store.move(unknown, toTrailingX: 1, toY: 1)
         store.resize(unknown, width: 300, height: 300)
         store.setText("x", for: unknown)
         store.setColor(.pink, for: unknown)
@@ -113,7 +113,7 @@ final class StickyStoreTests: XCTestCase {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         let first = StickyStore(directory: directory)
-        let sticky = first.add(x: 12, y: 34)
+        let sticky = first.add(trailingX: 12, y: 34)
         first.setText("# hello", for: sticky.id)
         first.setColor(.blue, for: sticky.id)
         first.flush()
@@ -127,7 +127,7 @@ final class StickyStoreTests: XCTestCase {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let good = Sticky(text: "survivor", x: 1, y: 2)
+        let good = Sticky(text: "survivor", trailingX: 1, y: 2)
         let payload = """
         [{"id":"\(good.id.uuidString)","text":"survivor","color":"yellow","x":1,"y":2,"isArchived":false},
          {"id":"not-a-uuid","text":{}}]
@@ -206,6 +206,52 @@ final class StickyStoreTests: XCTestCase {
             try String(contentsOf: directory.appendingPathComponent("stickies.json.corrupt"), encoding: .utf8),
             "not json at all"
         )
+    }
+
+    func testMoveByAppliesLeadingSpaceTravelToTheTrailingOffset() {
+        let store = store()
+        let note = store.add(trailingX: 800, y: 600)
+
+        store.moveBy(note.id, dx: 100, dy: 50)
+
+        // Rightward travel shrinks the trailing offset; downward grows y.
+        XCTAssertEqual(store.visible.first?.trailingX, 700)
+        XCTAssertEqual(store.visible.first?.y, 650)
+    }
+
+    func testMigrateToTrailingAnchoringConvertsLeadingValuesInOrder() {
+        let store = store()
+        // Pre-migration bytes: each number is a distance from the leading
+        // edge under the same `"x"` key — the conversion re-reads them.
+        let first = Sticky(trailingX: 200, y: 100)
+        let second = Sticky(trailingX: 900, y: 700)
+        store.setStickiesForTesting([first, second])
+
+        XCTAssertTrue(store.migrateToTrailingAnchoring(inWidth: 1000))
+
+        XCTAssertEqual(store.visible.map(\.id), [first.id, second.id])
+        XCTAssertEqual(store.visible.map(\.trailingX), [800, 100])
+        XCTAssertEqual(store.visible.map(\.y), [100, 700])
+    }
+
+    func testMigrateToTrailingAnchoringIncludesArchivedNotes() {
+        let store = store()
+        let note = store.add(trailingX: 200, y: 100)
+        store.archive(note.id)
+
+        XCTAssertTrue(store.migrateToTrailingAnchoring(inWidth: 1000))
+
+        store.unarchive(note.id)
+        XCTAssertEqual(store.visible.first?.trailingX, 800)
+    }
+
+    func testMigrateToTrailingAnchoringRefusesZeroWidth() {
+        let store = store()
+        _ = store.add(trailingX: 200, y: 100)
+
+        XCTAssertFalse(store.migrateToTrailingAnchoring(inWidth: 0))
+
+        XCTAssertEqual(store.visible.first?.trailingX, 200)
     }
 
     func testDisplayTitleFallsBackWhenEmpty() {

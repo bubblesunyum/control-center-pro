@@ -84,7 +84,7 @@ public struct ControlPanel: View {
         // Above the lanes, below the gallery. Hidden while editing: stickies
         // are always movable, so edit mode has nothing to offer them and
         // they would only cover the wiggle.
-        .overlay(alignment: .topLeading) { if !editor.isEditing { StickyDesk() } }
+        .overlay(alignment: .topLeading) { if !editor.isEditing { StickyDesk(seatWidth: editor.displayWidth) } }
         .overlay { if editor.isShowingGallery { galleryOverlay } }
         .animation(editor.isDragging ? nil : .snappy(duration: 0.28), value: arrangement.layout)
         .animation(.snappy(duration: 0.28), value: editor.isEditing)
@@ -169,8 +169,10 @@ public struct ControlPanel: View {
                 // Read off the store, not a preference: preferences trail by
                 // a layout pass, and a press in that gap would arm both the
                 // sticky drag and the lane hold at once.
+                // The seat width both sides share: `place()` sets it alongside
+                // the window frame, so it always equals the drawn width.
                 guard !StickyStore.shared.visible.contains(where: {
-                    StickyCard.frame(of: $0)
+                    StickyCard.frame(of: $0, inWidth: editor.displayWidth)
                         .contains(value.startLocation)
                 }) else { return }
                 if editor.isEditing {

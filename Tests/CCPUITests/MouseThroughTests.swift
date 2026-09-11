@@ -14,8 +14,9 @@ final class MouseThroughTests: XCTestCase {
     private let window = CGRect(x: 0, y: 0, width: 1000, height: 800)
     private let lanes = CGRect(x: 700, y: 20, width: 280, height: 400)
 
-    private func sticky(_ x: Double, _ y: Double) -> Sticky {
-        Sticky(x: x, y: y)
+    private func sticky(_ trailingX: Double, _ y: Double) -> Sticky {
+        // The window is 1000 wide: trailing 800 is the old leading 200.
+        Sticky(trailingX: trailingX, y: y)
     }
 
     private func check(
@@ -97,17 +98,17 @@ final class MouseThroughTests: XCTestCase {
         XCTAssertTrue(check(
             CGPoint(x: 200, y: 200),
             cards: [],
-            stickies: [sticky(200, 600)]
+            stickies: [sticky(800, 600)]
         ))
     }
 
     func testPointOnStickyIsInteractive() {
-        // Center (200, 600) panel-space is (200, 200) on screen.
-        XCTAssertTrue(check(CGPoint(x: 200, y: 200), stickies: [sticky(200, 600)]))
+        // Center leading 200 (trailing 800), y 600 panel-space is (200, 200) on screen.
+        XCTAssertTrue(check(CGPoint(x: 200, y: 200), stickies: [sticky(800, 600)]))
     }
 
     func testStickyCenterIsSufficientButNotRequired() {
-        let note = sticky(200, 600)
+        let note = sticky(800, 600)
         let halfW = StickyCard.defaultSize.width / 2
         let halfH = StickyCard.defaultSize.height / 2
         // Just inside the paper answers; just outside falls through. Screen
@@ -119,7 +120,7 @@ final class MouseThroughTests: XCTestCase {
 
     func testResizedStickyHitTestsItsStoredSize() {
         // A widened note answers across its full paper, not its old frame.
-        var wide = sticky(200, 600)
+        var wide = sticky(800, 600)
         wide.width = 400
         XCTAssertTrue(check(CGPoint(x: 200 + 180, y: 200), stickies: [wide]))
         XCTAssertFalse(check(CGPoint(x: 200 + 220, y: 200), stickies: [wide]))
@@ -128,7 +129,7 @@ final class MouseThroughTests: XCTestCase {
     func testResizePreviewRidesTheGrabbedCorner() {
         // The center rides half the translation so the grabbed corner tracks
         // the finger 1:1 and the opposite corner stands still.
-        let note = sticky(200, 600)
+        let note = sticky(800, 600)
         let preview = StickyCard.previewResize(from: note, translation: CGSize(width: 100, height: 60))
         XCTAssertEqual(preview.size, CGSize(width: note.width + 100, height: note.height + 60))
         XCTAssertEqual(preview.ride, CGSize(width: 50, height: 30))
@@ -163,7 +164,7 @@ final class MouseThroughTests: XCTestCase {
     func testStickyUnderLanesStillCounts() {
         // Overlapping a sticky with the lanes changes nothing — depth is
         // fixed and both are the panel's.
-        XCTAssertTrue(check(CGPoint(x: 800, y: 700), stickies: [sticky(800, 100)]))
+        XCTAssertTrue(check(CGPoint(x: 800, y: 700), stickies: [sticky(200, 100)]))
     }
 
     func testClampedCenterKeepsTheGrabStripReachable() {
@@ -203,5 +204,18 @@ final class MouseThroughTests: XCTestCase {
             StickyCard.clampedCenter(CGPoint(x: 500, y: 400), size: StickyCard.defaultSize, in: bounds),
             CGPoint(x: 500, y: 400)
         )
+    }
+
+    func testTrailingAnchorHoldsDistanceFromTheRightEdgeAcrossWidths() {
+        // The desk's promise: the same trailing offset on a wider seat keeps
+        // the same gap to the lanes. Trailing 800 is leading 200 at width
+        // 1000; at 1400 the paper must sit 800 from the new right edge.
+        let note = sticky(800, 600)
+        let narrow = StickyCard.frame(of: note, inWidth: 1000)
+        let wide = StickyCard.frame(of: note, inWidth: 1400)
+        XCTAssertEqual(narrow.minX, 200 - StickyCard.defaultSize.width / 2)
+        XCTAssertEqual(1000 - narrow.maxX, 1400 - wide.maxX)
+        XCTAssertEqual(wide.minX - narrow.minX, 400)
+        XCTAssertEqual(narrow.minY, wide.minY)
     }
 }

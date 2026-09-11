@@ -56,9 +56,11 @@ struct StickyCard: View {
         )
     }
 
-    static func frame(of sticky: Sticky) -> CGRect {
+    /// Stored positions measure from the trailing edge — `Sticky.leadingX`
+    /// owns the flip — so the frame resolves through the model.
+    static func frame(of sticky: Sticky, inWidth width: CGFloat) -> CGRect {
         frame(
-            center: CGPoint(x: sticky.x, y: sticky.y),
+            center: CGPoint(x: sticky.leadingX(inWidth: width), y: sticky.y),
             size: CGSize(width: sticky.width, height: sticky.height)
         )
     }
@@ -221,7 +223,12 @@ struct StickyCard: View {
             Button("Archive") { store.archive(sticky.id) }
             Divider()
             Button("New Sticky") {
-                store.add(x: sticky.x + Self.cascadeOffset, y: sticky.y + Self.cascadeOffset)
+                // Down-right in leading space is down plus towards trailing:
+                // the trailing offset shrinks as the note moves right.
+                store.add(
+                    trailingX: sticky.trailingX - Self.cascadeOffset,
+                    y: sticky.y + Self.cascadeOffset
+                )
             }
         }
         .confirmationDialog(
@@ -306,11 +313,7 @@ struct StickyCard: View {
     /// after the first, because the offset is zeroed on the way through.
     private func commitDragIfNeeded() {
         if dragOffset != .zero {
-            store.move(
-                sticky.id,
-                toX: sticky.x + dragOffset.width,
-                toY: sticky.y + dragOffset.height
-            )
+            store.moveBy(sticky.id, dx: dragOffset.width, dy: dragOffset.height)
             dragOffset = .zero
         }
         moveAnchor.reset()
@@ -382,7 +385,7 @@ struct StickyCard: View {
     /// path alike — a cancelled resize keeps what it grew to.
     private func commitResizeIfNeeded() {
         if let preview = resizePreview {
-            store.move(sticky.id, toX: sticky.x + resizeRide.width, toY: sticky.y + resizeRide.height)
+            store.moveBy(sticky.id, dx: resizeRide.width, dy: resizeRide.height)
             store.resize(sticky.id, width: preview.width, height: preview.height)
             resizePreview = nil
             resizeRide = .zero
