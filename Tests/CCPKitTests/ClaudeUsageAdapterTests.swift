@@ -229,16 +229,88 @@ final class ClaudeUsageAdapterTests: XCTestCase {
             .appending(path: "claude-oauth")
     }
 
-    func testAppStoreServesItsOwnFileFirst() throws {
+    func testAppStorePrefersLiveLoginOverAppCopy() throws {
+        let url = appStoreURL()
         let store = AppClaudeCredentialStore(
-            fileURL: appStoreURL(),
+            fileURL: url,
             legacyFile: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
                 accessToken: "legacy")),
             silentLogin: { ClaudeOAuthCredentials(accessToken: "keychain") })
         try store.saveCredentials(ClaudeOAuthCredentials(accessToken: "app-file"))
 
-        // Neither fallback is consulted when the app file hits.
+        // Same unknown expiry on all three: the tie breaks toward the CLI's
+        // own login, so a rotation is picked up while the old copy lives.
+        XCTAssertEqual(try store.loadCredentials()?.accessToken, "keychain")
+        // …and the copy is re-filed, so a build that can't read the
+        // keychain (dev re-sign) still serves the healed login.
+        let reread = AppClaudeCredentialStore(
+            fileURL: url,
+            legacyFile: InMemoryClaudeCredentialStore(credentials: nil),
+            silentLogin: { nil })
+        XCTAssertEqual(try reread.loadCredentials()?.accessToken, "keychain")
+    }
+
+    func testAppStoreServesAppFileWhenLoginAbsent() throws {
+        let store = AppClaudeCredentialStore(
+            fileURL: appStoreURL(),
+            legacyFile: InMemoryClaudeCredentialStore(credentials: nil),
+            silentLogin: { nil })
+        try store.saveCredentials(ClaudeOAuthCredentials(accessToken: "app-file"))
+
+        // Dev builds can't silently read the keychain — the copy is all
+        // there is until the next Import.
         XCTAssertEqual(try store.loadCredentials()?.accessToken, "app-file")
+    }
+
+    func testAppStoreResyncsWhenAppCopyExpires() throws {
+        let url = appStoreURL()
+        let store = AppClaudeCredentialStore(
+            fileURL: url,
+            legacyFile: InMemoryClaudeCredentialStore(credentials: nil),
+            silentLogin: { ClaudeOAuthCredentials(
+                accessToken: "rotated",
+                expiresAt: Date().addingTimeInterval(3600)) })
+        try store.saveCredentials(ClaudeOAuthCredentials(
+            accessToken: "stale",
+            expiresAt: Date().addingTimeInterval(-10)))
+
+        XCTAssertEqual(try store.loadCredentials()?.accessToken, "rotated")
+        let reread = AppClaudeCredentialStore(
+            fileURL: url,
+            legacyFile: InMemoryClaudeCredentialStore(credentials: nil),
+            silentLogin: { nil })
+        XCTAssertEqual(try reread.loadCredentials()?.accessToken, "rotated")
+    }
+
+    func testAppStorePrefersLaterExpiry() throws {
+        let store = AppClaudeCredentialStore(
+            fileURL: appStoreURL(),
+            legacyFile: InMemoryClaudeCredentialStore(credentials: nil),
+            silentLogin: { ClaudeOAuthCredentials(
+                accessToken: "new",
+                expiresAt: Date().addingTimeInterval(7200)) })
+        try store.saveCredentials(ClaudeOAuthCredentials(
+            accessToken: "old",
+            expiresAt: Date().addingTimeInterval(3600)))
+
+        XCTAssertEqual(try store.loadCredentials()?.accessToken, "new")
+    }
+
+    func testAppStoreReturnsNilWhenAllExpired() throws {
+        let url = appStoreURL()
+        let store = AppClaudeCredentialStore(
+            fileURL: url,
+            legacyFile: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
+                accessToken: "legacy-stale",
+                expiresAt: Date().addingTimeInterval(-10))),
+            silentLogin: { ClaudeOAuthCredentials(
+                accessToken: "keychain-stale",
+                expiresAt: Date().addingTimeInterval(-10)) })
+        try store.saveCredentials(ClaudeOAuthCredentials(
+            accessToken: "app-stale",
+            expiresAt: Date().addingTimeInterval(-10)))
+
+        XCTAssertNil(try store.loadCredentials())
     }
 
     func testAppStoreMigratesSilentLoginOnce() throws {
@@ -249,11 +321,11 @@ final class ClaudeUsageAdapterTests: XCTestCase {
             silentLogin: { ClaudeOAuthCredentials(accessToken: "migrated") })
 
         XCTAssertEqual(try store.loadCredentials()?.accessToken, "migrated")
-        // Filed, so the next load never touches the keychain again.
+        // Filed, so a later load with no keychain access still serves it.
         let reread = AppClaudeCredentialStore(
             fileURL: url,
             legacyFile: InMemoryClaudeCredentialStore(credentials: nil),
-            silentLogin: { XCTFail("migration must run once"); return nil })
+            silentLogin: { nil })
         XCTAssertEqual(try reread.loadCredentials()?.accessToken, "migrated")
     }
 
@@ -288,7 +360,7 @@ final class ClaudeUsageAdapterTests: XCTestCase {
 
         try store.saveCredentials(ClaudeOAuthCredentials(
             accessToken: "app-access", refreshToken: "app-refresh",
-            expiresAt: Date(timeIntervalSince1970: 2_000_000)))
+            expiresAt: Date().addingTimeInterval(3600)))
 
         let creds = try store.loadCredentials()
         XCTAssertEqual(creds?.accessToken, "app-access")
@@ -298,6 +370,108 @@ final class ClaudeUsageAdapterTests: XCTestCase {
         let leftovers = try FileManager.default.contentsOfDirectory(
             at: url.deletingLastPathComponent(), includingPropertiesForKeys: nil)
         XCTAssertEqual(leftovers.count, 1)
+    }
+
+    // MARK: - Fallback + 401 retry
+
+    func testFallbackBypassesAppFile() throws {
+        let store = AppClaudeCredentialStore(
+            fileURL: appStoreURL(),
+            legacyFile: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
+                accessToken: "legacy")),
+            silentLogin: { ClaudeOAuthCredentials(accessToken: "keychain") })
+        try store.saveCredentials(ClaudeOAuthCredentials(accessToken: "app-file"))
+
+        XCTAssertEqual(try store.loadFallbackCredentials()?.accessToken, "keychain")
+    }
+
+    func testFallbackReadsNothingAnywhere() throws {
+        let store = AppClaudeCredentialStore(
+            fileURL: appStoreURL(),
+            legacyFile: InMemoryClaudeCredentialStore(credentials: nil),
+            silentLogin: { nil })
+
+        XCTAssertNil(try store.loadFallbackCredentials())
+    }
+
+    func testUnauthorizedRetriesFallbackOnce() async throws {
+        ClaudeStubURLProtocol.handler = { request in
+            let token = request.value(forHTTPHeaderField: "Authorization")
+            if token == "Bearer live-login" {
+                return (200, Data(
+                    #"{"limits":[{"kind":"session","percent":23.5}]}"#.utf8))
+            }
+            return (401, Data())
+        }
+        let credentials = FakeRotatingClaudeCredentialStore(
+            primary: ClaudeOAuthCredentials(
+                accessToken: "revoked-copy",
+                expiresAt: Date().addingTimeInterval(3600)),
+            fallback: ClaudeOAuthCredentials(
+                accessToken: "live-login",
+                expiresAt: Date().addingTimeInterval(3600)))
+        let source = LiveClaudeUsageSource(
+            credentials: credentials,
+            session: ClaudeStubURLProtocol.session)
+
+        let snapshot = try await source.fetch()
+
+        XCTAssertEqual(snapshot.rolling?.percent, 23.5)
+        XCTAssertEqual(credentials.fallbackCalls, 1)
+        // A verified-live fallback heals the copy for the next load.
+        XCTAssertEqual(credentials.saved.last?.accessToken, "live-login")
+    }
+
+    func testUnauthorizedWithSameFallbackTokenStaysMissing() async {
+        var calls = 0
+        ClaudeStubURLProtocol.handler = { _ in
+            calls += 1
+            return (401, Data())
+        }
+        let source = LiveClaudeUsageSource(
+            credentials: FakeRotatingClaudeCredentialStore(
+                primary: ClaudeOAuthCredentials(
+                    accessToken: "revoked",
+                    expiresAt: Date().addingTimeInterval(3600)),
+                fallback: ClaudeOAuthCredentials(
+                    accessToken: "revoked",
+                    expiresAt: Date().addingTimeInterval(3600))),
+            session: ClaudeStubURLProtocol.session)
+
+        do {
+            _ = try await source.fetch()
+            XCTFail("a revoked token with no alternative must not fetch")
+        } catch let error as ClaudeUsageError {
+            XCTAssertEqual(error, .missingCredentials)
+        } catch {
+            XCTFail("wrong error: \(error)")
+        }
+        XCTAssertEqual(calls, 1)
+    }
+
+    func testServerErrorDoesNotTouchFallback() async {
+        ClaudeStubURLProtocol.handler = { _ in (500, Data()) }
+        let credentials = FakeRotatingClaudeCredentialStore(
+            primary: ClaudeOAuthCredentials(
+                accessToken: "live",
+                expiresAt: Date().addingTimeInterval(3600)),
+            fallback: ClaudeOAuthCredentials(
+                accessToken: "other",
+                expiresAt: Date().addingTimeInterval(3600)))
+        let source = LiveClaudeUsageSource(
+            credentials: credentials,
+            session: ClaudeStubURLProtocol.session)
+
+        do {
+            _ = try await source.fetch()
+            XCTFail("a 500 must not decode")
+        } catch let error as ClaudeUsageError {
+            XCTAssertEqual(error, .unavailable)
+        } catch {
+            XCTFail("wrong error: \(error)")
+        }
+        // An outage hits every token equally — no point spending the retry.
+        XCTAssertEqual(credentials.fallbackCalls, 0)
     }
 
     // MARK: - Login import
@@ -505,8 +679,33 @@ final class ClaudeStubURLProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
-final class FakeClaudeUsageSource: ClaudeUsageSource {
-    var nextSnapshot: ClaudeUsageSnapshot
+/// A credential store with a separate fallback login, for the 401-retry
+/// path. Same one-actor-at-a-time deal as the other stand-ins.
+final class FakeRotatingClaudeCredentialStore: ClaudeCredentialStore, @unchecked Sendable {
+    var primary: ClaudeOAuthCredentials?
+    var fallback: ClaudeOAuthCredentials?
+    private(set) var fallbackCalls = 0
+    private(set) var saved: [ClaudeOAuthCredentials] = []
+
+    init(primary: ClaudeOAuthCredentials?, fallback: ClaudeOAuthCredentials?) {
+        self.primary = primary
+        self.fallback = fallback
+    }
+
+    func loadCredentials() throws -> ClaudeOAuthCredentials? { primary }
+
+    func loadFallbackCredentials() throws -> ClaudeOAuthCredentials? {
+        fallbackCalls += 1
+        return fallback
+    }
+
+    func saveCredentials(_ credentials: ClaudeOAuthCredentials) throws {
+        saved.append(credentials)
+        primary = credentials
+    }
+}
+
+final class FakeClaudeUsageSource: ClaudeUsageSource {    var nextSnapshot: ClaudeUsageSnapshot
     var nextError: ClaudeUsageError?
     private(set) var fetchCount = 0
 

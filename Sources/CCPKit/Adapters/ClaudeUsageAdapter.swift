@@ -104,6 +104,15 @@ public struct ClaudeOAuthCredentials: Sendable, Equatable {
 public protocol ClaudeCredentialStore: Sendable {
     func loadCredentials() throws -> ClaudeOAuthCredentials?
     func saveCredentials(_ credentials: ClaudeOAuthCredentials) throws
+    /// The freshest login held outside our own copy, if any — the CLI's
+    /// keychain entry or legacy file for the app store, nothing for the
+    /// others. The usage source tries this once after a 401 before
+    /// reporting logged-out, so a revoked copy heals when the CLI is live.
+    func loadFallbackCredentials() throws -> ClaudeOAuthCredentials?
+}
+
+extension ClaudeCredentialStore {
+    public func loadFallbackCredentials() throws -> ClaudeOAuthCredentials? { nil }
 }
 
 /// Reads the key the file holds. Legacy path — the app's own store serves
@@ -255,10 +264,14 @@ public struct ClaudeKeychainLogin: Sendable {
 /// A 0600 file in the app's own container is isolated by the OS and encrypted
 /// at rest under FileVault, and never prompts.
 ///
-/// The copy arrives once: the first load with no file tries a prompt-free
-/// keychain read and files what it finds; otherwise the Import button copies
-/// it behind one explicit prompt. Refreshes write back here — Claude Code's
-/// own entry is never written.
+/// The file is a cache, never the authority: every load compares it against
+/// the CLI's own keychain entry (prompt-free) and legacy file and serves the
+/// freshest live credential, silently re-filing when the CLI has rotated
+/// past our copy. An hourly expiry therefore heals itself while the CLI
+/// stays logged in — the Import button is only the first-run and dev-build
+/// fallback. Refreshes are never minted here — refresh tokens are
+/// single-use, so minting from our copy would invalidate the CLI's own —
+/// and Claude Code's entry is never written.
 public struct AppClaudeCredentialStore: ClaudeCredentialStore {
     private let fileURL: URL
     private let legacyFile: ClaudeCredentialStore
@@ -277,19 +290,58 @@ public struct AppClaudeCredentialStore: ClaudeCredentialStore {
     }
 
     public func loadCredentials() throws -> ClaudeOAuthCredentials? {
-        if let data = try? Data(contentsOf: fileURL),
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let credentials = ClaudeOAuthCredentials(oauthJSON: json)
+        let appCreds = loadAppFile()
+        let silent = silentLogin()
+        let legacy = try? legacyFile.loadCredentials()
+
+        guard let best = Self.freshest(app: appCreds, silent: silent, legacy: legacy)
+        else { return nil }
+        if best.accessToken != appCreds?.accessToken,
+           let silent, best.accessToken == silent.accessToken
         {
-            return credentials
+            // The CLI rotated past our copy: adopt its login. Legacy
+            // read-through is deliberately not cemented — the file stays
+            // live-read every fetch, so copying it would only shadow the
+            // CLI's next rotation with a stale duplicate.
+            // An already-expired migration is never cemented either: it
+            // would shadow a still-valid legacy login with a dead copy on
+            // every load after. (Expired candidates never reach `best`.)
+            try? saveCredentials(best)
         }
-        if let migrated = silentLogin(), !migrated.isExpired {
-            // An already-expired migration is never cemented: it would shadow
-            // a still-valid legacy login with a dead copy on every load after.
-            try? saveCredentials(migrated)
-            return migrated
-        }
-        return try legacyFile.loadCredentials()
+        return best
+    }
+
+    public func loadFallbackCredentials() throws -> ClaudeOAuthCredentials? {
+        Self.freshest(app: nil, silent: silentLogin(), legacy: try? legacyFile.loadCredentials())
+    }
+
+    /// Freshest live credential wins; ties break toward the CLI's own
+    /// entries so a rotation is picked up even while the old copy still
+    /// looks live. Unknown expiry counts as live (legacy logins predate
+    /// the field) but sorts below any dated credential.
+    private static func freshest(
+        app: ClaudeOAuthCredentials?,
+        silent: ClaudeOAuthCredentials?,
+        legacy: ClaudeOAuthCredentials?
+    ) -> ClaudeOAuthCredentials? {
+        [(silent, 2), (legacy, 1), (app, 0)]
+            .compactMap { creds, priority -> (ClaudeOAuthCredentials, Int)? in
+                guard let creds, !creds.isExpired else { return nil }
+                return (creds, priority)
+            }
+            .max { lhs, rhs in
+                let lhsExpiry = lhs.0.expiresAt ?? .distantPast
+                let rhsExpiry = rhs.0.expiresAt ?? .distantPast
+                if lhsExpiry != rhsExpiry { return lhsExpiry < rhsExpiry }
+                return lhs.1 < rhs.1
+            }?.0
+    }
+
+    private func loadAppFile() -> ClaudeOAuthCredentials? {
+        guard let data = try? Data(contentsOf: fileURL),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return ClaudeOAuthCredentials(oauthJSON: json)
     }
 
     public func saveCredentials(_ credentials: ClaudeOAuthCredentials) throws {
@@ -388,13 +440,27 @@ public final class LiveClaudeUsageSource: ClaudeUsageSource {
         guard let creds = try credentials.loadCredentials(), !creds.accessToken.isEmpty,
               !creds.isExpired
         else {
-            // No refresh here, deliberately: refresh tokens are single-use,
-            // so minting from our copy would invalidate Claude Code's own and
-            // log the user out of their real tool. An expired copy just reads
-            // as logged-out until the next import re-syncs to the live login.
+            // No independent refresh, deliberately: refresh tokens are
+            // single-use, so minting from our copy would invalidate Claude
+            // Code's own and log the user out of their real tool. An expired
+            // copy just reads as logged-out until a live login is found
+            // again — which the resolving store usually already picked up.
             throw ClaudeUsageError.missingCredentials
         }
-        return try await requestUsage(token: creds.accessToken)
+        do {
+            return try await requestUsage(token: creds.accessToken)
+        } catch let error as ClaudeUsageError where error == .missingCredentials {
+            // 401: the served copy is revoked or rotated elsewhere. One
+            // retry with the CLI's live login before reporting logged-out —
+            // still no minting, just adopting the CLI's own fresh token.
+            guard let fallback = try? credentials.loadFallbackCredentials(),
+                  !fallback.accessToken.isEmpty, !fallback.isExpired,
+                  fallback.accessToken != creds.accessToken
+            else { throw error }
+            let snapshot = try await requestUsage(token: fallback.accessToken)
+            try? credentials.saveCredentials(fallback)
+            return snapshot
+        }
     }
 
     private func requestUsage(token: String) async throws -> ClaudeUsageSnapshot {
@@ -416,7 +482,8 @@ public final class LiveClaudeUsageSource: ClaudeUsageSource {
             case 200..<300:
                 data = body
             case 401:
-                // Revoked or rotated elsewhere — re-import re-syncs.
+                // Revoked or rotated elsewhere — the caller retries once
+                // with the CLI's live login before surfacing this.
                 throw ClaudeUsageError.missingCredentials
             default:
                 // Only 401 means the token is bad. A 403 of any shape — a
