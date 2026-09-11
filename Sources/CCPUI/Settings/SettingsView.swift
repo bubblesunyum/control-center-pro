@@ -15,6 +15,7 @@ import SwiftUI
 struct SettingsView: View {
     @Bindable var settings: SettingsStore
     @Bindable var craft: CraftConnectionModel
+    @Bindable var claudeToken: ClaudeTokenModel
     let hotkey: GlobalHotkey
 
     @State private var recorder = ShortcutRecorder.Status()
@@ -88,6 +89,34 @@ struct SettingsView: View {
             } footer: {
                 Text("Create an API connection in Craft's Imagine tab and paste its URL here. "
                     + "The URL is the credential: it lives in an owner-only file and is never shown again.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                if claudeToken.isConfigured {
+                    LabeledContent("Status") {
+                        Text(claudeToken.statusText)
+                            .foregroundStyle(.secondary)
+                    }
+                    Button("Forget", role: .destructive) { claudeToken.forget() }
+                } else {
+                    SecureField("Setup token", text: $claudeToken.tokenText)
+                        .accessibilityLabel("Claude setup token")
+                    Button("Save") { claudeToken.save() }
+                        .disabled(claudeToken.tokenText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    if claudeToken.status == .storeFailed {
+                        Text("Could not save the token — nothing was stored. Your text is still in the field.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("Claude Usage")
+            } footer: {
+                Text("Run claude setup-token in a terminal and paste the token here. "
+                    + "It lives in an owner-only file, is never shown again, and the usage "
+                    + "widget prefers it over the imported login — no hourly re-import.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

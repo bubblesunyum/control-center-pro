@@ -111,11 +111,14 @@ private struct UsageContent: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: Space.one) {
             ProviderHeader(provider: provider)
-            if lastError == .missingLogin {
+            if let lastError, lastError == .missingLogin || lastError == .rejectedToken {
                 // Logged-out beats stale: rows from a dead grant read as live
-                // numbers, and for Claude this is where the Import button
-                // lives — including the hourly expiry after a prior success.
-                errorRow(.missingLogin, provider: provider)
+                // numbers. A rejected paste must name its own recovery even
+                // when an older fetch succeeded — the static token outranks
+                // the import, so stale numbers would otherwise sit with no
+                // hint. (Only Claude reports a rejection; the OpenCode half
+                // can never yield it.)
+                errorRow(lastError, provider: provider)
             } else if lastUpdated == nil, let lastError {
                 errorRow(lastError, provider: provider)
             } else if lastUpdated == nil {
@@ -174,12 +177,19 @@ private struct UsageContent: View {
                 importLogin: { try ClaudeLoginImporter().importLogin() },
                 refresh: { await claude.refresh() }
             )
+        case (.claude, .rejectedToken):
+            Text("That token was rejected — paste a fresh one from claude setup-token in Settings")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Claude token rejected")
         case (.openCode, .missingLogin):
             Text("Connect Go with /connect in OpenCode")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .accessibilityLabel("OpenCode Go not connected")
-        case (_, .unreachable):
+        case (_, .unreachable), (.openCode, .rejectedToken):
+            // OpenCode has no token-paste path, so its half can never
+            // report a rejection — shared here to keep the switch total.
             Text("Couldn't load usage")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -268,6 +278,7 @@ private enum Provider {
 
 private enum ProviderError {
     case missingLogin
+    case rejectedToken
     case unreachable
 
     init(_ error: OpenCodeUsageError) {
@@ -275,7 +286,11 @@ private enum ProviderError {
     }
 
     init(_ error: ClaudeUsageError) {
-        self = error == .missingCredentials ? .missingLogin : .unreachable
+        switch error {
+        case .missingCredentials: self = .missingLogin
+        case .invalidToken: self = .rejectedToken
+        case .unavailable: self = .unreachable
+        }
     }
 }
 

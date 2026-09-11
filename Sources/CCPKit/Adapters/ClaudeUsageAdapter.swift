@@ -32,6 +32,9 @@ public enum ClaudeUsageError: Sendable, Equatable, Error {
     /// No usable OAuth anywhere — the user hasn't run `claude auth login`,
     /// or the refresh token is dead.
     case missingCredentials
+    /// The pasted setup-token was rejected. Distinct from missing: the fix
+    /// is a fresh paste in Settings, not an import.
+    case invalidToken
     /// The endpoint was unreachable, answered something unusable, or OAuth is
     /// disallowed for the account's organization.
     case unavailable
@@ -364,6 +367,180 @@ public struct ClaudeLoginImporter: Sendable {
     }
 }
 
+// MARK: - Static token
+
+/// Where the pasted `claude setup-token` comes from.
+///
+/// A setup-token authenticates as the subscription without an hourly
+/// expiry, so it outranks the imported login copy: when one is stored the
+/// fetch path never consults the imported copy at all. Raw trimmed bytes —
+/// the endpoint arbitrates the shape, never the store.
+public protocol ClaudeStaticTokenStore: Sendable {
+    func loadToken() throws -> String?
+    func saveToken(_ token: String) throws
+    func deleteToken() throws
+}
+
+/// The token as UTF-8 bytes in one owner-only file under Application
+/// Support. Never prompts, never touches the keychain — Settings is the
+/// only writer.
+public struct FileClaudeStaticTokenStore: ClaudeStaticTokenStore {
+    private let fileURL: URL
+
+    public init(fileURL: URL? = nil) {
+        self.fileURL = fileURL ?? URL.applicationSupport.appendingPathComponent("claude-token")
+    }
+
+    public func loadToken() throws -> String? {
+        guard let data = try? Data(contentsOf: fileURL) else { return nil }
+        let token = String(decoding: data, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return token.isEmpty ? nil : token
+    }
+
+    public func saveToken(_ token: String) throws {
+        let token = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { throw ClaudeStaticTokenError.empty }
+        try writeOwnerOnly(Data(token.utf8))
+        // Only a read-back proves the bytes landed: a throw after a
+        // successful write would report "nothing was stored" while the next
+        // launch reads the file as configured.
+        guard (try? loadToken()) == token else {
+            throw ClaudeStaticTokenError.unwritten
+        }
+    }
+
+    public func deleteToken() throws {
+        do {
+            try FileManager.default.removeItem(at: fileURL)
+        } catch let error as CocoaError where error.code == .fileNoSuchFile {
+            // Already gone is gone.
+        }
+    }
+
+    /// Owner-only from birth, never world-readable in between: the temp file
+    /// is created 0600 and renamed over the target. A crash mid-swap loses
+    /// the token (fail-safe: re-paste) rather than exposing it.
+    private func writeOwnerOnly(_ data: Data) throws {
+        let directory = fileURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        let tmp = directory.appendingPathComponent(UUID().uuidString)
+        do {
+            guard FileManager.default.createFile(atPath: tmp.path, contents: data,
+                                                 attributes: [.posixPermissions: 0o600]) else {
+                throw ClaudeStaticTokenError.unwritten
+            }
+            try? FileManager.default.removeItem(at: fileURL)
+            try FileManager.default.moveItem(at: tmp, to: fileURL)
+        } catch {
+            try? FileManager.default.removeItem(at: tmp)
+            throw error
+        }
+    }
+}
+
+public enum ClaudeStaticTokenError: Error {
+    case empty
+    case unwritten
+}
+
+/// In-memory stand-in for tests and previews. Never ships in the app.
+///
+/// Unchecked Sendable because tests drive it from one actor at a time — same
+/// deal as the OpenCode stand-in.
+public final class InMemoryClaudeStaticTokenStore: ClaudeStaticTokenStore, @unchecked Sendable {
+    private var token: String?
+
+    public init(token: String? = nil) {
+        self.token = token
+    }
+
+    public func loadToken() throws -> String? { token }
+
+    public func saveToken(_ token: String) throws {
+        self.token = token.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    public func deleteToken() throws {
+        token = nil
+    }
+}
+
+/// What the Settings row shows. The stored token itself is never exposed —
+/// it is the credential, and a field that echoes it leaks it onto the
+/// screen.
+public enum ClaudeTokenStatus: Equatable, Sendable {
+    case notConfigured
+    case saved
+    case storeFailed
+}
+
+/// Owns the pasted setup-token behind the Settings section. Entry only —
+/// never refilled from the store: once saved, the field clears and the
+/// token is not shown again.
+@MainActor
+@Observable
+public final class ClaudeTokenModel {
+    public var tokenText: String = ""
+    public private(set) var status: ClaudeTokenStatus = .notConfigured
+    /// Cached so view bodies do not touch disk on every evaluation.
+    public private(set) var isConfigured = false
+
+    @ObservationIgnored private let store: any ClaudeStaticTokenStore
+
+    public convenience init() {
+        self.init(store: FileClaudeStaticTokenStore())
+    }
+
+    public init(store: any ClaudeStaticTokenStore) {
+        self.store = store
+        isConfigured = (try? store.loadToken()) != nil
+        if isConfigured { status = .saved }
+    }
+
+    public var statusText: String {
+        switch status {
+        case .notConfigured: "Not connected"
+        case .saved: "Token saved"
+        case .storeFailed: "Not saved"
+        }
+    }
+
+    /// Store the entered text. A store failure keeps the entered text in the
+    /// field — the user should not have to fetch the token a second time.
+    public func save() {
+        let token = tokenText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { return }
+        do {
+            try store.saveToken(token)
+        } catch {
+            status = .storeFailed
+            return
+        }
+        tokenText = ""
+        isConfigured = true
+        status = .saved
+    }
+
+    /// Forgets the token. Reports success only when it is actually gone —
+    /// the UI must never claim a credential is destroyed while it is still
+    /// stored.
+    public func forget() {
+        do {
+            try store.deleteToken()
+        } catch {
+            status = .storeFailed
+            return
+        }
+        isConfigured = false
+        status = .notConfigured
+    }
+}
+
 // MARK: - Source
 
 /// Where Claude quota numbers come from.
@@ -380,17 +557,43 @@ public final class LiveClaudeUsageSource: ClaudeUsageSource {
     private static let usageEndpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
     private let credentials: ClaudeCredentialStore
+    private let staticToken: any ClaudeStaticTokenStore
     private let session: URLSession
 
+    public convenience init() {
+        self.init(
+            credentials: AppClaudeCredentialStore(),
+            staticToken: FileClaudeStaticTokenStore(),
+            session: .shared
+        )
+    }
+
+    /// Tests pass both stores explicitly so no test ever touches the real
+    /// login: the static token is read on every fetch, and a defaulted file
+    /// store here would go live the day a token is saved.
     public init(
-        credentials: ClaudeCredentialStore = AppClaudeCredentialStore(),
+        credentials: ClaudeCredentialStore,
+        staticToken: any ClaudeStaticTokenStore,
         session: URLSession = .shared
     ) {
         self.credentials = credentials
+        self.staticToken = staticToken
         self.session = session
     }
 
     public func fetch() async throws -> ClaudeUsageSnapshot {
+        // A pasted setup-token outranks everything: it carries no hourly
+        // expiry, so the imported copy is not even consulted while one is
+        // stored. Unknown shape counts as live — the endpoint arbitrates.
+        // A broken token file reads as absent and falls through to the
+        // import rather than blanking it.
+        if let token = try? staticToken.loadToken(), !token.isEmpty {
+            do {
+                return try await requestUsage(token: token)
+            } catch let error as ClaudeUsageError where error == .missingCredentials {
+                throw ClaudeUsageError.invalidToken
+            }
+        }
         guard let creds = try credentials.loadCredentials(), !creds.accessToken.isEmpty,
               !creds.isExpired
         else {

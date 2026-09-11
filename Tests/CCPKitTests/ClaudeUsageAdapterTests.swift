@@ -367,6 +367,7 @@ final class ClaudeUsageAdapterTests: XCTestCase {
                 expiresAt: Date().addingTimeInterval(3600)))
         let source = LiveClaudeUsageSource(
             credentials: credentials,
+            staticToken: InMemoryClaudeStaticTokenStore(),
             session: ClaudeStubURLProtocol.session)
 
         let snapshot = try await source.fetch()
@@ -391,6 +392,7 @@ final class ClaudeUsageAdapterTests: XCTestCase {
                 fallback: ClaudeOAuthCredentials(
                     accessToken: "revoked",
                     expiresAt: Date().addingTimeInterval(3600))),
+            staticToken: InMemoryClaudeStaticTokenStore(),
             session: ClaudeStubURLProtocol.session)
 
         do {
@@ -415,6 +417,7 @@ final class ClaudeUsageAdapterTests: XCTestCase {
                 expiresAt: Date().addingTimeInterval(3600)))
         let source = LiveClaudeUsageSource(
             credentials: credentials,
+            staticToken: InMemoryClaudeStaticTokenStore(),
             session: ClaudeStubURLProtocol.session)
 
         do {
@@ -427,6 +430,167 @@ final class ClaudeUsageAdapterTests: XCTestCase {
         }
         // An outage hits every token equally — no point spending the retry.
         XCTAssertEqual(credentials.fallbackCalls, 0)
+    }
+
+    // MARK: - Static token store
+
+    private func staticTokenURL() -> URL {
+        FileManager.default.temporaryDirectory
+            .appending(path: "ccp-claude-token-\(UUID().uuidString)")
+            .appending(path: "claude-token")
+    }
+
+    func testStaticTokenRoundTripsOwnerOnly() throws {
+        let url = staticTokenURL()
+        let store = FileClaudeStaticTokenStore(fileURL: url)
+
+        try store.saveToken("  pasted-token\n")
+
+        XCTAssertEqual(try store.loadToken(), "pasted-token")
+        let permissions = try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? Int
+        XCTAssertEqual(permissions, 0o600)
+    }
+
+    func testStaticTokenReadsMissingAndBlankAsNil() throws {
+        XCTAssertNil(try FileClaudeStaticTokenStore(fileURL: staticTokenURL()).loadToken())
+
+        let url = FileManager.default.temporaryDirectory
+            .appending(path: "ccp-claude-blank-\(UUID().uuidString)")
+        try Data("  \n ".utf8).write(to: url)
+        XCTAssertNil(try FileClaudeStaticTokenStore(fileURL: url).loadToken())
+    }
+
+    func testStaticTokenDeleteIsIdempotent() throws {
+        let url = staticTokenURL()
+        let store = FileClaudeStaticTokenStore(fileURL: url)
+
+        try store.deleteToken()
+        try store.saveToken("token")
+        try store.deleteToken()
+
+        XCTAssertNil(try store.loadToken())
+    }
+
+    // MARK: - Static token source precedence
+
+    func testStaticTokenIsUsedForUsage() async throws {
+        var token: String?
+        ClaudeStubURLProtocol.handler = { request in
+            token = request.value(forHTTPHeaderField: "Authorization")
+            return (200, Data(
+                #"{"limits":[{"kind":"session","percent":11}]}"#.utf8))
+        }
+        let source = LiveClaudeUsageSource(
+            credentials: InMemoryClaudeCredentialStore(credentials: nil),
+            staticToken: InMemoryClaudeStaticTokenStore(token: "pasted"),
+            session: ClaudeStubURLProtocol.session)
+
+        let snapshot = try await source.fetch()
+
+        XCTAssertEqual(snapshot.rolling?.percent, 11)
+        XCTAssertEqual(token, "Bearer pasted")
+    }
+
+    func testStaticTokenOutranksImportedCopy() async throws {
+        var token: String?
+        ClaudeStubURLProtocol.handler = { request in
+            token = request.value(forHTTPHeaderField: "Authorization")
+            return (200, Data(
+                #"{"limits":[{"kind":"session","percent":11}]}"#.utf8))
+        }
+        let source = LiveClaudeUsageSource(
+            credentials: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
+                accessToken: "imported",
+                expiresAt: Date().addingTimeInterval(3600))),
+            staticToken: InMemoryClaudeStaticTokenStore(token: "pasted"),
+            session: ClaudeStubURLProtocol.session)
+
+        _ = try await source.fetch()
+
+        // The imported copy is not even consulted while a token is stored.
+        XCTAssertEqual(token, "Bearer pasted")
+    }
+
+    func testStaticTokenRejectionReadsAsInvalidToken() async {
+        ClaudeStubURLProtocol.handler = { _ in (401, Data()) }
+        let credentials = FakeRotatingClaudeCredentialStore(
+            primary: ClaudeOAuthCredentials(
+                accessToken: "imported",
+                expiresAt: Date().addingTimeInterval(3600)),
+            fallback: nil)
+        let source = LiveClaudeUsageSource(
+            credentials: credentials,
+            staticToken: InMemoryClaudeStaticTokenStore(token: "revoked-paste"),
+            session: ClaudeStubURLProtocol.session)
+
+        do {
+            _ = try await source.fetch()
+            XCTFail("a rejected paste must not fetch")
+        } catch let error as ClaudeUsageError {
+            XCTAssertEqual(error, .invalidToken)
+        } catch {
+            XCTFail("wrong error: \(error)")
+        }
+        // No fallback to the import: the explicit token is authoritative.
+        XCTAssertEqual(credentials.fallbackCalls, 0)
+    }
+
+    func testStaticTokenOutageReadsAsUnavailable() async {
+        ClaudeStubURLProtocol.handler = { _ in (500, Data()) }
+        let source = LiveClaudeUsageSource(
+            credentials: InMemoryClaudeCredentialStore(credentials: nil),
+            staticToken: InMemoryClaudeStaticTokenStore(token: "pasted"),
+            session: ClaudeStubURLProtocol.session)
+
+        do {
+            _ = try await source.fetch()
+            XCTFail("a 500 must not decode")
+        } catch let error as ClaudeUsageError {
+            XCTAssertEqual(error, .unavailable)
+        } catch {
+            XCTFail("wrong error: \(error)")
+        }
+    }
+
+    // MARK: - Token model
+
+    func testTokenModelTracksConfiguredState() {
+        let store = InMemoryClaudeStaticTokenStore()
+
+        let model = ClaudeTokenModel(store: store)
+        XCTAssertFalse(model.isConfigured)
+
+        model.tokenText = "  pasted "
+        model.save()
+
+        XCTAssertTrue(model.isConfigured)
+        XCTAssertEqual(model.status, .saved)
+        // Entry only: the field clears and never echoes the credential.
+        XCTAssertEqual(model.tokenText, "")
+        XCTAssertEqual(try? store.loadToken(), "pasted")
+
+        model.forget()
+        XCTAssertFalse(model.isConfigured)
+        XCTAssertEqual(model.status, .notConfigured)
+        XCTAssertNil(try? store.loadToken())
+    }
+
+    func testTokenModelIgnoresBlankSave() {
+        let model = ClaudeTokenModel(store: InMemoryClaudeStaticTokenStore())
+        model.tokenText = "  \n "
+
+        model.save()
+
+        XCTAssertFalse(model.isConfigured)
+    }
+
+    func testTokenModelReadsExistingToken() {
+        let model = ClaudeTokenModel(
+            store: InMemoryClaudeStaticTokenStore(token: "existing"))
+
+        XCTAssertTrue(model.isConfigured)
+        XCTAssertEqual(model.status, .saved)
+        XCTAssertEqual(model.tokenText, "")
     }
 
     // MARK: - Login import
@@ -462,6 +626,7 @@ final class ClaudeUsageAdapterTests: XCTestCase {
         let source = LiveClaudeUsageSource(
             credentials: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
                 accessToken: "live", expiresAt: Date().addingTimeInterval(3600))),
+            staticToken: InMemoryClaudeStaticTokenStore(),
             session: ClaudeStubURLProtocol.session)
 
         let snapshot = try await source.fetch()
@@ -474,6 +639,7 @@ final class ClaudeUsageAdapterTests: XCTestCase {
     func testMissingFileReadsAsMissingCredentials() async {
         let source = LiveClaudeUsageSource(
             credentials: InMemoryClaudeCredentialStore(credentials: nil),
+            staticToken: InMemoryClaudeStaticTokenStore(),
             session: ClaudeStubURLProtocol.session)
 
         do {
@@ -492,6 +658,7 @@ final class ClaudeUsageAdapterTests: XCTestCase {
             credentials: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
                 accessToken: "revoked",
                 expiresAt: Date().addingTimeInterval(3600))),
+            staticToken: InMemoryClaudeStaticTokenStore(),
             session: ClaudeStubURLProtocol.session)
 
         do {
@@ -515,6 +682,7 @@ final class ClaudeUsageAdapterTests: XCTestCase {
             credentials: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
                 accessToken: "stale",
                 expiresAt: Date().addingTimeInterval(-10))),
+            staticToken: InMemoryClaudeStaticTokenStore(),
             session: ClaudeStubURLProtocol.session)
 
         do {
@@ -538,6 +706,7 @@ final class ClaudeUsageAdapterTests: XCTestCase {
         let source = LiveClaudeUsageSource(
             credentials: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
                 accessToken: "legacy")),
+            staticToken: InMemoryClaudeStaticTokenStore(),
             session: ClaudeStubURLProtocol.session)
 
         _ = try await source.fetch()
@@ -550,6 +719,7 @@ final class ClaudeUsageAdapterTests: XCTestCase {
         let source = LiveClaudeUsageSource(
             credentials: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
                 accessToken: "live", expiresAt: Date().addingTimeInterval(3600))),
+            staticToken: InMemoryClaudeStaticTokenStore(),
             session: ClaudeStubURLProtocol.session)
 
         do {
@@ -567,6 +737,7 @@ final class ClaudeUsageAdapterTests: XCTestCase {
         let source = LiveClaudeUsageSource(
             credentials: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
                 accessToken: "live", expiresAt: Date().addingTimeInterval(3600))),
+            staticToken: InMemoryClaudeStaticTokenStore(),
             session: ClaudeStubURLProtocol.session)
 
         do {
@@ -587,6 +758,7 @@ final class ClaudeUsageAdapterTests: XCTestCase {
         let source = LiveClaudeUsageSource(
             credentials: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
                 accessToken: "live", expiresAt: Date().addingTimeInterval(3600))),
+            staticToken: InMemoryClaudeStaticTokenStore(),
             session: ClaudeStubURLProtocol.session)
 
         do {
