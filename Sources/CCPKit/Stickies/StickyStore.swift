@@ -18,7 +18,10 @@ public final class StickyStore {
 
     /// All stickies, archived included, in draw order. The desk filters.
     public private(set) var stickies: [Sticky] = [] {
-        didSet { schedulePersist() }
+        didSet {
+            schedulePersist()
+            deskDidChangeForCraft()
+        }
     }
 
     /// A sticky's delete confirmation is up. The panel's Esc handling reads
@@ -34,6 +37,44 @@ public final class StickyStore {
 
     @ObservationIgnored private let fileStore: JSONFileStore<[Sticky]>
     @ObservationIgnored private var persistWork: DispatchWorkItem?
+    /// While true, `stickies` writes come from a Craft pull, not the user:
+    /// they persist to disk but never re-dirty the sync. Mirrors
+    /// NotesAdapter's `isReplacingText`.
+    @ObservationIgnored internal var isApplyingRemote = false
+
+    // MARK: - Craft sync state (the engine lives in StickyStore+Sync.swift)
+
+    /// The desk's Craft-side memory behind the same seam Notes syncs through
+    /// (ccp-2zi.4): sync base, document id, conflict records, history. One
+    /// fixed desk id addresses all of it — titles stay untouched, so the
+    /// title half of the seam simply goes unused.
+    @ObservationIgnored internal let craftDestination: any CraftSyncStore
+    /// Test seams: scripted transport and a fixed URL, so sync runs without
+    /// disk or the network.
+    @ObservationIgnored internal var craftTransport: (any CraftTransport)?
+    @ObservationIgnored internal var craftBaseURLOverride: URL?
+    /// Test seam: reads as unconfigured without touching the real store.
+    @ObservationIgnored internal var craftCredentialUnavailable = false
+    @ObservationIgnored internal var cachedCraftBaseURL: URL?
+    @ObservationIgnored internal var cachedCredentialFilePresence = false
+    @ObservationIgnored internal var pushTask: Task<Void, Never>?
+    @ObservationIgnored internal var pushRetryTask: Task<Void, Never>?
+    @ObservationIgnored internal var pullTask: Task<Void, Never>?
+    @ObservationIgnored internal var pullRetryTask: Task<Void, Never>?
+    @ObservationIgnored internal var isPushInFlight = false
+    @ObservationIgnored internal var isPullInFlight = false
+    @ObservationIgnored internal var needsPushAfterFlight = false
+    @ObservationIgnored internal var needsPullAfterFlight = false
+    @ObservationIgnored internal var consecutivePushFailures = 0
+    @ObservationIgnored internal var pushThrottledUntil: Date?
+    @ObservationIgnored internal var isPanelOpen = false
+    /// Whether the latest pull has proven Craft reachable. False until the
+    /// first pull lands, and on every activate until its pull finishes.
+    public internal(set) var isSyncVerified = false
+    /// The last verification failed: a credential is saved but Craft never
+    /// answered. Sticky until the next pull succeeds.
+    public internal(set) var isSyncCheckFailed = false
+    @ObservationIgnored internal var credentialObserver: NSObjectProtocol?
 
     private convenience init() {
         self.init(directory: .applicationSupport)
@@ -41,10 +82,27 @@ public final class StickyStore {
 
     /// Test seam: a store backed by a temporary directory rather than the
     /// user's own.
-    init(directory: URL) {
+    init(directory: URL,
+         defaults: UserDefaults = .standard,
+         destination: (any CraftSyncStore)? = nil) {
         fileStore = JSONFileStore(filename: "stickies.json", default: [], in: directory)
         stickies = fileStore.tolerantLoad()
+        self.craftDestination = destination ?? CraftNoteDestination(defaults: defaults)
+        refreshCraftCredentialPresence()
+        observeCraftCredentialChanges()
     }
+
+    deinit {
+        if let observer = credentialObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    /// How far a Craft-minted shell cascades from the note on top, so it
+    /// never lands exactly over its parent. Points, like every geometry
+    /// here — and local to the store, since CCPUI's own cascade answers a
+    /// different surface.
+    internal static let remoteCascadeStep: Double = 16
 
     /// The stickies on the desk, in draw order.
     public var visible: [Sticky] { stickies.filter { !$0.isArchived } }
@@ -148,6 +206,46 @@ public final class StickyStore {
         // Called from willTerminate and panel hide — must drain before exit,
         // so synchronous.
         try? store.save(snapshot)
+        // Best-effort only, like NotesAdapter: local bytes are safe above;
+        // Craft heals on the next push.
+        Task { [weak self] in await self?.flushCraftPush() }
+    }
+
+    /// Replace the desk from a Craft pull, keeping every shell: texts flow
+    /// through visible slots in order, geometry and colours never move, and
+    /// the write persists without re-dirtying the sync.
+    internal func setStickiesFromRemote(_ segments: [String]) {
+        isApplyingRemote = true
+        defer { isApplyingRemote = false }
+        var next = stickies
+        let visibleIndices = next.indices.filter { !next[$0].isArchived }
+        for (offset, index) in visibleIndices.enumerated() {
+            next[index].text = offset < segments.count ? segments[offset] : ""
+        }
+        // Extra segments mint shells, cascaded from whatever is on top, so a
+        // Craft-side addition never lands exactly over its parent. A desk
+        // that shrank keeps its shells blanked above rather than deleted:
+        // shells carry geometry Craft has no model for, and deleting layout
+        // on a text sync's say-so is data loss wearing a sync costume.
+        var trailingX = 0.0
+        var topY = 0.0
+        var hasAnchor = false
+        if let last = visibleIndices.last {
+            trailingX = next[last].trailingX
+            topY = next[last].y
+            hasAnchor = true
+        }
+        for text in segments.dropFirst(visibleIndices.count) {
+            if hasAnchor {
+                trailingX -= Self.remoteCascadeStep
+                topY += Self.remoteCascadeStep
+            }
+            next.append(Sticky(text: text,
+                               trailingX: hasAnchor ? trailingX : 0,
+                               y: hasAnchor ? topY : 0))
+            hasAnchor = true
+        }
+        stickies = next
     }
 
     // For previews / tests

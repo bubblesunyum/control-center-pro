@@ -150,7 +150,7 @@ public final class ControlPanelController {
         // Whatever edit mode changed goes to disk now rather than 500ms into
         // a panel nobody can see.
         arrangement.flush()
-        StickyStore.shared.flush()
+        StickyStore.shared.deactivate()
     }
 
     /// Start edit mode without the long press that normally begins it.
@@ -204,6 +204,7 @@ public final class ControlPanelController {
         anchor = statusItemButton?.window?.screen ?? NSScreen.main
         rememberPasteTarget()
         arrangement.activate()
+        StickyStore.shared.activate()
         if editing { editor.startEditing() }
         place()
         // The caches deliberately survive hide/show: SwiftUI only reports a
