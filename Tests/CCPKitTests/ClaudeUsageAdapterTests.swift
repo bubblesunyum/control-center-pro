@@ -229,66 +229,58 @@ final class ClaudeUsageAdapterTests: XCTestCase {
             .appending(path: "claude-oauth")
     }
 
-    func testAppStorePrefersLiveLoginOverAppCopy() throws {
+    func testAppStorePrefersOwnCopyOnTie() throws {
         let url = appStoreURL()
         let store = AppClaudeCredentialStore(
             fileURL: url,
             legacyFile: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
-                accessToken: "legacy")),
-            silentLogin: { ClaudeOAuthCredentials(accessToken: "keychain") })
+                accessToken: "legacy")))
         try store.saveCredentials(ClaudeOAuthCredentials(accessToken: "app-file"))
 
-        // Same unknown expiry on all three: the tie breaks toward the CLI's
-        // own login, so a rotation is picked up while the old copy lives.
-        XCTAssertEqual(try store.loadCredentials()?.accessToken, "keychain")
-        // …and the copy is re-filed, so a build that can't read the
-        // keychain (dev re-sign) still serves the healed login.
-        let reread = AppClaudeCredentialStore(
-            fileURL: url,
-            legacyFile: InMemoryClaudeCredentialStore(credentials: nil),
-            silentLogin: { nil })
-        XCTAssertEqual(try reread.loadCredentials()?.accessToken, "keychain")
+        // Same unknown expiry on both: our copy wins for stability — a dead
+        // copy still heals via the 401 retry, without flapping between two
+        // equally fresh logins on every fetch.
+        XCTAssertEqual(try store.loadCredentials()?.accessToken, "app-file")
     }
 
     func testAppStoreServesAppFileWhenLoginAbsent() throws {
         let store = AppClaudeCredentialStore(
             fileURL: appStoreURL(),
-            legacyFile: InMemoryClaudeCredentialStore(credentials: nil),
-            silentLogin: { nil })
+            legacyFile: InMemoryClaudeCredentialStore(credentials: nil))
         try store.saveCredentials(ClaudeOAuthCredentials(accessToken: "app-file"))
 
-        // Dev builds can't silently read the keychain — the copy is all
-        // there is until the next Import.
+        // No CLI file — the imported copy is all there is until the next
+        // Import.
         XCTAssertEqual(try store.loadCredentials()?.accessToken, "app-file")
     }
 
-    func testAppStoreResyncsWhenAppCopyExpires() throws {
+    func testAppStoreReadsThroughToFresherLegacyFile() throws {
         let url = appStoreURL()
         let store = AppClaudeCredentialStore(
             fileURL: url,
-            legacyFile: InMemoryClaudeCredentialStore(credentials: nil),
-            silentLogin: { ClaudeOAuthCredentials(
+            legacyFile: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
                 accessToken: "rotated",
-                expiresAt: Date().addingTimeInterval(3600)) })
+                expiresAt: Date().addingTimeInterval(3600))))
         try store.saveCredentials(ClaudeOAuthCredentials(
             accessToken: "stale",
             expiresAt: Date().addingTimeInterval(-10)))
 
         XCTAssertEqual(try store.loadCredentials()?.accessToken, "rotated")
-        let reread = AppClaudeCredentialStore(
-            fileURL: url,
-            legacyFile: InMemoryClaudeCredentialStore(credentials: nil),
-            silentLogin: { nil })
-        XCTAssertEqual(try reread.loadCredentials()?.accessToken, "rotated")
+        // Read-through only: the served login is the CLI's, but our file
+        // still holds the stale copy for the next Import baseline.
+        let filed = try JSONSerialization.jsonObject(
+            with: Data(contentsOf: url)) as? [String: Any]
+        XCTAssertEqual(
+            (filed?["claudeAiOauth"] as? [String: Any])?["accessToken"] as? String,
+            "stale")
     }
 
     func testAppStorePrefersLaterExpiry() throws {
         let store = AppClaudeCredentialStore(
             fileURL: appStoreURL(),
-            legacyFile: InMemoryClaudeCredentialStore(credentials: nil),
-            silentLogin: { ClaudeOAuthCredentials(
+            legacyFile: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
                 accessToken: "new",
-                expiresAt: Date().addingTimeInterval(7200)) })
+                expiresAt: Date().addingTimeInterval(7200))))
         try store.saveCredentials(ClaudeOAuthCredentials(
             accessToken: "old",
             expiresAt: Date().addingTimeInterval(3600)))
@@ -297,15 +289,11 @@ final class ClaudeUsageAdapterTests: XCTestCase {
     }
 
     func testAppStoreReturnsNilWhenAllExpired() throws {
-        let url = appStoreURL()
         let store = AppClaudeCredentialStore(
-            fileURL: url,
+            fileURL: appStoreURL(),
             legacyFile: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
                 accessToken: "legacy-stale",
-                expiresAt: Date().addingTimeInterval(-10))),
-            silentLogin: { ClaudeOAuthCredentials(
-                accessToken: "keychain-stale",
-                expiresAt: Date().addingTimeInterval(-10)) })
+                expiresAt: Date().addingTimeInterval(-10))))
         try store.saveCredentials(ClaudeOAuthCredentials(
             accessToken: "app-stale",
             expiresAt: Date().addingTimeInterval(-10)))
@@ -313,40 +301,10 @@ final class ClaudeUsageAdapterTests: XCTestCase {
         XCTAssertNil(try store.loadCredentials())
     }
 
-    func testAppStoreMigratesSilentLoginOnce() throws {
-        let url = appStoreURL()
-        let store = AppClaudeCredentialStore(
-            fileURL: url,
-            legacyFile: InMemoryClaudeCredentialStore(credentials: nil),
-            silentLogin: { ClaudeOAuthCredentials(accessToken: "migrated") })
-
-        XCTAssertEqual(try store.loadCredentials()?.accessToken, "migrated")
-        // Filed, so a later load with no keychain access still serves it.
-        let reread = AppClaudeCredentialStore(
-            fileURL: url,
-            legacyFile: InMemoryClaudeCredentialStore(credentials: nil),
-            silentLogin: { nil })
-        XCTAssertEqual(try reread.loadCredentials()?.accessToken, "migrated")
-    }
-
-    func testAppStoreFallsBackToLegacyFile() throws {
-        let url = appStoreURL()
-        let store = AppClaudeCredentialStore(
-            fileURL: url,
-            legacyFile: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
-                accessToken: "legacy")),
-            silentLogin: { nil })
-
-        XCTAssertEqual(try store.loadCredentials()?.accessToken, "legacy")
-        // Read-through only: a legacy login is not copied over.
-        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
-    }
-
     func testAppStoreReadsNothingAnywhere() throws {
         let store = AppClaudeCredentialStore(
             fileURL: appStoreURL(),
-            legacyFile: InMemoryClaudeCredentialStore(credentials: nil),
-            silentLogin: { nil })
+            legacyFile: InMemoryClaudeCredentialStore(credentials: nil))
 
         XCTAssertNil(try store.loadCredentials())
     }
@@ -355,8 +313,7 @@ final class ClaudeUsageAdapterTests: XCTestCase {
         let url = appStoreURL()
         let store = AppClaudeCredentialStore(
             fileURL: url,
-            legacyFile: InMemoryClaudeCredentialStore(credentials: nil),
-            silentLogin: { nil })
+            legacyFile: InMemoryClaudeCredentialStore(credentials: nil))
 
         try store.saveCredentials(ClaudeOAuthCredentials(
             accessToken: "app-access", refreshToken: "app-refresh",
@@ -378,18 +335,16 @@ final class ClaudeUsageAdapterTests: XCTestCase {
         let store = AppClaudeCredentialStore(
             fileURL: appStoreURL(),
             legacyFile: InMemoryClaudeCredentialStore(credentials: ClaudeOAuthCredentials(
-                accessToken: "legacy")),
-            silentLogin: { ClaudeOAuthCredentials(accessToken: "keychain") })
+                accessToken: "legacy")))
         try store.saveCredentials(ClaudeOAuthCredentials(accessToken: "app-file"))
 
-        XCTAssertEqual(try store.loadFallbackCredentials()?.accessToken, "keychain")
+        XCTAssertEqual(try store.loadFallbackCredentials()?.accessToken, "legacy")
     }
 
     func testFallbackReadsNothingAnywhere() throws {
         let store = AppClaudeCredentialStore(
             fileURL: appStoreURL(),
-            legacyFile: InMemoryClaudeCredentialStore(credentials: nil),
-            silentLogin: { nil })
+            legacyFile: InMemoryClaudeCredentialStore(credentials: nil))
 
         XCTAssertNil(try store.loadFallbackCredentials())
     }

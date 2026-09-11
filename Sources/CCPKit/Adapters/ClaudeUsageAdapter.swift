@@ -105,9 +105,9 @@ public protocol ClaudeCredentialStore: Sendable {
     func loadCredentials() throws -> ClaudeOAuthCredentials?
     func saveCredentials(_ credentials: ClaudeOAuthCredentials) throws
     /// The freshest login held outside our own copy, if any — the CLI's
-    /// keychain entry or legacy file for the app store, nothing for the
-    /// others. The usage source tries this once after a 401 before
-    /// reporting logged-out, so a revoked copy heals when the CLI is live.
+    /// legacy file for the app store, nothing for the others. The usage
+    /// source tries this once after a 401 before reporting logged-out,
+    /// so a revoked copy heals when the CLI's file is live.
     func loadFallbackCredentials() throws -> ClaudeOAuthCredentials?
 }
 
@@ -115,8 +115,8 @@ extension ClaudeCredentialStore {
     public func loadFallbackCredentials() throws -> ClaudeOAuthCredentials? { nil }
 }
 
-/// Reads the key the file holds. Legacy path — the app's own store serves
-/// first and tries this file only after its prompt-free migration misses.
+/// Reads the key the file holds. Legacy path — the app's own store
+/// live-reads this file alongside its copy on every load.
 /// Throws nothing on a missing or unparsable file — that is just "not
 /// connected", which the widget shows inline.
 public struct FileClaudeCredentialStore: ClaudeCredentialStore {
@@ -195,11 +195,11 @@ public final class InMemoryClaudeCredentialStore: ClaudeCredentialStore, @unchec
 /// One-shot reads of the login Claude Code keeps in the login keychain.
 ///
 /// Deliberately NOT a ClaudeCredentialStore: nothing on the fetch path may
-/// hold one. Every access can re-prompt — dev builds re-signed on every
-/// compile arrive as strangers — so ambient reads nag once per panel open
-/// (see never-ambient-login-keychain-reads). The silent read backs the app
-/// file's first-launch migration; the explicit read backs the Import button,
-/// which is the only moment a system dialog is contextual.
+/// hold one. A keychain read from this app can present a system prompt even
+/// when asked not to — observed 2026-09-11, every panel open prompted —
+/// because the item is ACL'd to the build that created it. So the only
+/// keychain touch is the explicit read behind the Import button, which is
+/// the one moment a system dialog is contextual.
 public struct ClaudeKeychainLogin: Sendable {
     public static let service = "Claude Code-credentials"
 
@@ -209,29 +209,14 @@ public struct ClaudeKeychainLogin: Sendable {
         self.service = service
     }
 
-    /// Reads without ever prompting: with `kSecUseAuthenticationUIFail` a
-    /// build the keychain doesn't trust fails fast with
-    /// `errSecInteractionNotAllowed` instead of showing Allow. Nil on any
-    /// failure — the caller falls through to its next source.
-    public func loadSilently() -> ClaudeOAuthCredentials? {
-        var query = baseQuery
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-        query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
-        var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data,
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let credentials = ClaudeOAuthCredentials(oauthJSON: json)
-        else { return nil }
-        return credentials
-    }
-
     /// Reads with the system prompt. Call only from the Import button —
     /// never ambiently. Nil when there is no login or the read fails.
     public func loadWithPrompt() -> ClaudeOAuthCredentials? {
+        var query = baseQuery
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
-        guard SecItemCopyMatching(query(returningData: true), &item) == errSecSuccess,
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
               let data = item as? Data,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let credentials = ClaudeOAuthCredentials(oauthJSON: json)
@@ -245,86 +230,55 @@ public struct ClaudeKeychainLogin: Sendable {
             kSecAttrService as String: service,
         ]
     }
-
-    private func query(returningData: Bool) -> CFDictionary {
-        var query = baseQuery
-        query[kSecReturnData as String] = returningData
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-        return query as CFDictionary
-    }
 }
 
 /// Our own copy of the Claude OAuth, in one owner-only file under
 /// Application Support — the FileCraftCredentialStore shape, not the login
 /// keychain.
 ///
-/// A login-keychain item is ACL'd to the build that created it, and dev
-/// builds are re-signed on every compile, so each launch arrived as a
-/// stranger and macOS asked the user to vouch for it — twice per panel open.
-/// A 0600 file in the app's own container is isolated by the OS and encrypted
-/// at rest under FileVault, and never prompts.
-///
-/// The file is a cache, never the authority: every load compares it against
-/// the CLI's own keychain entry (prompt-free) and legacy file and serves the
-/// freshest live credential, silently re-filing when the CLI has rotated
-/// past our copy. An hourly expiry therefore heals itself while the CLI
-/// stays logged in — the Import button is only the first-run and dev-build
-/// fallback. Refreshes are never minted here — refresh tokens are
-/// single-use, so minting from our copy would invalidate the CLI's own —
-/// and Claude Code's entry is never written.
+/// Reads on the fetch path are files only: ours and the CLI's legacy file.
+/// A login-keychain read can present a system prompt even when asked not to
+/// (observed 2026-09-11: every panel open prompted), so the keychain is
+/// touched solely behind the Import button, where a dialog is contextual.
+/// Our file is written only by that import and by a 401-verified heal —
+/// never speculatively — so a rotation can never be shadowed by a stale
+/// copy. Refreshes are never minted here — refresh tokens are single-use,
+/// so minting from our copy would invalidate Claude Code's own — and
+/// Claude Code's entry is never written.
 public struct AppClaudeCredentialStore: ClaudeCredentialStore {
     private let fileURL: URL
     private let legacyFile: ClaudeCredentialStore
-    private let silentLogin: @Sendable () -> ClaudeOAuthCredentials?
 
     public init(
         fileURL: URL? = nil,
-        legacyFile: ClaudeCredentialStore = FileClaudeCredentialStore(),
-        silentLogin: @Sendable @escaping () -> ClaudeOAuthCredentials? = {
-            ClaudeKeychainLogin().loadSilently()
-        }
+        legacyFile: ClaudeCredentialStore = FileClaudeCredentialStore()
     ) {
         self.fileURL = fileURL ?? URL.applicationSupport.appendingPathComponent("claude-oauth")
         self.legacyFile = legacyFile
-        self.silentLogin = silentLogin
     }
 
     public func loadCredentials() throws -> ClaudeOAuthCredentials? {
         let appCreds = loadAppFile()
-        let silent = silentLogin()
         let legacy = try? legacyFile.loadCredentials()
-
-        guard let best = Self.freshest(app: appCreds, silent: silent, legacy: legacy)
-        else { return nil }
-        if best.accessToken != appCreds?.accessToken,
-           let silent, best.accessToken == silent.accessToken
-        {
-            // The CLI rotated past our copy: adopt its login. Legacy
-            // read-through is deliberately not cemented — the file stays
-            // live-read every fetch, so copying it would only shadow the
-            // CLI's next rotation with a stale duplicate.
-            // An already-expired migration is never cemented either: it
-            // would shadow a still-valid legacy login with a dead copy on
-            // every load after. (Expired candidates never reach `best`.)
-            try? saveCredentials(best)
-        }
-        return best
+        // Freshest live credential wins; ties break toward our copy for
+        // stability — a dead copy still heals via the 401 retry below.
+        return Self.freshest(app: appCreds, legacy: legacy)
     }
 
     public func loadFallbackCredentials() throws -> ClaudeOAuthCredentials? {
-        Self.freshest(app: nil, silent: silentLogin(), legacy: try? legacyFile.loadCredentials())
+        let legacy = try? legacyFile.loadCredentials()
+        guard let legacy, !legacy.isExpired else { return nil }
+        return legacy
     }
 
-    /// Freshest live credential wins; ties break toward the CLI's own
-    /// entries so a rotation is picked up even while the old copy still
-    /// looks live. Unknown expiry counts as live (legacy logins predate
-    /// the field) but sorts below any dated credential.
+    /// Freshest live credential wins; ties prefer our copy. Unknown expiry
+    /// counts as live (legacy logins predate the field) but sorts below
+    /// any dated credential.
     private static func freshest(
         app: ClaudeOAuthCredentials?,
-        silent: ClaudeOAuthCredentials?,
         legacy: ClaudeOAuthCredentials?
     ) -> ClaudeOAuthCredentials? {
-        [(silent, 2), (legacy, 1), (app, 0)]
+        [(app, 1), (legacy, 0)]
             .compactMap { creds, priority -> (ClaudeOAuthCredentials, Int)? in
                 guard let creds, !creds.isExpired else { return nil }
                 return (creds, priority)
