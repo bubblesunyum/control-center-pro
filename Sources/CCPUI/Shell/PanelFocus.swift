@@ -23,6 +23,19 @@ final class PanelFocus {
     /// `newSticky()` before the card exists, answered and cleared by the
     /// card itself. Nil the rest of the time: stickies never steal focus.
     var pendingStickyID: UUID?
+
+    /// The panel window, set once by the controller. Held weakly: the
+    /// controller owns the window, and focus only ever resigns through it.
+    weak var panelWindow: NSWindow?
+
+    /// Drops the caret from whatever editor holds it — a sticky's grab or
+    /// resize press lands on SwiftUI chrome, never on the text view itself,
+    /// so AppKit would otherwise leave the caret blinking mid-drag. No-op
+    /// unless a text view holds first responder.
+    func resignTextEditing() {
+        guard let window = panelWindow, window.firstResponder is NSTextView else { return }
+        window.makeFirstResponder(nil)
+    }
 }
 
 private struct PanelFocusKey: EnvironmentKey {

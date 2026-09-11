@@ -255,6 +255,11 @@ struct StickyCard: View {
         .onChange(of: isDragActive) { _, active in
             if active {
                 store.isDragging = true
+                // The grab ring is SwiftUI chrome AppKit never sees, so the
+                // press would otherwise leave the caret blinking mid-drag.
+                // Fires on press even for a zero-travel click, which is what
+                // defocuses a bare edge tap.
+                panelFocus?.resignTextEditing()
             } else {
                 commitDragIfNeeded()
             }
@@ -262,6 +267,7 @@ struct StickyCard: View {
         .onChange(of: isResizeActive) { _, active in
             if active {
                 store.isDragging = true
+                panelFocus?.resignTextEditing()
             } else {
                 commitResizeIfNeeded()
             }
@@ -395,6 +401,9 @@ struct StickyCard: View {
     }
 
     private func nudgeResize(by delta: CGSize) {
+        // VoiceOver resize with no gesture in flight: still chrome, still
+        // steps the caret down first.
+        panelFocus?.resignTextEditing()
         store.resize(
             sticky.id,
             width: sticky.width + delta.width,

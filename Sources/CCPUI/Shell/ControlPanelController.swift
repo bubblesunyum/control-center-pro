@@ -77,6 +77,10 @@ public final class ControlPanelController {
     public init(arrangement: PanelArrangement) {
         self.arrangement = arrangement
         window = ControlPanelWindow(contentRect: NSRect(origin: .zero, size: .zero))
+        // The resign path reads back out through here: a sticky's grab or
+        // resize press lands on SwiftUI chrome, so the card asks focus to
+        // step down through the window rather than naming a text view.
+        panelFocus.panelWindow = window
         // An already-empty panel reports no zones, so its card cache would
         // sit at nil (the not-yet-arrived fallback) forever. Seed its
         // emptiness once; every later change arrives as a report while open.
