@@ -220,6 +220,7 @@ struct NoteFormatRailHost: View {
     @Environment(\.isPanelEditing) private var isPanelEditing
     @State private var monitor = RailCaretMonitor()
     @State private var caretY: CGFloat?
+    @State private var containerHeight: CGFloat = 0
 
     /// The rail shows on an editable pad outside edit mode, once the caret
     /// reports — never over a drag, a gallery, or a background pull.
@@ -234,25 +235,30 @@ struct NoteFormatRailHost: View {
     }
 
     var body: some View {
-        Group {
-            if isVisible, let caretY {
-                GeometryReader { proxy in
-                    NoteFormatRail(documentId: documentId)
-                        .offset(y: NoteFormatRail.clampedRailTop(
-                            caretMidY: caretY,
-                            containerHeight: proxy.size.height,
-                            railHeight: NoteFormatRail.height))
-                        // Gutter math: 4pt from the well plus the 30pt rail
-                        // meets the 34pt text inset exactly — no glyph column
-                        // under the buttons, and no well gap wasted.
-                        .padding(.leading, Space.half)
-                        .allowsHitTesting(true)
-                }
-                // The reader fills the editor to measure it; only the rail
-                // itself answers clicks, so caret placement and drag
-                // selection pass straight through to the text view.
-                .allowsHitTesting(false)
-                .transition(.opacity)
+        // Siblings, deliberately: `allowsHitTesting(false)` excludes the
+        // whole subtree it sits on, and no descendant can opt back in — so
+        // the measuring reader carries it alone over bare clear, and the
+        // rail keeps default hit testing.
+        ZStack(alignment: .topLeading) {
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { containerHeight = proxy.size.height }
+                    .onChange(of: proxy.size.height) { _, height in
+                        containerHeight = height
+                    }
+            }
+            .allowsHitTesting(false)
+            if isVisible, let caretY, containerHeight > 0 {
+                NoteFormatRail(documentId: documentId)
+                    .offset(y: NoteFormatRail.clampedRailTop(
+                        caretMidY: caretY,
+                        containerHeight: containerHeight,
+                        railHeight: NoteFormatRail.height))
+                    // Gutter math: 4pt from the well plus the 30pt rail
+                    // meets the 34pt text inset exactly — no glyph column
+                    // under the buttons, and no well gap wasted.
+                    .padding(.leading, Space.half)
+                    .transition(.opacity)
             }
         }
         .animation(.easeOut(duration: 0.15), value: isVisible)
