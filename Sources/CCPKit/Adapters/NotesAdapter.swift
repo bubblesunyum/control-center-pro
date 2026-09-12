@@ -333,6 +333,28 @@ public final class NotesAdapter {
         syncedAtVersion += 1
     }
 
+    /// Whether the selected pad holds blocks Craft owns or the pad cannot
+    /// render (ccp-occ). The editor shows them but the push never writes
+    /// them; the surface marks the pad view-only while they are present.
+    /// True per-range inert regions wait on the fork (ccp-i7g).
+    public var containsReadOnlyBlocks: Bool {
+        _ = readOnlyBlocksVersion
+        guard let selectedNoteID else { return false }
+        return craftDestination.base(for: selectedNoteID).blocks.contains { !$0.isWritable }
+    }
+
+    /// Bumped whenever the selected pad's base lands. The base lives behind
+    /// the destination, which observation cannot see — views read it through
+    /// `containsReadOnlyBlocks` so the marking appears when a pull delivers
+    /// pinned blocks, not on the next keystroke.
+    private(set) var readOnlyBlocksVersion = 0
+
+    /// Store the sync base and publish it when it belongs to the visible pad.
+    private func storeBase(_ base: PadSyncBase, for padID: UUID) {
+        craftDestination.storeBase(base, for: padID)
+        if padID == selectedNoteID { readOnlyBlocksVersion += 1 }
+    }
+
     @ObservationIgnored private var document: NotesDocument?
     @ObservationIgnored private var lastSavedDocument: NotesDocument?
     /// The index's filename for each pad of the last save. Renames move the
@@ -1435,8 +1457,8 @@ public final class NotesAdapter {
         guard let document,
               let pad = document.notes.first(where: { $0.id == padID })
         else { return .skipped }
-        let padText = pad.text
-        let slices = CraftBlockSplitter.slices(in: padText)
+        var padText = pad.text
+        var slices = CraftBlockSplitter.slices(in: padText)
         var docID = craftDestination.craftDocumentID(for: padID)
         var justProvisioned = false
         if docID == nil {
@@ -1477,6 +1499,13 @@ public final class NotesAdapter {
         // this only fires for pads the push reaches before any pull.)
         let titleDirty = pad.name != craftDestination.syncedTitle(for: padID)
         let base = craftDestination.base(for: padID)
+        // ccp-occ revert-guard: pinned edits can never be written back, so
+        // restore them before planning — otherwise the pad diverges while
+        // reporting clean. True inert regions wait on the fork (ccp-i7g).
+        if let restored = restorePinnedBlocks(padID: padID, base: base, padText: padText) {
+            padText = restored
+            slices = CraftBlockSplitter.slices(in: padText)
+        }
         let plan = BlockPushPlan.plan(from: base, to: slices.map(\.markdown))
         guard !plan.isEmpty || titleDirty else { return .skipped }
 
@@ -1554,6 +1583,34 @@ public final class NotesAdapter {
         return .wrote
     }
 
+    /// Restore pinned ranges edited since the base, snapshotting first so the
+    /// typing stays reachable in history. Nil when nothing changed,
+    /// unattributable, or the pad moved under us. The base is left alone:
+    /// advancing it would absorb writable edits sharing the round into an
+    /// agreement Craft never confirmed.
+    private func restorePinnedBlocks(padID: UUID, base: PadSyncBase, padText: String) -> String? {
+        guard let restored = base.restoredPinnedText(in: padText), restored != padText,
+              var live = document,
+              let index = live.notes.firstIndex(where: { $0.id == padID }),
+              live.notes[index].text == padText
+        else { return nil }
+        if !padText.isEmpty {
+            recordSnapshot(markdown: padText, reason: .pull, date: Date(), for: padID)
+        }
+        live.notes[index].text = restored
+        live.notes[index].modifiedAt = Date()
+        self.document = live
+        notes = live.notes
+        if padID == selectedNoteID {
+            isReplacingText = true
+            text = restored
+            isReplacingText = false
+        }
+        _ = persist(live)
+        padsPendingUndoClear.insert(padID)
+        return restored
+    }
+
     /// Read the document back and record it, with the text that was pushed,
     /// as the new agreement.
     ///
@@ -1584,7 +1641,7 @@ public final class NotesAdapter {
             .filter { known.contains($0.id) }
         let base = PadSyncBase(localText: pushed ?? CraftPull.join(blocks.map(\.markdown)),
                                blocks: blocks)
-        craftDestination.storeBase(base, for: padID)
+        storeBase(base, for: padID)
     }
 
     /// Observable for tests.
@@ -1855,7 +1912,7 @@ public final class NotesAdapter {
         case .seed(let base):
             // First sight of this pad, or the first pull since the base
             // replaced the sidecar: start remembering, move nothing.
-            craftDestination.storeBase(base, for: padID)
+            storeBase(base, for: padID)
         case .adopt(let text, let base):
             adoptRemote(padID: padID, text: text, base: base,
                         snapshotReason: .pull, snapshotDate: serverTime)
@@ -1866,7 +1923,7 @@ public final class NotesAdapter {
             // remote side advances: Craft's move is in the pad now, but the
             // merged text is not in Craft until the push lands, which is what
             // keeps the pad reading as leading.
-            craftDestination.storeBase(base, for: padID)
+            storeBase(base, for: padID)
             if hadConflict {
                 // A block each side changed differently. Ours stands — it is
                 // what the user was looking at — and Craft's version stays
@@ -2000,7 +2057,7 @@ public final class NotesAdapter {
         if replaced {
             padsPendingUndoClear.insert(padID)
         }
-        if let base { craftDestination.storeBase(base, for: padID) }
+        if let base { storeBase(base, for: padID) }
         _ = persist(document)
     }
 

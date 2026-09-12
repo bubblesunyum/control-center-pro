@@ -219,4 +219,79 @@ final class CraftPullTests: XCTestCase {
         else { return XCTFail("expected adopt") }
         XCTAssertTrue(adopted.blocks[0].isWritable)
     }
+
+    // MARK: - Revert-guard (ccp-occ)
+
+    private func pinnedBase() -> PadSyncBase {
+        PadSyncBase(localText: CraftPull.join(["one", "<callout>x</callout>"]),
+                    blocks: [BaseBlock(id: "a", markdown: "one", isWritable: true),
+                             BaseBlock(id: "k", markdown: "<callout>x</callout>",
+                                       isWritable: false)])
+    }
+
+    func testPinnedRestoreLeavesCleanTextAlone() {
+        let base = pinnedBase()
+        XCTAssertEqual(base.restoredPinnedText(in: base.localText), base.localText)
+    }
+
+    func testPinnedRestoreRevertsAnEditedPinnedBlock() {
+        let base = pinnedBase()
+        let edited = CraftPull.join(["one", "<callout>EDITED</callout>"])
+        XCTAssertEqual(base.restoredPinnedText(in: edited), base.localText)
+    }
+
+    func testPinnedRestoreKeepsWritableEdits() {
+        let base = pinnedBase()
+        let edited = CraftPull.join(["ONE", "<callout>EDITED</callout>"])
+        XCTAssertEqual(base.restoredPinnedText(in: edited),
+                       CraftPull.join(["ONE", "<callout>x</callout>"]))
+    }
+
+    func testPinnedRestoreReinsertsADeletedPinnedBlock() {
+        let base = pinnedBase()
+        XCTAssertEqual(base.restoredPinnedText(in: "one"), base.localText)
+    }
+
+    func testPinnedRestoreCollapsesASplitPinnedBlock() {
+        let base = pinnedBase()
+        let split = CraftPull.join(["one", "<callout>x", "y</callout>"])
+        XCTAssertEqual(base.restoredPinnedText(in: split), base.localText)
+    }
+
+    func testPinnedRetypedPlainRestoresWithoutDuplicating() {
+        // The retype is tag-free, so it must not come back as a new insert
+        // beside the restored original.
+        let base = pinnedBase()
+        let retyped = CraftPull.join(["one", "hello"])
+        XCTAssertEqual(base.restoredPinnedText(in: retyped), base.localText)
+    }
+
+    func testWritableRetypedToTagsStaysVerbatim() {
+        // Tag-carrying text the user typed is theirs to hold; the push
+        // POSTs it like any writable edit rather than the guard wiping it.
+        let base = pinnedBase()
+        let retyped = CraftPull.join(["one <div>x</div>", "<callout>x</callout>"])
+        XCTAssertEqual(base.restoredPinnedText(in: retyped), retyped)
+    }
+
+    func testPinnedRestorePreservesSeedDivergenceUntilItMoves() {
+        // The seed deliberately preserves a pre-existing divergence: a push
+        // that only touches writable lines must not revert the pinned draft.
+        var base = pinnedBase()
+        let draft = CraftPull.join(["one", "<callout>my draft</callout>"])
+        base = PadSyncBase(localText: draft, blocks: base.blocks)
+        let edited = CraftPull.join(["ONE", "<callout>my draft</callout>"])
+        XCTAssertEqual(base.restoredPinnedText(in: edited), edited,
+                       "untouched pinned keeps the base side, not Craft's")
+    }
+
+    func testPinnedRestoreIsNilWhenMisaligned() {
+        // Craft split a block: no index names a block id, so the pull owns
+        // the reconcile, not the push.
+        let misaligned = PadSyncBase(
+            localText: "one two",
+            blocks: [BaseBlock(id: "a", markdown: "one"),
+                     BaseBlock(id: "b", markdown: "two")])
+        XCTAssertNil(misaligned.restoredPinnedText(in: "one two edited"))
+    }
 }

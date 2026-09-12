@@ -99,4 +99,82 @@ public struct PadSyncBase: Codable, Equatable, Sendable {
     /// True when our slices and Craft's blocks stand one-to-one, which is
     /// what lets a local slice index name a Craft block id.
     public var isAligned: Bool { localSlices.count == blocks.count }
+
+    /// Base indices Craft owns: the push never writes these and the merge
+    /// never lets the pad win them (ccp-occ revert-guard).
+    public var pinnedIndices: Set<Int> {
+        Set(blocks.indices.filter { !blocks[$0].isWritable })
+    }
+
+    /// The pad text with every changed pinned slice restored to what Craft
+    /// holds. Nil when unattributable: the base itself is misaligned, so no
+    /// index names a Craft block — the pull owns that reconcile, not the
+    /// push. Equal to the input when no pinned block changed, so callers can
+    /// compare pointers rather than re-derive the decision.
+    ///
+    /// Changed covers edits, splits and deletes: anything the diff maps onto
+    /// a pinned base index comes back as Craft's single block. Untouched
+    /// pinned blocks keep the base side, which preserves seed-time
+    /// divergence until anything moves rather than reverting it on an
+    /// unrelated edit. Writable slices and new inserts pass through;
+    /// separators normalize to the pull's hard-break dialect only when a
+    /// restore actually happened.
+    public func restoredPinnedText(in currentText: String) -> String? {
+        guard isAligned else { return nil }
+        let old = localSlices
+        let current = CraftBlockSplitter.slices(in: currentText).map(\.markdown)
+        let change = Alignment(base: old, side: current)
+        let pinned = pinnedIndices
+        var restored: [String] = []
+        var index = blocks.indices.lowerBound
+        while index < blocks.indices.upperBound {
+            restored += change.insertsBefore[index] ?? []
+            guard let arrived = change.replacements[index] else {
+                restored.append(old[index])
+                index += 1
+                continue
+            }
+            // One diff run: `arrived` stands in place of the whole gone run
+            // (`index` plus every following index the diff emptied), so a
+            // retype spanning pinned and writable blocks arrives unsplit.
+            // Walk it back apart: pinned positions restore Craft's text
+            // without consuming an arrival, writable positions keep the next
+            // arrival verbatim — even tag-carrying text, which is the pad's
+            // to hold and the push's to POST like any other writable edit.
+            // Leftover arrivals are genuine splits only when the run holds a
+            // writable position; inside an all-pinned run they are the retype
+            // itself, dropped rather than duplicated beside the original.
+            var run = [index]
+            var next = index + 1
+            while next < blocks.indices.upperBound,
+                  let following = change.replacements[next], following.isEmpty {
+                run.append(next)
+                next += 1
+            }
+            var arrivals = arrived.makeIterator()
+            let runHasWritable = run.contains { !pinned.contains($0) }
+            for gone in run {
+                if pinned.contains(gone) {
+                    restored.append(blocks[gone].markdown)
+                } else if let text = arrivals.next() {
+                    restored.append(text)
+                }
+            }
+            // Leftover arrivals are genuine splits only when the run holds a
+            // writable position — and only when tag-free. Inside an
+            // all-pinned run (or carrying tags) they are the retype itself,
+            // dropped rather than duplicated beside the original.
+            if runHasWritable {
+                while let text = arrivals.next() {
+                    if !CraftBlockPolicy.isUnwritable(markdown: text) {
+                        restored.append(text)
+                    }
+                }
+            }
+            index = next
+        }
+        restored += change.insertsBefore[blocks.count] ?? []
+        guard restored != current else { return currentText }
+        return CraftPull.join(restored)
+    }
 }

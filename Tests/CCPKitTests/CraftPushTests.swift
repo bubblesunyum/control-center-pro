@@ -444,6 +444,20 @@ final class BlockPushPlanTests: XCTestCase {
         XCTAssertEqual(result.deletes, ["a"])
         XCTAssertEqual(result.inserts, [BlockInsert(afterID: "keep", markdown: "edited")])
     }
+
+    func testAMisalignedRepostNeverDuplicatesPinnedContent() {
+        // ccp-occ revert-guard: an edited pinned block must not come back as
+        // a new insert beside the original it can never overwrite.
+        let misaligned = PadSyncBase(
+            localText: "one two",
+            blocks: [BaseBlock(id: "a", markdown: "one"),
+                     BaseBlock(id: "keep", markdown: "<callout>x</callout>",
+                               isWritable: false)])
+        let result = plan(misaligned, "one two  \n<callout>EDITED</callout>")
+        XCTAssertFalse(result.inserts.map(\.markdown).contains("<callout>EDITED</callout>"),
+                       "edited pinned text is dropped, never posted as new")
+        XCTAssertFalse(result.updates.map(\.markdown).contains("<callout>EDITED</callout>"))
+    }
 }
 
 /// The two JSON-dict stores behind one helper: unreadable reads as empty
@@ -531,6 +545,91 @@ final class CraftPushAdapterTests: XCTestCase {
     /// round that pushes mapped pads.
     private func emptyTrash() -> ScriptedTransport.Script {
         .init(statusCode: 200, json: "{\"items\":[]}")
+    }
+
+    func testPinnedOnlyEditRestoresInsteadOfPushing() async throws {
+        // ccp-occ revert-guard: an edit to a block Craft owns can never be
+        // written back, so the push restores Craft's text — no PUT, no
+        // duplication beside the original, pad converged. The discarded
+        // typing stays reachable in history.
+        let name = "ccp.push.pinnedrestore.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([emptyTrash()])
+        let (adapter, destination) = adapter(store, transport)
+        let id = try XCTUnwrap(adapter.selectedNoteID)
+        let agreed = CraftPull.join(["one", "<callout>x</callout>"])
+        destination.storeBase(PadSyncBase(
+            localText: agreed,
+            blocks: [BaseBlock(id: "a", markdown: "one", isWritable: true),
+                     BaseBlock(id: "k", markdown: "<callout>x</callout>",
+                               isWritable: false)]), for: id)
+        destination.setCraftDocumentID("doc1", for: id)
+        destination.storeSyncedTitle(adapter.selectedNoteName, for: id)
+
+        adapter.text = CraftPull.join(["one", "<callout>EDITED</callout>"])
+        await adapter.flushCraftPush()
+
+        XCTAssertEqual(adapter.text, agreed, "the pinned edit is restored")
+        XCTAssertEqual(transport.requests.count, 1,
+                       "trash sweep only — nothing is PUT, POSTed or deleted")
+        XCTAssertFalse(adapter.isPushDirty(id))
+        XCTAssertEqual(destination.base(for: id).localText, agreed)
+        XCTAssertFalse(adapter.snapshots(for: id).isEmpty,
+                       "the discarded typing stays reachable in history")
+    }
+
+    func testMixedEditWritesWritableAndRestoresPinned() async throws {
+        // Writable edits still push while the pinned edit in the same round
+        // restores — one round, both halves.
+        let name = "ccp.push.pinnedmixed.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let transport = ScriptedTransport([emptyTrash(), .init(statusCode: 200, json: """
+            {"items":[{"id":"a","markdown":"ONE!"}]}
+            """)])
+        transport.documentBlocks = [("a", "ONE!"), ("k", "<callout>x</callout>")]
+        let (adapter, destination) = adapter(store, transport)
+        let id = try XCTUnwrap(adapter.selectedNoteID)
+        destination.storeBase(PadSyncBase(
+            localText: CraftPull.join(["one", "<callout>x</callout>"]),
+            blocks: [BaseBlock(id: "a", markdown: "one", isWritable: true),
+                     BaseBlock(id: "k", markdown: "<callout>x</callout>",
+                               isWritable: false)]), for: id)
+        destination.setCraftDocumentID("doc1", for: id)
+        destination.storeSyncedTitle(adapter.selectedNoteName, for: id)
+
+        adapter.text = CraftPull.join(["ONE", "<callout>EDITED</callout>"])
+        await adapter.flushCraftPush()
+
+        let expected = CraftPull.join(["ONE", "<callout>x</callout>"])
+        XCTAssertEqual(adapter.text, expected,
+                       "writable edit kept, pinned edit restored")
+        let putBodies = transport.requests.filter { $0.httpMethod == "PUT" }
+        XCTAssertEqual(putBodies.count, 1)
+        let putData = try XCTUnwrap(putBodies[0].httpBody)
+        let putBody = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: putData) as? [String: Any])
+        let updated = try XCTUnwrap(putBody["blocks"] as? [[String: String]])
+        XCTAssertEqual(updated, [["id": "a", "markdown": "ONE"]],
+                       "the pinned block is never PUT")
+        XCTAssertFalse(adapter.isPushDirty(id))
+    }
+
+    func testContainsReadOnlyBlocksFollowsTheBase() throws {
+        let name = "ccp.push.readonlyflag.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let (adapter, destination) = adapter(store, ScriptedTransport([]))
+        let id = try XCTUnwrap(adapter.selectedNoteID)
+
+        XCTAssertFalse(adapter.containsReadOnlyBlocks)
+        destination.storeBase(PadSyncBase(
+            localText: "one",
+            blocks: [BaseBlock(id: "a", markdown: "one"),
+                     BaseBlock(id: "k", markdown: "<callout>x</callout>",
+                               isWritable: false)]), for: id)
+        XCTAssertTrue(adapter.containsReadOnlyBlocks)
     }
 
     func testFlushPutsTheEditAndStoresTheEcho() async throws {
@@ -1149,5 +1248,69 @@ final class CraftPushAdapterTests: XCTestCase {
         destination.setCraftDocumentID("doc9", for: doomed)
         XCTAssertTrue(adapter.deleteNote(doomed))
         XCTAssertNil(destination.craftDocumentID(for: doomed))
+    }
+}
+
+/// The read-only rule (ccp-occ, widened per ccp-prk tier 1): a block whose
+/// markdown carries any tag the pad does not render is read-only — output-only
+/// tags, unrendered-but-round-trippable tags, and unknown future tags alike.
+/// Fail safe, not fail open.
+final class CraftBlockPolicyTests: XCTestCase {
+    func testPlainMarkdownStaysWritable() {
+        for markdown in ["plain", "## heading", "**bold**", "- [ ] open",
+                         "- [x] done", "> quote", "```swift\nlet a = 1\n```",
+                         "[link](https://example.com)", "an _italic_ word"] {
+            XCTAssertFalse(CraftBlockPolicy.isUnwritable(markdown: markdown),
+                           "\(markdown) must stay writable")
+        }
+    }
+
+    func testOutputOnlyTagsAreUnwritable() {
+        for markdown in ["<collection>x</collection>", "<title>t</title>",
+                         "<properties>p</properties>",
+                         "<collectionItem>i</collectionItem>",
+                         "<property name=\"s\">v</property>",
+                         "<contentPreview>p</contentPreview>",
+                         "<itemsPreview>i</itemsPreview>",
+                         "[gone](invalid:out_of_scope)"] {
+            XCTAssertTrue(CraftBlockPolicy.isUnwritable(markdown: markdown),
+                          "\(markdown) must be read-only")
+        }
+    }
+
+    func testUnrenderedTagsAreUnwritable() {
+        for markdown in ["<callout>note</callout>", "<caption>cap</caption>",
+                         "<page>sub</page>", "<pageTitle>t</pageTitle>",
+                         "<content>c</content>",
+                         "<comment id=\"1\">thread</comment>",
+                         "<card>sub</card>",
+                         "<highlight color=\"yellow\">marked</highlight>"] {
+            XCTAssertTrue(CraftBlockPolicy.isUnwritable(markdown: markdown),
+                          "\(markdown) must be read-only until rendered")
+        }
+    }
+
+    func testUnknownFutureTagsFailSafe() {
+        XCTAssertTrue(CraftBlockPolicy.isUnwritable(markdown: "<futureWidget>x</futureWidget>"))
+        XCTAssertTrue(CraftBlockPolicy.isUnwritable(markdown: "see </weird> here"))
+    }
+
+    func testTagShapedTextThatIsNotATagStaysWritable() {
+        XCTAssertFalse(CraftBlockPolicy.isUnwritable(markdown: "a < b"))
+        XCTAssertFalse(CraftBlockPolicy.isUnwritable(markdown: "a<b"))
+        XCTAssertFalse(CraftBlockPolicy.isUnwritable(markdown: "<3 love"))
+        XCTAssertFalse(CraftBlockPolicy.isUnwritable(markdown: "<https://example.com>"))
+        XCTAssertFalse(CraftBlockPolicy.isUnwritable(markdown: "<user@example.com>"))
+    }
+
+    func testTagsInsideCodeStayWritable() {
+        XCTAssertFalse(CraftBlockPolicy.isUnwritable(
+            markdown: "```\n<collection>x</collection>\n```"))
+        XCTAssertFalse(CraftBlockPolicy.isUnwritable(
+            markdown: "a `<title>` sample"))
+    }
+
+    func testClosingTagsStillClassify() {
+        XCTAssertTrue(CraftBlockPolicy.isUnwritable(markdown: "tail </callout>"))
     }
 }

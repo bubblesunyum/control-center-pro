@@ -80,11 +80,15 @@ public struct BlockPushPlan: Equatable, Sendable {
 
     /// The base and the document no longer stand one-to-one: replace what we
     /// know we wrote and post the pad afresh. Pinned blocks are left where
-    /// they are, so nothing Craft owns is lost to a realignment.
+    /// they are, so nothing Craft owns is lost to a realignment — and slices
+    /// carrying tags the pad cannot render are never posted as new blocks,
+    /// so an edited pinned block cannot duplicate itself as an insert while
+    /// the original stays (ccp-occ revert-guard).
     private static func rewrite(base: PadSyncBase, slices: [String]) -> BlockPushPlan {
-        let keep = base.blocks.filter { !$0.isWritable }
+        let pinned = base.blocks.filter { !$0.isWritable }
+        let writableSlices = slices.filter { !CraftBlockPolicy.isUnwritable(markdown: $0) }
         return BlockPushPlan(
-            inserts: slices.map { BlockInsert(afterID: keep.last?.id, markdown: $0) },
+            inserts: writableSlices.map { BlockInsert(afterID: pinned.last?.id, markdown: $0) },
             deletes: base.blocks.filter(\.isWritable).map(\.id))
     }
 

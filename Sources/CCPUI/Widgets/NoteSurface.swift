@@ -94,6 +94,24 @@ struct NoteSurface: View {
                 NoteFormatRailHost(documentId: noteDocumentId, isEditable: adapter.isEditable)
             }
 
+            // ccp-occ: the pad holds blocks Craft owns or cannot render. The
+            // push never writes them and an edit restores on the next round;
+            // this quiet line is the marking until the fork lands per-range
+            // regions (ccp-i7g). One line for the whole pad, never per-block
+            // chrome. Present only while pinned blocks are present, so the
+            // card keeps its shape for every ordinary pad.
+            if adapter.containsReadOnlyBlocks {
+                Label("Some Craft blocks are view-only here", systemImage: "eye")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, Space.one)
+                    .padding(.top, Space.half)
+                    .transition(.opacity)
+                    .accessibilityLabel("Some Craft blocks are read-only")
+                    .accessibilityHint("Craft content this pad can't edit. Open it in Craft to change it.")
+            }
+
             NoteToolbar(adapter: adapter, onDeleteSelected: onDeleteSelected)
         }
         .frame(maxWidth: .infinity)

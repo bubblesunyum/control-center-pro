@@ -81,7 +81,8 @@ public enum CraftPull {
                 base: base.localSlices,
                 ours: CraftBlockSplitter.slices(in: local).map(\.markdown),
                 theirs: fetched.map(\.markdown),
-                theirBase: base.isAligned ? base.blocks.map(\.markdown) : nil)
+                theirBase: base.isAligned ? base.blocks.map(\.markdown) : nil,
+                pinned: base.isAligned ? base.pinnedIndices : [])
             let text = join(result.merged)
             // The merge changing nothing and agreeing throughout means
             // Craft's move was already in the pad: the push carries the local

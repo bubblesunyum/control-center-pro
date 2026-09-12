@@ -34,10 +34,16 @@ public enum ThreeWayMerge {
     /// nil when the two do not align and accept the false positives — they
     /// cost a spurious history snapshot, never text.
     ///
+    /// `pinned` names base indices Craft owns (ccp-occ): the pad can never
+    /// win those, so ours edits there are dropped and theirs stands — without
+    /// raising a conflict, since there was never anything to save. The
+    /// replacing pull snapshots the discarded text into history regardless.
+    ///
     /// Always produces a usable result: there is no blocked or half-applied
     /// state, and nothing is left for the user to resolve by hand.
     public static func merge(base: [String], ours: [String], theirs: [String],
-                             theirBase: [String]? = nil) -> Result {
+                             theirBase: [String]? = nil,
+                             pinned: Set<Int> = []) -> Result {
         let mine = Alignment(base: base, side: ours)
         let yours = Alignment(base: theirBase ?? base, side: theirs)
         var merged: [String] = []
@@ -46,18 +52,30 @@ public enum ThreeWayMerge {
         for index in base.indices {
             merged += mine.insertsBefore[index] ?? []
             merged += yours.insertsBefore[index] ?? []
+            let isPinned = pinned.contains(index)
             switch (mine.replacements[index], yours.replacements[index]) {
             case (nil, nil):
                 merged.append(base[index])
             case (let ourChange?, nil):
-                merged += ourChange
+                // Pinned and only we touched it: our edit can never be
+                // written back, so the base stands and the push later
+                // restores the pad rather than duplicating it.
+                if isPinned {
+                    merged.append(base[index])
+                } else {
+                    merged += ourChange
+                }
             case (nil, let theirChange?):
                 merged += theirChange
             case (let ourChange?, let theirChange?):
                 // Identical edits are agreement, not conflict: two people
                 // fixing the same typo must not raise one.
-                if ourChange != theirChange { hadConflict = true }
-                merged += ourChange
+                if isPinned {
+                    merged += theirChange
+                } else {
+                    if ourChange != theirChange { hadConflict = true }
+                    merged += ourChange
+                }
             }
         }
         merged += mine.insertsBefore[base.count] ?? []

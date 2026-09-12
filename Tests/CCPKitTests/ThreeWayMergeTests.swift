@@ -72,4 +72,36 @@ final class ThreeWayMergeTests: XCTestCase {
         XCTAssertEqual(result.merged, ["a", "new", "B"])
         XCTAssertFalse(result.hadConflict)
     }
+
+    func testPinnedOursOnlyEditIsDropped() {
+        // ccp-occ: the pad can never win a block Craft owns — ours edit to
+        // pinned restores the base instead of flowing into the merge.
+        let result = ThreeWayMerge.merge(base: ["a", "b"], ours: ["a", "OURS"],
+                                         theirs: ["a", "b"], pinned: [1])
+        XCTAssertEqual(result.merged, ["a", "b"])
+        XCTAssertFalse(result.hadConflict, "a dropped read-only edit is not a conflict")
+    }
+
+    func testPinnedBothChangedTakesTheirsQuietly() {
+        let result = ThreeWayMerge.merge(base: ["a", "b"], ours: ["a", "OURS"],
+                                         theirs: ["a", "THEIRS"], pinned: [1])
+        XCTAssertEqual(result.merged, ["a", "THEIRS"])
+        XCTAssertFalse(result.hadConflict)
+    }
+
+    func testPinnedTheirsOnlyStillAdopts() {
+        let result = ThreeWayMerge.merge(base: ["a", "b"], ours: ["a", "b"],
+                                         theirs: ["a", "THEIRS"], pinned: [1])
+        XCTAssertEqual(result.merged, ["a", "THEIRS"])
+        XCTAssertFalse(result.hadConflict)
+    }
+
+    func testPinnedNewInsertsBesideItSurvive() {
+        // Inserts before a pinned block are new user content, not edits to
+        // it — they merge normally.
+        let result = ThreeWayMerge.merge(base: ["a", "b"], ours: ["a", "new", "b"],
+                                         theirs: ["a", "b"], pinned: [1])
+        XCTAssertEqual(result.merged, ["a", "new", "b"])
+        XCTAssertFalse(result.hadConflict)
+    }
 }
