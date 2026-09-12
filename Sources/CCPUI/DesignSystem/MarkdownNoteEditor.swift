@@ -184,8 +184,20 @@ struct MarkdownNoteEditor: View {
         // chrome ever is.
         configuration.textInsets = textInsets
         configuration.overscroll = overscroll
-        configuration.services = MarkdownEditorServices(syntaxHighlighter: NoteCodeAppearance())
+        configuration.services = MarkdownEditorServices(syntaxHighlighter: NoteCodeAppearance(),
+                                                          bus: Self.formatBus(for: documentId))
         return configuration
+    }
+
+    /// The margin rail's verbs, scoped to this pad — see NoteFormatRequest.
+    /// One value per document so a tap formats its own editor and no other.
+    static func formatBus(for documentId: String) -> MarkdownEditorBus {
+        MarkdownEditorBus(
+            applyBoldRequest: NoteFormatRequest.bold(for: documentId),
+            applyItalicRequest: NoteFormatRequest.italic(for: documentId),
+            applyHeadingRequest: NoteFormatRequest.heading(for: documentId),
+            applyUnorderedListRequest: NoteFormatRequest.bullet(for: documentId)
+        )
     }
 
     private static var theme: MarkdownEditorTheme {

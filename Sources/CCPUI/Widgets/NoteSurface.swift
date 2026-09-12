@@ -17,11 +17,15 @@ struct NoteSurface: View {
     @State private var isDropTargeted = false
     @Environment(\.panelFocus) private var panelFocus
 
+    /// The pad the editor and the rail agree on — one name, so the rail's bus
+    /// verbs reach this editor and no other (see NoteFormatRequest).
+    private var noteDocumentId: String { adapter.selectedNoteID?.uuidString ?? "notes" }
+
     var body: some View {
         VStack(spacing: 0) {
             MarkdownNoteEditor(
                 text: Binding(get: { adapter.text }, set: { adapter.text = $0 }),
-                documentId: adapter.selectedNoteID?.uuidString ?? "notes",
+                documentId: noteDocumentId,
                 placeholder: "Write something…",
                 isEditable: adapter.isEditable,
                 // The panel's default keystrokes: the window falls back here
@@ -81,6 +85,13 @@ struct NoteSurface: View {
                     )
                     .frame(height: Layout.noteToolbarFadeHeight)
                 }
+            }
+
+            // After the mask, so the fade dissolves the text and never the
+            // rail. The host owns the rail's sampling and visibility; the
+            // surface stays layout.
+            .overlay(alignment: .topLeading) {
+                NoteFormatRailHost(documentId: noteDocumentId, isEditable: adapter.isEditable)
             }
 
             NoteToolbar(adapter: adapter, onDeleteSelected: onDeleteSelected)
@@ -425,53 +436,4 @@ fileprivate func padHistoryEntryTitle(_ snapshot: PadSnapshot) -> String {
     case .preRestore: reason = "Before restore"
     }
     return "\(reason) — \(noteHistoryDateText(snapshot.date))"
-}
-
-/// The toolbar's icon cell: caption symbol in a row-action frame, wearing the
-/// shared hover chip. The frame and font stay here — only the hover behaviour
-/// lives in the modifier.
-private struct NoteToolbarIcon: View {
-    let symbol: String
-    let tint: Color?
-
-    // Explicit: a `let` with a default drops out of the memberwise init
-    // beside a property wrapper, so the default lives here instead.
-    init(symbol: String, tint: Color? = nil) {
-        self.symbol = symbol
-        self.tint = tint
-    }
-
-    var body: some View {
-        Image(systemName: symbol)
-            .font(.caption)
-            .frame(width: Layout.rowActionSize, height: Layout.rowActionSize)
-            .contentShape(Rectangle())
-            .hoverChip(tint: tint)
-    }
-}
-
-/// One button in the note's bottom toolbar: an icon cell with a hover chip,
-/// help, and label. The frame and font live on the icon, the behaviour on
-/// the shared modifier.
-private struct NoteToolbarButton: View {
-    private let symbol: String
-    private let label: String
-    private let tint: Color?
-    private let action: () -> Void
-
-    init(_ symbol: String, label: String, tint: Color? = nil, action: @escaping () -> Void) {
-        self.symbol = symbol
-        self.label = label
-        self.tint = tint
-        self.action = action
-    }
-
-    var body: some View {
-        Button(action: action) {
-            NoteToolbarIcon(symbol: symbol, tint: tint)
-        }
-        .buttonStyle(.plain)
-        .help(label)
-        .accessibilityLabel(label)
-    }
 }

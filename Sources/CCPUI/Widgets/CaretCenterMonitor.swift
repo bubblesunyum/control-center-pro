@@ -189,21 +189,29 @@ private func defaultCaretMeasure(_ textView: NSTextView) -> CaretCenterMonitor.S
                                        contentHeight: document.frame.height)
 }
 
-/// The caret's line in document coordinates: its text segment where there is
-/// one, else its layout fragment. The true location is tried first, then one
-/// char back — a caret at the document end has no fragment of its own (the
-/// engine steps back for the same reason).
+/// The caret's line in document coordinates, or nil for a selection — the
+/// rail measures those through the indexed overload below.
 private func caretLineRect(for textView: NSTextView) -> CGRect? {
+    let caret = textView.selectedRange()
+    guard caret.length == 0 else { return nil }
+    return caretLineRect(for: textView, at: caret.location)
+}
+
+/// The line containing `index` in document coordinates: its text segment
+/// where there is one, else its layout fragment. The true location is tried
+/// first, then one char back — a caret at the document end has no fragment of
+/// its own (the engine steps back for the same reason).
+func caretLineRect(for textView: NSTextView, at index: Int) -> CGRect? {
     // The engine's view is TextKit 2, where `layoutManager` is nil.
     guard let layout = textView.textLayoutManager,
           let content = layout.textContentManager
     else { return nil }
-    let caret = textView.selectedRange()
-    guard caret.length == 0 else { return nil }
+    let length = (textView.string as NSString).length
+    let clamped = min(max(index, 0), length)
     let start = content.documentRange.location
     var locations: [NSTextLocation] = []
-    if let at = content.location(start, offsetBy: caret.location) { locations.append(at) }
-    if caret.location > 0, let back = content.location(start, offsetBy: caret.location - 1) {
+    if let at = content.location(start, offsetBy: clamped) { locations.append(at) }
+    if clamped > 0, let back = content.location(start, offsetBy: clamped - 1) {
         locations.append(back)
     }
     for location in locations {
