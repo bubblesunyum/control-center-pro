@@ -47,6 +47,53 @@ public final class QuickTogglesWidget: CCPWidget {
 /// that name `QuickTogglesWidget` keep resolving to the same widget.
 public typealias ToolsWidget = QuickTogglesWidget
 
+// MARK: - Capture permission gate
+
+/// Decides what a Copy Text tap does about Screen Recording, the only
+/// permission the capture needs. The system prompt is one-shot and a grant
+/// only takes effect after relaunch, so the request fires at most once ever;
+/// later denied taps point at Settings with the relaunch step instead of
+/// re-prompting into the void.
+@MainActor
+enum CopyTextCaptureGate {
+    enum Action: Equatable {
+        case proceed
+        case promptSystem
+        case settingsHint
+    }
+
+    nonisolated static func action(granted: Bool, alreadyPrompted: Bool) -> Action {
+        if granted { return .proceed }
+        return alreadyPrompted ? .settingsHint : .promptSystem
+    }
+
+    /// Whether the one-shot system prompt has fired. Persisted, not just
+    /// per-launch: TCC remembers the denial across relaunches, so a second
+    /// process's request would no-op behind a HUD claiming a prompt is up.
+    /// (After a TCC reset the first tap skips a prompt that would have
+    /// shown; the Settings route still grants fine.)
+    private static let promptedKey = "copyTextDidPromptScreenRecording"
+    static var didPrompt: Bool {
+        get { UserDefaults.standard.bool(forKey: promptedKey) }
+        set { UserDefaults.standard.set(newValue, forKey: promptedKey) }
+    }
+
+    /// When Settings was last fronted. Each tap is explicit, but a double-tap
+    /// must not yank focus twice and bury the relaunch HUD behind Settings.
+    static var lastSettingsOpened: Date?
+
+    nonisolated static func shouldOpenSettings(lastOpened: Date?, now: Date) -> Bool {
+        guard let lastOpened else { return true }
+        return now.timeIntervalSince(lastOpened) >= 5
+    }
+
+    static func isGranted() -> Bool { CGPreflightScreenCaptureAccess() }
+    static func requestAccess() { CGRequestScreenCaptureAccess() }
+    static func openSettings() {
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
+    }
+}
+
 // MARK: - Content
 
 private struct ToolsContent: View {
@@ -126,22 +173,27 @@ private struct ToolsContent: View {
 
     private func startCapture() {
         guard !isCapturing else { return }
-        // Screen Recording is the gate for any screen capture. Ask once
-        // contextually; if the user denies, the next tap will offer
-        // System Settings rather than silently doing nothing.
-        if !CGPreflightScreenCaptureAccess() {
-            CGRequestScreenCaptureAccess()
-            // The prompt is One-Shot. If the user denied previously,
-            // opening the pane is the only route that helps.
-            if !CGPreflightScreenCaptureAccess() {
-                // Give the system a turn to show its prompt, then check
-                // again. If still denied, send them to Settings.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    if !CGPreflightScreenCaptureAccess() {
-                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
-                    }
-                }
+        // Screen Recording is the only gate for capture. The system prompt
+        // is one-shot and a grant needs a relaunch to take effect, so ask
+        // once ever. Later denied taps are explicit re-taps, which is
+        // the only time Settings opens — never on a timer behind the tap.
+        switch CopyTextCaptureGate.action(
+            granted: CopyTextCaptureGate.isGranted(),
+            alreadyPrompted: CopyTextCaptureGate.didPrompt
+        ) {
+        case .proceed:
+            break
+        case .promptSystem:
+            CopyTextCaptureGate.didPrompt = true
+            CopyTextCaptureGate.requestAccess()
+            ToolHUD.show(icon: "text.viewfinder", message: "Allow Screen Recording to copy text")
+            return
+        case .settingsHint:
+            if CopyTextCaptureGate.shouldOpenSettings(lastOpened: CopyTextCaptureGate.lastSettingsOpened, now: Date()) {
+                CopyTextCaptureGate.lastSettingsOpened = Date()
+                CopyTextCaptureGate.openSettings()
             }
+            ToolHUD.show(icon: "text.viewfinder", message: "Turn on Screen Recording, then quit and reopen the app")
             return
         }
 
@@ -151,10 +203,22 @@ private struct ToolsContent: View {
         // Give the panel a frame to order out so it is not in the
         // capture. 350ms matches the panel's hide animation.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            ScreenAreaSelector.select { cgImage in
+            ScreenAreaSelector.select { cancelled, cgImage in
                 Task { @MainActor in
                     isCapturing = false
-                    guard let cgImage else { return }
+                    // Esc stays silent; a failed capture must not: past the
+                    // gate the pixels can still refuse (a grant the running
+                    // process has not picked up yet), and retrying blind
+                    // is the same loop this gate exists to break.
+                    if cancelled { return }
+                    guard let cgImage else {
+                        if CopyTextCaptureGate.isGranted() {
+                            ToolHUD.show(icon: "text.viewfinder", message: "Quit and reopen the app, then try again")
+                        } else {
+                            ToolHUD.show(icon: "text.viewfinder", message: "Allow Screen Recording to copy text")
+                        }
+                        return
+                    }
                     // OCR off the main actor so the HUD is not held up.
                     let outcome = await Task.detached(priority: .userInitiated) {
                         ScreenTextHelper.outcome(for: cgImage)
@@ -363,16 +427,16 @@ private enum ScreenTextHelper {
 @MainActor
 private final class ScreenAreaSelector {
     private var panel: NSPanel?
-    private var completion: ((CGImage?) -> Void)?
+    private var completion: ((Bool, CGImage?) -> Void)?
     private static var current: ScreenAreaSelector?
 
-    static func select(completion: @escaping (CGImage?) -> Void) {
+    static func select(completion: @escaping (Bool, CGImage?) -> Void) {
         let selector = ScreenAreaSelector()
         current = selector
         selector.start(completion: completion)
     }
 
-    private func start(completion: @escaping (CGImage?) -> Void) {
+    private func start(completion: @escaping (Bool, CGImage?) -> Void) {
         self.completion = completion
 
         // Union of all screens so the overlay covers every display.
@@ -398,9 +462,9 @@ private final class ScreenAreaSelector {
                 guard let self else { return }
                 if let rect = globalRect {
                     let image = await self.captureImage(for: rect)
-                    self.finish(with: image)
+                    self.finish(cancelled: false, image: image)
                 } else {
-                    self.finish(with: nil)
+                    self.finish(cancelled: true, image: nil)
                 }
             }
         }
@@ -411,13 +475,13 @@ private final class ScreenAreaSelector {
         panel.makeFirstResponder(selectionView)
     }
 
-    private func finish(with image: CGImage?) {
+    private func finish(cancelled: Bool, image: CGImage?) {
         panel?.orderOut(nil)
         panel = nil
         let cb = completion
         completion = nil
         Self.current = nil
-        cb?(image)
+        cb?(cancelled, image)
     }
 
     private func captureImage(for globalRect: CGRect) async -> CGImage? {
