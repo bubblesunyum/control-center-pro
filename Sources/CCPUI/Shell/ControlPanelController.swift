@@ -259,6 +259,16 @@ public final class ControlPanelController {
     /// responder at all. Edit mode and the gallery have their own controls
     /// to type in and are left alone.
     private func focusNotesForOpen() {
+        if let web = panelFocus.notesWebView, web.window === window {
+            let start = ContinuousClock.now
+            if !editor.isEditing, !editor.isShowingGallery, panelFocus.pendingStickyID == nil,
+               window.firstResponder !== web {
+                window.makeFirstResponder(web)
+                NoteWebEditorController.shared.focusEnd()
+            }
+            NoteWebEditorController.shared.measureFirstFrame(since: start, label: "panel open")
+            return
+        }
         guard let notes = panelFocus.notesTextView, notes.window === window else { return }
         guard Self.shouldAutofocusNotes(
             isEditing: editor.isEditing,

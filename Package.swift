@@ -213,7 +213,9 @@ let package = Package(
                 "CCPKit",
                 .product(name: "MarkdownEngine", package: "swift-markdown-engine"),
             ],
-            path: "Sources/CCPUI"
+            path: "Sources/CCPUI",
+            // The Tiptap spike's page (ccp-5hpw), built by Spikes/tiptap-editor.
+            resources: [.copy("Resources/NoteWebEditor")]
         ),
 
         .executableTarget(

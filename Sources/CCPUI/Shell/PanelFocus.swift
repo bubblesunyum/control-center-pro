@@ -19,6 +19,10 @@ final class PanelFocus {
     /// itself, which is how "Notes isn't here" reads as nil.
     weak var notesTextView: NSTextView?
 
+    /// The Tiptap spike's web view, standing in for `notesTextView` while the
+    /// spike flag is on (ccp-5hpw).
+    weak var notesWebView: NSView?
+
     /// The sticky that should take focus when its view arrives. Set by
     /// `newSticky()` before the card exists, answered and cleared by the
     /// card itself. Nil the rest of the time: stickies never steal focus.

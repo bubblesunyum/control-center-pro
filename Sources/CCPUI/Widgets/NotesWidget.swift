@@ -51,6 +51,8 @@ public final class NotesWidget: CCPWidget {
         self.markdownDelete = MarkdownDeleteMonitor()
         self.hardBreakCaret = HardBreakCaretMonitor()
         self.caretCenter = CaretCenterMonitor()
+        // The spike's page loads at launch so no panel open waits on it.
+        if NoteWebEditor.isEnabled { _ = NoteWebEditorController.shared }
     }
 
     /// Test seam: widget backed by an in-memory document.

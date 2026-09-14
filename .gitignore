@@ -56,3 +56,6 @@ __pycache__/
 
 # The dashboard snapshot, regenerated on every poll — machine-local.
 dashboard/state.json
+
+# The Tiptap spike's npm install (Spikes/tiptap-editor).
+node_modules/

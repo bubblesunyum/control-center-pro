@@ -21,8 +21,13 @@ struct NoteSurface: View {
     /// verbs reach this editor and no other (see NoteFormatRequest).
     private var noteDocumentId: String { adapter.selectedNoteID?.uuidString ?? "notes" }
 
-    var body: some View {
-        VStack(spacing: 0) {
+    /// The Tiptap spike swaps in behind its flag (ccp-5hpw); it reads the pad
+    /// and never writes it.
+    @ViewBuilder
+    private var editor: some View {
+        if NoteWebEditor.isEnabled {
+            NoteWebEditor(markdown: adapter.text, documentId: noteDocumentId)
+        } else {
             MarkdownNoteEditor(
                 text: Binding(get: { adapter.text }, set: { adapter.text = $0 }),
                 documentId: noteDocumentId,
@@ -41,6 +46,12 @@ struct NoteSurface: View {
                     Self.clearStaleUndoIfPending(adapter: adapter, panelFocus: panelFocus)
                 }
             )
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            editor
             // Optimistic editing (ccp-t53p): the pull reconciles around
             // keystrokes in the background, so the editor never dims or
             // holds the caret while it proves.
