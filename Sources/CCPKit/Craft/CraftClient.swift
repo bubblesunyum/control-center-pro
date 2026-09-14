@@ -33,6 +33,19 @@ public enum CraftClientError: Error, Equatable {
     case rateLimited(retryAfter: TimeInterval?)
 }
 
+extension CraftClientError {
+    /// Short user-facing reason for a failed push, for sync status UI. One
+    /// wording for every surface, so the pad and the desk never describe one
+    /// server differently. A non-Craft error is unreachable by the case
+    /// above's definition — call sites coalesce to that before reading this.
+    var pushFailureText: String {
+        switch self {
+        case .rateLimited: return "Rate limited — retrying"
+        case .unreachable: return "Craft unreachable"
+        }
+    }
+}
+
 /// The network boundary. URLSession conforms; tests stub it.
 public protocol CraftTransport: Sendable {
     func data(for request: URLRequest) async throws -> (Data, URLResponse)

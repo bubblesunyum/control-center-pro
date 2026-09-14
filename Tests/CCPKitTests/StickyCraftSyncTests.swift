@@ -181,6 +181,36 @@ final class StickyCraftSyncTests: XCTestCase {
         XCTAssertEqual(transport.writes.count, writes, "healed rounds go quiet")
     }
 
+    /// The desk tells waiting apart from failed (ccp-2zi.7): a delete that
+    /// lands nowhere reads failed with its reason, and the healing retry
+    /// clears back to saved.
+    func testFailedPushReadsFailedUntilHealed() async throws {
+        let name = "ccp.sticky.status.\(UUID().uuidString)"
+        let defaults = try defaults(name)
+        defer { defaults.removePersistentDomain(forName: name) }
+        let transport = NormalisingCraftTransport()
+        let (store, _) = store(defaults, transport)
+        let shells = await steadyDesk(store, transport)
+        await store.pullAll()
+        XCTAssertEqual(store.syncStatus, .saved)
+
+        store.delete(shells[1].id)
+        XCTAssertEqual(store.syncStatus, .unsavedChanges, "nothing failed yet")
+
+        transport.failDelete = true
+        await store.flushCraftPush()
+
+        XCTAssertTrue(store.hasPushFailed)
+        XCTAssertEqual(store.lastPushErrorDescription, "Craft unreachable")
+        XCTAssertEqual(store.syncStatus, .failed)
+
+        transport.failDelete = false
+        await store.flushCraftPush()
+
+        XCTAssertFalse(store.hasPushFailed)
+        XCTAssertEqual(store.syncStatus, .saved)
+    }
+
     func testTrashedDocumentUnmapsAndKeepsTheDesk() async throws {
         let name = "ccp.sticky.trash.\(UUID().uuidString)"
         let defaults = try defaults(name)

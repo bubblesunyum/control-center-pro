@@ -52,6 +52,7 @@ extension StickyStore {
         case syncing
         case offline
         case unsavedChanges
+        case failed
         case saved
     }
 
@@ -65,7 +66,7 @@ extension StickyStore {
     public var syncStatus: SyncStatus {
         guard hasCraftCredential else { return .localOnly }
         guard isSyncVerified else { return isSyncCheckFailed ? .offline : .syncing }
-        if deskTextMoved { return .unsavedChanges }
+        if deskTextMoved { return hasPushFailed ? .failed : .unsavedChanges }
         if craftDestination.craftDocumentID(for: Self.craftDeskID) == nil { return .localOnly }
         return .saved
     }
@@ -155,6 +156,7 @@ extension StickyStore {
                 self.refreshCraftCredentialPresence()
                 self.isSyncVerified = false
                 self.isSyncCheckFailed = false
+                self.lastPushErrorDescription = nil
                 self.pullTask?.cancel()
                 self.pullTask = nil
                 self.pullRetryTask?.cancel()
@@ -246,12 +248,22 @@ extension StickyStore {
                     return
                 }
             } else if craftBaseURL() == baseURL {
+                // Unknown trash blocks the round rather than green-lighting
+                // it: a blind write strands desk text in a trashed doc. A
+                // blocked round backs off like any failed round — silently
+                // standing dirty is the silent failure the status exists for.
+                recordPushFailure(CraftClientError.unreachable(statusCode: nil))
                 return
             } else {
                 return
             }
         }
-        guard craftBaseURL() == baseURL, deskNeedsPush else { return }
+        guard craftBaseURL() == baseURL, deskNeedsPush else {
+            // Nothing owed, nothing failed-pending: a no-op round must not
+            // leave a stale failure standing past the undo that cleaned it.
+            lastPushErrorDescription = nil
+            return
+        }
         do {
             switch try await pushOneDesk(client: client) {
             case .wrote:
@@ -267,12 +279,22 @@ extension StickyStore {
             }
             consecutivePushFailures = 0
             pushThrottledUntil = nil
+            lastPushErrorDescription = nil
         } catch {
-            consecutivePushFailures += 1
-            let delay = retryDelay(for: error)
-            pushThrottledUntil = Date().addingTimeInterval(delay ?? Self.pushRetryDelays[2])
-            schedulePushRetry(after: delay)
+            recordPushFailure(error)
         }
+    }
+
+    /// A failed round's bookkeeping in one place: the throw, the
+    /// trash-blocked early return, and any future failure share it, so the
+    /// status can never miss one.
+    private func recordPushFailure(_ error: Error) {
+        consecutivePushFailures += 1
+        lastPushErrorDescription =
+            (error as? CraftClientError ?? .unreachable(statusCode: nil)).pushFailureText
+        let delay = retryDelay(for: error)
+        pushThrottledUntil = Date().addingTimeInterval(delay ?? Self.pushRetryDelays[2])
+        schedulePushRetry(after: delay)
     }
 
     private enum PushVisit {
@@ -300,6 +322,7 @@ extension StickyStore {
             craftDestination.setCraftDocumentID(newID, for: Self.craftDeskID)
             consecutivePushFailures = 0
             pushThrottledUntil = nil
+            lastPushErrorDescription = nil
             docID = newID
             justProvisioned = true
         }
@@ -387,11 +410,12 @@ extension StickyStore {
     }
 
     private func schedulePushRetry(after delay: TimeInterval?) {
-        guard let delay else { return }
+        guard let delay else { pushRetryTask = nil; return }
         pushRetryTask?.cancel()
         pushRetryTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled else { return }
+            self?.pushRetryTask = nil
             await self?.runCraftPush()
         }
     }
@@ -545,5 +569,8 @@ extension StickyStore {
     /// that no longer exists, and the desk survives.
     private func unmapDesk() {
         craftDestination.dropSyncState(for: Self.craftDeskID)
+        // Unmapped pads owe no push: a stale failure must not brand the next
+        // edit's fresh document before it is ever attempted.
+        lastPushErrorDescription = nil
     }
 }

@@ -169,9 +169,10 @@ fileprivate func notesSyncDisplay(_ status: NotesAdapter.SyncStatus) -> (symbol:
     switch status {
     case .localOnly: ("internaldrive", "Local")
     case .syncing: ("arrow.triangle.2.circlepath", "Syncing")
-    // The cloud-with-X the error state wants; `cloud.slash` does not exist.
-    case .offline: ("xmark.icloud", "Error")
-    case .unsavedChanges: ("clock", "Unsaved")
+    // The cloud-with-X the offline state wants; `cloud.slash` does not exist.
+    case .offline: ("xmark.icloud", "Offline")
+    case .unsavedChanges: ("clock", "Pending")
+    case .failed: ("exclamationmark.icloud", "Failed")
     case .saved: ("cloud", "Synced")
     }
 }
@@ -308,6 +309,22 @@ private struct SyncStatusPopover: View {
         return adapter.lastSyncedAt(for: padID)
     }
 
+    /// The failed-push row under the last-synced line: the reason the last
+    /// push failed and whether its retry is still armed. Past the final
+    /// backoff nothing is scheduled, so the copy stops promising a retry.
+    /// Red like the destructive rows in PopoverMenu, not a new signal.
+    @ViewBuilder
+    private var failureBanner: some View {
+        if adapter.syncStatus == .failed {
+            Text("\(adapter.lastPushErrorDescription ?? "Sync failed") — \(adapter.isPushRetryScheduled ? "retrying automatically" : "will retry on your next edit").")
+                .font(.caption)
+                .foregroundStyle(.red)
+                .padding(.horizontal, Space.one)
+                .padding(.bottom, Space.two)
+                .accessibilityLabel("Last push failed: \(adapter.lastPushErrorDescription ?? "sync failed")")
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Last synced: \(lastSynced.map(noteLastSyncedText) ?? "Never")")
@@ -315,7 +332,8 @@ private struct SyncStatusPopover: View {
                 .foregroundStyle(.primary)
                 .padding(.horizontal, Space.one)
                 .padding(.top, Space.one)
-                .padding(.bottom, Space.two)
+                .padding(.bottom, adapter.syncStatus == .failed ? Space.half : Space.two)
+            failureBanner
             if !records.isEmpty {
                 WidgetSectionLabel("Conflicts", isCollapsed: $isConflictsCollapsed)
                     .padding(.horizontal, Space.one)

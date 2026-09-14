@@ -258,6 +258,14 @@ public final class NotesAdapter {
     /// answered. Sticky until the next pull succeeds, so a failing retry
     /// never flickers the status between attempts.
     public private(set) var isSyncCheckFailed = false
+    /// Pads whose verified push failed and Craft never confirmed since. A
+    /// failed round spends only the pads it visits, so a pad typed after the
+    /// failure but never attempted still reads pending, not failed.
+    /// Reassigned, never mutated in place, so observation fires.
+    public private(set) var failedPadIDs: Set<UUID> = []
+    /// Short human reason for the last push failure, for the sync popover.
+    /// Global — the per-pad fact is the set above; cleared when it empties.
+    public private(set) var lastPushErrorDescription: String?
 
     /// A saved connection exists. Without one the pads are local-only notes.
     /// With one the pads still stay editable while the pull proves it —
@@ -292,6 +300,7 @@ public final class NotesAdapter {
         case syncing
         case offline
         case unsavedChanges
+        case failed
         case saved
     }
 
@@ -299,7 +308,9 @@ public final class NotesAdapter {
         guard hasCraftCredential else { return .localOnly }
         guard isSyncVerified else { return isSyncCheckFailed ? .offline : .syncing }
         if let selectedNoteID {
-            if dirtyPadIDs.contains(selectedNoteID) { return .unsavedChanges }
+            if dirtyPadIDs.contains(selectedNoteID) {
+                return failedPadIDs.contains(selectedNoteID) ? .failed : .unsavedChanges
+            }
             // Verified and clean but never provisioned — an empty pad, or
             // text the trash sent back to local-only — exists nowhere in
             // Craft, so it must not read as saved there.
@@ -550,6 +561,8 @@ public final class NotesAdapter {
                 // already be up, and the status should reflect the new space.
                 self.isSyncVerified = false
                 self.isSyncCheckFailed = false
+                self.failedPadIDs = []
+                self.lastPushErrorDescription = nil
                 self.pullTask?.cancel()
                 self.pullTask = nil
                 self.pullRetryTask?.cancel()
@@ -1101,6 +1114,8 @@ public final class NotesAdapter {
     private func dropSyncState(for id: UUID) {
         craftDestination.dropSyncState(for: id)
         dirtyPadIDs.remove(id)
+        failedPadIDs = failedPadIDs.subtracting([id])
+        clearFailureDescriptionIfHealed()
         conflictsVersion += 1
         // The popover reads the agreement through this, not the store — a
         // trashed-then-unmapped pad must flip to Never while it stands open.
@@ -1364,7 +1379,11 @@ public final class NotesAdapter {
             // The trash listing failed with the credential steady: writing
             // blind risks stranding text in a trashed doc, so the round
             // backs off like any failed round with the dirty bits standing.
+            // Only the mapped writers the sweep gated failed with it — an
+            // unmapped pad needs no trash check (provision creates fresh),
+            // so it stays pending for the retry round.
             failure = CraftClientError.unreachable(statusCode: nil)
+            failedPadIDs = failedPadIDs.union(mappedWriters)
             attempted = []
         } else {
             // The credential switched mid-sweep: nothing settled can be
@@ -1392,6 +1411,9 @@ public final class NotesAdapter {
                 }
             } catch {
                 failure = failure ?? error
+                // Only the pad the round actually spent failed: pads typed
+                // after the failure but never attempted still read pending.
+                failedPadIDs = failedPadIDs.union([padID])
                 // Backpressure stops the round, not just the pad: unvisited
                 // pads would each spend their own creates into the throttled
                 // window before the backoff below lands.
@@ -1421,6 +1443,11 @@ public final class NotesAdapter {
         }
         if let failure {
             consecutivePushFailures += 1
+            lastPushErrorDescription =
+                (failure as? CraftClientError ?? .unreachable(statusCode: nil)).pushFailureText
+            // Pads the round wrote clean agreed mid-failure: only still-dirty
+            // pads keep their failure into the retry.
+            failedPadIDs = failedPadIDs.intersection(dirtyPadIDs)
             let delay = retryDelay(for: failure)
             // Gate debounced runs for the same window the retry waits out:
             // typing must not hammer a server that just said slow down. The
@@ -1431,6 +1458,10 @@ public final class NotesAdapter {
         } else {
             consecutivePushFailures = 0
             pushThrottledUntil = nil
+            // Only still-dirty pads keep their failure: clean pads agreed,
+            // and the reason clears when no failed pad holds it anymore.
+            failedPadIDs = failedPadIDs.intersection(dirtyPadIDs)
+            clearFailureDescriptionIfHealed()
         }
     }
 
@@ -1481,6 +1512,8 @@ public final class NotesAdapter {
             // A new sync relationship gets fresh chances.
             consecutivePushFailures = 0
             pushThrottledUntil = nil
+            failedPadIDs = failedPadIDs.subtracting([padID])
+            clearFailureDescriptionIfHealed()
             // Born named: the creation title IS the pad's name, so the title
             // baseline starts converged — no rename PUT follows.
             craftDestination.storeSyncedTitle(pad.name, for: padID)
@@ -1647,6 +1680,10 @@ public final class NotesAdapter {
     /// Observable for tests.
     func isPushDirty(_ id: UUID) -> Bool { dirtyPadIDs.contains(id) }
 
+    /// Whether the pad pushed and failed, unconfirmed since. Mirrors the
+    /// dirty seam above: the toolbar's pending/failed split reads through it.
+    public func isPushFailed(_ id: UUID) -> Bool { failedPadIDs.contains(id) }
+
     /// Observable for tests: a failed push leaves a retry scheduled.
     var hasScheduledRetry: Bool { pushRetryTask != nil }
 
@@ -1669,6 +1706,16 @@ public final class NotesAdapter {
 
     private static let pushRetryDelays: [TimeInterval] = [30, 120, 300]
 
+    /// Drop the popover's failure reason once no failed pad holds it. The
+    /// set is the fact; the string is its telling.
+    private func clearFailureDescriptionIfHealed() {
+        if failedPadIDs.isEmpty { lastPushErrorDescription = nil }
+    }
+
+    /// Whether a failed push still has its automatic retry armed. The popover
+    /// reads it so past-the-final-backoff failures stop promising a retry.
+    public var isPushRetryScheduled: Bool { pushRetryTask != nil }
+
     private func retryDelay(for error: Error) -> TimeInterval? {
         switch error as? CraftClientError {
         case .rateLimited(let retryAfter):
@@ -1683,11 +1730,16 @@ public final class NotesAdapter {
     }
 
     private func schedulePushRetry(after delay: TimeInterval?) {
-        guard let delay else { return }
+        // No delay, no retry: release the handle, or isPushRetryScheduled
+        // keeps promising one past the final backoff.
+        guard let delay else { pushRetryTask = nil; return }
         pushRetryTask?.cancel()
         pushRetryTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled else { return }
+            // A replacement cancels this task first, so the handle is still
+            // ours to release — the next schedule remarries it.
+            self?.pushRetryTask = nil
             await self?.runCraftPush()
         }
     }

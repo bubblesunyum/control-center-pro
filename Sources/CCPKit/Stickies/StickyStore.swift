@@ -67,6 +67,12 @@ public final class StickyStore {
     @ObservationIgnored internal var needsPullAfterFlight = false
     @ObservationIgnored internal var consecutivePushFailures = 0
     @ObservationIgnored internal var pushThrottledUntil: Date?
+    /// Whether the desk pushed and failed, unconfirmed since. Derived from
+    /// the reason below: one fact, one source — a later reset path cannot
+    /// clear one and forget the other.
+    public var hasPushFailed: Bool { lastPushErrorDescription != nil }
+    /// Short human reason for the last push failure.
+    public internal(set) var lastPushErrorDescription: String?
     @ObservationIgnored internal var isPanelOpen = false
     /// Whether the latest pull has proven Craft reachable. False until the
     /// first pull lands, and on every activate until its pull finishes.
