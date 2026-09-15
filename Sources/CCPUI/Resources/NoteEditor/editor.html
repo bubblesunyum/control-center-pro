@@ -50,7 +50,7 @@ body {
 .ProseMirror > :first-child { margin-top: 0; }
 
 .ProseMirror :is(ul, ol) { padding-left: var(--bb-list-indent); }
-.ProseMirror li > :is(p, ul, ol) { margin: 0; }
+.ProseMirror li :is(p, ul, ol) { margin: 0; }
 .ProseMirror ul[data-type="taskList"] { list-style: none; padding-left: 0; }
 .ProseMirror ul[data-type="taskList"] ul[data-type="taskList"] { padding-left: var(--bb-list-indent); }
 .ProseMirror ul[data-type="taskList"] li { display: flex; align-items: baseline; gap: 6px; }
@@ -75,12 +75,12 @@ body {
 .ProseMirror mark { background: rgba(255, 214, 10, 0.35); color: inherit; border-radius: 2px; }
 .ProseMirror a { color: -apple-system-link; cursor: text; }
 .ProseMirror img { max-width: 100%; border-radius: 6px; }
-.ProseMirror img.ProseMirror-selectednode { outline: 2px solid -apple-system-control-accent; }
+.ProseMirror-focused img.ProseMirror-selectednode { outline: 2px solid -apple-system-control-accent; }
 .ProseMirror table { border-collapse: collapse; }
 .ProseMirror :is(td, th) { border: 1px solid -apple-system-separator; padding: 2px 6px; vertical-align: top; }
 .ProseMirror :is(td, th) > p { margin: 0; }
 .ProseMirror .raw-html { color: -apple-system-secondary-label; font: 0.92em ui-monospace, monospace; white-space: pre-wrap; }
-.ProseMirror .ProseMirror-selectednode.raw-html { outline: 2px solid -apple-system-control-accent; border-radius: 4px; }
+.ProseMirror-focused .ProseMirror-selectednode.raw-html { outline: 2px solid -apple-system-control-accent; border-radius: 4px; }
 
 .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
