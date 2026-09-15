@@ -37,9 +37,11 @@ whatever is actually under review. Our adapters over those engines live in
 `CCPKit` and stay in scope, which is the part worth reviewing anyway.
 
 Config and the board are in scope too — `opencode.json` is three lines deciding
-what every session loads, and `dashboard/index.html` is the board itself. Only
-the generated files are cut: the ledger export, `dashboard/state.json`, and
-`.claude/context.lock` are churn that dilutes the read.
+what every session loads, and `dashboard/index.html` is the board itself. So
+are JS and CSS, which is where a web editor's real code lives. Only the
+generated files are cut: the ledger export, `dashboard/state.json`,
+`.claude/context.lock`, npm lockfiles and built bundles are churn that dilutes
+the read.
 
 Give each one only the packet path and one line on what the change was meant to
 do. They read `CLAUDE.md` themselves. Don't paste the diff into the prompt —
