@@ -63,7 +63,20 @@ for (const [name, md] of Object.entries(craft)) report(name, md, roundTrip(md))
 // A pad file is Craft blocks joined by the hard-break boundary (two trailing
 // spaces + newline). Sync fidelity is per block: a block that comes back
 // different is a block the push would rewrite in Craft.
-const craftBlocks = md => md.split(/(?<=\S) {2,}\n/).map(b => b.replace(/ +$/, '')).filter(b => b.trim())
+// Inside a fence, trailing spaces are code, never a boundary — the same rule
+// CraftBlockSplitter gets from the engine's AST.
+const craftBlocks = md => {
+  const blocks = []
+  let current = [], inFence = false
+  for (const line of md.split('\n')) {
+    if (/^\s{0,3}(```|~~~)/.test(line)) inFence = !inFence
+    const isBoundary = !inFence && /\S {2,}$/.test(line)
+    current.push(isBoundary ? line.replace(/ +$/, '') : line)
+    if (isBoundary) { blocks.push(current.join('\n')); current = [] }
+  }
+  blocks.push(current.join('\n'))
+  return blocks.map(b => b.replace(/\n+$/, '')).filter(b => b.trim())
+}
 const shape = s => JSON.stringify(s.replace(/[A-Za-z0-9]/g, 'a').slice(0, 90))
 const kinds = {}
 let blocks = 0, blocksSame = 0, unstable = 0
