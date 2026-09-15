@@ -82,7 +82,6 @@ final class CraftHistoryTests: XCTestCase {
         XCTAssertEqual(ring.count, 2)
         XCTAssertEqual(ring[0].reason, .preRestore)
         XCTAssertEqual(ring[0].markdown, "current")
-        XCTAssertEqual(adapter.padsPendingUndoClear, [id])
     }
 
     func testRestoreIdenticalTextRecordsNothing() throws {
@@ -94,7 +93,6 @@ final class CraftHistoryTests: XCTestCase {
 
         XCTAssertEqual(adapter.snapshots(for: id).count, 1,
                       "no pre-restore copy of identical text")
-        XCTAssertTrue(adapter.padsPendingUndoClear.isEmpty, "no replacement happened")
         XCTAssertFalse(adapter.isPushDirty(id))
     }
 
@@ -125,19 +123,14 @@ final class CraftHistoryTests: XCTestCase {
         XCTAssertEqual(adapter.snapshots(for: id).count, 1,
                       "emptiness is not worth a snapshot")
         XCTAssertTrue(adapter.isPushDirty(id))
-        XCTAssertEqual(adapter.padsPendingUndoClear, [id], "the text was still replaced")
     }
 
-    func testTypingNeitherSnapshotsNorFlagsReplacement() throws {
-        // The undo-clear answers wholesale replacements only: keystrokes
-        // must leave the stack alone, so typing records nothing and flags
-        // nothing — the surface has nothing to spend.
+    func testTypingRecordsNoSnapshot() throws {
         let (adapter, id) = adapter(text: "hello")
 
         adapter.text = "hello edited"
 
         XCTAssertTrue(adapter.snapshots(for: id).isEmpty)
-        XCTAssertTrue(adapter.padsPendingUndoClear.isEmpty)
         XCTAssertTrue(adapter.isPushDirty(id), "typing still pushes as usual")
     }
 
@@ -148,37 +141,17 @@ final class CraftHistoryTests: XCTestCase {
 
         XCTAssertEqual(adapter.text, "current")
         XCTAssertTrue(adapter.snapshots(for: id).isEmpty)
-        XCTAssertTrue(adapter.padsPendingUndoClear.isEmpty)
         XCTAssertFalse(adapter.isPushDirty(id))
     }
 
-    func testReplacementFlagsAccumulateAcrossPads() throws {
-        // One pull adopts every mapped pad: the signal must hold both, or
-        // the first pad's undo clear never fires.
-        let (adapter, first, second) = twoPads(first: "one", second: "two")
-        adapter.recordSnapshot(markdown: "old-one", reason: .pull, date: nil, for: first)
-        adapter.recordSnapshot(markdown: "old-two", reason: .pull, date: nil, for: second)
-        let firstID = try XCTUnwrap(adapter.snapshots(for: first).first?.id)
-        let secondID = try XCTUnwrap(adapter.snapshots(for: second).first?.id)
-
-        adapter.restoreSnapshot(firstID, for: first)
-        adapter.restoreSnapshot(secondID, for: second)
-
-        XCTAssertEqual(adapter.padsPendingUndoClear, [first, second])
-        adapter.acknowledgeUndoClear(for: first)
-        XCTAssertEqual(adapter.padsPendingUndoClear, [second])
-    }
-
-    func testDeleteDropsHistoryAndPendingFlags() throws {
+    func testDeleteDropsHistory() throws {
         let (adapter, first, _) = twoPads(first: "one", second: "two")
         adapter.recordSnapshot(markdown: "old-one", reason: .pull, date: nil, for: first)
         let savedID = try XCTUnwrap(adapter.snapshots(for: first).first?.id)
         adapter.restoreSnapshot(savedID, for: first)
-        XCTAssertEqual(adapter.padsPendingUndoClear, [first])
 
         XCTAssertTrue(adapter.deleteNote(first))
 
         XCTAssertTrue(adapter.snapshots(for: first).isEmpty, "history dies with the pad")
-        XCTAssertTrue(adapter.padsPendingUndoClear.isEmpty)
     }
 }

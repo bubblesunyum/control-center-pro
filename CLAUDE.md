@@ -17,19 +17,21 @@ Glass). The CoreAudio process-tap API the audio mixer needs floors at 14.4, well
 under it.
 `--full` adds the app smoke launch.
 
-There are two dependencies, and they are different in kind. **PsymailKit** is
+There are two Swift dependencies, and they are different in kind. **PsymailKit** is
 the library lane of `../psymail-mini`, carried by a *path* dependency — the two
 repos are developed as a pair in sibling checkouts, so a checkout of
 control-center-pro alone will not resolve; see [PATCHES.md](./PATCHES.md).
 **MarkdownEngine** (`bubblesunyum/swift-markdown-engine`, Apache-2.0, forked
-from `nodes-app`) is the
-Notes widget's live-styled Markdown editor, carried by a *URL* dependency pinned
-exact to our own tag: unlike the Vorssaint engines we fork, it started as a
-library we consumed unchanged — but CCP needs its block AST public and upstream
-keeps its public surface small by policy, so the fork carries that seam and
-merges from upstream are deliberate (ccp-aa5). Its resolution also pins HighlighterSwift and
-SwiftMath, which only its opt-in code-block and LaTeX products link — CCP takes
-the dependency-free core product and neither of those.
+from `nodes-app`) is carried by a *URL* dependency pinned exact to our own tag,
+and only CCPKit links it: the Craft sync splitter cuts pads with its block AST,
+which upstream keeps private by policy, so the fork carries that seam (ccp-aa5).
+
+The note editor is neither: it is **bb-editor** (`../bb-editor`, MIT), a Tiptap
+page in a `WKWebView`, and CCPUI carries it as one committed HTML bundle in
+`Sources/CCPUI/Resources/NoteEditor`, stamped with the commit it came from.
+`scripts/editor-bundle.sh` rebuilds it from the sibling checkout, so
+`swift build` never needs node. Editor behaviour and its tests live in
+bb-editor; the Swift side is `NoteEditorController` and `UntouchedBlocks`.
 
 ## Architecture Overview
 

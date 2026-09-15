@@ -271,12 +271,11 @@ final class CraftPullAdapterTests: XCTestCase {
         XCTAssertEqual(ring[0].markdown, "one")
         let clock = ISO8601DateFormatter().date(from: "2026-09-06T19:00:00Z")
         XCTAssertEqual(ring[0].date, clock, "dated by the server clock, never the Mac's")
-        XCTAssertEqual(adapter.padsPendingUndoClear, [id])
     }
 
     func testAdoptIntoEmptyPadSnapshotsNothing() async throws {
         // Provisioned but never pushed: an empty sidecar adopts, and
-        // emptiness is not worth a snapshot — but the undo stack still turns.
+        // emptiness is not worth a snapshot.
         let name = "ccp.pull.history-empty.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
@@ -293,12 +292,11 @@ final class CraftPullAdapterTests: XCTestCase {
 
         XCTAssertEqual(adapter.text, "hi")
         XCTAssertTrue(adapter.snapshots(for: id).isEmpty)
-        XCTAssertEqual(adapter.padsPendingUndoClear, [id], "the text was still replaced")
     }
 
     func testIdOnlyReseedReplacesNothing() async throws {
         // Same text under a new block id: the sidecar reseeds, but no text
-        // was replaced — no snapshot, and the undo stack stands.
+        // was replaced — no snapshot.
         let name = "ccp.pull.history-reseed.\(UUID().uuidString)"
         let store = try defaults(name)
         defer { store.removePersistentDomain(forName: name) }
@@ -314,7 +312,6 @@ final class CraftPullAdapterTests: XCTestCase {
         XCTAssertEqual(destination.base(for: id).blocks.map(\.id), ["block-9"],
                       "the reseed still lands")
         XCTAssertTrue(adapter.snapshots(for: id).isEmpty)
-        XCTAssertTrue(adapter.padsPendingUndoClear.isEmpty)
     }
 
     func testDirtyPadSkipsWhenRemoteDidNotMove() async throws {

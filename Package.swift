@@ -197,8 +197,8 @@ let package = Package(
             dependencies: [
                 "VorssaintEngines",
                 .product(name: "PsymailKit", package: "psymail-mini"),
-                // The Craft sync splitter cuts the pad with the same grammar
-                // the editor styles with (ccp-xgl).
+                // The Craft sync splitter cuts the pad with the engine's block
+                // grammar (ccp-xgl); nothing else links the engine.
                 .product(name: "MarkdownEngine", package: "swift-markdown-engine"),
             ],
             path: "Sources/CCPKit"
@@ -209,13 +209,11 @@ let package = Package(
         // one adapter, not the interface.
         .target(
             name: "CCPUI",
-            dependencies: [
-                "CCPKit",
-                .product(name: "MarkdownEngine", package: "swift-markdown-engine"),
-            ],
+            dependencies: ["CCPKit"],
             path: "Sources/CCPUI",
-            // The Tiptap spike's page (ccp-5hpw), built by Spikes/tiptap-editor.
-            resources: [.copy("Resources/NoteWebEditor")]
+            // The note editor page, bundled from ../bb-editor by
+            // scripts/editor-bundle.sh.
+            resources: [.copy("Resources/NoteEditor")]
         ),
 
         .executableTarget(

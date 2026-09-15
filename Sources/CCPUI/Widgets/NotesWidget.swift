@@ -29,47 +29,21 @@ public final class NotesWidget: CCPWidget {
     )
 
     private let adapter: NotesAdapter
-    /// Bare return starts a new block (ccp-inoq). Owned here so its lifetime
-    /// is the panel's: the view graph is built once and hidden with
-    /// `orderOut`, which never fires `onDisappear`, so view-bound start/stop
-    /// would leave the monitor watching with the panel shut.
-    private let paragraphReturn: ParagraphReturnMonitor
-    /// Delete skips hidden markdown markers (ccp-e8df). Same lifetime for
-    /// the same reason.
-    private let markdownDelete: MarkdownDeleteMonitor
-    /// The caret steps over a block boundary rather than into its spaces
-    /// (ccp-ra2l). Same lifetime, same reason.
-    private let hardBreakCaret: HardBreakCaretMonitor
-    /// Typing or moving the caret while its line is off-screen centers the
-    /// line instead of edge-revealing it (ccp-sotw). Same lifetime, same
-    /// reason — and its global observation covers the stickies too.
-    private let caretCenter: CaretCenterMonitor
 
     public init() {
         self.adapter = NotesAdapter()
-        self.paragraphReturn = ParagraphReturnMonitor()
-        self.markdownDelete = MarkdownDeleteMonitor()
-        self.hardBreakCaret = HardBreakCaretMonitor()
-        self.caretCenter = CaretCenterMonitor()
-        // The spike's page loads at launch so no panel open waits on it.
-        if NoteWebEditor.isEnabled { _ = NoteWebEditorController.shared }
+        // The editor page takes a second and a half to load cold, so it
+        // loads at launch and no panel open waits on it.
+        _ = NoteEditorController.notes
     }
 
     /// Test seam: widget backed by an in-memory document.
     init(document: NotesDocument) {
         self.adapter = NotesAdapter(document: document)
-        self.paragraphReturn = ParagraphReturnMonitor()
-        self.markdownDelete = MarkdownDeleteMonitor()
-        self.hardBreakCaret = HardBreakCaretMonitor()
-        self.caretCenter = CaretCenterMonitor()
     }
 
-    init(adapter: NotesAdapter, monitors: EventMonitors = .system) {
+    init(adapter: NotesAdapter) {
         self.adapter = adapter
-        self.paragraphReturn = ParagraphReturnMonitor(monitors: monitors)
-        self.markdownDelete = MarkdownDeleteMonitor(monitors: monitors)
-        self.hardBreakCaret = HardBreakCaretMonitor()
-        self.caretCenter = CaretCenterMonitor()
     }
 
     public func makeView() -> some View {
@@ -78,17 +52,9 @@ public final class NotesWidget: CCPWidget {
 
     public func activate() {
         adapter.activate()
-        paragraphReturn.start()
-        markdownDelete.start()
-        hardBreakCaret.start()
-        caretCenter.start()
     }
 
     public func deactivate() {
-        caretCenter.stop()
-        hardBreakCaret.stop()
-        markdownDelete.stop()
-        paragraphReturn.stop()
         adapter.deactivate()
     }
 }

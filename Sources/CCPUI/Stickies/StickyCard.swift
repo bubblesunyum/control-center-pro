@@ -172,24 +172,13 @@ struct StickyCard: View {
                 .gesture(moveGesture)
             // Fenced off from the drag: a move steers only the card's offset,
             // so the text stack must not re-evaluate per pixel.
-            StableStickyEditor(
-                text: sticky.text,
-                documentId: "sticky-\(sticky.id.uuidString)",
-                onText: { store.setText($0, for: sticky.id) },
-                // Only the just-created sticky answers: `newSticky()` names it
-                // before the card exists, and the claim clears on arrival. Every
-                // other sticky stays out of the focus path entirely.
-                onCreate: { [weak panelFocus, id = sticky.id] textView in
-                    guard panelFocus?.pendingStickyID == id else { return }
-                    panelFocus?.pendingStickyID = nil
-                    textView.window?.makeFirstResponder(textView)
-                }
-            )
-            .equatable()
-            .frame(
-                width: Self.editorSize(for: drawnSize).width,
-                height: Self.editorSize(for: drawnSize).height
-            )
+            StableStickyEditor(sticky: sticky, size: Self.editorSize(for: CGSize(width: sticky.width, height: sticky.height)))
+                .equatable()
+                .frame(
+                    width: Self.editorSize(for: drawnSize).width,
+                    height: Self.editorSize(for: drawnSize).height,
+                    alignment: .topLeading
+                )
         }
         .frame(width: drawnSize.width, height: drawnSize.height)
         .background {
@@ -413,35 +402,81 @@ struct StickyCard: View {
 }
 
 /// The editor, fenced off from drag re-renders: a move steers only the
-/// card's offset, so the text view must not hear about every pixel — each
-/// body re-evaluation pokes the AppKit stack (header reconcile, scroll and
-/// undo bookkeeping) and the dropped frames read as the card trailing the
-/// finger. Equal while the text and document match, whatever closures the
-/// card rebuilt around them; resizes still land, because the frame sits
-/// outside the fence and only the frame moves.
+/// card's offset, so the text must not hear about every pixel. Equal while
+/// the text and committed size match; resizes still land live, because the
+/// frame sits outside the fence and only the frame moves.
+///
+/// The sticky holding the shared editor shows it live; every other sticky
+/// shows its snapshot, and a click in one brings the editor to the text
+/// under the pointer (see `StickyEditorController`).
 private struct StableStickyEditor: View, Equatable {
-    let text: String
-    let documentId: String
-    let onText: (String) -> Void
-    let onCreate: ((NSTextView) -> Void)?
+    let sticky: Sticky
+    /// The committed editor size, which is what a snapshot is drawn at.
+    let size: CGSize
+
+    @Environment(\.panelFocus) private var panelFocus
+    private var editing: StickyEditorController { .shared }
 
     static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.text == rhs.text && lhs.documentId == rhs.documentId
+        lhs.sticky.text == rhs.sticky.text && lhs.sticky.id == rhs.sticky.id && lhs.size == rhs.size
     }
 
     var body: some View {
-        MarkdownNoteEditor(
-            text: Binding(get: { text }, set: onText),
-            documentId: documentId,
-            placeholder: "Jot it down…",
-            // None of either: the card's 16pt paper border is already the
-            // well, and the caret-comfort slack a full-window document wants
-            // raises a scroller on a note that visibly fits. The Notes widget
-            // keeps both defaults — these presets are sticky-only.
-            textInsets: MarkdownNoteEditor.stickyInsets,
-            overscroll: MarkdownNoteEditor.stickyOverscroll,
-            onCreate: onCreate
-        )
+        Group {
+            if editing.focusedStickyID == sticky.id {
+                StickyLiveEditor(editing: editing)
+            } else {
+                snapshot
+                    .contentShape(Rectangle())
+                    .onTapGesture(coordinateSpace: .local) { location in
+                        editing.focus(sticky, at: location)
+                    }
+                    .accessibilityElement()
+                    .accessibilityLabel("Sticky note text")
+                    .accessibilityValue(sticky.text)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { editing.focus(sticky, at: nil) }
+            }
+        }
+        .onAppear {
+            // Only the just-created sticky answers: `newSticky()` names it
+            // before the card exists, and the claim clears on arrival. Every
+            // other sticky stays out of the focus path entirely.
+            if panelFocus?.pendingStickyID == sticky.id {
+                panelFocus?.pendingStickyID = nil
+                editing.focus(sticky, at: nil)
+            } else if editing.snapshots[sticky.id] == nil {
+                editing.redraw(sticky, size: size)
+            }
+        }
+        .onChange(of: sticky.text) { editing.textChanged(sticky, size: size) }
+        .onChange(of: size) {
+            if editing.focusedStickyID != sticky.id { editing.redraw(sticky, size: size) }
+        }
+    }
+
+    @ViewBuilder
+    private var snapshot: some View {
+        if let image = editing.snapshots[sticky.id] {
+            Image(nsImage: image)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .clipped()
+        } else {
+            Color.clear
+        }
+    }
+}
+
+private struct StickyLiveEditor: NSViewRepresentable {
+    let editing: StickyEditorController
+
+    func makeNSView(context: Context) -> NSView {
+        NSView()
+    }
+
+    func updateNSView(_ host: NSView, context: Context) {
+        // A tick later: the host joins its window after the first update.
+        DispatchQueue.main.async { editing.didMount(in: host) }
     }
 }
 

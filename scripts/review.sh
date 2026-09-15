@@ -57,7 +57,7 @@ fi
 # generated bundle it builds filled two thirds of it.
 SCOPE=('*.swift' '*.py' '*.sh' '*.md' '*.html' '*.json' '*.js' '*.mjs' '*.css'
        'Package.swift' 'scripts/hooks/*'
-       ':(exclude)*package-lock.json' ':(exclude)Sources/CCPUI/Resources/NoteWebEditor/*'
+       ':(exclude)*package-lock.json' ':(exclude)Sources/CCPUI/Resources/NoteEditor/*'
        ':(exclude).beads/*' ':(exclude)dashboard/vendor/*'
        ':(exclude)dashboard/state.json' ':(exclude).claude/context.lock'
        ':(exclude)Sources/Vorssaint/*' ':(exclude)Sources/FanControlHelper/*'

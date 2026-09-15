@@ -245,8 +245,9 @@ seam we opened deliberately and each is one commit on the fork:
   step. `nil` — the default — leaves every other embedder pixel-identical.
 
 Each seam is a config struct plus one call site, which is what keeps a merge
-from upstream cheap. `Sources/CCPUI/DesignSystem/MarkdownNoteEditor.swift` is
-the only view in CCP that names MarkdownEngine at all.
+from upstream cheap. Since the note editor moved to bb-editor (ccp-9vpv), only
+`CraftBlockSplitter` names MarkdownEngine: the editing seams above are unused
+by CCP, and the block AST is the one the fork still exists for.
 
 **Building against an unpushed fork commit:** `swift package edit
 swift-markdown-engine --path ../swift-markdown-engine` parks a symlink in

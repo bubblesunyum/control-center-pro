@@ -123,6 +123,9 @@ public final class ControlPanelController {
         // Lay the SwiftUI graph out now rather than on the first open, where it
         // would land inside the 100ms.
         window.layoutIfNeeded()
+        // The stickies' editor page takes a second and a half to load cold;
+        // loaded now, their snapshots are drawn before anyone looks.
+        _ = StickyEditorController.shared
 
         trackContentChanges()
         trackMouseThroughContent()
@@ -259,30 +262,16 @@ public final class ControlPanelController {
     /// responder at all. Edit mode and the gallery have their own controls
     /// to type in and are left alone.
     private func focusNotesForOpen() {
-        if let web = panelFocus.notesWebView, web.window === window {
-            let start = ContinuousClock.now
-            if !editor.isEditing, !editor.isShowingGallery, panelFocus.pendingStickyID == nil,
-               window.firstResponder !== web {
-                window.makeFirstResponder(web)
-                NoteWebEditorController.shared.focusEnd()
-            }
-            NoteWebEditorController.shared.measureFirstFrame(since: start, label: "panel open")
-            return
-        }
-        guard let notes = panelFocus.notesTextView, notes.window === window else { return }
+        guard let notes = panelFocus.notesWebView, notes.window === window else { return }
         guard Self.shouldAutofocusNotes(
             isEditing: editor.isEditing,
             galleryOpen: editor.isShowingGallery,
-            notesEditable: notes.isEditable,
             notesAlreadyFocused: window.firstResponder === notes,
             newcomerPending: panelFocus.pendingStickyID != nil
         ) else { return }
-        window.makeFirstResponder(notes)
         // Append-ready: caret to the end, scrolled into view. Notes already
         // holding focus keeps its caret where the user left it.
-        let end = NSRange(location: (notes.string as NSString).length, length: 0)
-        notes.setSelectedRange(end)
-        notes.scrollRangeToVisible(end)
+        NoteEditorController.notes.focusShown(atEnd: true)
     }
 
     /// Whether opening the panel should hand focus to Notes. Pure so the
@@ -292,11 +281,10 @@ public final class ControlPanelController {
     nonisolated static func shouldAutofocusNotes(
         isEditing: Bool,
         galleryOpen: Bool,
-        notesEditable: Bool,
         notesAlreadyFocused: Bool,
         newcomerPending: Bool
     ) -> Bool {
-        guard !isEditing, !galleryOpen, notesEditable, !notesAlreadyFocused, !newcomerPending else { return false }
+        guard !isEditing, !galleryOpen, !notesAlreadyFocused, !newcomerPending else { return false }
         return true
     }
 

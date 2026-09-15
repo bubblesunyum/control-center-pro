@@ -1124,10 +1124,9 @@ public final class NotesAdapter {
 
     /// History dies with the pad: snapshots are the way back into text that
     /// no longer exists. Unmapping keeps them — the pad survives local-only,
-    /// still edited, and the undo-clear still depends on the way back.
+    /// still edited.
     private func dropHistory(for id: UUID) {
         craftDestination.dropSnapshots(for: id)
-        padsPendingUndoClear.remove(id)
         snapshotsVersion += 1
     }
 
@@ -1640,7 +1639,6 @@ public final class NotesAdapter {
             isReplacingText = false
         }
         _ = persist(live)
-        padsPendingUndoClear.insert(padID)
         return restored
     }
 
@@ -1792,22 +1790,6 @@ public final class NotesAdapter {
     /// `snapshots(for:)`, which the destination hides from observation.
     private(set) var snapshotsVersion = 0
 
-    /// Pads whose wholesale replacement the surface has not yet answered by
-    /// clearing the editor's undo stack. A set, not a slot: one pull adopts
-    /// every mapped pad, and SwiftUI may coalesce the bumps into a single
-    /// delivery carrying only the last. Entries for background pads linger
-    /// harmlessly — the engine invalidates their stacks on switch-back, and
-    /// switching to one acknowledges it.
-    public private(set) var padsPendingUndoClear: Set<UUID> = []
-
-    /// The surface spent the replacement: the stack is dropped, the
-    /// snapshots keep the way back. Switching to a pending pad acknowledges
-    /// without clearing — the engine's switch-back invalidation owns that
-    /// stack, and a stale flag must never clear fresh keystrokes later.
-    public func acknowledgeUndoClear(for id: UUID) {
-        padsPendingUndoClear.remove(id)
-    }
-
     /// Pre-replacement copies for a pad, newest first. Empty when no pull,
     /// merge, or restore ever replaced its text.
     public func snapshots(for id: UUID) -> [PadSnapshot] {
@@ -1853,7 +1835,6 @@ public final class NotesAdapter {
             dirtyPadIDs.insert(id)
             scheduleCraftPush()
         }
-        padsPendingUndoClear.insert(id)
     }
 
     /// Pull every mapped pad: one clock read, one trash listing, then one
@@ -2105,9 +2086,6 @@ public final class NotesAdapter {
             isReplacingText = true
             self.text = text
             isReplacingText = false
-        }
-        if replaced {
-            padsPendingUndoClear.insert(padID)
         }
         if let base { storeBase(base, for: padID) }
         _ = persist(document)

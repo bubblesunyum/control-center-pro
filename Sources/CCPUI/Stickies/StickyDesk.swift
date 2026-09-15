@@ -29,5 +29,9 @@ struct StickyDesk: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Archived and deleted stickies give back their editor and snapshot.
+        .onChange(of: store.visible.map(\.id)) { _, ids in
+            StickyEditorController.shared.keep(only: Set(ids))
+        }
     }
 }

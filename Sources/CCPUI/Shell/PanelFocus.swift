@@ -3,24 +3,21 @@
 
 import AppKit
 import SwiftUI
+import WebKit
 
 /// Who the panel's keystrokes belong to.
 ///
 /// Neither the Notes widget nor any sticky can say it directly: the editor
-/// is an AppKit text view behind a SwiftUI wrapper, and SwiftUI focus stops
-/// at that boundary. So each editor reports its own text view on arrival
-/// (see `MarkdownNoteEditor.onCreate`) and the controller reads back
-/// out the one outlet it needs: Notes on every open, a newborn sticky once.
+/// is a web view behind a SwiftUI wrapper, and SwiftUI focus stops at that
+/// boundary. So each editor reports its view on arrival and the controller
+/// reads back out the one outlet it needs: Notes on every open, a newborn
+/// sticky once.
 @MainActor
 @Observable
 final class PanelFocus {
-    /// The Notes editor's text view, while the widget is in the layout.
-    /// Weak: removing the widget tears its view down and the outlet clears
-    /// itself, which is how "Notes isn't here" reads as nil.
-    weak var notesTextView: NSTextView?
-
-    /// The Tiptap spike's web view, standing in for `notesTextView` while the
-    /// spike flag is on (ccp-5hpw).
+    /// The Notes editor's web view, once the widget has shown it. The view
+    /// outlives the widget (one page per surface kind, loaded at launch), so
+    /// "Notes isn't here" reads as the view being out of the panel window.
     weak var notesWebView: NSView?
 
     /// The sticky that should take focus when its view arrives. Set by
@@ -35,9 +32,11 @@ final class PanelFocus {
     /// Drops the caret from whatever editor holds it — a sticky's grab or
     /// resize press lands on SwiftUI chrome, never on the text view itself,
     /// so AppKit would otherwise leave the caret blinking mid-drag. No-op
-    /// unless a text view holds first responder.
+    /// unless a text or web view holds first responder.
     func resignTextEditing() {
-        guard let window = panelWindow, window.firstResponder is NSTextView else { return }
+        guard let window = panelWindow,
+              window.firstResponder is NSTextView || window.firstResponder is WKWebView
+        else { return }
         window.makeFirstResponder(nil)
     }
 }

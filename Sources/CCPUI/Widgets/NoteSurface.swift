@@ -17,41 +17,27 @@ struct NoteSurface: View {
     @State private var isDropTargeted = false
     @Environment(\.panelFocus) private var panelFocus
 
-    /// The pad the editor and the rail agree on — one name, so the rail's bus
-    /// verbs reach this editor and no other (see NoteFormatRequest).
+    /// The pad the editor and the rail agree on.
     private var noteDocumentId: String { adapter.selectedNoteID?.uuidString ?? "notes" }
-
-    /// The Tiptap spike swaps in behind its flag (ccp-5hpw); it reads the pad
-    /// and never writes it.
-    @ViewBuilder
-    private var editor: some View {
-        if NoteWebEditor.isEnabled {
-            NoteWebEditor(markdown: adapter.text, documentId: noteDocumentId)
-        } else {
-            MarkdownNoteEditor(
-                text: Binding(get: { adapter.text }, set: { adapter.text = $0 }),
-                documentId: noteDocumentId,
-                placeholder: "Write something…",
-                isEditable: adapter.isEditable,
-                // The panel's default keystrokes: the window falls back here
-                // on a fresh open, and the controller re-asserts it on every
-                // open after (see `PanelFocus`).
-                onCreate: { [weak panelFocus, adapter] textView in
-                    panelFocus?.notesTextView = textView
-                    if textView.isEditable {
-                        textView.window?.initialFirstResponder = textView
-                    }
-                    // The mount a replacing pull arrived before: the delivery
-                    // stayed pending for exactly this.
-                    Self.clearStaleUndoIfPending(adapter: adapter, panelFocus: panelFocus)
-                }
-            )
-        }
-    }
 
     var body: some View {
         VStack(spacing: 0) {
-            editor
+            NoteEditor(text: Binding(get: { adapter.text }, set: { adapter.text = $0 }),
+                       documentId: noteDocumentId)
+            // A deleted pad gives back its editor in the page.
+            .onChange(of: adapter.notes.map(\.id)) { _, ids in
+                NoteEditorController.notes.closeDocuments(except: Set(ids.map(\.uuidString)))
+            }
+            .onAppear {
+                let webView = NoteEditorController.notes.webView
+                panelFocus?.notesWebView = webView
+                // Text dragged in lands where it is dropped, the editor's own
+                // way; a Finder file appends its path like a drop anywhere
+                // else on the surface.
+                webView.onFileDrop = { [adapter] urls in
+                    adapter.acceptDrop(providers: urls.map { NSItemProvider(object: $0 as NSURL) })
+                }
+            }
             // Optimistic editing (ccp-t53p): the pull reconciles around
             // keystrokes in the background, so the editor never dims or
             // holds the caret while it proves.
@@ -60,26 +46,7 @@ struct NoteSurface: View {
             // strip of container below the text that looks editable and
             // swallows the click.
             .frame(minHeight: Layout.noteEditorHeight, maxHeight: .infinity)
-            .accessibilityLabel("Note text")
             .accessibilityHint("Editable Markdown")
-            // A pull (or restore) that replaces the visible pad wholesale
-            // strands the editor's undo stack at stale ranges — cmd-Z would
-            // walk into pre-pull text and push it as if typed. The snapshots
-            // keep the way back, so the stack drops.
-            .onChange(of: adapter.padsPendingUndoClear) {
-                Self.clearStaleUndoIfPending(adapter: adapter, panelFocus: panelFocus)
-            }
-            .onChange(of: adapter.selectedNoteID) {
-                // Clear before acknowledging: a visible pad replaced just
-                // ahead of a switch away and back still holds its flag, and
-                // the engine's switch-back baseline is already post-replace
-                // — acknowledging first would drop the flag the clear checks.
-                Self.clearStaleUndoIfPending(adapter: adapter, panelFocus: panelFocus)
-                // Then acknowledge what the engine owns: a background pad's
-                // stack is invalidated on switch-back, so a surviving flag
-                // would only clear fresh keystrokes on a later delivery.
-                if let id = adapter.selectedNoteID { adapter.acknowledgeUndoClear(for: id) }
-            }
             // The toolbar's fade: the last lines dissolve into the toolbar
             // instead of clipping hard. A mask on the content, not a scrim
             // on the backdrop — the well is near-black, so darkening it
@@ -133,26 +100,12 @@ struct NoteSurface: View {
                     .stroke(Color.accentColor, lineWidth: Stroke.hairline)
             }
         }
-        // Clipboard rows, Finder files and browser text all land here; images
-        // have no text form and spring back unaccepted.
+        // Drops beside the editor: clipboard rows, Finder files and browser
+        // text all land here; images have no text form and spring back
+        // unaccepted.
         .onDrop(of: [.plainText, .text, .rtf, .html, .fileURL, .url], isTargeted: $isDropTargeted) { providers in
             adapter.acceptDrop(providers: providers)
         }
-    }
-}
-
-/// Drop the visible editor's undo stack when its pad's text was replaced
-/// wholesale underneath it. Needs the text view alive — the reporter mounts
-/// it a runloop after the editor, so an early delivery stays pending for
-/// the next check instead of missing permanently.
-extension NoteSurface {
-    fileprivate static func clearStaleUndoIfPending(adapter: NotesAdapter, panelFocus: PanelFocus?) {
-        guard let id = adapter.selectedNoteID,
-              adapter.padsPendingUndoClear.contains(id),
-              let textView = panelFocus?.notesTextView
-        else { return }
-        textView.undoManager?.removeAllActions()
-        adapter.acknowledgeUndoClear(for: id)
     }
 }
 

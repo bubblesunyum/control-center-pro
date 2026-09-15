@@ -7,13 +7,12 @@ import XCTest
 
 /// Every panel open belongs to Notes — unless something else has a better
 /// claim. These pin the policy: edit mode and the gallery own their own
-/// keystrokes, a missing or read-only Notes takes nothing, and Notes
+/// keystrokes, a missing Notes takes nothing, and Notes
 /// already holding focus keeps its caret where the user left it.
 final class PanelFocusTests: XCTestCase {
     private func check(
         isEditing: Bool = false,
         galleryOpen: Bool = false,
-        notesEditable: Bool = true,
         notesAlreadyFocused: Bool = false,
         newcomerPending: Bool = false,
         _ file: StaticString = #filePath,
@@ -22,7 +21,6 @@ final class PanelFocusTests: XCTestCase {
         ControlPanelController.shouldAutofocusNotes(
             isEditing: isEditing,
             galleryOpen: galleryOpen,
-            notesEditable: notesEditable,
             notesAlreadyFocused: notesAlreadyFocused,
             newcomerPending: newcomerPending
         )
@@ -38,10 +36,6 @@ final class PanelFocusTests: XCTestCase {
 
     func testGalleryKeepsFocus() {
         XCTAssertFalse(check(galleryOpen: true))
-    }
-
-    func testUnreadableNotesTakesNothing() {
-        XCTAssertFalse(check(notesEditable: false))
     }
 
     func testFocusedNotesKeepsItsCaret() {
