@@ -99,12 +99,22 @@ swift build -c "$CONFIGURATION" --product "$EXECUTABLE" > /tmp/ccp-app-build.log
   grep -E "error:" /tmp/ccp-app-build.log | sort -u | head -8 >&2
   exit 1
 }
-BINARY="$(swift build -c "$CONFIGURATION" --show-bin-path)/$EXECUTABLE"
+BINARY_DIR="$(swift build -c "$CONFIGURATION" --show-bin-path)"
+BINARY="$BINARY_DIR/$EXECUTABLE"
 
 rm -rf "$BUNDLE"
 mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources"
 cp "$BINARY" "$BUNDLE/Contents/MacOS/$EXECUTABLE"
 cp AppBundle/Info.plist "$BUNDLE/Contents/Info.plist"
+
+# SwiftPM resource bundles (CCPUI's NoteEditor page, etc.). The generated
+# Bundle.module accessor looks for <Product>_<Target>.bundle under
+# Bundle.main.resourceURL, but the assembly above only copied the binary —
+# so the app died on launch with "unable to find bundle named ..._CCPUI".
+for resource_bundle in "$BINARY_DIR"/*.bundle; do
+  [ -e "$resource_bundle" ] || break
+  cp -R "$resource_bundle" "$BUNDLE/Contents/Resources/"
+done
 
 # The mail widget's OAuth client credentials, if this checkout has them. They are
 # merged in here rather than living in AppBundle/Info.plist because that file is
