@@ -136,7 +136,9 @@ final class NoteWebEditorController: NSObject, WKScriptMessageHandler {
         case "ready":
             isReady = true
             Self.log("cold load: ready \(Self.ms(since: createdAt)) ms after init (page \(Self.ms(body["sinceNavigationMs"])) ms)")
-            evaluate("ccpEditor.configure({insetX: \(Space.three + Space.one + Space.quarter), insetY: \(Space.three + Space.quarter), fontSize: \(MarkdownNoteEditor.fontSize)})")
+            let insetX = Space.three + Space.one + Space.quarter
+            let insetY = Space.three + Space.quarter
+            evaluate("ccpEditor.configure({insetX: \(insetX), insetY: \(insetY), fontSize: \(MarkdownNoteEditor.fontSize)})")
             if let pending {
                 self.pending = nil
                 show(padText: pending.text, documentId: pending.documentId)

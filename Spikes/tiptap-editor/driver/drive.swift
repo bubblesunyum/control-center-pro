@@ -8,6 +8,11 @@ import Foundation
 
 let source = CGEventSource(stateID: .hidSystemState)
 
+func fail(_ message: String) -> Never {
+    FileHandle.standardError.write("\(message)\n".data(using: .utf8)!)
+    exit(2)
+}
+
 func press(_ code: CGKeyCode, flags: CGEventFlags = [], unicode: String? = nil) {
     for down in [true, false] {
         guard let event = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: down) else { continue }
@@ -33,9 +38,11 @@ for action in CommandLine.arguments.dropFirst() {
     case "key":
         let fields = parts[1].split(separator: ":")
         let flags: CGEventFlags = fields.count > 1 ? (fields[1] == "shift" ? .maskShift : .maskCommand) : []
-        press(CGKeyCode(fields[0])!, flags: flags)
+        guard let code = CGKeyCode(fields[0]) else { fail("bad keycode in \(action)") }
+        press(code, flags: flags)
     case "wait":
-        usleep(useconds_t(Int(parts[1])! * 1000))
+        guard parts.count > 1, let ms = Int(parts[1]) else { fail("bad wait in \(action)") }
+        usleep(useconds_t(ms * 1000))
     default:
         FileHandle.standardError.write("unknown action \(action)\n".data(using: .utf8)!)
     }

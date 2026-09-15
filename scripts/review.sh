@@ -52,8 +52,12 @@ fi
 # Config files are in scope: opencode.json is three lines that decide what every
 # session in the project loads, and dashboard/index.html is the board itself —
 # both went through a full review pass invisible while the scope had no *.json
-# or *.html.
-SCOPE=('*.swift' '*.py' '*.sh' '*.md' '*.html' '*.json' 'Package.swift' 'scripts/hooks/*'
+# or *.html. JS and CSS went the same way with the Tiptap spike (ccp-5hpw), whose
+# whole editor was JS the packet never showed — while its lockfile and the
+# generated bundle it builds filled two thirds of it.
+SCOPE=('*.swift' '*.py' '*.sh' '*.md' '*.html' '*.json' '*.js' '*.mjs' '*.css'
+       'Package.swift' 'scripts/hooks/*'
+       ':(exclude)*package-lock.json' ':(exclude)Sources/CCPUI/Resources/NoteWebEditor/*'
        ':(exclude).beads/*' ':(exclude)dashboard/vendor/*'
        ':(exclude)dashboard/state.json' ':(exclude).claude/context.lock'
        ':(exclude)Sources/Vorssaint/*' ':(exclude)Sources/FanControlHelper/*'
