@@ -11,7 +11,11 @@ caffeinate -u -t 2
 
 # The typing that breaks the native pad: a space at the end of a block with a
 # block below, double spaces, return vs shift-return, lists, tasks, headings.
-"$DRIVE" toggle wait:700 \
+"$DRIVE" toggle wait:700
+# Never type blind: if the panel did not open, the keys would land in whatever
+# app the user has in front.
+grep -q "panel open" /tmp/ccp-tiptap-spike.log || { echo "panel did not open — not typing" >&2; exit 4; }
+"$DRIVE" \
   "text:hello" key:36 "text:second block" key:36:shift "text:soft line" key:36 \
   "text:- item one" key:36 "text:item two" key:36 key:36 \
   "text:[ ] task" key:36 "text:## heading" key:36 "text:**bold** and *it* end" \
@@ -20,6 +24,6 @@ screencapture -x /tmp/ccp-spike-typed.png
 echo "── typed document"; cat /tmp/ccp-tiptap-spike.md; echo
 
 # Warm opens: close and reopen, each open logs its next-frame latency.
-for _ in 1 2 3 4 5 6; do "$DRIVE" key:53 wait:500 toggle wait:500; done
+for _ in 1 2 3 4 5 6; do "$DRIVE" toggle wait:500 toggle wait:500; done
 echo "── timings"; grep -E "panel open|cold|setMarkdown" /tmp/ccp-tiptap-spike.log
 ps -axo rss,comm | awk '/WebContent|MacOS\/ControlCenterPro/ {printf "%6.0f MB %s\n", $1/1024, $2}'
