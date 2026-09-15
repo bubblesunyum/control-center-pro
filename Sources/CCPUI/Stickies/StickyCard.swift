@@ -56,22 +56,42 @@ struct StickyCard: View {
         )
     }
 
+    /// Draw-time guard, not a data migration (ccp-2esx): the bytes can carry
+    /// anything — a hand edit, sync corruption — and the desk must never take
+    /// a clip layer NaN over them. Past a million points a card is off every
+    /// display, so drawing clamps while the file keeps its bytes.
+    static let drawLimit: CGFloat = 1_000_000
+
     /// Stored positions measure from the trailing edge — `Sticky.leadingX`
     /// owns the flip — so the frame resolves through the model.
     static func frame(of sticky: Sticky, inWidth width: CGFloat) -> CGRect {
         frame(
-            center: CGPoint(x: sticky.leadingX(inWidth: width), y: sticky.y),
-            size: CGSize(width: sticky.width, height: sticky.height)
+            center: CGPoint(x: drawClamped(CGFloat(sticky.leadingX(inWidth: width))),
+                            y: drawClamped(CGFloat(sticky.y))),
+            size: drawClampedSize(CGSize(width: sticky.width, height: sticky.height))
         )
+    }
+
+    private static func drawClamped(_ value: CGFloat) -> CGFloat {
+        guard value.isFinite else { return 0 }
+        return min(max(value, -drawLimit), drawLimit)
+    }
+
+    private static func drawClampedSize(_ size: CGSize) -> CGSize {
+        CGSize(width: min(max(size.width, 0), drawLimit),
+               height: min(max(size.height, 0), drawLimit))
     }
 
     /// The editor's frame inside the chrome: the stored size is the whole
     /// card, padding included, so every geometry reader (desk, drag guard,
     /// controller hit-test, reclaim) shares one definition with the drawing.
     static func editorSize(for size: CGSize) -> CGSize {
-        CGSize(
-            width: max(size.width - edgeWidth * 2, 0),
-            height: max(size.height - edgeWidth * 2, 0)
+        // Clamped like every other drawn size (see `drawLimit`): this is
+        // also the size snapshots render at.
+        let clamped = drawClampedSize(size)
+        return CGSize(
+            width: max(clamped.width - edgeWidth * 2, 0),
+            height: max(clamped.height - edgeWidth * 2, 0)
         )
     }
 
@@ -133,7 +153,7 @@ struct StickyCard: View {
     @State private var isConfirmingDelete = false
 
     private var drawnSize: CGSize {
-        resizePreview ?? CGSize(width: sticky.width, height: sticky.height)
+        Self.drawClampedSize(resizePreview ?? CGSize(width: sticky.width, height: sticky.height))
     }
 
     /// Everything the finger owes the card this frame: the move's offset

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Control Center Pro contributors
 
+import AppKit
 import CCPKit
 import Observation
 import SwiftUI
@@ -30,7 +31,14 @@ public final class PanelEditor {
     /// is the only thing that knows what screen the panel is on. Whether one
     /// more lane fits depends on the lanes already placed as well as this, so
     /// it is the width that is stored rather than a count.
-    public var displayWidth = CGFloat.greatestFiniteMagnitude
+    ///
+    /// Seeded with the main screen, not infinity: the desk draws stickies
+    /// before the first show, and an infinite seat put their centers at
+    /// x ≈ 1.8e308, which took a clip layer NaN and the app down with it
+    /// (ccp-2esx). The fallback matches the shell's no-screen rect precedent
+    /// (ShelfWindowController, QuickTogglesWidget); the first show still
+    /// re-seats onto the real display.
+    public var displayWidth: CGFloat = NSScreen.main?.visibleFrame.width ?? 1440
 
     /// Where every slot currently sits, in panel coordinates. Reported by the
     /// lanes themselves as they lay out, because their real frames are the only
