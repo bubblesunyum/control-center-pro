@@ -73,6 +73,14 @@ else
   echo "$agents_out"
 fi
 
+if codex_out="$(python3 scripts/codex-support.py check 2>&1)"; then
+  echo "$codex_out"
+else
+  failed=1
+  echo "$codex_out"
+fi
+step "codex support tests" python3 scripts/test-codex-support.py
+
 # ── PROJECT STEPS ─────────────────────────────────────────────────────────
 # SwiftPM. Until the package is scaffolded there is nothing to build, and the
 # gate says so rather than reporting a green build it never ran.

@@ -2,6 +2,7 @@
   scripts/brief.sh
   scripts/review.sh
   scripts/verify.sh
+  harness/codex.md
 -->
 
 # Working on control-center-pro
@@ -105,6 +106,12 @@ bead; the commit-msg hook enforces it.
 `graphify-out/graph.json` exists). Claude Code and opencode both discover
 them there. Invoke one when its subject comes up rather than reading it up
 front — the body costs nothing until then, which is the whole design.
+
+## Codex support
+
+**Codex only:** read [harness/codex.md](./harness/codex.md) before using the shared
+skills. It maps the Claude-oriented tool instructions to Codex. The shared
+skills and reviewer prompts stay authoritative and unchanged for Claude Code.
 
 ## Closing a session
 

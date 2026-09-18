@@ -3,6 +3,7 @@
 # in one file, so it doesn't spend a dozen tool calls rediscovering the diff.
 #
 #   scripts/review.sh                 # working tree vs HEAD
+#   scripts/review.sh --staged        # only the prepared commit
 #   scripts/review.sh HEAD~3          # since a commit
 #   scripts/review.sh master          # since a branch (use on a feature branch)
 #
@@ -19,12 +20,15 @@ mtime() { stat -f '%m' "$@" 2>/dev/null || stat -c '%Y' "$@"; }
 stamp() { date -r "$1" +%Y%m%d%H%M.%S 2>/dev/null || date -d "@$1" +%Y%m%d%H%M.%S; }
 
 base="${1:-}"
-packet=/tmp/ccp-review-packet.md
+staged=0
+packet=$(mktemp /tmp/ccp-review.XXXXXX)
 
 # No base given: review what isn't committed yet, and fall back to the last
 # commit when the tree is clean — "review my work" almost never means "review
 # nothing".
-if [ -z "$base" ]; then
+if [ "$base" = "--staged" ]; then
+  staged=1; range=""; label="staged changes"
+elif [ -z "$base" ]; then
   if [ -n "$(git status --porcelain)" ]; then
     range=""; label="uncommitted working tree"
   else
@@ -55,8 +59,8 @@ fi
 # or *.html. JS and CSS went the same way with the Tiptap spike (ccp-5hpw), whose
 # whole editor was JS the packet never showed — while its lockfile and the
 # generated bundle it builds filled two thirds of it.
-SCOPE=('*.swift' '*.py' '*.sh' '*.md' '*.html' '*.json' '*.js' '*.mjs' '*.css'
-       'Package.swift' 'scripts/hooks/*'
+SCOPE=('*.swift' '*.py' '*.sh' '*.md' '*.html' '*.json' '*.js' '*.mjs' '*.css' '*.toml' '*.yaml'
+       'Package.swift' 'scripts/hooks/*' '.agents/skills/*'
        ':(exclude)*package-lock.json' ':(exclude)Sources/CCPUI/Resources/NoteEditor/*'
        ':(exclude).beads/*' ':(exclude)dashboard/vendor/*'
        ':(exclude)dashboard/state.json' ':(exclude).claude/context.lock'
@@ -70,7 +74,8 @@ CAPTURES='ccp-*.png'
 # ── END CONFIGURE ─────────────────────────────────────────────────────────
 
 diff_cmd() {
-  if [ -z "$range" ]; then git diff HEAD "$@" -- "${SCOPE[@]}"
+  if [ "$staged" -eq 1 ]; then git diff --cached "$@" -- "${SCOPE[@]}"
+  elif [ -z "$range" ]; then git diff HEAD "$@" -- "${SCOPE[@]}"
   else git diff "$range"... "$@" -- "${SCOPE[@]}"; fi
 }
 
@@ -82,7 +87,7 @@ diff_cmd() {
 # read-only about the repository, and an intent-to-add entry it left behind
 # would be picked up in full by the next `git commit -a` — an untracked scratch
 # file riding along in an unrelated commit.
-untracked() { [ -n "$range" ] || git ls-files --others --exclude-standard -- "${SCOPE[@]}"; }
+untracked() { [ "$staged" -eq 1 ] || [ -n "$range" ] || git ls-files --others --exclude-standard -- "${SCOPE[@]}"; }
 
 untracked_diff() {
   untracked | while IFS= read -r file; do

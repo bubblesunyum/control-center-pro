@@ -5,18 +5,21 @@
     ".claude/agents/reviewer-design.md": "e33457cee19285cc",
     ".claude/agents/reviewer-taste.md": "bbd3d37bc5429b0a",
     ".claude/skills/workflow/SKILL.md": "9ccee0cf7ad97c31",
-    "doc": "465f0550f92aceb5",
+    ".codex/hooks.json": "9ebe2492ec7aec62",
+    "doc": "fdb1fd0c59520eb8",
     "scripts/brief.sh": "58d710492c34dda3",
-    "scripts/context.py": "586af6d85e348ae7",
+    "scripts/codex-support.py": "6f5ff28e0ea19f1d",
+    "scripts/context.py": "c26066e1970bb054",
     "scripts/opencode-agents.py": "5e28af95787ef261",
-    "scripts/review.sh": "a0c17fb9e8c53598",
-    "scripts/verify.sh": "b153cef95ca90c1c"
+    "scripts/review.sh": "6f25284bfbf798d3",
+    "scripts/test-codex-support.py": "9ee2042a42cb4514",
+    "scripts/verify.sh": "dd083d6bcd862179"
   },
   ".claude/skills/agentic-review/SKILL.md": {
     ".claude/agents/reviewer-correctness.md": "dfa12aa581b45c70",
     ".claude/agents/reviewer-taste.md": "bbd3d37bc5429b0a",
     "doc": "19b9214d40859790",
-    "scripts/review.sh": "a0c17fb9e8c53598"
+    "scripts/review.sh": "6f25284bfbf798d3"
   },
   ".claude/skills/handoff/SKILL.md": {
     "doc": "0bc0322a612df8fc",
@@ -27,13 +30,20 @@
     "\u2026": ""
   },
   "AGENTS.md": {
-    "doc": "767e26d37143cec3",
+    "doc": "f300589b0ef2fff5",
+    "harness/codex.md": "856b36ca34423207",
     "scripts/brief.sh": "58d710492c34dda3",
-    "scripts/review.sh": "a0c17fb9e8c53598",
-    "scripts/verify.sh": "b153cef95ca90c1c"
+    "scripts/review.sh": "6f25284bfbf798d3",
+    "scripts/verify.sh": "dd083d6bcd862179"
   },
   "CLAUDE.md": {
     "Package.swift": "4c855256d0b077b2",
     "doc": "69f58cedfadeb465"
+  },
+  "harness/codex.md": {
+    ".codex/hooks.json": "9ebe2492ec7aec62",
+    "doc": "856b36ca34423207",
+    "scripts/codex-support.py": "6f5ff28e0ea19f1d",
+    "scripts/review.sh": "6f25284bfbf798d3"
   }
 }

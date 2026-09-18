@@ -30,6 +30,7 @@ ROOT = Path(__file__).resolve().parent.parent
 LOCK = ROOT / ".claude/context.lock"
 
 DOCS = [ROOT / "CLAUDE.md", ROOT / "AGENTS.md", ROOT / ".claude/HARNESS.md",
+        ROOT / "harness/codex.md",
         *sorted((ROOT / ".claude/skills").glob("*/SKILL.md"))]
 
 # The memory index loads every session too, but it lives outside the repo, under

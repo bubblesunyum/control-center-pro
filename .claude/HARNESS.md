@@ -7,6 +7,9 @@
   scripts/brief.sh
   scripts/context.py
   scripts/opencode-agents.py
+  scripts/codex-support.py
+  scripts/test-codex-support.py
+  .codex/hooks.json
   scripts/review.sh
   scripts/verify.sh
 -->
@@ -193,6 +196,45 @@ costs nothing and says what the harness intends. `HARNESS.md` is deliberately
 not in the list: it is the rationale, read when the pieces are being rearranged,
 and always-loading it in one tool and not the other would put the two sessions
 on different budgets while `context.py` counted neither.
+
+## Codex shares the prompts and skills
+
+Codex loads `AGENTS.md`; that file explicitly directs it to read `CLAUDE.md` for
+project standards. Do not rename those standards in a translated copy.
+`.agents/skills/*` are relative directory links to `.claude/skills/*`, including
+Beads and its metadata. Codex supports symlinked skills, so an edit has one home
+and a fresh checkout discovers the same five procedures.
+
+`.codex/agents/*.toml` are generated from `.claude/agents/*.md` by
+`python3 scripts/codex-support.py write`. Only the name, description and prompt
+are translated. Model, reasoning and sandbox settings inherit the Codex host;
+Claude's model aliases and tool allowlists are not copied as configuration.
+The gate checks generated agents, orphaned generated roles, skill links, and
+repository hooks. It also runs isolated regression checks. Codex TOML and skill
+metadata are included in the review packet.
+
+The same generator owns `.codex/hooks.json`. SessionStart supplies
+`scripts/brief.sh --hook` on startup, resume, clear and compact; the JSON envelope
+is supported by both Claude Code and Codex. Startup/resume/clear also bring up
+the dashboard, and SessionEnd stops it. Commands resolve the git root so opening
+a session in a subdirectory still works. Generic `bd codex-hook` context hooks
+are replaced, not combined with the brief. Re-running `bd setup codex` can
+restore them; the gate detects that drift.
+
+Hooks are configured, not silently trusted. Codex requires the project and each
+new or changed hook definition to be trusted. Review them through `/hooks` in
+the Codex CLI, and check for duplicate user-level hooks there too. This repo does
+not edit global configuration or bypass trust. Until hooks run, AGENTS.md's manual
+brief fallback applies. New agent definitions may need a fresh Codex session;
+an existing session can give the source prompt to a default subagent.
+
+The context cost and transcript measurements in `scripts/context.py` describe
+Claude Code. Shared skill links add no second instruction copy, but these
+measurements do not establish Codex's total context or spend.
+
+Compatibility references: [Codex skills](https://learn.chatgpt.com/docs/build-skills),
+[custom agents](https://learn.chatgpt.com/docs/agent-configuration/subagents), and
+[hooks](https://learn.chatgpt.com/docs/hooks).
 
 ## Staleness is the failure review can't catch
 
