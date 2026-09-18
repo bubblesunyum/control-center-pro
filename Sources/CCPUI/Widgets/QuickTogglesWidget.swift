@@ -25,18 +25,26 @@ public final class QuickTogglesWidget: CCPWidget {
     )
 
     private let rocket: RocketAdapter
+    private let dashboards: HarnessDashboardAdapter
 
     public init() {
         self.rocket = RocketAdapter()
+        self.dashboards = HarnessDashboardAdapter()
     }
 
     /// Test seam: a widget backed by a fake source.
     init(source: RocketSource) {
         self.rocket = RocketAdapter(source: source)
+        self.dashboards = HarnessDashboardAdapter()
+    }
+
+    init(source: RocketSource, dashboards: HarnessDashboardAdapter) {
+        self.rocket = RocketAdapter(source: source)
+        self.dashboards = dashboards
     }
 
     public func makeView() -> some View {
-        ToolsContent(rocket: rocket)
+        ToolsContent(rocket: rocket, dashboards: dashboards)
     }
 
     public func activate() { rocket.activate() }
@@ -102,13 +110,21 @@ private struct ToolsContent: View {
     private static let isRocketEnabled = false
 
     @Bindable var rocket: RocketAdapter
+    @Bindable var dashboards: HarnessDashboardAdapter
     @Environment(\.hidePanel) private var hidePanel
     @State private var isCapturing = false
     @State private var isOpeningRocket = false
 
+    /// Three cells of 64pt plus their gaps fit the lane; a fourth does not,
+    /// so the grid wraps the dashboard buttons onto a second row on its own.
+    private static let columns = Array(
+        repeating: GridItem(.fixed(Layout.toggleCellWidth), spacing: Space.one),
+        count: 3
+    )
+
     var body: some View {
         WidgetCard(QuickTogglesWidget.descriptor) {
-            HStack(spacing: Space.one) {
+            LazyVGrid(columns: Self.columns, alignment: .leading, spacing: Space.one) {
                 copyTextButton
                 // Rocket keeps working with its icon hidden, so the strip
                 // gives the hidden icon back its menu. Not installed means
@@ -117,7 +133,9 @@ private struct ToolsContent: View {
                 if Self.isRocketEnabled && rocket.isInstalled {
                     rocketButton
                 }
-                Spacer(minLength: 0)
+                ForEach(HarnessDashboard.dashboards) { dashboard in
+                    dashboardButton(for: dashboard)
+                }
             }
         }
         .animation(.easeInOut(duration: 0.2), value: isCapturing)
@@ -129,7 +147,8 @@ private struct ToolsContent: View {
             subtitle: isCapturing ? "…" : "From Screen",
             systemImage: "text.viewfinder",
             isBusy: isCapturing,
-            help: "Select an area and copy the text in it"
+            help: "Select an area and copy the text in it",
+            accessibilityLabel: "Copy Text"
         ) {
             startCapture()
         }
@@ -141,9 +160,39 @@ private struct ToolsContent: View {
             subtitle: rocket.isRunning ? "Menu" : "Launch",
             systemImage: "rocket",
             isBusy: isOpeningRocket,
-            help: rocket.isRunning ? "Open Rocket's menu" : "Launch Rocket"
+            help: rocket.isRunning ? "Open Rocket's menu" : "Launch Rocket",
+            accessibilityLabel: "Rocket"
         ) {
             openRocketMenu()
+        }
+    }
+
+    private func dashboardButton(for dashboard: HarnessDashboard) -> some View {
+        ToolIconButton(
+            title: dashboard.title,
+            subtitle: dashboard.subtitle,
+            systemImage: dashboard.systemImage,
+            isBusy: dashboards.isBusy(dashboard),
+            help: dashboard.help,
+            accessibilityLabel: dashboard.accessibilityLabel
+        ) {
+            guard !dashboards.isBusy(dashboard) else { return }
+            Task { @MainActor in
+                let outcome = await dashboards.launch(dashboard)
+                switch outcome {
+                case .started:
+                    ToolHUD.show(icon: dashboard.systemImage, message: "\(dashboard.title) dashboard started")
+                case .alreadyRunning:
+                    ToolHUD.show(icon: dashboard.systemImage, message: "\(dashboard.title) board opened")
+                case .failed:
+                    ToolHUD.show(icon: dashboard.systemImage, message: "Couldn't start \(dashboard.title) dashboard")
+                }
+                // A board just opened in the browser, so the panel gets out of
+                // the way. A failure keeps it open for the retry.
+                if outcome.url != nil {
+                    hidePanel?()
+                }
+            }
         }
     }
 
@@ -251,6 +300,7 @@ private struct ToolIconButton: View {
     let systemImage: String
     let isBusy: Bool
     let help: String
+    let accessibilityLabel: String
     let action: () -> Void
 
     var body: some View {
@@ -291,7 +341,7 @@ private struct ToolIconButton: View {
         }
         .buttonStyle(.plain)
         .disabled(isBusy)
-        .accessibilityLabel(title)
+        .accessibilityLabel(accessibilityLabel)
         .help(help)
     }
 }
