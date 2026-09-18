@@ -4,6 +4,7 @@
 import AppKit
 import Foundation
 import Observation
+import OSLog
 import Security
 
 /// What saving a login came to. The password itself never appears here.
@@ -11,7 +12,17 @@ public enum PasswordsSaveError: Error, Equatable, Sendable {
     case emptySite
     case emptyUsername
     case emptyPassword
+    /// Saved, but only in this Mac's file keychain: the build couldn't reach
+    /// the syncing keychain (see below).
+    case savedLocalOnly
     case keychain(OSStatus)
+}
+
+private extension PasswordsSaveError {
+    var status: OSStatus? {
+        if case .keychain(let status) = self { return status }
+        return nil
+    }
 }
 
 /// A site as the keychain identifies it: bare host plus the scheme and port
@@ -57,16 +68,49 @@ public protocol PasswordsStore: AnyObject, Sendable {
 /// synchronizable so it syncs over iCloud Keychain and surfaces in
 /// Passwords.app. Scoped to logins saved through CCP — there is no API for
 /// reading anything else in Passwords, which is the point of Passwords.
+///
+/// The syncing keychain is entitlement-gated: ad-hoc and locally-signed
+/// builds carry no keychain access group, so securityd refuses them with
+/// `errSecMissingEntitlement`. Rather than failing outright there, the save
+/// falls back to the file keychain — on this Mac only, no sync — and says so.
 public final class KeychainPasswordsStore: PasswordsStore {
-    public init() {}
+    private static let log = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "com.controlcenterpro.ControlCenterPro",
+        category: "passwords")
+
+    /// Scripted SecItem entry points. The defaults talk to the real keychain;
+    /// tests script statuses to drive the fallback without touching it.
+    private let addItem: @Sendable ([String: Any]) -> OSStatus
+    private let updateItem: @Sendable ([String: Any], [String: Any]) -> OSStatus
+
+    public init() {
+        self.addItem = { SecItemAdd($0 as CFDictionary, nil) }
+        self.updateItem = { SecItemUpdate($0 as CFDictionary, $1 as CFDictionary) }
+    }
+
+    init(addItem: @Sendable @escaping ([String: Any]) -> OSStatus,
+         updateItem: @Sendable @escaping ([String: Any], [String: Any]) -> OSStatus) {
+        self.addItem = addItem
+        self.updateItem = updateItem
+    }
 
     public func save(site: PasswordSite, account: String, password: String) throws {
-        let status = SecItemAdd(
-            PasswordsAdapter.addQuery(site: site, account: account, password: password) as CFDictionary, nil)
+        do {
+            try save(site: site, account: account, password: password, syncable: true)
+        } catch let error as PasswordsSaveError where error.status == errSecMissingEntitlement {
+            Self.log.info("syncable save refused (\(error.status ?? 0), this build can't reach the syncing keychain); keeping the login on this Mac")
+            try save(site: site, account: account, password: password, syncable: false)
+            throw PasswordsSaveError.savedLocalOnly
+        }
+    }
+
+    private func save(site: PasswordSite, account: String, password: String, syncable: Bool) throws {
+        let status = addItem(
+            PasswordsAdapter.addQuery(site: site, account: account, password: password, syncable: syncable))
         if status == errSecDuplicateItem {
-            let updateStatus = SecItemUpdate(
-                PasswordsAdapter.matchQuery(site: site, account: account) as CFDictionary,
-                [kSecValueData as String: Data(password.utf8)] as CFDictionary)
+            let updateStatus = updateItem(
+                PasswordsAdapter.matchQuery(site: site, account: account, syncable: syncable),
+                [kSecValueData as String: Data(password.utf8)])
             guard updateStatus == errSecSuccess else {
                 throw PasswordsSaveError.keychain(updateStatus)
             }
@@ -104,7 +148,7 @@ public final class LivePasswordsLauncher: PasswordsLauncher {
 @MainActor
 @Observable
 public final class PasswordsAdapter {
-    public static let passwordsBundleID = "com.apple.Passwords"
+    nonisolated public static let passwordsBundleID = "com.apple.Passwords"
 
     /// What the widget shows after a save tap. The password never appears.
     public var notice: String?
@@ -146,6 +190,9 @@ public final class PasswordsAdapter {
                 try store.save(site: parsed, account: account, password: password)
             }.value
             notice = "Saved for \(parsed.server) — check Passwords to verify."
+            return true
+        } catch PasswordsSaveError.savedLocalOnly {
+            notice = "Saved \(parsed.server) on this Mac only — iCloud sync needs a team-signed build."
             return true
         } catch let error as PasswordsSaveError {
             notice = error.message
@@ -190,18 +237,24 @@ public final class PasswordsAdapter {
 
     /// Internet-password, not generic-password: only the former renders as a
     /// Login in Passwords and participates in AutoFill.
-    nonisolated static func addQuery(site: PasswordSite, account: String, password: String) -> [String: Any] {
+    ///
+    /// `syncable: false` leaves both the sync flag and the data-protection
+    /// keychain out: the item lands in the file keychain, which any build
+    /// can write. No entitlement there can gate.
+    nonisolated static func addQuery(site: PasswordSite, account: String, password: String, syncable: Bool = true) -> [String: Any] {
         var query: [String: Any] = [
             kSecClass as String: kSecClassInternetPassword,
             kSecAttrServer as String: site.server,
             kSecAttrAccount as String: account,
             kSecAttrProtocol as String: site.scheme,
             kSecValueData as String: Data(password.utf8),
+        ]
+        if syncable {
             // Unset means local-only: without this the item never reaches
             // iCloud Keychain or Passwords.
-            kSecAttrSynchronizable as String: true,
-            kSecUseDataProtectionKeychain as String: true,
-        ]
+            query[kSecAttrSynchronizable as String] = true
+            query[kSecUseDataProtectionKeychain as String] = true
+        }
         if let port = site.port {
             query[kSecAttrPort as String] = port
         }
@@ -212,15 +265,17 @@ public final class PasswordsAdapter {
     /// the stored password differs, which is exactly when an update runs.
     /// `SynchronizableAny` so the update also heals a pre-existing local-only
     /// twin instead of failing against it forever.
-    nonisolated static func matchQuery(site: PasswordSite, account: String) -> [String: Any] {
+    nonisolated static func matchQuery(site: PasswordSite, account: String, syncable: Bool = true) -> [String: Any] {
         var query: [String: Any] = [
             kSecClass as String: kSecClassInternetPassword,
             kSecAttrServer as String: site.server,
             kSecAttrAccount as String: account,
             kSecAttrProtocol as String: site.scheme,
-            kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
-            kSecUseDataProtectionKeychain as String: true,
         ]
+        if syncable {
+            query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
+            query[kSecUseDataProtectionKeychain as String] = true
+        }
         if let port = site.port {
             query[kSecAttrPort as String] = port
         }
@@ -234,6 +289,7 @@ private extension PasswordsSaveError {
         case .emptySite: return "Enter a site first."
         case .emptyUsername: return "Enter a username first."
         case .emptyPassword: return "Enter a password, or generate one."
+        case .savedLocalOnly: return "Saved on this Mac only."
         case .keychain: return "Couldn't save that login."
         }
     }

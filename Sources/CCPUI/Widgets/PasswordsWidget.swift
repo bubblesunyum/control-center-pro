@@ -48,32 +48,34 @@ private struct PasswordsContent: View {
                 adapter.openPasswords()
             }
         } content: {
-            VStack(alignment: .leading, spacing: Space.half) {
-                TextField("Site", text: $site)
-                    .textFieldStyle(.plain)
-                    .font(.body)
-                    .textContentType(.URL)
-                    .accessibilityLabel("Site")
-                TextField("Username", text: $username)
-                    .textFieldStyle(.plain)
-                    .font(.body)
-                    .textContentType(.username)
-                    .accessibilityLabel("Username")
-                HStack(spacing: Space.half) {
-                    SecureField("Password", text: $password)
-                        .textFieldStyle(.plain)
+            VStack(alignment: .leading, spacing: Space.one) {
+                PasswordFieldRow(label: "Site") {
+                    TextField("example.com", text: $site)
                         .font(.body)
-                        .textContentType(.newPassword)
-                        .accessibilityLabel("Password")
-                    Button {
-                        password = PasswordsAdapter.generatePassword()
-                    } label: {
-                        Image(systemName: "dice")
-                            .foregroundStyle(.secondary)
+                        .textContentType(.URL)
+                        .accessibilityLabel("Site")
+                }
+                PasswordFieldRow(label: "Username") {
+                    TextField("you@example.com", text: $username)
+                        .font(.body)
+                        .textContentType(.username)
+                        .accessibilityLabel("Username")
+                }
+                PasswordFieldRow(label: "Password") {
+                    HStack(spacing: Space.half) {
+                        SecureField("Required", text: $password)
+                            .font(.body)
+                            .textContentType(.newPassword)
+                            .accessibilityLabel("Password")
+                        Button {
+                            password = PasswordsAdapter.generatePassword()
+                        } label: {
+                            Label("Generate", systemImage: "dice")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .help("Generate a strong password")
                     }
-                    .buttonStyle(.plain)
-                    .help("Generate a strong password")
-                    .accessibilityLabel("Generate a strong password")
                 }
                 Button("Save to Passwords") {
                     Task {
@@ -83,15 +85,41 @@ private struct PasswordsContent: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .controlSize(.small)
+                .frame(maxWidth: .infinity)
                 .disabled(site.isEmpty || username.isEmpty || password.isEmpty)
-                if let notice = adapter.notice {
-                    Text(notice)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
+                // Always drawn so a landing notice never grows the card and
+                // shoves the fields it reports on.
+                Text(adapter.notice ?? " ")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2, reservesSpace: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .opacity(adapter.notice == nil ? 0 : 1)
+                    .accessibilityHidden(adapter.notice == nil)
             }
+        }
+    }
+}
+
+/// One labeled field: a small-caps label over a hairline box. The box is
+/// drawn in both states so focusing only emphasizes it — a bare `.plain`
+/// field gains its ring out of nothing, which reads as the field jumping.
+private struct PasswordFieldRow<Field: View>: View {
+    let label: String
+    @ViewBuilder let field: Field
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.half) {
+            Text(label.uppercased())
+                .sectionCaps()
+            field
+                .textFieldStyle(.plain)
+                .padding(.horizontal, Space.one)
+                .padding(.vertical, Space.one)
+                .background(
+                    RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                        .strokeBorder(Color.cardStroke, lineWidth: Stroke.hairline)
+                )
         }
     }
 }

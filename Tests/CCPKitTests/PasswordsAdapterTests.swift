@@ -81,6 +81,14 @@ final class PasswordsAdapterTests: XCTestCase {
         XCTAssertEqual(adapter.notice, "Couldn't save that login.")
     }
 
+    func testSaveLocalOnlyReadsMacOnlyAndClearsNothing() async {
+        let store = FakePasswordsStore(error: .savedLocalOnly)
+        let adapter = PasswordsAdapter(store: store, launcher: FakePasswordsLauncher())
+        let saved = await adapter.save(site: "example.com", username: "u", password: "p")
+        XCTAssertTrue(saved, "the login exists — only the sync didn't")
+        XCTAssertTrue(adapter.notice?.contains("on this Mac only") == true)
+    }
+
     // MARK: - Generator
 
     func testGeneratePasswordUsesFullLengthAndAlphabet() {
@@ -126,6 +134,66 @@ final class PasswordsAdapterTests: XCTestCase {
         XCTAssertEqual(
             query[kSecAttrSynchronizable as String] as? String,
             kSecAttrSynchronizableAny as String)
+    }
+
+    func testLocalQueriesLeaveOutEveryGatedKey() {
+        let site = PasswordSite.parse("example.com")!
+        let add = PasswordsAdapter.addQuery(site: site, account: "u", password: "p", syncable: false)
+        XCTAssertNil(add[kSecAttrSynchronizable as String])
+        XCTAssertNil(add[kSecUseDataProtectionKeychain as String])
+        XCTAssertEqual(add[kSecAttrServer as String] as? String, "example.com")
+        let match = PasswordsAdapter.matchQuery(site: site, account: "u", syncable: false)
+        XCTAssertNil(match[kSecAttrSynchronizable as String])
+        XCTAssertNil(match[kSecUseDataProtectionKeychain as String])
+    }
+
+    // MARK: - Store fallback (scripted statuses, never the real keychain)
+
+    func testStoreFallsBackToLocalOnMissingEntitlement() {
+        var seen: [[String: Any]] = []
+        let store = KeychainPasswordsStore(
+            addItem: { query in
+                seen.append(query)
+                return seen.count == 1 ? errSecMissingEntitlement : errSecSuccess
+            },
+            updateItem: { _, _ in errSecSuccess })
+        XCTAssertThrowsError(
+            try store.save(site: PasswordSite.parse("example.com")!, account: "u", password: "p")
+        ) { error in
+            XCTAssertEqual(error as? PasswordsSaveError, .savedLocalOnly)
+        }
+        XCTAssertEqual(seen.count, 2)
+        XCTAssertNotNil(seen[0][kSecUseDataProtectionKeychain as String], "first attempt goes syncable")
+        XCTAssertNil(seen[1][kSecUseDataProtectionKeychain as String], "retry stays in the file keychain")
+    }
+
+    func testStoreUpdatesOnDuplicateWithoutThrowing() {
+        var updatedWith: [String: Any]?
+        let store = KeychainPasswordsStore(
+            addItem: { _ in errSecDuplicateItem },
+            updateItem: { match, _ in
+                updatedWith = match
+                return errSecSuccess
+            })
+        XCTAssertNoThrow(
+            try store.save(site: PasswordSite.parse("example.com")!, account: "u", password: "p"))
+        XCTAssertNil(updatedWith?[kSecValueData as String], "the match carries identity, never the secret")
+    }
+
+    func testStoreNeverReportsLocalOnlyWhenTheRetryFails() {
+        var calls = 0
+        let store = KeychainPasswordsStore(
+            addItem: { _ in
+                calls += 1
+                return calls == 1 ? errSecMissingEntitlement : errSecParam
+            },
+            updateItem: { _, _ in errSecSuccess })
+        XCTAssertThrowsError(
+            try store.save(site: PasswordSite.parse("example.com")!, account: "u", password: "p")
+        ) { error in
+            XCTAssertEqual(error as? PasswordsSaveError, .keychain(errSecParam))
+        }
+        XCTAssertEqual(calls, 2)
     }
 }
 
