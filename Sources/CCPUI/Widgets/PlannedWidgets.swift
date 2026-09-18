@@ -39,7 +39,7 @@ public let standardLayout = PanelLayout([
     ["system-stats", "ai-usage", "clipboard"],
     ["mail"],
     ["quick-toggles", "now-playing", "audio-mixer", "focus"],
-    ["shelf", "scratchpad"],
+    ["shelf", "scratchpad", "passwords"],
 ])
 
 /// Every widget this build offers, in the order a gallery lists them.
@@ -56,5 +56,6 @@ public func makeStandardRegistry() -> WidgetRegistry {
     registry.register(MailWidget.self)
     registry.register(ShelfWidget.self)
     registry.register(NotesWidget.self)
+    registry.register(PasswordsWidget.self)
     return registry
 }
