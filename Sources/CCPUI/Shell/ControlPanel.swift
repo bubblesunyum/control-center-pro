@@ -285,9 +285,10 @@ public struct ControlPanel: View {
                 newLaneTarget(at: index + 1)
             }
         }
-        // Where the lanes sit in panel space. The window is screen-sized and
-        // lets clicks through everywhere else, so the controller needs this
-        // box to know which points are the panel's and which fall through.
+        // Where the lanes sit in panel space. The window is a full-screen
+        // backdrop that swallows clicks outside the panel's own content, so
+        // the controller needs this box to know which points are the panel's
+        // and which are backdrop.
         .background {
             GeometryReader { proxy in
                 Color.clear.preference(

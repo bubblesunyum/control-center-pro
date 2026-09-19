@@ -31,19 +31,19 @@ public final class ControlPanelController {
     /// wholesale, so this is the seat kept across display changes while open.
     private var anchor: NSScreen?
 
-    /// The lanes' box in panel space, reported by the view. The window is
-    /// screen-sized and lets clicks through outside the panel's own content,
-    /// so the pointer is hit-tested against this (translated to screen space)
-    /// to decide what falls through.
+    /// The lanes' box in panel space, reported by the view. The window is a
+    /// full-screen backdrop that swallows every click on its screen, so the
+    /// pointer is hit-tested against this (translated to screen space) to
+    /// decide what is the panel's content and what is backdrop.
     private var lanesFrame: CGRect = .zero
     /// Whether a lanes frame has arrived since the panel opened. The first
-    /// evaluation must assume interactive: a zero rect would let a click
-    /// through onto the app below and dismiss the panel on its first frame.
+    /// evaluation must assume interactive: a zero rect would read a click on
+    /// the panel as backdrop and dismiss the panel on its first frame.
     private var lanesFrameValid = false
     /// Every card's frame in panel space, reported by the lanes. The
     /// hit-test reads this union, not the lanes' bounding box: the gutters
-    /// between cards are blank window, and a click there must fall through
-    /// to the app below rather than be swallowed (ccp-dz0, ccp-ckyz).
+    /// between cards are blank backdrop, and a click there dismisses (and is
+    /// swallowed) rather than reaching the app below (ccp-dz0, ccp-ckyz).
     /// Nil until the first report arrives; empty after means the panel
     /// genuinely holds no cards.
     private var cardFrames: [CGRect]?
@@ -55,12 +55,6 @@ public final class ControlPanelController {
     /// values, which would deliver no correcting reports ever.
     private var cacheSeatWidth: CGFloat = 0
 
-    /// The pointer watchers while the panel is up — a local monitor and a
-    /// global one, because each is deaf where the other hears: the global one
-    /// never sees moves over our own window, the local one never sees moves
-    /// past it. Same lifetime as the dismissal monitor.
-    private var mouseThroughMonitors: [Any] = []
-
     public var isVisible: Bool { visibility.isVisible }
 
     /// The app that was frontmost when the panel was shown — where a clipboard
@@ -70,7 +64,9 @@ public final class ControlPanelController {
     /// Watches for a click elsewhere or an Esc only while the panel is up.
     /// Built lazily because it dismisses this controller and so cannot be made
     /// before there is one.
-    private lazy var dismissal = PanelDismissalMonitor { [weak self] reason in
+    private lazy var dismissal = PanelDismissalMonitor(
+        isBackdropClick: { [weak self] event in self?.isBackdropClick(event) ?? false }
+    ) { [weak self] reason in
         self?.dismiss(for: reason)
     }
 
@@ -128,7 +124,6 @@ public final class ControlPanelController {
         _ = StickyEditorController.shared
 
         trackContentChanges()
-        trackMouseThroughContent()
     }
 
     /// Show the panel anchored to the top-right of the screen carrying the
@@ -142,7 +137,6 @@ public final class ControlPanelController {
 
     public func hide() {
         dismissal.stop()
-        stopMouseThrough()
         editor.stopEditing()
         window.orderOut(nil)
         // After the window is down, not before: a widget stopped first would
@@ -230,7 +224,6 @@ public final class ControlPanelController {
         focusNotesForOpen()
         visibility.show()
         dismissal.start()
-        startMouseThrough()
     }
 
     public func toggle(from statusItemButton: NSStatusBarButton?) {
@@ -319,8 +312,9 @@ public final class ControlPanelController {
     // MARK: - Placement
 
     /// Cut the window to the anchor screen. The window is the screen, not the
-    /// lanes: stickies live anywhere in it, and clicks outside the panel's
-    /// own content fall through to whatever is below (see mouse-through).
+    /// lanes: stickies live anywhere in it, and the window itself is the
+    /// backdrop — clicks outside the panel's own content dismiss the panel
+    /// and are swallowed (see the dismissal monitor).
     /// The lanes keep their top-right seat inside, via the view's own insets.
     private func place() {
         guard let visible = anchor?.visibleFrame else { return }
@@ -387,118 +381,74 @@ public final class ControlPanelController {
         }
     }
 
-    // MARK: - Mouse-through
+    // MARK: - Backdrop
 
-    /// The window covers the screen, but only the lanes, the stickies, and an
-    /// open gallery are the panel's: everywhere else the window ignores the
-    /// pointer so clicks reach the app below (and the dismissal monitor sees
-    /// them land there).
+    /// The window is the backdrop: it takes every click on its screen, and a
+    /// click that missed the panel's own content dismisses the panel and is
+    /// swallowed. Only the lanes, the stickies, and an open gallery are the
+    /// panel's; everywhere else is backdrop.
     private func lanesFrameDidChange(_ frame: CGRect) {
         lanesFrame = frame
         lanesFrameValid = true
         cacheSeatWidth = window.frame.size.width
-        updateMouseThrough(at: NSEvent.mouseLocation)
     }
 
     /// Card frames arrive on their own preference, often a frame after the
-    /// lanes' box. Re-evaluate on arrival: until they do the hit-test falls
-    /// back to the bounding box, which would keep swallowing gutter clicks.
+    /// lanes' box. Until they do the hit-test falls back to the bounding box,
+    /// which reads gutter clicks as the panel's — one frame of swallowing
+    /// what the next frame dismisses on, never a click leaking below.
     private func cardFramesDidChange(_ frames: [CGRect]) {
         cardFrames = frames
         cacheSeatWidth = window.frame.size.width
-        updateMouseThrough(at: NSEvent.mouseLocation)
     }
 
-    private func startMouseThrough() {
-        stopMouseThrough()
-        updateMouseThrough(at: NSEvent.mouseLocation)
-        let hop: (NSEvent) -> Void = { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.updateMouseThrough(at: NSEvent.mouseLocation)
-            }
-        }
-        // The pair, not either half: the global monitor is deaf over our own
-        // window, the local one past it. In-repo precedent is the local/global
-        // click pair the dismissal path already relies on.
-        if let global = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved, handler: hop) {
-            mouseThroughMonitors.append(global)
-        }
-        if let local = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved, handler: { hop($0); return $0 }) {
-            mouseThroughMonitors.append(local)
-        }
-    }
-
-    private func stopMouseThrough() {
-        mouseThroughMonitors.forEach(NSEvent.removeMonitor)
-        mouseThroughMonitors.removeAll()
-        window.ignoresMouseEvents = false
-    }
-
-    private func updateMouseThrough(at screenPoint: CGPoint) {
-        guard isVisible else { return }
-        // A sticky drag owns the pointer until release: the hit-test below
-        // reads committed geometry, which trails the finger mid-drag, so
-        // re-evaluating here would flip the window mouse-through under a
-        // held gesture and stall it (ccp-rlql).
-        guard !StickyStore.shared.isDragging else { return }
-        // A delete confirmation open is modal-ish: the window takes the
-        // pointer so the dialog answers clicks instead of the app below.
+    /// Whether this click is backdrop: on our own window, while visible, and
+    /// missing everything the panel owns. Anything else — the status item's
+    /// toggle click, another window of ours, a press mid-drag — is not ours
+    /// to dismiss on and passes through untouched.
+    private func isBackdropClick(_ event: NSEvent) -> Bool {
+        guard event.window === window else { return false }
+        guard isVisible else { return false }
+        // A drag owns the pointer until release: the hit-test below reads
+        // committed geometry, which trails the finger mid-drag (ccp-rlql).
+        guard !StickyStore.shared.isDragging, !editor.isDragging else { return false }
+        // A delete confirmation open is modal-ish: the dialog answers clicks
+        // instead of the backdrop dismissing under the question.
         let hitRects = Self.hitRects(
             lanesFrame: lanesFrame,
             cardFrames: cardFrames,
             isEditing: editor.isEditing
         )
         let interactive = !lanesFrameValid || StickyStore.shared.isConfirmingDelete || Self.isInteractive(
-            at: screenPoint,
+            at: NSEvent.mouseLocation,
             windowFrame: window.frame,
             hitRects: hitRects,
             stickies: editor.isEditing ? [] : StickyStore.shared.visible,
             galleryOpen: editor.isShowingGallery
         )
-        if window.ignoresMouseEvents == interactive {
-            window.ignoresMouseEvents = !interactive
-        }
+        return !interactive
     }
 
     /// Outward slack on the edit-mode hit box. The resize target overshoots
     /// its card and the remove badge caps past it, and on an edge card that
     /// overhang sits past the lanes' outer boundary where the box doesn't
-    /// reach — without slack a press there falls through and exits edit mode
+    /// reach — without slack a press there dismisses and exits edit mode
     /// instead of resizing or removing.
     nonisolated static let editHitTestOutset: CGFloat = 12
 
     /// Which rects count as the panel's. At rest the cards' union is exact,
-    /// so gutter clicks fall through; editing keeps the lanes' box (with
+    /// so gutter clicks are backdrop; editing keeps the lanes' box (with
     /// slack) because the union would punch holes mid-gesture — the lifted
-    /// card leaves its lane as a frameless gap, and a window going
-    /// mouse-through under a held drag cancels it. Nil frames mean the first
+    /// card leaves its lane as a frameless gap, and backdrop under a held
+    /// drag would dismiss from under it. Nil frames mean the first
     /// report hasn't arrived, so the box stands in; an empty panel reports
-    /// nothing to click and falls through. Pure so the mode rule is provable
+    /// nothing to click and is all backdrop. Pure so the mode rule is provable
     /// without ordering windows.
     nonisolated static func hitRects(lanesFrame: CGRect, cardFrames: [CGRect]?, isEditing: Bool) -> [CGRect] {
         if isEditing {
             return [lanesFrame.insetBy(dx: -editHitTestOutset, dy: -editHitTestOutset)]
         }
         return cardFrames ?? [lanesFrame]
-    }
-
-    /// Re-evaluate click-through when the interactive set itself changes —
-    /// gallery, edit mode, and every sticky mutation — rather than waiting
-    /// for the next mouse move that may never come.
-    private func trackMouseThroughContent() {
-        withObservationTracking {
-            _ = StickyStore.shared.stickies
-            _ = StickyStore.shared.isConfirmingDelete
-            _ = StickyStore.shared.isDragging
-            _ = editor.isEditing
-            _ = editor.isShowingGallery
-        } onChange: {
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.trackMouseThroughContent()
-                self.updateMouseThrough(at: NSEvent.mouseLocation)
-            }
-        }
     }
 
     /// Whether the screen point is the panel's own content. Pure so the
@@ -508,11 +458,11 @@ public final class ControlPanelController {
     /// the desk and the drag guard.
     ///
     /// The rects are tested as a union, not as their bounding box: the
-    /// gutters between cards are blank window, and a point there is outside
-    /// the panel — it must fall through to the app below (which the dismissal
-    /// monitor then sees) rather than be swallowed. The caller picks the set:
+    /// gutters between cards are blank backdrop, and a point there is outside
+    /// the panel — it dismisses (and is swallowed) rather than reaching the
+    /// app below. The caller picks the set:
     /// the cards' frames at rest, the lanes' box until they arrive, in edit
-    /// mode, and never for an empty panel (no rects at all falls through).
+    /// mode, and never for an empty panel (no rects at all is all backdrop).
     nonisolated static func isInteractive(
         at screenPoint: CGPoint,
         windowFrame: CGRect,

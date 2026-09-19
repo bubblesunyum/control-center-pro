@@ -6,6 +6,12 @@ import AppKit
 /// Watches for the two gestures that mean "put the panel away": a click
 /// somewhere else, and Esc.
 ///
+/// The panel window is a full-screen backdrop: it takes every click on its
+/// screen, and a click that missed the panel's own content dismisses the
+/// panel and is swallowed — it never reaches the app below. That swallowing
+/// is permanent behaviour, pinned by test: a dismiss click that passes
+/// through is how a panel nobody can see clicks buttons for the user.
+///
 /// The panel takes key focus but never activates the app, so it gets no
 /// `resignKey` when the user goes back to what they were doing — the events
 /// have to be watched for, and watching stops the moment the panel is down.
@@ -23,11 +29,19 @@ final class PanelDismissalMonitor {
     }
 
     private let monitors: EventMonitors
+    private let isBackdropClick: (NSEvent) -> Bool
     private let dismiss: (Reason) -> Void
     private var handles: [Any] = []
 
-    init(monitors: EventMonitors = .system, dismiss: @escaping (Reason) -> Void) {
+    init(
+        monitors: EventMonitors = .system,
+        isBackdropClick: @escaping (NSEvent) -> Bool = { _ in false },
+        dismiss: @escaping (Reason) -> Void
+    ) {
         self.monitors = monitors
+        // The default answers no backdrop: only clicks past the window
+        // dismiss (the multi-display fallback). The panel supplies the test.
+        self.isBackdropClick = isBackdropClick
         self.dismiss = dismiss
     }
 
@@ -36,16 +50,33 @@ final class PanelDismissalMonitor {
     func start() {
         guard handles.isEmpty else { return }
 
-        // Only clicks in *other* apps dismiss. A local mouse monitor would
-        // also see the click on the status item, which already toggles the
-        // panel — the panel would close here and reopen there, and the item
-        // would look like it had stopped working.
+        // Clicks past the window — another display, the menu bar — dismiss.
+        // They arrive here because no window of ours ate them, so they still
+        // reach the app below; the backdrop below covers our own screen.
+        // A local mouse monitor would also see the click on the status item,
+        // which already toggles the panel — the panel would close here and
+        // reopen there, and the item would look like it had stopped working.
+        // The backdrop test answers that: only clicks on our own window that
+        // missed the content dismiss, so the status item never qualifies.
         let outsideClick = monitors.addGlobal([.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
             // A modal save panel (e.g. scratchpad Export) is an NSPanel at
             // .modalPanel level; global monitors still see its clicks and
             // would dismiss the control panel behind it. Ignore while modal.
             if NSApp?.modalWindow != nil { return }
             self?.dismiss(.clickElsewhere)
+        }
+
+        // The backdrop: our own window ate a click that missed the panel's
+        // content. Dismiss and swallow it — returning nil keeps it from the
+        // app below. Clicks on the content pass through to their views.
+        let backdropClick = monitors.addLocal([.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
+            if NSApp?.modalWindow != nil { return event }
+            guard let self else { return event }
+            if isBackdropClick(event) {
+                dismiss(.clickElsewhere)
+                return nil
+            }
+            return event
         }
 
         // Esc arrives locally because the panel is key, which is what keeps
@@ -61,7 +92,7 @@ final class PanelDismissalMonitor {
             return nil
         }
 
-        handles = [outsideClick, escape].compactMap { $0 }
+        handles = [outsideClick, backdropClick, escape].compactMap { $0 }
     }
 
     func stop() {

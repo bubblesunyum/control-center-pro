@@ -12,7 +12,7 @@ final class PanelDismissalMonitorTests: XCTestCase {
         let monitor = PanelDismissalMonitor(monitors: events.interface) { _ in }
 
         monitor.start()
-        XCTAssertEqual(events.installed, 2, "one monitor for the click, one for the key")
+        XCTAssertEqual(events.installed, 3, "one monitor for outside clicks, one for the backdrop, one for the key")
 
         monitor.stop()
         XCTAssertEqual(events.installed, 0)
@@ -27,13 +27,13 @@ final class PanelDismissalMonitorTests: XCTestCase {
 
         for _ in 0..<20 {
             monitor.start()
-            XCTAssertLessThanOrEqual(events.installed, 2)
+            XCTAssertLessThanOrEqual(events.installed, 3)
             monitor.stop()
         }
 
         XCTAssertEqual(events.installed, 0)
-        XCTAssertEqual(events.added, 40, "each open installs its own pair")
-        XCTAssertEqual(events.removed, 40)
+        XCTAssertEqual(events.added, 60, "each open installs its own triple")
+        XCTAssertEqual(events.removed, 60)
     }
 
     func testStartingTwiceInstallsOneSet() {
@@ -43,7 +43,7 @@ final class PanelDismissalMonitorTests: XCTestCase {
         monitor.start()
         monitor.start()
 
-        XCTAssertEqual(events.installed, 2)
+        XCTAssertEqual(events.installed, 3)
         XCTAssertTrue(monitor.isWatching)
     }
 
@@ -56,6 +56,38 @@ final class PanelDismissalMonitorTests: XCTestCase {
         events.sendGlobal(.init())
 
         XCTAssertEqual(reasons, [.clickElsewhere])
+    }
+
+    /// The permanent contract (ccp-ecye): a click on the backdrop dismisses
+    /// the panel and is swallowed — returning nil so it never reaches the
+    /// app below. A dismiss click that passes through is a panel nobody can
+    /// see clicking buttons for the user.
+    func testBackdropClickDismissesAndIsSwallowed() {
+        let events = FakeEventMonitors()
+        var reasons: [PanelDismissalMonitor.Reason] = []
+        let monitor = PanelDismissalMonitor(
+            monitors: events.interface,
+            isBackdropClick: { _ in true }
+        ) { reasons.append($0) }
+
+        monitor.start()
+
+        XCTAssertNil(events.sendBackdropClick(), "the dismiss click dies here")
+        XCTAssertEqual(reasons, [.clickElsewhere])
+    }
+
+    func testContentClickPassesThroughToItsViews() {
+        let events = FakeEventMonitors()
+        var reasons: [PanelDismissalMonitor.Reason] = []
+        let monitor = PanelDismissalMonitor(
+            monitors: events.interface,
+            isBackdropClick: { _ in false }
+        ) { reasons.append($0) }
+
+        monitor.start()
+
+        XCTAssertNotNil(events.sendBackdropClick(), "a click on a card still reaches it")
+        XCTAssertEqual(reasons, [])
     }
 
     func testEscapeDismissesAndIsSwallowed() {
@@ -90,7 +122,8 @@ private final class FakeEventMonitors {
     private var live: Set<Int> = []
 
     private var globalHandler: ((NSEvent) -> Void)?
-    private var localHandler: ((NSEvent) -> NSEvent?)?
+    private var backdropHandler: ((NSEvent) -> NSEvent?)?
+    private var keyHandler: ((NSEvent) -> NSEvent?)?
 
     var installed: Int { live.count }
 
@@ -100,8 +133,14 @@ private final class FakeEventMonitors {
                 globalHandler = handler
                 return token()
             },
-            addLocal: { [self] _, handler in
-                localHandler = handler
+            addLocal: { [self] mask, handler in
+                // The monitor installs two locals: the backdrop mouse watcher
+                // and the Esc key watcher. Tell them apart by their masks.
+                if mask.contains(.keyDown) {
+                    keyHandler = handler
+                } else {
+                    backdropHandler = handler
+                }
                 return token()
             },
             remove: { [self] handle in
@@ -122,6 +161,21 @@ private final class FakeEventMonitors {
         globalHandler?(event)
     }
 
+    func sendBackdropClick() -> NSEvent? {
+        let event = NSEvent.mouseEvent(
+            with: .leftMouseDown,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 1,
+            pressure: 0
+        )!
+        return backdropHandler?(event)
+    }
+
     func sendLocal(keyCode: UInt16) -> NSEvent? {
         let event = NSEvent.keyEvent(
             with: .keyDown,
@@ -135,6 +189,6 @@ private final class FakeEventMonitors {
             isARepeat: false,
             keyCode: keyCode
         )!
-        return localHandler?(event)
+        return keyHandler?(event)
     }
 }

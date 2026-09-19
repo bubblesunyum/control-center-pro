@@ -5,11 +5,13 @@
 @testable import CCPUI
 import XCTest
 
-/// The window covers the screen and ignores the pointer everywhere the panel
-/// isn't, so clicks reach the app below. These pin the hit-test math: panel
-/// rects are top-leading origin, screen points are bottom-leading, and the
-/// flip between them is where this would go wrong.
-final class MouseThroughTests: XCTestCase {
+/// The window is a full-screen backdrop that swallows every click outside
+/// the panel's own content, so a dismiss click never reaches the app below
+/// (ccp-ecye — permanent behaviour). These pin the hit-test math that tells
+/// content apart from backdrop: panel rects are top-leading origin, screen
+/// points are bottom-leading, and the flip between them is where this would
+/// go wrong.
+final class BackdropHitTestTests: XCTestCase {
     /// A 1000×800 screen with lanes top-right and one sticky mid-screen.
     private let window = CGRect(x: 0, y: 0, width: 1000, height: 800)
     private let lanes = CGRect(x: 700, y: 20, width: 280, height: 400)
@@ -54,9 +56,10 @@ final class MouseThroughTests: XCTestCase {
 
     /// Two cards with a 10pt gutter between them, in panel space. The gutter
     /// is inside the lanes' bounding box but on no card: a click there is
-    /// outside the panel and must fall through (ccp-ckyz). Without card
-    /// frames the bounding box is the only answer and the gutter wrongly
-    /// reads as the panel's — the fallback this pins, not the behaviour.
+    /// outside the panel and dismisses (swallowed, never reaching the app
+    /// below). Without card frames the bounding box is the only answer and
+    /// the gutter wrongly reads as the panel's — the fallback this pins, not
+    /// the behaviour.
     private var twoCards: [CGRect] {
         [CGRect(x: 700, y: 20, width: 130, height: 400), CGRect(x: 840, y: 20, width: 140, height: 400)]
     }
@@ -90,8 +93,9 @@ final class MouseThroughTests: XCTestCase {
         XCTAssertFalse(check(CGPoint(x: 995, y: 700), cards: twoCards, isEditing: true))
     }
 
-    func testEmptyPanelFallsThrough() {
-        // No cards and the box gone: nothing to click, so nothing swallows.
+    func testEmptyPanelIsAllBackdrop() {
+        // No cards and the box gone: nothing to click, so everything
+        // dismisses — and is swallowed, never reaching the app below.
         XCTAssertFalse(check(CGPoint(x: 835, y: 700), cards: []))
         XCTAssertFalse(check(CGPoint(x: 800, y: 700), cards: []))
         // A sticky is still the panel's.
@@ -111,7 +115,7 @@ final class MouseThroughTests: XCTestCase {
         let note = sticky(800, 600)
         let halfW = StickyCard.defaultSize.width / 2
         let halfH = StickyCard.defaultSize.height / 2
-        // Just inside the paper answers; just outside falls through. Screen
+        // Just inside the paper answers; just outside is backdrop. Screen
         // y runs bottom-leading against the panel's top-leading, hence the
         // mirrored vertical.
         XCTAssertTrue(check(CGPoint(x: 200 + halfW - 20, y: 200 - (halfH - 20)), stickies: [note]))
