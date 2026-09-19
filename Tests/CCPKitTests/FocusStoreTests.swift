@@ -28,6 +28,8 @@ final class FakeFocusNotifier: FocusNotifier, @unchecked Sendable {
     private(set) var cancelledCount = 0
     private(set) var chimeCount = 0
     private(set) var authorizationRequests = 0
+    private(set) var returnNudgeCount = 0
+    private(set) var returnNudgeCancelledCount = 0
 
     func currentStatus() async -> FocusNotificationStatus { statusToReport }
 
@@ -42,6 +44,8 @@ final class FakeFocusNotifier: FocusNotifier, @unchecked Sendable {
     }
 
     func cancelScheduled() { cancelledCount += 1 }
+    func scheduleReturnNudge() { returnNudgeCount += 1 }
+    func cancelReturnNudge() { returnNudgeCancelledCount += 1 }
     func chime() { chimeCount += 1 }
 }
 

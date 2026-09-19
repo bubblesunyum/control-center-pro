@@ -46,9 +46,12 @@ public extension FocusPhase {
 public struct FocusSettings: Codable, Sendable, Hashable {
     public static let focusRange = 5...120
     public static let shortBreakRange = 0...30
+    public static let returnNudgeDelayRange = 5...60
 
     public var focusMinutes: Int
     public var shortBreakMinutes: Int
+    public var returnNudgeEnabled: Bool
+    public var returnNudgeMinutes: Int
 
     /// Breaks are on whenever a break has a length. Zero is the off switch.
     public var breaksEnabled: Bool { shortBreakMinutes > 0 }
@@ -60,10 +63,14 @@ public struct FocusSettings: Codable, Sendable, Hashable {
 
     public init(
         focusMinutes: Int,
-        shortBreakMinutes: Int
+        shortBreakMinutes: Int,
+        returnNudgeEnabled: Bool = true,
+        returnNudgeMinutes: Int = 12
     ) {
         self.focusMinutes = focusMinutes
         self.shortBreakMinutes = shortBreakMinutes
+        self.returnNudgeEnabled = returnNudgeEnabled
+        self.returnNudgeMinutes = returnNudgeMinutes
     }
 
     public init(from decoder: Decoder) throws {
@@ -78,12 +85,19 @@ public struct FocusSettings: Codable, Sendable, Hashable {
         {
             self.shortBreakMinutes = 0
         }
+        // Added after the nudge shipped: old files simply never asked.
+        self.returnNudgeEnabled = try container.decodeIfPresent(Bool.self, forKey: .returnNudgeEnabled)
+            ?? Self.default.returnNudgeEnabled
+        self.returnNudgeMinutes = try container.decodeIfPresent(Int.self, forKey: .returnNudgeMinutes)
+            ?? Self.default.returnNudgeMinutes
     }
 
     enum CodingKeys: String, CodingKey {
         case focusMinutes
         case shortBreakMinutes
         case breaksEnabled
+        case returnNudgeEnabled
+        case returnNudgeMinutes
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -93,12 +107,16 @@ public struct FocusSettings: Codable, Sendable, Hashable {
         // Derived, but still written: a reader from before the migration
         // learns off-ness from this key rather than from the zero.
         try container.encode(breaksEnabled, forKey: .breaksEnabled)
+        try container.encode(returnNudgeEnabled, forKey: .returnNudgeEnabled)
+        try container.encode(returnNudgeMinutes, forKey: .returnNudgeMinutes)
     }
 
     public var clamped: FocusSettings {
         FocusSettings(
             focusMinutes: focusMinutes.clamped(to: Self.focusRange),
-            shortBreakMinutes: shortBreakMinutes.clamped(to: Self.shortBreakRange)
+            shortBreakMinutes: shortBreakMinutes.clamped(to: Self.shortBreakRange),
+            returnNudgeEnabled: returnNudgeEnabled,
+            returnNudgeMinutes: returnNudgeMinutes.clamped(to: Self.returnNudgeDelayRange)
         )
     }
 
@@ -159,6 +177,9 @@ struct FocusPersisted: Codable, Sendable {
     var pendingNext: FocusPhase?
     var focusStreak: Int
     var openSessionID: UUID?
+    /// Which completed focus the return nudge already fired for. Once per
+    /// gap: missing in old files, which decodes as never-nudged.
+    var lastNudgeSessionID: UUID?
 
     static let empty = FocusPersisted(
         settings: .default,
@@ -168,7 +189,8 @@ struct FocusPersisted: Codable, Sendable {
         pausedRemaining: nil,
         pendingNext: nil,
         focusStreak: 0,
-        openSessionID: nil
+        openSessionID: nil,
+        lastNudgeSessionID: nil
     )
 
     enum CodingKeys: String, CodingKey {
@@ -180,6 +202,7 @@ struct FocusPersisted: Codable, Sendable {
         case pendingNext
         case focusStreak
         case openSessionID
+        case lastNudgeSessionID
     }
 }
 

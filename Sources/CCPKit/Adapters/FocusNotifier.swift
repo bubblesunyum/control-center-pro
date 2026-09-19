@@ -23,6 +23,8 @@ public protocol FocusNotifier: AnyObject, Sendable {
     func requestAuthorization() async -> Bool
     func schedule(title: String, body: String, at: Date)
     func cancelScheduled()
+    func scheduleReturnNudge()
+    func cancelReturnNudge()
     func chime()
 }
 
@@ -34,6 +36,8 @@ public final class NoopFocusNotifier: FocusNotifier, Sendable {
     public func requestAuthorization() async -> Bool { false }
     public func schedule(title: String, body: String, at: Date) {}
     public func cancelScheduled() {}
+    public func scheduleReturnNudge() {}
+    public func cancelReturnNudge() {}
     public func chime() {}
 }
 
@@ -49,6 +53,31 @@ public final class LiveFocusNotifier: FocusNotifier, @unchecked Sendable {
     // framework guarantee, not one the type system can see; the center is
     // never reassigned after init.
     private static let requestID = "ccp-focus-phase-end"
+    private static let returnRequestID = "ccp-focus-return-nudge"
+
+    /// The return-nudge category and its Start action. String IDs, so the app
+    /// delegate matches the tap without hardcoding them.
+    public static let returnCategoryID = "ccp-focus-return"
+    public static let startFocusActionID = "ccp-start-focus"
+
+    /// Register once at launch, before any nudge can post.
+    public static func registerCategories(
+        center: UNUserNotificationCenter = .current()
+    ) {
+        let start = UNNotificationAction(
+            identifier: startFocusActionID,
+            title: "Start focus",
+            options: [.foreground]
+        )
+        center.setNotificationCategories([
+            UNNotificationCategory(
+                identifier: returnCategoryID,
+                actions: [start],
+                intentIdentifiers: [],
+                options: []
+            ),
+        ])
+    }
 
     private let center: UNUserNotificationCenter
     // Retained: a throwaway NSSound deallocates mid-play and truncates the
@@ -90,6 +119,29 @@ public final class LiveFocusNotifier: FocusNotifier, @unchecked Sendable {
 
     public func cancelScheduled() {
         center.removePendingNotificationRequests(withIdentifiers: [Self.requestID])
+    }
+
+    /// One immediate nudge with the Start action. Separate ID from the
+    /// phase-end request so the two never withdraw each other. Neutral copy
+    /// on purpose: the watch fires on presence after the delay, whether the
+    /// user stepped away or simply kept working past it.
+    public func scheduleReturnNudge() {
+        Self.registerCategories(center: center)
+        let content = UNMutableNotificationContent()
+        content.title = "Time for another focus?"
+        content.body = "Start a focus round when you're ready."
+        content.sound = .default
+        content.categoryIdentifier = Self.returnCategoryID
+        center.add(UNNotificationRequest(
+            identifier: Self.returnRequestID,
+            content: content,
+            trigger: nil
+        ))
+    }
+
+    public func cancelReturnNudge() {
+        center.removePendingNotificationRequests(withIdentifiers: [Self.returnRequestID])
+        center.removeDeliveredNotifications(withIdentifiers: [Self.returnRequestID])
     }
 
     public func chime() {

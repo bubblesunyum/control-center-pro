@@ -5,6 +5,7 @@ import AppKit
 import CCPKit
 import CCPUI
 import Observation
+import UserNotifications
 import VorssaintEngines
 
 /// Wires the app together: the widgets it offers, the arrangement they start
@@ -14,7 +15,7 @@ import VorssaintEngines
 /// from having to reach for the interface and the shell from having to know
 /// what a widget is.
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     private var statusItem: StatusItemController?
     private var arrangement: PanelArrangement?
     private var settings: SettingsStore?
@@ -25,6 +26,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         BridgedDefaults.register()
+        // UNUserNotificationCenter has no bundle under xctest and traps, so
+        // only the shipped app takes the delegate and categories.
+        if Bundle.main.bundleIdentifier != nil {
+            UNUserNotificationCenter.current().delegate = self
+            LiveFocusNotifier.registerCategories()
+        }
         let registry = makeStandardRegistry()
         let store = JSONFileStore(filename: "layout.json", default: standardLayout)
         let arrangement = PanelArrangement(
@@ -52,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settingsWindow = SettingsWindowController(settings: settings,
                                                         craft: craftConnection,
                                                         claudeToken: ClaudeTokenModel(),
+                                                        claudeConnect: ClaudeConnectModel(),
                                                         hotkey: hotkey)
         self.settingsWindow = settingsWindow
         statusItem = StatusItemController(panel: panel, settingsWindow: settingsWindow)
@@ -105,5 +113,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         arrangement?.flush()
         ShelfStore.shared.flush()
         StickyStore.shared.flush()
+    }
+
+    // MARK: - Notifications
+
+    /// Foreground banners only for the return nudge. The phase-end request
+    /// keeps its old behaviour — no banner while active, the store's own
+    /// chime carries it — so the panel-open deadline doesn't gain a second
+    /// signal.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        guard notification.request.content.categoryIdentifier
+            == LiveFocusNotifier.returnCategoryID
+        else { return [] }
+        return [.banner, .sound]
+    }
+
+    /// The nudge's Start action, or a tap on its body, begins the round
+    /// silently — the panel stays shut.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        let isStart = response.actionIdentifier == LiveFocusNotifier.startFocusActionID
+        let isBodyTap = response.actionIdentifier
+            == UNNotificationDefaultActionIdentifier
+            && response.notification.request.content.categoryIdentifier
+                == LiveFocusNotifier.returnCategoryID
+        guard isStart || isBodyTap else { return }
+        FocusStore.shared.handleReturnNudgeAction()
     }
 }

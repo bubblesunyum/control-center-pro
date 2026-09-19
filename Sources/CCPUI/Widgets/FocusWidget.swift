@@ -388,6 +388,8 @@ private struct FocusSettingsPopover: View {
                 presets: [0, 5, 15],
                 offText: "Off"
             )
+            Divider()
+            nudgeRow
         }
         .padding(Space.oneHalf)
         .frame(minWidth: Layout.shelfMenuWidth)
@@ -406,6 +408,54 @@ private struct FocusSettingsPopover: View {
 
     private func doubleRange(_ range: ClosedRange<Int>) -> ClosedRange<Double> {
         Double(range.lowerBound)...Double(range.upperBound)
+    }
+
+    /// One suggestion after a finished focus, with its delay.
+    private var nudgeRow: some View {
+        VStack(alignment: .leading, spacing: Space.one) {
+            HStack(spacing: Space.half) {
+                Image(systemName: "bell.badge")
+                    .foregroundStyle(.secondary)
+                Text("Return nudge")
+                Spacer(minLength: Space.one)
+                Toggle("", isOn: nudgeEnabledBinding)
+                    .labelsHidden()
+                    .accessibilityLabel("Suggest a focus when back at your desk")
+            }
+            .font(.caption.weight(.medium))
+            sliderRow(
+                systemImage: "deskclock",
+                title: "Wait",
+                value: nudgeDelayBinding,
+                range: doubleRange(FocusSettings.returnNudgeDelayRange),
+                step: 1,
+                presets: [5, 12, 30]
+            )
+            .disabled(!store.settings.returnNudgeEnabled)
+            .opacity(store.settings.returnNudgeEnabled ? 1 : 0.4)
+        }
+    }
+
+    private var nudgeEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { store.settings.returnNudgeEnabled },
+            set: {
+                var next = store.settings
+                next.returnNudgeEnabled = $0
+                store.updateSettings(next)
+            }
+        )
+    }
+
+    private var nudgeDelayBinding: Binding<Double> {
+        Binding(
+            get: { Double(store.settings.returnNudgeMinutes) },
+            set: {
+                var next = store.settings
+                next.returnNudgeMinutes = Int($0.rounded())
+                store.updateSettings(next)
+            }
+        )
     }
 
     private func sliderRow(
