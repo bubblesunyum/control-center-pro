@@ -64,6 +64,19 @@ public struct ControlPanel: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         .coordinateSpace(.panel)
         .contentShape(Rectangle())
+        // The click-catcher: a nearly-invisible full-window veil. Clicks on
+        // fully-transparent window pixels are never delivered to the app at
+        // all — they fall to whatever is below no matter what
+        // ignoresMouseEvents says (ccp-ecye) — so the backdrop needs a
+        // whisper of alpha to be hittable. 2% black is below perception on
+        // real desktop content and below what screenshots can show, but it
+        // is alpha the compositor counts. It has no gesture of its own: the
+        // dismissal monitor decides backdrop-vs-content and swallows.
+        .background {
+            Color.black.opacity(0.02)
+                .ignoresSafeArea()
+                .accessibilityHidden(true)
+        }
         .environment(\.isPanelEditing, editor.isEditing)
         .environment(\.panelEditor, editor)
         .environment(\.panelArrangement, arrangement)

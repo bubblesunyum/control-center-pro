@@ -317,14 +317,32 @@ public final class ControlPanelController {
     /// and are swallowed (see the dismissal monitor).
     /// The lanes keep their top-right seat inside, via the view's own insets.
     private func place() {
-        guard let visible = anchor?.visibleFrame else { return }
+        guard let screen = anchor else { return }
+        let full = screen.frame
+        let visible = screen.visibleFrame
 
         // What the display can show is edit mode's limit too, so it is told
         // here rather than working it out from a screen it has no business
         // knowing about.
         editor.displayWidth = visible.width
 
-        window.setFrame(visible, display: true)
+        // Full height below the menu bar. The visible frame stops at the
+        // Dock, but a click down there is still a dismiss click and must be
+        // swallowed like any other (ccp-ecye) — the visible frame would
+        // leave a strip that falls through. Width stays on the visible
+        // frame: with a side Dock the full frame is wider, and that width
+        // feeds the lanes' seat and the sticky geometry — stretching it
+        // would slide the lanes under the Dock and split the hit-test from
+        // what is drawn. The top edge is unchanged, so the lanes keep their
+        // seat; the menu bar strip stays uncovered so system UI keeps
+        // working.
+        let seat = NSRect(
+            x: visible.minX,
+            y: full.minY,
+            width: visible.width,
+            height: visible.maxY - full.minY
+        )
+        window.setFrame(seat, display: true)
         migrateStickiesIfNeeded()
         reclaimStickies()
     }
