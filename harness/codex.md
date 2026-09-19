@@ -17,6 +17,16 @@ changed hooks must be reviewed and trusted in Codex's `/hooks` before they run.
 Also check for duplicate user-level Beads hooks there. Until the brief actually
 arrives, run `bash scripts/brief.sh` yourself. Do not add `bd prime` on top.
 
+## Completing work
+
+The repository authorizes local commits without another user request. Claim the
+bead before implementation and keep its status current. For each completed task,
+run the gate and independent review, commit only your changes with the bead id,
+then close the bead with the outcome before reporting completion. This applies
+to ordinary task replies, not only explicit handoffs. Leave unrelated work out
+of the commit. If blocked or paused, record the remaining work and return the
+bead to open using the handoff procedure. Push only when the user requests it.
+
 ## Shared skill mappings
 
 - **workflow:** use `open_in_codex` with a browser target for the URL printed by

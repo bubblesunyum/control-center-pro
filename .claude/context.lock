@@ -22,7 +22,7 @@
     "scripts/review.sh": "6f25284bfbf798d3"
   },
   ".claude/skills/handoff/SKILL.md": {
-    "doc": "0bc0322a612df8fc",
+    "doc": "f6aabd61eb1d0b0b",
     "scripts/brief.sh": "58d710492c34dda3"
   },
   ".claude/skills/workflow/SKILL.md": {
@@ -31,7 +31,7 @@
   },
   "AGENTS.md": {
     "doc": "f300589b0ef2fff5",
-    "harness/codex.md": "856b36ca34423207",
+    "harness/codex.md": "ff5ee81a3f430b22",
     "scripts/brief.sh": "58d710492c34dda3",
     "scripts/review.sh": "6f25284bfbf798d3",
     "scripts/verify.sh": "dd083d6bcd862179"
@@ -42,7 +42,7 @@
   },
   "harness/codex.md": {
     ".codex/hooks.json": "9ebe2492ec7aec62",
-    "doc": "856b36ca34423207",
+    "doc": "ff5ee81a3f430b22",
     "scripts/codex-support.py": "6f5ff28e0ea19f1d",
     "scripts/review.sh": "6f25284bfbf798d3"
   }

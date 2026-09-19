@@ -9,13 +9,13 @@ Use Beads as the shared project task system. Local plans, scratch files, and per
 
 ## First Step
 
-In this harness `scripts/brief.sh` is the session start (≈200 tokens) — it prints seat, last handoff, ready list and trap keys. Prefer it over `bd prime` (≈1900 tokens) which is the generic fallback. If the brief is unavailable, run:
+In this harness `scripts/brief.sh` is the session start — it prints seat, last handoff, ready list and trap keys. Run it if the hook has not supplied it:
 
 ```bash
-bd prime
+bash scripts/brief.sh
 ```
 
-If that prints nothing, check whether the repository has an active Beads workspace:
+If the brief fails, check the Beads workspace with the command below and report the failure. `AGENTS.md` remains the workflow authority; do not load the generic `bd prime` or `bd codex-hook` instructions.
 
 ```bash
 bd where
@@ -76,5 +76,4 @@ Use agent-local planning tools only for the current turn's execution checklist. 
 - Do not create markdown TODO files as the source of truth when Beads is available.
 - Do not use `bd edit`; it opens an interactive editor. Use `bd update` flags instead.
 - Prefer `--json` when parsing `bd` output programmatically.
-- If hooks are installed, `bd prime` may already be injected. Run it manually when context is missing.
-- Do not auto-close or mutate tasks unless the work is actually complete.
+- Close tasks only when the work is actually complete; update claims and progress as work proceeds.
