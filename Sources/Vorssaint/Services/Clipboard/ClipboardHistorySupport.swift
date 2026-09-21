@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Vorssaint
 
+// ── CCP PATCH (ccp-7z5d): AppKit for the rich-fallback parser below. See PATCHES.md.
+import AppKit
 import Foundation
 
 enum ClipboardHistoryEntryKind: String, Codable {
@@ -459,6 +461,31 @@ enum ClipboardHistoryCapturePolicy {
         return ScreenshotSupport.isCopiedScreenshot(URL(fileURLWithPath: paths[0]), in: directory)
     }
 }
+
+// ── CCP PATCH (ccp-7z5d) ────────────────────────────────────────────────
+/// Plain text derived from rich blobs when a copy carries no `.string`
+/// (styled-only programmatic writes). Lives beside the other pure capture
+/// helpers so the standalone test harness covers it without touching the
+/// pasteboard. Call on the main thread: the HTML importer is WebKit.
+/// See PATCHES.md.
+enum ClipboardHistoryRichFallback {
+    static func plainText(fromRTFData rtf: Data?, htmlData html: Data?) -> String? {
+        if let rtf, !rtf.isEmpty,
+           let parsed = NSAttributedString(rtf: rtf, documentAttributes: nil)?.string
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !parsed.isEmpty {
+            return parsed
+        }
+        if let html, !html.isEmpty,
+           let parsed = NSAttributedString(html: html, documentAttributes: nil)?.string
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !parsed.isEmpty {
+            return parsed
+        }
+        return nil
+    }
+}
+// ── END CCP PATCH ───────────────────────────────────────────────────────
 
 enum ClipboardHistoryPasteboardText {
     static func preferredText(webURLString: String?, plainText: String?) -> String? {

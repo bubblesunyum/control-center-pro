@@ -4,6 +4,8 @@
 import AppKit
 import Combine
 import Foundation
+// ── CCP PATCH (ccp-7z5d): os for the exclusion diagnostic below. See PATCHES.md.
+import os
 
 /// Apps whose copies never reach the clipboard history (issue #423).
 ///
@@ -107,6 +109,16 @@ final class ClipboardIgnoredApps: ObservableObject {
 
     // MARK: - The question the history asks
 
+    // ── CCP PATCH (ccp-7z5d) ────────────────────────────────────────────
+    /// Which listed apps were in front since the last check, for the capture
+    /// diagnostic log. The window itself is unchanged — a password window
+    /// that closes the instant something is copied must still count — but a
+    /// drop now names its cause instead of vanishing silently. See PATCHES.md.
+    private(set) var lastExcludedBundleIDs: Set<String> = []
+    private static let exclusionLog = Logger(subsystem: "pro.controlcenterpro",
+                                             category: "clipboard-capture")
+    // ── END CCP PATCH ─────────────────────────────────────────────────────
+
     /// Whether a copy noticed right now could have come from a listed app, and
     /// opens the next window. Called once per pasteboard check, on the main
     /// thread, whether or not anything was actually copied, so the window
@@ -114,6 +126,14 @@ final class ClipboardIgnoredApps: ObservableObject {
     func excludedSourceSinceLastCheck() -> Bool {
         guard shouldWatch else { return false }
         let excluded = !candidates.isDisjoint(with: lookup)
+        // ── CCP PATCH (ccp-7z5d): record the cause for diagnostics.
+        if excluded {
+            lastExcludedBundleIDs = candidates.intersection(lookup)
+            Self.exclusionLog.debug("skip: ignored app(s) in window: \(self.lastExcludedBundleIDs.joined(separator: ","), privacy: .public)")
+        } else {
+            lastExcludedBundleIDs = []
+        }
+        // ── END CCP PATCH ─────────────────────────────────────────────────
         candidates = Self.frontmostBundleID().map { [$0] } ?? []
         return excluded
     }

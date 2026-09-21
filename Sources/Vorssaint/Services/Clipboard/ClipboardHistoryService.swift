@@ -8,6 +8,8 @@ import CoreGraphics
 import CryptoKit
 import Foundation
 import ImageIO
+// ── CCP PATCH (ccp-7z5d): os for the capture diagnostic log below. See PATCHES.md.
+import os
 import SwiftUI
 
 enum ClipboardHistoryMoveDirection {
@@ -24,6 +26,17 @@ final class ClipboardHistoryService: ObservableObject {
     /// Upstream sets this to `ClipboardQuickPanelView()` at launch; CCP leaves
     /// it nil and shows history in its own widget instead. See PATCHES.md.
     static var makeQuickPanelContent: (() -> NSViewController)?
+    // ── END CCP PATCH ─────────────────────────────────────────────────────
+    // ── CCP PATCH (ccp-7z5d) ──────────────────────────────────────────────
+    /// Marker type stamped on pasteboard writes this app makes itself, so the
+    /// next poll can tell its own write apart from a copy the user made. The
+    /// previous guard was timing-only (`ignoreNextChange(upTo:)` on a single
+    /// change-count int), which swallowed a real copy landing in the same
+    /// poll window as an internal write. Unknown to paste targets, which
+    /// ignore types they don't understand. See PATCHES.md.
+    static let ownPasteboardType = NSPasteboard.PasteboardType("pro.controlcenterpro.clipboard.own")
+    /// Why a copy never reached history, at debug level for `log stream`.
+    static let captureLog = Logger(subsystem: "pro.controlcenterpro", category: "clipboard-capture")
     // ── END CCP PATCH ─────────────────────────────────────────────────────
     static let shared = ClipboardHistoryService()
     static let quickPanelCompactSize = NSSize(width: 560, height: 420)
@@ -134,8 +147,21 @@ final class ClipboardHistoryService: ObservableObject {
         }
         GeneralPasteboardAccess.shared.async({ () -> Int in
             let pasteboard = NSPasteboard.general
+            // ── CCP PATCH (ccp-7z5d): tag the write so the poll below skips
+            // it by content, not by count timing. Measured (macOS 26, probe
+            // 2026-09-21): only clearContents() bumps changeCount — same-owner
+            // setString/setData/writeObjects do not — so a clean write reads
+            // exactly pre+1 afterwards, and any interleaving copy (which always
+            // clears) reads higher. The stamp is skipped then: the content is
+            // foreign-or-mixed and must stay capturable, exactly as without
+            // the marker. If a later OS bumps per call, the guard degrades to
+            // skipping the stamp, never to a loss. See PATCHES.md.
+            let preChangeCount = pasteboard.changeCount
             pasteboard.clearContents()
             write(pasteboard)
+            if pasteboard.changeCount == preChangeCount + 1 {
+                pasteboard.setString("ccp", forType: Self.ownPasteboardType)
+            }
             return pasteboard.changeCount
         }, then: { [weak self] changeCount in
             // lastChangeCount stays owned by the main queue, where the capture
@@ -557,10 +583,13 @@ final class ClipboardHistoryService: ObservableObject {
             isRunning = true
             return
         }
-        let timer = Timer(timeInterval: 0.8, repeats: true) { [weak self] _ in
+        // ── CCP PATCH (ccp-7z5d): 0.8s missed rapid copy-copy-paste runs;
+        // every poller in this space (Maccy et al) sits at 0.3–0.5s and the
+        // change-count check itself is microseconds. See PATCHES.md.
+        let timer = Timer(timeInterval: 0.4, repeats: true) { [weak self] _ in
             self?.captureIfChanged()
         }
-        timer.tolerance = 0.25
+        timer.tolerance = 0.1
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
         isRunning = true
@@ -584,6 +613,11 @@ final class ClipboardHistoryService: ObservableObject {
         // ── CCP PATCH ── the plain string plus the original RTF/HTML blobs
         // when the copy carried them. See PATCHES.md.
         case text(plain: String, rtf: Data?, html: Data?)
+        // ── END CCP PATCH ─────────────────────────────────────────────────
+        // ── CCP PATCH (ccp-7z5d): a styled-only copy's raw blobs, whose
+        // plain text is derived on the main thread (WebKit HTML importer).
+        // See PATCHES.md.
+        case richOnly(rawRTF: Data?, rawHTML: Data?)
         // ── END CCP PATCH ─────────────────────────────────────────────────
     }
 
@@ -645,11 +679,32 @@ final class ClipboardHistoryService: ObservableObject {
                 // ignoreNextChange() consumed while the read was running.
                 guard changeCount > self.lastChangeCount else { return }
                 self.lastChangeCount = changeCount
-                guard self.isRunning, !excludedSource, let content else { return }
+                guard self.isRunning else { return }
+                // ── CCP PATCH (ccp-7z5d): say why a noticed change never
+                // reached history, at debug level for `log stream`. The
+                // candidate window is unchanged (privacy first); the faster
+                // poll already halves its span. See PATCHES.md.
+                if excludedSource {
+                    Self.captureLog.debug("skip: ignored app held the front since last check")
+                    return
+                }
+                guard let content else { return }
                 switch content {
                 case .files(let paths): self.promoteFiles(paths)
                 case .image(let image): self.promoteImage(image)
                 case .text(let plain, let rtf, let html): self.promote(plain: plain, rtf: rtf, html: html)
+                // ── CCP PATCH (ccp-7z5d): derived on main for the WebKit
+                // HTML importer; over-cap blobs stay dropped. See PATCHES.md.
+                case .richOnly(let rawRTF, let rawHTML):
+                    guard let plain = ClipboardHistoryRichFallback.plainText(
+                        fromRTFData: rawRTF, htmlData: rawHTML) else {
+                        Self.captureLog.debug("skip: rich-only copy with no readable text")
+                        return
+                    }
+                    let rtf = rawRTF.flatMap { $0.count <= Self.maxRichBytes ? $0 : nil }
+                    let html = rawHTML.flatMap { $0.count <= Self.maxRichBytes ? $0 : nil }
+                    self.promote(plain: plain, rtf: rtf, html: html)
+                // ── END CCP PATCH ─────────────────────────────────────────
                 }
             }
         }
@@ -659,11 +714,19 @@ final class ClipboardHistoryService: ObservableObject {
     /// the pasteboard server, which is exactly why it stays off the main thread.
     private static func readPasteboard(includeImagesFiles: Bool) -> CapturedContent? {
         let pasteboard = NSPasteboard.general
+        let types = (pasteboard.types ?? []).map(\.rawValue)
+        // ── CCP PATCH (ccp-7z5d): our own write — skip by content, not by
+        // count timing. See PATCHES.md.
+        if types.contains(ownPasteboardType.rawValue) {
+            captureLog.debug("skip: own write")
+            return nil
+        }
         // An app can mark what it puts on the pasteboard as a secret, which is
         // what the apps that keep passwords do when they hand one over. Said
         // that plainly by the app itself, it is taken at its word and the
         // content is never even read, whatever the other options say.
-        if ClipboardHistorySensitiveText.isConcealed((pasteboard.types ?? []).map(\.rawValue)) {
+        if ClipboardHistorySensitiveText.isConcealed(types) {
+            captureLog.debug("skip: concealed type")
             return nil
         }
         // Files first: a Finder copy also carries name strings, and a browser
@@ -673,24 +736,39 @@ final class ClipboardHistoryService: ObservableObject {
             if let paths = copiedFilePaths(from: pasteboard) {
                 if ClipboardHistoryCapturePolicy.isCopiedScreenshot(
                     paths, in: ScreenshotSupport.copiedFilesDirectory()) {
-                    guard let image = copiedPNGImage(from: pasteboard) else { return nil }
+                    guard let image = copiedImage(from: pasteboard) else {
+                        captureLog.debug("skip: screenshot files with no readable image")
+                        return nil
+                    }
                     return .image(image)
                 }
                 return .files(paths)
             }
-            if let image = copiedPNGImage(from: pasteboard) { return .image(image) }
+            if let image = copiedImage(from: pasteboard) { return .image(image) }
         }
-        guard let text = ClipboardHistoryPasteboardText.preferredText(
+        // The same two rich types captured as opaque bytes on this same lane
+        // read. Over-cap blobs are dropped with the plain text kept, never
+        // the reverse.
+        let rawRTF = copiedRichData(from: pasteboard, forType: .rtf, cap: maxFallbackBytes)
+        let rawHTML = copiedRichData(from: pasteboard, forType: .html, cap: maxFallbackBytes)
+        let rtf = rawRTF.flatMap { $0.count <= maxRichBytes ? $0 : nil }
+        let html = rawHTML.flatMap { $0.count <= maxRichBytes ? $0 : nil }
+        if let text = ClipboardHistoryPasteboardText.preferredText(
             webURLString: webURLString(from: pasteboard),
             plainText: pasteboard.string(forType: .string)
-        ) else { return nil }
-        // ── CCP PATCH ── the same two rich types PastePlainService already
-        // reads, captured as opaque bytes on this same lane read. Over-cap
-        // blobs are dropped with the plain text kept, never the reverse.
-        return .text(plain: text,
-                     rtf: copiedRichData(from: pasteboard, forType: .rtf),
-                     html: copiedRichData(from: pasteboard, forType: .html))
-        // ── END CCP PATCH ─────────────────────────────────────────────────
+        ) {
+            return .text(plain: text, rtf: rtf, html: html)
+        }
+        // ── CCP PATCH (ccp-7z5d): a styled-only programmatic copy carries no
+        // `.string` — hand the raw blobs to the main thread, which derives
+        // the plain text there: the HTML importer is WebKit and must run on
+        // main. Derivation reads the pre-storage-cap bytes, so an over-cap
+        // blob still yields its text with the blob dropped. See PATCHES.md.
+        if rawRTF?.isEmpty == false || rawHTML?.isEmpty == false {
+            return .richOnly(rawRTF: rawRTF, rawHTML: rawHTML)
+        }
+        captureLog.debug("skip: no text/image/files in \(types.joined(separator: ","), privacy: .public)")
+        return nil
     }
 
     // ── CCP PATCH ─────────────────────────────────────────────────────────
@@ -698,10 +776,16 @@ final class ClipboardHistoryService: ObservableObject {
     /// keep. Runs on the shared pasteboard lane with the rest of the read.
     private static let maxRichBytes = 2 * 1024 * 1024
 
+    // ── CCP PATCH (ccp-7z5d): derivation reads past the storage cap (an
+    // over-cap blob still yields its text with the blob dropped), so the
+    // fetch takes a cap. See PATCHES.md.
+    private static let maxFallbackBytes = 8 * 1024 * 1024
+
     private static func copiedRichData(from pasteboard: NSPasteboard,
-                                       forType type: NSPasteboard.PasteboardType) -> Data? {
+                                       forType type: NSPasteboard.PasteboardType,
+                                       cap: Int) -> Data? {
         guard let data = pasteboard.data(forType: type), !data.isEmpty,
-              data.count <= maxRichBytes
+              data.count <= cap
         else { return nil }
         return data
     }
@@ -720,25 +804,51 @@ final class ClipboardHistoryService: ObservableObject {
         return urls.map { $0.standardizedFileURL.path }
     }
 
-    private static func copiedPNGImage(from pasteboard: NSPasteboard)
+    // ── CCP PATCH (ccp-7z5d) ────────────────────────────────────────────
+    /// The image flavors programs actually write, beyond PNG/TIFF: screenshots
+    /// and browser copies usually arrive as TIFF already, but scripts and
+    /// automation hand over JPEG, GIF, HEIC and friends. Anything found is
+    /// normalized to PNG for the store. See PATCHES.md.
+    private static let imageSearchTypes: [NSPasteboard.PasteboardType] = [
+        .tiff,
+        NSPasteboard.PasteboardType("public.jpeg"),
+        NSPasteboard.PasteboardType("com.compuserve.gif"),
+        NSPasteboard.PasteboardType("public.heic"),
+        NSPasteboard.PasteboardType("public.heif"),
+        NSPasteboard.PasteboardType("org.webmproject.webp"),
+        NSPasteboard.PasteboardType("com.microsoft.bmp"),
+    ]
+
+    private static func copiedImage(from pasteboard: NSPasteboard)
         -> (data: Data, width: Int, height: Int)? {
-        let png = pasteboard.data(forType: .png)
-        guard let source = png ?? pasteboard.data(forType: .tiff),
-              source.count <= maxRawImageBytes,
-              let rep = NSBitmapImageRep(data: source),
-              rep.pixelsWide > 0, rep.pixelsHigh > 0
-        else { return nil }
-        let data: Data
-        if let png {
-            data = png
-        } else if let converted = rep.representation(using: .png, properties: [:]) {
-            data = converted
-        } else {
-            return nil
+        // PNG keeps its original bytes, as before — no re-encode.
+        if let png = pasteboard.data(forType: .png),
+           !png.isEmpty, png.count <= maxRawImageBytes, png.count <= maxImageBytes,
+           let rep = NSBitmapImageRep(data: png),
+           rep.pixelsWide > 0, rep.pixelsHigh > 0 {
+            return (png, rep.pixelsWide, rep.pixelsHigh)
         }
-        guard data.count <= maxImageBytes else { return nil }
-        return (data, rep.pixelsWide, rep.pixelsHigh)
+        for type in imageSearchTypes {
+            guard let source = pasteboard.data(forType: type), !source.isEmpty,
+                  source.count <= maxRawImageBytes,
+                  let rep = Self.imageRep(from: source),
+                  rep.pixelsWide > 0, rep.pixelsHigh > 0,
+                  let data = rep.representation(using: .png, properties: [:]),
+                  data.count <= maxImageBytes
+            else { continue }
+            return (data, rep.pixelsWide, rep.pixelsHigh)
+        }
+        return nil
     }
+
+    private static func imageRep(from source: Data) -> NSBitmapImageRep? {
+        if let rep = NSBitmapImageRep(data: source) { return rep }
+        guard let image = NSImage(data: source),
+              let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff) else { return nil }
+        return rep
+    }
+    // ── END CCP PATCH ─────────────────────────────────────────────────────
 
     private func promoteImage(_ image: (data: Data, width: Int, height: Int)) {
         let hash = Self.sha256Hex(image.data)
@@ -820,9 +930,15 @@ final class ClipboardHistoryService: ObservableObject {
     /// swept after the save, like purged images. See PATCHES.md.
     private func promote(plain raw: String, rtf: Data?, html: Data?) {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, text.count <= ClipboardHistoryEditing.maxCharacters else { return }
+        guard !text.isEmpty, text.count <= ClipboardHistoryEditing.maxCharacters else {
+            // ── CCP PATCH (ccp-7z5d): diagnostic for empty/oversize drops.
+            Self.captureLog.debug("drop: empty or oversize text")
+            return
+        }
         if UserDefaults.standard.bool(forKey: DefaultsKey.clipboardHistorySkipSensitive),
            looksSensitive(text) {
+            // ── CCP PATCH (ccp-7z5d): diagnostic for sensitive-text drops.
+            Self.captureLog.debug("drop: sensitive-looking text")
             return
         }
 

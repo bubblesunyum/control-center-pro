@@ -704,6 +704,27 @@ struct MetricsTests {
         expect(maximumPasteboardOperations == 1,
                "pasteboard access serializes concurrent service work")
 
+        // ── CCP PATCH (ccp-7z5d) ────────────────────────────────────
+        // Styled-only copies carry no `.string`; the fallback derives plain
+        // text from the rich blobs instead of dropping the copy.
+        let fallbackRTF = try? NSAttributedString(string: "styled hello").data(
+            from: NSRange(location: 0, length: 12),
+            documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf])
+        expect(ClipboardHistoryRichFallback.plainText(
+            fromRTFData: fallbackRTF, htmlData: nil) == "styled hello",
+            "rich fallback reads plain text out of an RTF-only copy")
+        expect(ClipboardHistoryRichFallback.plainText(
+            fromRTFData: nil,
+            htmlData: Data("<b>bold hello</b>".utf8)) == "bold hello",
+            "rich fallback reads plain text out of an HTML-only copy")
+        expect(ClipboardHistoryRichFallback.plainText(
+            fromRTFData: nil, htmlData: nil) == nil,
+            "rich fallback stays nil when a copy carried no rich blobs")
+        expect(ClipboardHistoryRichFallback.plainText(
+            fromRTFData: Data(), htmlData: Data()) == nil,
+            "rich fallback stays nil for empty blobs")
+        // ── END CCP PATCH ─────────────────────────────────────────────
+
         // The freeze this lane exists to prevent (issue #887): a read stuck
         // behind an app that promised pasteboard content and stopped answering
         // holds the lane, and any caller that waited for it would be frozen

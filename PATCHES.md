@@ -120,6 +120,69 @@ Reapply the fenced blocks.
 
 ---
 
+## `Sources/Vorssaint/Services/Clipboard/ClipboardHistory{Service,Support}.swift`, `ClipboardIgnoredApps.swift` — capture reliability (ccp-7z5d)
+
+**What.** Five fenced `CCP PATCH (ccp-7z5d)` blocks, all in the capture path:
+
+- Poll `0.8s`/`0.25` tolerance → `0.4s`/`0.1`: the slowest in this space
+  (Maccy et al sit at 0.3–0.5s) missed rapid copy-copy-paste runs; the
+  change-count check itself is microseconds, so this costs nothing measurable.
+- Own-write marker: `writeToPasteboard` stamps
+  `pro.controlcenterpro.clipboard.own` on its writes and `readPasteboard`
+  skips the marked pasteboard by content. The previous guard was timing-only
+  (`ignoreNextChange(upTo:)` on one change-count int) and swallowed a real
+  copy landing in the same window as an internal write. The stamp is skipped
+  unless the count reads exactly pre-write + 1 afterwards — measured on
+  macOS 26 (probe 2026-09-21, `bd recall nspasteboard-clear-is-the-only-bump`):
+  only `clearContents()` bumps the count while same-owner writes do not, so
+  any interleaving copy (which always clears) is detected exactly and its
+  content stays capturable. The count handshake stays as belt-and-braces.
+  Unknown types are ignored by paste targets, so the marker is inert on paste.
+- Format coverage: text no longer requires `.string` — an RTF/HTML-only
+  programmatic copy travels as a `richOnly` capture whose plain text is
+  derived on the main thread via the pure `ClipboardHistoryRichFallback`
+  helper (the HTML importer is WebKit and must run on main). Derivation reads
+  pre-storage-cap bytes (8MB fetch cap), so an over-cap blob still yields its
+  text with the blob dropped, honoring the keep-text invariant. Images are
+  accepted as TIFF/JPEG/GIF/HEIC/HEIF/WebP (`org.webmproject.webp`)/BMP
+  (normalized to PNG for the store) instead of PNG-only, with PNG keeping its
+  original bytes. Files, concealment, sensitivity, and size caps are untouched.
+- Diagnostics: every silent drop now says why at debug level
+  (`clipboard-capture`: own write, concealed, ignored app + which bundle
+  IDs, unsupported types, sensitive/oversize text) for `log stream`, and
+  `ClipboardIgnoredApps` records `lastExcludedBundleIDs`. The ignored-app
+  candidate window itself is unchanged (privacy first — a password window
+  that closes on copy must still count); the faster poll halves its span.
+- The fallback parser lives in `ClipboardHistorySupport.swift` (with a fenced
+  `import AppKit`) rather than the service, because the standalone
+  `build.sh --test` harness compiles the Support file but not the service;
+  `Tests/MetricsTests.swift` gains a fenced block beside the other clipboard
+  expects (RTF-only/HTML-only fallback, empty cases).
+
+**Why.** Capture happens inside upstream's pasteboard poll and the write tag
+inside its write planner — a CCP-side observer would duplicate the poll and
+race it, same reason as the ccp-a5ss rich-text patch above. No bridge/adapter
+changes: entries flow through unchanged.
+
+**Known residual.** A wedged pasteboard lane (promised data, lingering
+password prompt) still head-blocks later polls until it clears — the 5s
+in-flight timeout frees the flag but the serial lane stays queued behind the
+wedge. CopyQ-style isolation (a separate monitor process) is the real fix
+and is deliberately out of scope here; the faster poll and cheaper reads
+shrink the blast radius. So is an event-tap `⌘C` trigger (needs an
+Accessibility prompt) — the user settled for the faster poll.
+
+**Deleting it.** Propose upstream in pieces: faster poll, own-write marker
+type, rich-fallback text, wider image types, capture logging. If accepted,
+this entry goes away entirely.
+
+**On merge.** Conflicts only if upstream touches the poll interval,
+`writeToPasteboard`, `readPasteboard`, `copiedPNGImage`, `promote`,
+`captureIfChanged`, `excludedSourceSinceLastCheck`, or the clipboard expects
+in `Tests/MetricsTests.swift`. Reapply the fenced blocks.
+
+---
+
 ## `Sources/Vorssaint/Core/Permissions.swift` — UI overlay behind a hook
 
 **What.** Four lines. `requestAccessibility()` and `requestScreenRecording()`
