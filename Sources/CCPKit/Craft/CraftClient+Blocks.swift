@@ -75,26 +75,31 @@ extension CraftClient {
     /// page object itself. Envelopes and arrays name no document, so they
     /// carry no title; the page object does, with its mtime when metadata was
     /// fetched. Nodes without an id are skipped, never guessed at.
-    private static func decodeDocument(from data: Data) -> FetchedDocument? {
+    private static func decodeDocument(from data: Data, documentID: String) -> FetchedDocument? {
         let decoder = JSONDecoder()
         if let envelope = try? decoder.decode(FetchedItemsEnvelope.self, from: data),
            let items = envelope.items {
-            return FetchedDocument(blocks: items.flatMap(Self.flatten(node:)))
+            return FetchedDocument(blocks: Self.blocks(of: items, documentID: documentID))
         }
         if let envelope = try? decoder.decode(FetchedBlocksEnvelope.self, from: data),
            let blocks = envelope.blocks {
-            return FetchedDocument(blocks: blocks.flatMap(Self.flatten(node:)))
+            return FetchedDocument(blocks: Self.blocks(of: blocks, documentID: documentID))
         }
         if let nodes = try? decoder.decode([FetchedNode].self, from: data) {
-            return FetchedDocument(blocks: nodes.flatMap(Self.flatten(node:)))
+            return FetchedDocument(blocks: Self.blocks(of: nodes, documentID: documentID))
         }
         // The live shape: one page object carrying its blocks under
         // `content`. Only the children come back as blocks — the root is
         // position, not text, even though it carries the document title as
-        // markdown. A missing key reads as an empty page; a missing id is not
-        // a page at all, so error payloads still throw.
+        // markdown. A missing key reads as an empty page.
+        //
+        // The root must name the document we asked for. A payload that names
+        // another one is not this pad's content, and adopting its children
+        // would be ccp-d8ec by a second door: error payloads and a redirected
+        // or merged page alike fail the fetch, which skips the pad and writes
+        // nothing, rather than replacing it with a stranger's blocks.
         if let page = try? decoder.decode(FetchedNode.self, from: data),
-           page.id != nil {
+           Self.isDocument(page.id, documentID) {
             // The root's mtime is the title sync's remote clock. lastModified
             // only: createdAt is the document's birth, not the title's, and a
             // rename necessarily postdates it — falling back would resolve
@@ -102,16 +107,16 @@ extension CraftClient {
             // happened. Unknown reads as unknown, and ties break local.
             let modified = page.metadata?.lastModifiedAt.flatMap(Self.parseServerTime)
             return FetchedDocument(title: page.markdown, modifiedAt: modified,
-                                   blocks: (page.content ?? []).flatMap(Self.flatten(node:)))
+                                   blocks: (page.content ?? []).compactMap(Self.block(for:)))
         }
         return nil
     }
 
     /// `GET /blocks?id=&maxDepth=-1&fetchMetadata=true` — the document's
-    /// title, mtime, and blocks in document order, flattened depth-first. The
-    /// root page node carries no block and flattens away to its children; any
-    /// descendant without markdown stays in the list (markdown nil) so the
-    /// sidecar can pin its position and the push routes around it.
+    /// title, mtime, and its own top-level blocks in document order. The root
+    /// page node carries no block and gives way to its children; any child
+    /// without markdown stays in the list (markdown nil) so the base can pin
+    /// its position and the push routes around it.
     public func fetchDocument(documentID: String) async throws(CraftClientError) -> FetchedDocument {
         var components = URLComponents(url: baseURL.appending(path: "blocks"),
                                        resolvingAgainstBaseURL: false)
@@ -126,26 +131,46 @@ extension CraftClient {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         let (data, http) = try await send(request)
-        guard let document = Self.decodeDocument(from: data) else {
+        guard let document = Self.decodeDocument(from: data, documentID: documentID) else {
             throw CraftClientError.unreachable(statusCode: http.statusCode)
         }
         return document
     }
 
-    private static func flatten(node: FetchedNode) -> [FetchedBlock] {
-        var out: [FetchedBlock] = []
-        // A container (the page root, a sub-page) with children is position,
-        // not text — no text block ever carries both markdown and children,
-        // so children always win. A nil id never pins — without an address
-        // there is nothing to route around. An empty `content` array pins
-        // like a missing key: server serialisation must not change sync.
-        if let id = node.id, (node.content ?? []).isEmpty {
-            out.append(FetchedBlock(id: id, markdown: node.markdown))
+    /// Whether an id names the document this fetch asked for. Compared
+    /// case-insensitively: Craft-authored ids come back uppercase hex and
+    /// CCP's own POST echoes lowercase UUIDs, so the same document is spelled
+    /// two ways depending on who made it (craft-block-id-case-provenance).
+    private static func isDocument(_ id: String?, _ documentID: String) -> Bool {
+        id?.caseInsensitiveCompare(documentID) == .orderedSame
+    }
+
+    /// The document's own blocks. Only the page we asked for gives way to
+    /// its children; every other node at this level is one of its blocks.
+    private static func blocks(of nodes: [FetchedNode], documentID: String) -> [FetchedBlock] {
+        nodes.flatMap { node in
+            Self.isDocument(node.id, documentID)
+                ? (node.content ?? []).compactMap(Self.block(for:))
+                : [node].compactMap(Self.block(for:))
         }
-        for child in node.content ?? [] {
-            out.append(contentsOf: flatten(node: child))
-        }
-        return out
+    }
+
+    /// One child of the page root. A node carrying children is a container —
+    /// a sub-page, a card — and what it holds is its own, not this
+    /// document's: it pins position and nothing else, markdown nil, exactly
+    /// like an image. A nil id never pins — without an address there is
+    /// nothing to route around. An empty `content` array pins like a missing
+    /// key: server serialisation must not change sync.
+    ///
+    /// Descending into a container was the bug (ccp-d8ec): a sub-page's
+    /// blocks joined the parent's list, so the base handed the push ids that
+    /// live inside the sub-page, and the next round PUT, deleted and
+    /// anchored against them — moving the parent page's text into the
+    /// sub-page the user had just made.
+    private static func block(for node: FetchedNode) -> FetchedBlock? {
+        guard let id = node.id else { return nil }
+        let isContainer = !(node.content ?? []).isEmpty
+        return FetchedBlock(id: id, markdown: isContainer ? nil : node.markdown)
     }
 
     // MARK: - Block writes

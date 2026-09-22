@@ -15,7 +15,7 @@ final class CraftPullWireTests: XCTestCase {
         CraftClient(baseURL: base, transport: transport)
     }
 
-    func testFetchSendsDocumentQueryAndFlattensTheTreeInOrder() async throws {
+    func testFetchSendsDocumentQueryAndReadsTheDocumentsOwnBlocksInOrder() async throws {
         let transport = ScriptedTransport([.init(statusCode: 200, json: """
             {"items":[{"id":"doc1","type":"page","content":[
               {"id":"a","markdown":"one","type":"text"},
@@ -37,8 +37,10 @@ final class CraftPullWireTests: XCTestCase {
         XCTAssertEqual(query["id"], "doc1")
         XCTAssertEqual(query["maxDepth"], "-1")
 
-        XCTAssertEqual(blocks.map(\.id), ["a", "b", "img"])
-        XCTAssertEqual(blocks.map(\.markdown), ["one", "two", nil])
+        // The sub-page pins its position and nothing else: what it holds is
+        // its own document's, never this one's (ccp-d8ec).
+        XCTAssertEqual(blocks.map(\.id), ["a", "sub", "img"])
+        XCTAssertEqual(blocks.map(\.markdown), ["one", nil, nil])
     }
 
     func testFetchParsesBlocksEnvelopeAndBareArraysToo() async throws {
@@ -66,8 +68,35 @@ final class CraftPullWireTests: XCTestCase {
 
         XCTAssertEqual(fetched.title, "playground")
         XCTAssertNil(fetched.modifiedAt, "no metadata fetched, no mtime")
-        XCTAssertEqual(fetched.blocks.map(\.id), ["a", "img", "b"])
-        XCTAssertEqual(fetched.blocks.map(\.markdown), ["one", nil, "two"])
+        XCTAssertEqual(fetched.blocks.map(\.id), ["a", "img", "sub"])
+        XCTAssertEqual(fetched.blocks.map(\.markdown), ["one", nil, nil])
+    }
+
+    func testFetchRefusesAPageRootNamingAnotherDocument() async throws {
+        // Adopting a stranger's children is ccp-d8ec by a second door: the
+        // fetch fails, the pull skips the pad, and nothing is written.
+        let transport = ScriptedTransport([.init(statusCode: 200, json: """
+            {"id":"other","type":"page","markdown":"someone else","content":[
+              {"id":"a","markdown":"one","type":"text"}]}
+            """)])
+        do {
+            let fetched = try await client(transport).fetchDocument(documentID: "doc1")
+            XCTFail("expected a throw, got \(fetched)")
+        } catch {}
+    }
+
+    func testFetchMatchesThePageRootWhateverItsIdCase() async throws {
+        // Craft-authored ids are uppercase hex, ours lowercase UUIDs
+        // (craft-block-id-case-provenance) — the same document, two
+        // spellings, and a case-sensitive match would empty the pad.
+        let transport = ScriptedTransport([.init(statusCode: 200, json: """
+            {"id":"DOC1","type":"page","markdown":"playground","content":[
+              {"id":"a","markdown":"one","type":"text"}]}
+            """)])
+        let fetched = try await client(transport).fetchDocument(documentID: "doc1")
+
+        XCTAssertEqual(fetched.title, "playground")
+        XCTAssertEqual(fetched.blocks.map(\.id), ["a"])
     }
 
     func testFetchParsesPageRootMtimeFromMetadata() async throws {

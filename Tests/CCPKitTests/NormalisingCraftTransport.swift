@@ -16,6 +16,10 @@ final class NormalisingCraftTransport: CraftTransport, @unchecked Sendable {
     struct Block {
         var id: String
         var markdown: String
+        /// A sub-page's own blocks. Craft addresses every block by id however
+        /// deep it sits, which is what lets a stray anchor write the parent
+        /// page's text into the sub-page (ccp-d8ec).
+        var children: [Block] = []
     }
 
     /// The document, in order. Seed it to stand for a Craft doc that already
@@ -131,10 +135,28 @@ final class NormalisingCraftTransport: CraftTransport, @unchecked Sendable {
     }
 
     private func page() -> String {
-        let content = blocks.map {
-            #"{"id":"\#($0.id)","type":"text","markdown":\#(quoted($0.markdown))}"#
+        #"{"id":"doc1","type":"page","markdown":\#(quoted(title)),"content":[\#(rendered(blocks))]}"#
+    }
+
+    private func rendered(_ list: [Block]) -> String {
+        list.map { block in
+            block.children.isEmpty
+                ? #"{"id":"\#(block.id)","type":"text","markdown":\#(quoted(block.markdown))}"#
+                : #"{"id":"\#(block.id)","type":"page","markdown":\#(quoted(block.markdown)),"content":[\#(rendered(block.children))]}"#
         }.joined(separator: ",")
-        return #"{"id":"doc1","type":"page","markdown":\#(quoted(title)),"content":[\#(content)]}"#
+    }
+
+    /// Reach a block by id wherever it sits, and hand its owning list to the
+    /// caller. Nil when no such id exists anywhere in the document.
+    private func withBlock<T>(_ id: String, _ body: (inout [Block], Int) -> T) -> T? {
+        func search(_ list: inout [Block]) -> T? {
+            if let index = list.firstIndex(where: { $0.id == id }) { return body(&list, index) }
+            for index in list.indices {
+                if let hit = search(&list[index].children) { return hit }
+            }
+            return nil
+        }
+        return search(&blocks)
     }
 
     private func put(_ body: [String: Any]) -> String {
@@ -148,62 +170,67 @@ final class NormalisingCraftTransport: CraftTransport, @unchecked Sendable {
                 echo.append(Block(id: id, markdown: markdown))
                 continue
             }
-            guard let index = blocks.firstIndex(where: { $0.id == id }) else { continue }
             let forms = stored(markdown)
             guard let first = forms.first else { continue }
-            blocks[index].markdown = first
-            echo.append(blocks[index])
             // A split keeps the id on the first piece; the rest are new
             // blocks landing right behind it.
-            for extra in forms.dropFirst().reversed() {
-                let new = Block(id: mintID(), markdown: extra)
-                blocks.insert(new, at: index + 1)
-                echo.append(new)
+            let extras = forms.dropFirst().map { Block(id: mintID(), markdown: $0) }
+            let written = withBlock(id) { list, index -> [Block] in
+                list[index].markdown = first
+                list.insert(contentsOf: extras, at: index + 1)
+                return [list[index]] + extras
             }
+            echo.append(contentsOf: written ?? [])
         }
         return items(echo)
     }
 
     private func post(_ body: [String: Any]) -> String {
-        let position = body["position"] as? [String: Any] ?? [:]
-        var cursor: Int
-        switch position["position"] as? String {
-        case "after":
-            let sibling = position["siblingId"] as? String
-            cursor = (blocks.firstIndex { $0.id == sibling }).map { $0 + 1 } ?? blocks.count
-        case "start":
-            cursor = 0
-        default:
-            cursor = blocks.count
-        }
         var echo: [Block] = []
         for item in body["blocks"] as? [[String: Any]] ?? [] {
             guard let markdown = item["markdown"] as? String else { continue }
-            for form in stored(markdown) {
-                let new = Block(id: mintID(), markdown: form)
-                blocks.insert(new, at: cursor)
-                cursor += 1
-                echo.append(new)
-            }
+            echo += stored(markdown).map { Block(id: mintID(), markdown: $0) }
         }
+        let position = body["position"] as? [String: Any] ?? [:]
+        // "after" names a sibling, and the sibling decides which list the
+        // batch lands in — the sub-page's own, when the id sits inside one.
+        if position["position"] as? String == "after",
+           let sibling = position["siblingId"] as? String,
+           withBlock(sibling, { list, index in list.insert(contentsOf: echo, at: index + 1) }) != nil {
+            return items(echo)
+        }
+        blocks.insert(contentsOf: echo,
+                      at: position["position"] as? String == "start" ? 0 : blocks.count)
         return items(echo)
     }
 
     private func delete(_ body: [String: Any]) -> String {
         let ids = Set(body["blockIds"] as? [String] ?? [])
-        blocks.removeAll { ids.contains($0.id) }
+        func prune(_ list: inout [Block]) {
+            list.removeAll { ids.contains($0.id) }
+            for index in list.indices { prune(&list[index].children) }
+        }
+        prune(&blocks)
         return #"{"items":[]}"#
     }
 
     private func move(_ body: [String: Any]) -> String {
-        let ids = body["blockIds"] as? [String] ?? []
+        let ids = Set(body["blockIds"] as? [String] ?? [])
+        var moved: [Block] = []
+        func take(_ list: inout [Block]) {
+            moved += list.filter { ids.contains($0.id) }
+            list.removeAll { ids.contains($0.id) }
+            for index in list.indices { take(&list[index].children) }
+        }
+        take(&blocks)
         let position = body["position"] as? [String: Any] ?? [:]
-        let moved = blocks.filter { ids.contains($0.id) }
-        blocks.removeAll { ids.contains($0.id) }
-        let sibling = position["siblingId"] as? String
-        let anchor = blocks.firstIndex { $0.id == sibling } ?? 0
-        let target = (position["position"] as? String) == "after" ? anchor + 1 : anchor
-        blocks.insert(contentsOf: moved, at: min(target, blocks.count))
+        let after = position["position"] as? String == "after"
+        let landed = (position["siblingId"] as? String).flatMap { sibling in
+            withBlock(sibling) { list, index in
+                list.insert(contentsOf: moved, at: after ? index + 1 : index)
+            }
+        }
+        if landed == nil { blocks.insert(contentsOf: moved, at: 0) }
         return items(moved)
     }
 
