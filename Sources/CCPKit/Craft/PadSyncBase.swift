@@ -100,6 +100,37 @@ public struct PadSyncBase: Codable, Equatable, Sendable {
     /// what lets a local slice index name a Craft block id.
     public var isAligned: Bool { localSlices.count == blocks.count }
 
+    /// This agreement carried onto what Craft holds now, block by block.
+    ///
+    /// Recorded when a merge has put Craft's move into the pad while the
+    /// pad's own move has not yet reached Craft. The remote side advances to
+    /// the fetch, and the local side has to keep saying what we last agreed
+    /// *per block*, so the push that follows sends only what is genuinely
+    /// ours.
+    ///
+    /// Pairing is by id, never by position. A block we already knew keeps the
+    /// local slice recorded against it, so a block Craft merely respelled
+    /// still reads as agreed (ccp-c2x5). A block that is new to us takes
+    /// Craft's own markdown, because the merge has just put that text into
+    /// the pad verbatim — agreeing to it is what stops the next push posting
+    /// Craft's own addition back as if the user had typed it.
+    ///
+    /// The result stands one-to-one by construction, which is the point: the
+    /// predecessor paired the old local text against the new block list by
+    /// index, so any round where Craft gained or lost a block left the base
+    /// misaligned and the next push rewrote the whole document (ccp-hu51).
+    /// A base that was already misaligned names no ids at all and takes
+    /// Craft's text throughout — aligned again, at the cost of one round
+    /// diffing across dialects.
+    public func rebased(on fetched: [BaseBlock]) -> PadSyncBase {
+        let recorded = isAligned
+            ? Dictionary(zip(blocks.map(\.id), localSlices)) { first, _ in first }
+            : [:]
+        return PadSyncBase(
+            localText: CraftPull.join(fetched.map { recorded[$0.id] ?? $0.markdown }),
+            blocks: fetched)
+    }
+
     /// Base indices Craft owns: the push never writes these and the merge
     /// never lets the pad win them (ccp-occ revert-guard).
     public var pinnedIndices: Set<Int> {

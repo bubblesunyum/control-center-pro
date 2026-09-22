@@ -421,31 +421,33 @@ final class BlockPushPlanTests: XCTestCase {
         XCTAssertEqual(plan(base(["one", "two"]), "").deletes, ["block-0", "block-1"])
     }
 
-    func testAMisalignedBaseRepostsInsteadOfGuessing() {
+    func testAMisalignedBaseRealignsInsteadOfRebuilding() {
         // Craft split a block, so slice index no longer names a block id.
-        // Reposting churns; mispairing would put one block's text under
-        // another block's id.
+        // Walking the two lists together still pairs what it can: the pad's
+        // one slice keeps the first block's id and only the block the pad has
+        // no text for goes. Deleting both and reposting was ccp-hu51.
         let misaligned = PadSyncBase(
             localText: "one two",
             blocks: [BaseBlock(id: "a", markdown: "one"), BaseBlock(id: "b", markdown: "two")])
         let result = plan(misaligned, "one two edited")
-        XCTAssertEqual(result.deletes, ["a", "b"])
-        XCTAssertEqual(result.inserts.map(\.markdown), ["one two edited"])
-        XCTAssertTrue(result.updates.isEmpty, "no id is gambled on a guess")
+        XCTAssertEqual(result.updates, [BlockUpdate(id: "a", markdown: "one two edited")])
+        XCTAssertEqual(result.deletes, ["b"])
+        XCTAssertTrue(result.inserts.isEmpty, "nothing is torn down to be posted again")
     }
 
-    func testAMisalignedRepostLeavesPinnedBlocksAlone() {
+    func testAMisalignedRealignLeavesPinnedBlocksAlone() {
         let misaligned = PadSyncBase(
             localText: "one two",
             blocks: [BaseBlock(id: "a", markdown: "one"),
                      BaseBlock(id: "keep", markdown: "<collection>x</collection>",
                                isWritable: false)])
         let result = plan(misaligned, "edited")
-        XCTAssertEqual(result.deletes, ["a"])
-        XCTAssertEqual(result.inserts, [BlockInsert(afterID: "keep", markdown: "edited")])
+        XCTAssertEqual(result.updates, [BlockUpdate(id: "a", markdown: "edited")])
+        XCTAssertTrue(result.deletes.isEmpty && result.inserts.isEmpty,
+                      "what Craft owns is untouched and the pad's block keeps its id")
     }
 
-    func testAMisalignedRepostNeverDuplicatesPinnedContent() {
+    func testAMisalignedRealignNeverDuplicatesPinnedContent() {
         // ccp-occ revert-guard: an edited pinned block must not come back as
         // a new insert beside the original it can never overwrite.
         let misaligned = PadSyncBase(

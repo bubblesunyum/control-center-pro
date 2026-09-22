@@ -39,15 +39,14 @@ public struct BlockPushPlan: Equatable, Sendable {
     ///
     /// Craft ids come from `base.blocks` by position, which only means
     /// anything while the two sides stand one-to-one. When Craft has split a
-    /// block they do not, and the plan reposts the pad's blocks rather than
-    /// guess an alignment — churn on a rare path, and the fetch that follows
-    /// the push puts the base back in step.
+    /// block they do not, and the plan falls back to `realign`, which walks
+    /// the two lists together instead of trusting the index.
     public static func plan(from base: PadSyncBase, to slices: [String]) -> BlockPushPlan {
         let old = base.localSlices
         guard old == slices else {
             return base.isAligned
                 ? aligned(base: base, old: old, slices: slices)
-                : rewrite(base: base, slices: slices)
+                : realign(base: base, slices: slices)
         }
         return BlockPushPlan()
     }
@@ -78,18 +77,73 @@ public struct BlockPushPlan: Equatable, Sendable {
         return plan
     }
 
-    /// The base and the document no longer stand one-to-one: replace what we
-    /// know we wrote and post the pad afresh. Pinned blocks are left where
-    /// they are, so nothing Craft owns is lost to a realignment — and slices
-    /// carrying tags the pad cannot render are never posted as new blocks,
-    /// so an edited pinned block cannot duplicate itself as an insert while
-    /// the original stays (ccp-occ revert-guard).
-    private static func rewrite(base: PadSyncBase, slices: [String]) -> BlockPushPlan {
-        let pinned = base.blocks.filter { !$0.isWritable }
-        let writableSlices = slices.filter { !CraftBlockPolicy.isUnwritable(markdown: $0) }
-        return BlockPushPlan(
-            inserts: writableSlices.map { BlockInsert(afterID: pinned.last?.id, markdown: $0) },
-            deletes: base.blocks.filter(\.isWritable).map(\.id))
+    /// The base and the document no longer stand one-to-one, so no slice
+    /// index names a block id. Walk the two lists together and write the
+    /// least that reconciles them: our writable slices in order against
+    /// Craft's writable blocks in order, PUT where the pad's text has
+    /// actually changed, POST what is left over, DELETE only the blocks the
+    /// pad has no slice for.
+    ///
+    /// **Every id that can stay, stays.** The predecessor deleted every
+    /// writable block and reposted the whole pad behind the last pinned one,
+    /// which threw away block ids, whatever Craft held that markdown cannot
+    /// express, and the pad's position among pinned blocks — a document torn
+    /// down and rebuilt over a state we merely could not attribute, which is
+    /// `never-resolve-a-decode-failure-by-writing` from the other side
+    /// (ccp-hu51). Its doc comment called this "churn on a rare path"; a
+    /// remote add or delete arriving while the pad was dirty reached it
+    /// every time.
+    ///
+    /// Pairing by order is still a guess — that is what misaligned means —
+    /// but it is the guess that costs least when it is wrong, and the fetch
+    /// that follows the push puts the base back in step. Pinned blocks are
+    /// never written or deleted, and only anchor; slices carrying tags the
+    /// pad cannot render are never posted as new blocks, so an edited pinned
+    /// block cannot duplicate itself as an insert while the original stays
+    /// (ccp-occ revert-guard).
+    private static func realign(base: PadSyncBase, slices: [String]) -> BlockPushPlan {
+        let agreed = writable(base.localSlices)
+        let current = writable(slices)
+        var plan = BlockPushPlan()
+        /// Writable blocks paired so far — the cursor into both slice lists.
+        var paired = 0
+        // The last block still standing after this round: what a leftover
+        // slice lands behind, so new text joins the end of the pad's own run
+        // rather than the end of the document.
+        var anchor: String?
+        for block in base.blocks {
+            guard block.isWritable else {
+                anchor = block.id
+                continue
+            }
+            guard paired < current.count else {
+                plan.deletes.append(block.id)
+                continue
+            }
+            // What the slice is measured against: our own recorded text for
+            // that position while we still have it, which keeps the question
+            // "did the pad change?" inside one dialect. Comparing against
+            // Craft's markdown instead is ccp-c2x5 — it reads every block
+            // Craft respelled as edited, so one keystroke anywhere would PUT
+            // our stale spelling over every other block in the pad. Past the
+            // record there is nothing but Craft's own text to compare with,
+            // and a needless PUT is what having no record costs.
+            let held = paired < agreed.count ? agreed[paired] : block.markdown
+            if current[paired] != held {
+                plan.updates.append(BlockUpdate(id: block.id, markdown: current[paired]))
+            }
+            paired += 1
+            anchor = block.id
+        }
+        plan.append(inserts: Array(current.dropFirst(paired)), after: anchor)
+        return plan
+    }
+
+    /// The markdown a push may write. A slice carrying tags the pad cannot
+    /// render belongs to Craft, and is counted out of both sides so the two
+    /// lists stay in step.
+    private static func writable(_ markdowns: [String]) -> [String] {
+        markdowns.filter { !CraftBlockPolicy.isUnwritable(markdown: $0) }
     }
 
     private mutating func append(inserts markdowns: [String]?, after anchor: String?) {

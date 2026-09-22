@@ -11,8 +11,9 @@ public enum PullDecision: Equatable, Sendable {
     /// Only Craft moved: replace the pad's text and advance the base.
     case adopt(text: String, base: PadSyncBase)
     /// Both moved, and the two edits combined. The pad takes `text` and goes
-    /// dirty; `base` advances its *remote* side only, since Craft's move is
-    /// now in the pad but the merged text is not yet in Craft. Without that
+    /// dirty; `base` advances its *remote* side to the fetch while its local
+    /// side keeps, per block, what we last agreed — Craft's move is now in
+    /// the pad but the merged text is not yet in Craft. Without that
     /// half-step every later pull re-derives the same merge and appends
     /// another conflict record while the push is still retrying.
     /// `hadConflict` means at least one block was changed differently on both
@@ -89,9 +90,14 @@ public enum CraftPull {
             // lead as usual. A disagreement still has to be recorded, even
             // when ours winning leaves the text where it was.
             guard text != local || result.hadConflict else { return .skip }
+            // Carried onto the fetch by id (`rebased`), never by index: the
+            // predecessor kept the old local text whole beside the new block
+            // list, so a round where Craft gained or lost a block left the
+            // base misaligned and the next push rewrote the document
+            // (ccp-hu51).
             return .merged(text: text, hadConflict: result.hadConflict,
                            remoteText: remoteText,
-                           base: PadSyncBase(localText: base.localText, blocks: fetched))
+                           base: base.rebased(on: fetched))
         }
     }
 }
