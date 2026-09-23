@@ -30,7 +30,6 @@ ROOT = Path(__file__).resolve().parent.parent
 LOCK = ROOT / ".claude/context.lock"
 
 DOCS = [ROOT / "CLAUDE.md", ROOT / "AGENTS.md", ROOT / ".claude/HARNESS.md",
-        ROOT / "harness/codex.md",
         *sorted((ROOT / ".claude/skills").glob("*/SKILL.md"))]
 
 # The memory index loads every session too, but it lives outside the repo, under
@@ -290,6 +289,19 @@ def report(strict):
         failed = True
         print(f"  BEADS {doc.relative_to(ROOT)} carries {blocks} bd managed block(s)")
         print("        one copy, in AGENTS.md — see .claude/HARNESS.md")
+
+    # Informational, never a failure: the gate runs before the ledger is pushed
+    # by design (verify, commit, then push), so an ahead ledger here is the
+    # normal state rather than a broken one. What it must not be is silent.
+    try:
+        push = subprocess.run(["bash", str(ROOT / "scripts/ledger-push.sh"),
+                               "--check"],
+                              capture_output=True, text=True,
+                              timeout=30).stdout.strip()
+    except Exception:
+        push = ""
+    for line in push.splitlines():
+        print(f"  {line}")
 
     for doc in unblessed:
         print(f"  new   {doc.relative_to(ROOT)} — run 'scripts/context.py bless'")

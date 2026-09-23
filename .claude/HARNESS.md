@@ -76,22 +76,68 @@ a **contract file**: `AGENTS.md`, `opencode.json`, the skills, the scripts behin
 them. Those the project has no reason to touch, so a difference means a starter
 fix never arrived, and `add` says so by name instead of skipping. `harness
 update` is the same check standing alone, with `--diff` for what actually
-changed.
+changed, `--apply` for the asked-for overwrite, and follow-ups when reviewer
+sources are among the flagged files.
 
 Which set a file is in is read off the template's own content rather than kept as
 a list. A list goes stale in the direction that produces false alarms, and a
 warning nobody believes is worth less than no warning.
 
-Nothing is ever overwritten, here or there. Half these files have local edits in
-them by design, so merging is a judgment call — and a command that overwrote
-them would be a command nobody could afford to run.
+Nothing is overwritten unless asked. Half these files have local edits in
+them by design, so merging is a judgment call — and an overwrite-by-default
+would be a command nobody could afford to run. `harness update --apply` is the
+asked-for exception: it writes the rendered template over stale contract files,
+never customised ones, and names every file it changed. A file carrying a beads
+block is left for a hand merge, and reviewer sources come with follow-ups — the
+generated agent copies, the hashes, the gate — because the merge is half the
+job.
 
 The comparison has to allow for the installer's own post-copy edits, or every
-fresh install reads as stale: `bd setup codex` appends a block to `AGENTS.md`,
+fresh install reads as stale: `bd init` leaves managed blocks in `AGENTS.md`,
 and the tidier rewrites `.claude/settings.json` through `json.dumps`, reordering
 every key. Both are normalised away on both sides. The gate has a step that
 installs into a throwaway repo and asserts the result reads as current, because
 that particular false alarm is invisible in the diff that causes it.
+
+## Codex shares the prompts and skills
+
+Codex loads `AGENTS.md`; that file explicitly directs it to read `CLAUDE.md` for
+project standards. Do not rename those standards in a translated copy.
+`.agents/skills/*` are relative directory links to `.claude/skills/*`, including
+Beads and its metadata. Codex supports symlinked skills, so an edit has one home
+and a fresh checkout discovers the same five procedures.
+
+`.codex/agents/*.toml` are generated from `.claude/agents/*.md` by
+`python3 scripts/codex-support.py write`. Only the name, description and prompt
+are translated. Model, reasoning and sandbox settings inherit the Codex host;
+Claude's model aliases and tool allowlists are not copied as configuration.
+The gate checks generated agents, orphaned generated roles, skill links, and
+repository hooks. It also runs isolated regression checks. Codex TOML and skill
+metadata are included in the review packet.
+
+The same generator owns `.codex/hooks.json`. SessionStart supplies
+`scripts/brief.sh --hook` on startup, resume, clear and compact; the JSON envelope
+is supported by both Claude Code and Codex. Startup/resume/clear also bring up
+the dashboard, and SessionEnd stops it. Commands resolve the git root so opening
+a session in a subdirectory still works. Generic `bd codex-hook` context hooks
+are replaced, not combined with the brief. Re-running `bd setup codex` can
+restore them; the gate detects that drift.
+
+Hooks are configured, not silently trusted. Codex requires the project and each
+new or changed hook definition to be trusted. Review them through `/hooks` in
+the Codex CLI, and check for duplicate user-level hooks there too. This repo does
+not edit global configuration or bypass trust. Until hooks run, AGENTS.md's manual
+brief fallback applies. New agent definitions may need a fresh Codex session;
+an existing session can give the source prompt to a default subagent.
+
+The context cost and transcript measurements in `scripts/context.py` describe
+Claude Code. Shared skill links add no second instruction copy, but these
+measurements do not establish Codex's total context or spend.
+
+Compatibility references: [Codex skills](https://learn.chatgpt.com/docs/build-skills),
+[custom agents](https://learn.chatgpt.com/docs/agent-configuration/subagents), and
+[hooks](https://learn.chatgpt.com/docs/hooks).
+Claude and OpenCode keep their existing startup configuration.
 
 ## Why it's shaped this way
 
@@ -99,7 +145,7 @@ One account, not a team of thirteen agents, so the whole design is
 token-budgeted: progressive disclosure over always-loaded context, cheap models
 for bulk reading, diff-scoped review. The stock beads SessionStart hook
 (`bd prime`, ~1900 tokens every session) is replaced by `scripts/brief.sh`
-(~200) — see below, because that replacement does not stay done on its own.
+(~500) — see below, because that replacement does not stay done on its own.
 
 ## The brief overrides `bd setup claude`, and has to be re-applied
 
@@ -107,9 +153,10 @@ for bulk reading, diff-scoped review. The stock beads SessionStart hook
 harness deliberately does not want it: `bd prime` is a command reference and a
 session-close protocol, which is what the `beads` skill holds and loads on
 demand. Always-loading it is the exact instinct progressive disclosure exists to
-resist, and it is not small — measured at 7,949 bytes against the brief's 1,072.
+resist, and it is not small — measured at 7,949 bytes against the brief's 2,122.
 What a session actually needs at wake-up is ledger *state*, and `brief.sh`
-already prints it: the seat, the last note, the ready list, the memory keys.
+already prints it: the seat and what it's for, the last note, the ready list,
+the memory keys.
 
 The hook is additive, so it does not replace the brief — it runs beside it and
 both are paid for. It shipped that way in this starter and in the first project
@@ -175,12 +222,13 @@ it worked and fails at spawn. So the prompt body has one home,
 header around it into `.opencode/agent/`. The gate checks the two match, because
 nothing about editing the source makes opencode complain.
 
-The generated agents carry no `model:`. Claude's tier names are aliases opencode
-doesn't have — it wants a provider-qualified id, and which provider a given
-install has authenticated isn't knowable from the starter. Omitted, the agent
-inherits the session's model and always resolves; the cost is that
-`reviewer-taste` stops being the cheap one under opencode until there's a real
-tier→model roster.
+The generated agents carry a `model:` line from `harness/models.json` — the
+per-role roster, mapping reviewer-taste and friends to provider-qualified ids.
+The roster is machine-local and gitignored: it names models this machine
+happens to have. A fresh clone has none, so the first review prompts once per
+role and writes it; later runs are silent. With no roster the agents omit
+`model:` and inherit the session's model, which always resolves — the cost is
+that `reviewer-taste` stops being the cheap one under opencode until then.
 
 **There is no session-start hook to write.** opencode's plugin hooks are
 `event`, `chat.message`, `chat.params`, `chat.headers`, `chat.completion`,
@@ -197,45 +245,6 @@ costs nothing and says what the harness intends. `HARNESS.md` is deliberately
 not in the list: it is the rationale, read when the pieces are being rearranged,
 and always-loading it in one tool and not the other would put the two sessions
 on different budgets while `context.py` counted neither.
-
-## Codex shares the prompts and skills
-
-Codex loads `AGENTS.md`; that file explicitly directs it to read `CLAUDE.md` for
-project standards. Do not rename those standards in a translated copy.
-`.agents/skills/*` are relative directory links to `.claude/skills/*`, including
-Beads and its metadata. Codex supports symlinked skills, so an edit has one home
-and a fresh checkout discovers the same five procedures.
-
-`.codex/agents/*.toml` are generated from `.claude/agents/*.md` by
-`python3 scripts/codex-support.py write`. Only the name, description and prompt
-are translated. Model, reasoning and sandbox settings inherit the Codex host;
-Claude's model aliases and tool allowlists are not copied as configuration.
-The gate checks generated agents, orphaned generated roles, skill links, and
-repository hooks. It also runs isolated regression checks. Codex TOML and skill
-metadata are included in the review packet.
-
-The same generator owns `.codex/hooks.json`. SessionStart supplies
-`scripts/brief.sh --hook` on startup, resume, clear and compact; the JSON envelope
-is supported by both Claude Code and Codex. Startup/resume/clear also bring up
-the dashboard, and SessionEnd stops it. Commands resolve the git root so opening
-a session in a subdirectory still works. Generic `bd codex-hook` context hooks
-are replaced, not combined with the brief. Re-running `bd setup codex` can
-restore them; the gate detects that drift.
-
-Hooks are configured, not silently trusted. Codex requires the project and each
-new or changed hook definition to be trusted. Review them through `/hooks` in
-the Codex CLI, and check for duplicate user-level hooks there too. This repo does
-not edit global configuration or bypass trust. Until hooks run, AGENTS.md's manual
-brief fallback applies. New agent definitions may need a fresh Codex session;
-an existing session can give the source prompt to a default subagent.
-
-The context cost and transcript measurements in `scripts/context.py` describe
-Claude Code. Shared skill links add no second instruction copy, but these
-measurements do not establish Codex's total context or spend.
-
-Compatibility references: [Codex skills](https://learn.chatgpt.com/docs/build-skills),
-[custom agents](https://learn.chatgpt.com/docs/agent-configuration/subagents), and
-[hooks](https://learn.chatgpt.com/docs/hooks).
 
 ## Staleness is the failure review can't catch
 

@@ -9,13 +9,13 @@ Use Beads as the shared project task system. Local plans, scratch files, and per
 
 ## First Step
 
-In this harness `scripts/brief.sh` is the session start — it prints seat, last handoff, ready list and trap keys. Run it if the hook has not supplied it:
+Run the project brief if its output has not arrived through the startup hook:
 
 ```bash
 bash scripts/brief.sh
 ```
 
-If the brief fails, check the Beads workspace with the command below and report the failure. `AGENTS.md` remains the workflow authority; do not load the generic `bd prime` or `bd codex-hook` instructions.
+If the brief fails, check the workspace below and report the failure. Follow the repository workflow rather than loading generic Beads context:
 
 ```bash
 bd where

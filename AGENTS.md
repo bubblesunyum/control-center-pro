@@ -2,7 +2,6 @@
   scripts/brief.sh
   scripts/review.sh
   scripts/verify.sh
-  harness/codex.md
 -->
 
 # Working on control-center-pro
@@ -20,16 +19,11 @@ standards and taste. Read it too. Neither file repeats the other.
 scripts/brief.sh
 ```
 
-The seat, the last session's note, the ready work, the known traps, in about 200
-tokens. Claude Code runs it as a SessionStart hook and opencode loads this file
+The seat and what it's for, the last session's note, the ready work, the known
+traps, in about 500 tokens. Claude Code runs it as a SessionStart hook and opencode loads this file
 through `opencode.json`, but the brief is *state* rather than a static file, so
 if your tool didn't hand it to you, run it yourself. Starting cold is how a
 session spends its first ten minutes rediscovering what the ledger already knew.
-
-> **opencode:** your first action every session is `bash scripts/brief.sh` — the
-> ready list and traps are not in this file. Claude Code gets this auto via its
-> SessionStart hook; opencode has no equivalent hook, so you must run it
-> yourself before anything else.
 
 ## The ledger is beads, and it is the record
 
@@ -70,10 +64,7 @@ scripts/verify.sh --full   # + slow checks and any smoke run
 
 Run this rather than raw build commands. It swallows tens of thousands of log
 lines and prints one line per step, which is the difference between proving your
-work and spending the day's context learning one bit. The `plan` step ahead of
-the build is a stale-plan guard: SwiftPM caches a path dependency's file list,
-so a sibling checkout that gained a source file fails the build with a bare
-"cannot find in scope" until the plan is refreshed.
+work and spending the day's context learning one bit.
 
 ## The review pass is standing, not optional
 
@@ -101,17 +92,9 @@ bead; the commit-msg hook enforces it.
 ## Skills load on demand
 
 `.claude/skills/` holds `workflow` (how work moves through all of this),
-`agentic-review`, `beads`, `handoff`, and `graphify` (local code graph — prefer
-`graphify explain`/`path`/`query` over grepping `Sources/CCPKit`/`CCPUI` when
-`graphify-out/graph.json` exists). Claude Code and opencode both discover
+`agentic-review`, `beads`, and `handoff`. Claude Code and opencode both discover
 them there. Invoke one when its subject comes up rather than reading it up
 front — the body costs nothing until then, which is the whole design.
-
-## Codex support
-
-**Codex only:** read [harness/codex.md](./harness/codex.md) before using the shared
-skills. It maps the Claude-oriented tool instructions to Codex. The shared
-skills and reviewer prompts stay authoritative and unchanged for Claude Code.
 
 ## Closing a session
 
@@ -122,3 +105,8 @@ next. The `handoff` skill has the procedure.
 
 `.claude/HARNESS.md` explains *why* the pieces are shaped this way. Read it
 before rearranging any of them.
+
+## Codex
+
+**Codex only:** read [harness/codex.md](harness/codex.md) for startup and task
+completion guidance.
