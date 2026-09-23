@@ -69,6 +69,18 @@ public enum CraftPull {
         }
         let localMoved = local != base.localText
         let remoteMoved = PadSyncBase.remoteMoved(fetched, from: base.blocks)
+        // ccp-ve18: an empty fetch never moves a non-empty pad. A fetch
+        // that returns no writable blocks is what a moved-to-sub-page,
+        // image-only, or otherwise unmodelled document looks like after
+        // ccp-d8ec stopped descending into containers — and it is also what
+        // a genuine full clear in Craft looks like. Adopting or merging it
+        // would replace local text with "" (clean pad) or drop unedited
+        // blocks beside a local edit (dirty pad), and store an empty base —
+        // which blanked fusebox (2026-09-23) while Craft still held the
+        // content. Stand the divergence instead: no snapshot, no base
+        // write, no dirty bit. The next local edit owns the reconcile
+        // through the push, like a cleared pad (ccp-o2qs) in reverse.
+        if remoteText.isEmpty, !local.isEmpty { return .skip }
         switch (localMoved, remoteMoved) {
         case (false, false):
             return .converged

@@ -52,6 +52,30 @@ final class UntouchedBlocksTests: XCTestCase {
         XCTAssertEqual(UntouchedBlocks.restore(in: "typed", loaded: "", source: ""), "typed")
     }
 
+    /// ccp-giwa: the cached-slices path the editor bridge calls per
+    /// keystroke agrees with the from-strings path. The identical-save case
+    /// is excluded: the bridge answers it with a string compare before
+    /// calling (trailing-space markers never survive the splitter, so only
+    /// the verbatim fast path reproduces them).
+    func testCachedSlicesMatchTheFromStringsPath() {
+        let saves = [
+            "# Plan\n\n***\n\n- parent\n  - child\n\nsnake_case, edited",
+            "# Plan\n\nnew line\n\n***\n\n- parent\n  - child\n\nsnake_case",
+            "# Plan\n\n- parent\n  - child\n\nsnake_case",
+            "one\n\ntwo, edited",
+            "typed",
+        ]
+        let sourceSlices = CraftBlockSplitter.slices(in: source)
+        let loadedMarkdowns = CraftBlockSplitter.slices(in: loaded).map(\.markdown)
+        for saved in saves {
+            XCTAssertEqual(
+                UntouchedBlocks.restore(in: saved, loadedMarkdowns: loadedMarkdowns,
+                                        sourceSlices: sourceSlices),
+                UntouchedBlocks.restore(in: saved, loaded: loaded, source: source),
+                "for \(saved)")
+        }
+    }
+
     func testTheSplitterReadsTheSameBlocksInBothSpellings() {
         XCTAssertEqual(CraftBlockSplitter.slices(in: source).count,
                        CraftBlockSplitter.slices(in: loaded).count)

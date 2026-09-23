@@ -24,12 +24,22 @@ public enum UntouchedBlocks {
     public static func restore(in saved: String, loaded: String, source: String) -> String {
         if saved == loaded { return source }
         let sourceSlices = CraftBlockSplitter.slices(in: source)
-        let loadedSlices = CraftBlockSplitter.slices(in: loaded)
+        let loadedMarkdowns = CraftBlockSplitter.slices(in: loaded).map(\.markdown)
+        return restore(in: saved, loadedMarkdowns: loadedMarkdowns, sourceSlices: sourceSlices)
+    }
+
+    /// The per-keystroke path (ccp-giwa): the editor page posts the whole
+    /// document on every edit, and `source`/`loaded` never move between
+    /// replaces — so the host slices them once and only `saved` is cut here.
+    /// A 172KB pad otherwise pays three full parses plus the diff on the
+    /// main thread per keystroke, which reads as lag that grows with use.
+    public static func restore(in saved: String, loadedMarkdowns: [String],
+                               sourceSlices: [CraftBlockSlice]) -> String {
+        let savedSlices = CraftBlockSplitter.slices(in: saved)
         // The editor read one block per stored block; if it did not, the
         // pairing is unknowable and the editor's own spelling is the answer.
-        guard sourceSlices.count == loadedSlices.count else { return saved }
-        let savedSlices = CraftBlockSplitter.slices(in: saved)
-        let unchanged = unchangedPairs(loaded: loadedSlices.map(\.markdown),
+        guard sourceSlices.count == loadedMarkdowns.count else { return saved }
+        let unchanged = unchangedPairs(loaded: loadedMarkdowns,
                                        saved: savedSlices.map(\.markdown))
         let text = NSMutableString(string: saved)
         for (loadedIndex, savedIndex) in unchanged.reversed() {

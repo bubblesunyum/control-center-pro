@@ -33,7 +33,11 @@ final class StickyEditorController {
     /// Stickies whose snapshot is out of date, drawn once the editor is free.
     @ObservationIgnored private var staleSnapshots: [UUID: (sticky: Sticky, size: CGSize)] = [:]
     /// One thing at a time: a snapshot and a move both need the editor.
-    @ObservationIgnored private var queue: Task<Void, Never>?
+    /// A FIFO run by a single task (ccp-4wvx): chaining each enqueue onto
+    /// the last Task kept every completed closure — sticky texts included —
+    /// alive for as long as the app runs, growing with use.
+    @ObservationIgnored private var pendingWork: [@MainActor () async -> Void] = []
+    @ObservationIgnored private var runner: Task<Void, Never>?
 
     private init() {
         parking.isReleasedWhenClosed = false
@@ -133,9 +137,14 @@ final class StickyEditorController {
     }
 
     private func enqueue(_ work: @escaping @MainActor () async -> Void) {
-        queue = Task { [previous = queue] in
-            await previous?.value
-            await work()
+        pendingWork.append(work)
+        guard runner == nil else { return }
+        runner = Task { @MainActor [weak self] in
+            while let next = self?.pendingWork.first {
+                self?.pendingWork.removeFirst()
+                await next()
+            }
+            self?.runner = nil
         }
     }
 

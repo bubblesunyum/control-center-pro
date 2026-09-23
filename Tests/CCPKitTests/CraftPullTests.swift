@@ -114,6 +114,38 @@ final class CraftPullTests: XCTestCase {
                                                 blocks: PadSyncBase.remote([block("a", "one")]))))
     }
 
+    /// ccp-ve18: a fetch with nothing in it never blanks a pad. This is the
+    /// fusebox shape (2026-09-23): the fetch returned no blocks while the
+    /// pad held text, and adopting it stored an empty base over full local
+    /// text. Partial deletes still adopt above; only the full clear stands.
+    func testFullRemoteClearSkipsOnAnUnmovedPad() {
+        XCTAssertEqual(CraftPull.decide(local: "one  \ntwo", base: base(["one", "two"]),
+                                        remote: []),
+                       .skip)
+    }
+
+    func testContainerOnlyFetchSkipsOnAnUnmovedPad() {
+        // ccp-d8ec stopped descending into sub-pages: a document whose
+        // content moved under a container fetches as position-only blocks,
+        // which the base filters out — the same empty shape as a clear.
+        XCTAssertEqual(CraftPull.decide(local: "one  \ntwo", base: base(["one", "two"]),
+                                        remote: [block("sub", nil)]),
+                       .skip)
+    }
+
+    /// Correctness review on ccp-ve18: the guard must also cover a dirty
+    /// pad. Merging an empty fetch beside a local edit drops the unedited
+    /// blocks and pushes the truncation to Craft — the fusebox blanking
+    /// through a second door. The pad stays dirty and the push owns it.
+    func testEmptyFetchSkipsOnADirtyPad() {
+        XCTAssertEqual(CraftPull.decide(local: "ONE  \ntwo", base: base(["one", "two"]),
+                                        remote: []),
+                       .skip)
+        XCTAssertEqual(CraftPull.decide(local: "ONE  \ntwo", base: base(["one", "two"]),
+                                        remote: [block("sub", nil)]),
+                       .skip)
+    }
+
     func testEmptySidesConverge() {
         XCTAssertEqual(CraftPull.decide(local: "", base: PadSyncBase(), remote: []), .converged)
     }

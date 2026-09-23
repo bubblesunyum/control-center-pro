@@ -53,6 +53,22 @@ final class NoteEditorController: NSObject, WKScriptMessageHandler, WKNavigation
         /// The pad text last handed to, or taken from, the app.
         var text: String
         var onText: (String) -> Void
+        /// The baseline cut once (ccp-giwa): source and loaded never move
+        /// between replaces, so a keystroke cuts only the save instead of
+        /// parsing the whole pad three times on the main thread.
+        var sourceSlices: [CraftBlockSlice]
+        var loadedMarkdowns: [String]
+
+        init(source: String, loaded: String? = nil, pageMarkdown: String? = nil,
+             text: String, onText: @escaping (String) -> Void) {
+            self.source = source
+            self.loaded = loaded
+            self.pageMarkdown = pageMarkdown
+            self.text = text
+            self.onText = onText
+            sourceSlices = CraftBlockSplitter.slices(in: source)
+            loadedMarkdowns = loaded.map { CraftBlockSplitter.slices(in: $0).map(\.markdown) } ?? []
+        }
     }
 
     init(style: NoteEditorStyle) {
@@ -97,9 +113,13 @@ final class NoteEditorController: NSObject, WKScriptMessageHandler, WKNavigation
         return Task {
             await ready()
             guard let loaded = try? await call("return bbEditor.open(id, markdown)",
-                                               ["id": documentId, "markdown": text]) as? String
+                                                ["id": documentId, "markdown": text]) as? String
             else { return }
-            if documents[documentId]?.loaded == nil { documents[documentId]?.loaded = loaded }
+            if documents[documentId]?.loaded == nil {
+                documents[documentId]?.loaded = loaded
+                documents[documentId]?.loadedMarkdowns =
+                    CraftBlockSplitter.slices(in: loaded).map(\.markdown)
+            }
         }
     }
 
@@ -180,7 +200,10 @@ final class NoteEditorController: NSObject, WKScriptMessageHandler, WKNavigation
             else { return }
             if result["applied"] as? Bool == true {
                 documents[documentId]?.source = text
+                documents[documentId]?.sourceSlices = CraftBlockSplitter.slices(in: text)
                 documents[documentId]?.loaded = markdown
+                documents[documentId]?.loadedMarkdowns =
+                    CraftBlockSplitter.slices(in: markdown).map(\.markdown)
                 documents[documentId]?.pageMarkdown = markdown
             } else {
                 receiveChange(documentId: documentId, markdown: markdown)
@@ -231,9 +254,16 @@ final class NoteEditorController: NSObject, WKScriptMessageHandler, WKNavigation
     private func receiveChange(documentId: String, markdown: String) {
         guard var document = documents[documentId] else { return }
         document.pageMarkdown = markdown
-        let text = document.loaded.map {
-            UntouchedBlocks.restore(in: markdown, loaded: $0, source: document.source)
-        } ?? markdown
+        let text: String
+        if let loaded = document.loaded {
+            text = markdown == loaded
+                ? document.source
+                : UntouchedBlocks.restore(in: markdown,
+                                          loadedMarkdowns: document.loadedMarkdowns,
+                                          sourceSlices: document.sourceSlices)
+        } else {
+            text = markdown
+        }
         document.text = text
         documents[documentId] = document
         document.onText(text)
