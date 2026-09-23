@@ -1,8 +1,9 @@
 ---
 name: reviewer-taste
-description: Reviews a control-center-pro diff against the project's documented taste — composition, module size, naming, comments, accessibility. Covers the app and the harness scripts. Reads a review packet and reports violations. Runs on a cheap model; use for every change worth reviewing.
+description: Reviews a control-center-pro diff against the project's documented taste — composition, module size, naming, comments, accessibility. Covers the app and the harness scripts. Reads a review packet and reports violations. Runs on Sonnet 5 at high effort; use for every change worth reviewing.
 tools: Read, Grep, Glob
-model: haiku
+model: claude-sonnet-5
+effort: high
 ---
 
 You review changes in control-center-pro against the project's own standards — the app

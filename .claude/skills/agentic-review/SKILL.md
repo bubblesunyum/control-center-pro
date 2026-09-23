@@ -20,9 +20,9 @@ scripts/review.sh            # 3. build the packet, prints its path
 Then spawn all three reviewers **in parallel, in one message**, each pointed at
 the packet path:
 
-- `reviewer-taste` — the project's own standards, on Haiku
-- `reviewer-correctness` — real defects, on Sonnet
-- `reviewer-design` — what it actually renders, on Sonnet
+- `reviewer-taste` — the project's own standards, on Sonnet 5 at high effort
+- `reviewer-correctness` — real defects, on Opus 5.5 at low effort
+- `reviewer-design` — what it actually renders, on Opus 5.5 at low effort
 
 In Claude Code spawn via `Task` subagents; in opencode spawn the same three
 agents (`reviewer-taste`, `reviewer-correctness`, `reviewer-design` from
@@ -85,10 +85,9 @@ nobody looked at is the defect.
   intent-to-add entry left in the index gets committed in full by the next
   `git commit -a`, which would ride an untracked scratch file into someone
   else's commit.
-- **Cheap models do the reading.** Taste checking is pattern matching against a
-  written standard — Haiku is good at it and costs a fraction. Correctness gets
-  Sonnet because it needs to reason about concurrency and lifecycle. Neither
-  needs the expensive model; that's for design and for writing the code.
+- **Fit the model to the read.** Taste runs Sonnet 5 at high effort;
+  correctness and design run Opus 5.5 at low effort — enough reasoning for
+  each pass without paying full price.
 - **One reviewer looks at pixels.** In the project this came from, both diff
   readers passed a card that clipped every value it existed to show — and were
   right to: nothing in the diff was wrong. The defect lived in the render, in a
