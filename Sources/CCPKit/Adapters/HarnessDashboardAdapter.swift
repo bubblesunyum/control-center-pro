@@ -12,12 +12,13 @@ import Observation
 /// noise. The checkout id behind each title lives on `help` and the
 /// accessibility label instead.
 public struct HarnessDashboard: Sendable, Identifiable, Equatable {
-    /// The four harnesses, in the order their buttons draw.
+    /// The harnesses, in the order their buttons draw.
     public static let dashboards: [HarnessDashboard] = [
         HarnessDashboard(id: "psymail-mini", title: "Psymail", rootPath: "/Users/bubbles/dev/psymail-mini"),
         HarnessDashboard(id: "control-center-pro", title: "CCP", rootPath: "/Users/bubbles/dev/control-center-pro"),
         HarnessDashboard(id: "bb-kit", title: "bb-kit", rootPath: "/Users/bubbles/dev/bb-kit"),
         HarnessDashboard(id: "fusebox-migration", title: "Fusebox", rootPath: "/Users/bubbles/dev/fusebox-migration"),
+        HarnessDashboard(id: "harness-starter", title: "Starter", rootPath: "/Users/bubbles/dev/harness-starter"),
     ]
 
     public let id: String
@@ -146,7 +147,7 @@ public final class LiveHarnessDashboardSource: HarnessDashboardSource {
 
 // MARK: - Adapter
 
-/// The Tools strip's model for the four harness dashboards.
+/// The Tools strip's model for the harness dashboards.
 ///
 /// `up` is idempotent per checkout (it reports "already serving" when its own
 /// board holds the port), so a tap is always safe; the busy flag only guards

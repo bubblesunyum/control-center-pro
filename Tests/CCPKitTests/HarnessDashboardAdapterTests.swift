@@ -9,9 +9,9 @@ import XCTest
 final class HarnessDashboardAdapterTests: XCTestCase {
     // MARK: - Catalogue
 
-    func testDashboardsListsTheFourHarnessesInOrder() {
+    func testDashboardsListsHarnessesInOrder() {
         let ids = HarnessDashboard.dashboards.map(\.id)
-        XCTAssertEqual(ids, ["psymail-mini", "control-center-pro", "bb-kit", "fusebox-migration"])
+        XCTAssertEqual(ids, ["psymail-mini", "control-center-pro", "bb-kit", "fusebox-migration", "harness-starter"])
     }
 
     func testDashboardsPointAtFixedSiblingCheckouts() {
@@ -21,6 +21,7 @@ final class HarnessDashboardAdapterTests: XCTestCase {
             "/Users/bubbles/dev/control-center-pro",
             "/Users/bubbles/dev/bb-kit",
             "/Users/bubbles/dev/fusebox-migration",
+            "/Users/bubbles/dev/harness-starter",
         ])
     }
 
