@@ -7,7 +7,7 @@ import Observation
 
 /// One harness board the Tools strip can bring up with `dashboard up`.
 ///
-/// Titles stay short on purpose: the strip's cell is 64pt wide, so the full
+/// Titles stay short on purpose: the strip's cell is 60pt wide, so the full
 /// checkout name (`control-center-pro`, `fusebox-migration`) would truncate to
 /// noise. The checkout id behind each title lives on `help` and the
 /// accessibility label instead.

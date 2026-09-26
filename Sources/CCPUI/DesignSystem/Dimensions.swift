@@ -71,7 +71,7 @@ public enum Layout {
 
     /// Size of a row's leading icon and trailing menu button.
     static let rowActionSize: CGFloat = 22
-    /// Thumbnail shown on the trailing edge of an image clipboard row.
+    /// Thumbnail shown on the leading edge of an image clipboard row.
     static let clipboardThumbnailWidth: CGFloat = 44
     static let clipboardThumbnailHeight: CGFloat = 32
     /// Larger preview used in the context menu for an image entry.
@@ -158,9 +158,10 @@ public extension WidgetSize {
 public extension Layout {
     /// Height of the miniature graphs in the System Stats card.
     static let sparklineHeight: CGFloat = Space.three + Space.half // 28
-    /// Size of a toggle icon button tile and its cell, in the Toggles widget.
-    static let toggleIconSize: CGFloat = 44
-    static let toggleCellWidth: CGFloat = 64
+    /// Size of a tool icon button tile and its cell. Sized so four cells
+    /// fit the lane's content width and the strip reads four across.
+    static let toolIconSize: CGFloat = 44
+    static let toolCellWidth: CGFloat = 60
     /// The shortcut field in Settings. Fixed so the row doesn't reflow as the
     /// combination inside it grows from "⌘K" to "Type a shortcut".
     static let shortcutFieldWidth: CGFloat = 160

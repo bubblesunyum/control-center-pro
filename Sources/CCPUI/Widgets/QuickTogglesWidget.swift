@@ -115,11 +115,9 @@ private struct ToolsContent: View {
     @State private var isCapturing = false
     @State private var isOpeningRocket = false
 
-    /// Three cells of 64pt plus their gaps fit the lane; a fourth does not,
-    /// so the grid wraps the dashboard buttons onto a second row on its own.
     private static let columns = Array(
-        repeating: GridItem(.fixed(Layout.toggleCellWidth), spacing: Space.one),
-        count: 3
+        repeating: GridItem(.fixed(Layout.toolCellWidth), spacing: Space.one),
+        count: 4
     )
 
     var body: some View {
@@ -309,7 +307,7 @@ private struct ToolIconButton: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
                         .fill(Color.controlFill)
-                        .frame(width: Layout.toggleIconSize, height: Layout.toggleIconSize)
+                        .frame(width: Layout.toolIconSize, height: Layout.toolIconSize)
                         .overlay(
                             RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
                                 .strokeBorder(Color.cardStroke, lineWidth: Stroke.hairline)
@@ -336,7 +334,7 @@ private struct ToolIconButton: View {
                         .lineLimit(1)
                 }
             }
-            .frame(width: Layout.toggleCellWidth)
+            .frame(width: Layout.toolCellWidth)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
