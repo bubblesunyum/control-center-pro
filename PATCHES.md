@@ -146,7 +146,8 @@ Reapply the fenced blocks.
   text with the blob dropped, honoring the keep-text invariant. Images are
   accepted as TIFF/JPEG/GIF/HEIC/HEIF/WebP (`org.webmproject.webp`)/BMP
   (normalized to PNG for the store) instead of PNG-only, with PNG keeping its
-  original bytes. Files, concealment, sensitivity, and size caps are untouched.
+  original bytes. Files and size caps are untouched; concealment and
+  sensitivity were removed later by ccp-pkvz (section below).
 - Diagnostics: every silent drop now says why at debug level
   (`clipboard-capture`: own write, concealed, ignored app + which bundle
   IDs, unsupported types, sensitive/oversize text) for `log stream`, and
@@ -180,6 +181,31 @@ this entry goes away entirely.
 `writeToPasteboard`, `readPasteboard`, `copiedPNGImage`, `promote`,
 `captureIfChanged`, `excludedSourceSinceLastCheck`, or the clipboard expects
 in `Tests/MetricsTests.swift`. Reapply the fenced blocks.
+
+---
+
+## Clipboard sensitivity filtering removed (ccp-pkvz)
+
+**What.** Deleted, not gated: `ClipboardHistorySensitiveText` (the
+`looksSensitive` word/shape heuristic and the
+`org.nspasteboard.ConcealedType` check), the `clipboardHistorySkipSensitive`
+defaults key + registration, the upstream Settings toggle + search keyword +
+all `skipSensitive` localizations, and the MetricsTests expects for both.
+Every copy is now kept: password-manager handoffs and secret-looking strings
+capture like everything else. History stays owner-only (`PrivateFileStore`,
+0600 files), which is the remaining protection for the secrets now stored in
+it.
+
+**Why.** The owner's call: the filter's false positives (any prose mentioning
+tokens/secrets/passwords, any 20–160 char unbroken letter+digit+symbol
+string) were the reported "barely capturing" cause, and the wanted behavior
+is that passwords capture too.
+
+**On merge.** Upstream still has all of this. Keep deleting on every merge:
+`ClipboardHistorySensitiveText`, the concealed read in `readPasteboard`, the
+sensitive gate in `promote`, the defaults key + registration, the Settings
+toggle/keyword/strings, and the MetricsTests expects. If upstream ever makes
+the skip load-bearing elsewhere, revisit.
 
 ---
 

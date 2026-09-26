@@ -91,7 +91,6 @@ enum SettingsDirectory {
                 SettingsDirectoryItem(page: .clipboard, title: FeatureStrings.clipboard(language).title,
                                       icon: "doc.on.clipboard",
                                       keywords: [FeatureStrings.clipboard(language).limit,
-                                                 FeatureStrings.clipboard(language).skipSensitive,
                                                  FeatureStrings.clipboard(language).pasteImageAsFile,
                                                  FeatureStrings.clipboard(language).autoClearEnable,
                                                  FeatureStrings.clipboard(language).autoClearOnSleep,

@@ -12,7 +12,6 @@ struct ClipboardSettings: View {
     @AppStorage(DefaultsKey.pastePlainEnabled) private var pastePlainEnabled = false
     @AppStorage(DefaultsKey.clipboardHistoryEnabled) private var enabled = false
     @AppStorage(DefaultsKey.clipboardHistoryLimit) private var limit = 50
-    @AppStorage(DefaultsKey.clipboardHistorySkipSensitive) private var skipSensitive = true
     @AppStorage(DefaultsKey.clipboardHistoryIncludeImagesFiles) private var includeImagesFiles = true
     @AppStorage(DefaultsKey.clipboardHistoryShortcutEnabled) private var shortcutEnabled = true
     @AppStorage(DefaultsKey.panelUtilityClipboard) private var showInPanel = true
@@ -56,11 +55,6 @@ struct ClipboardSettings: View {
                     Toggle(text.includeImagesFiles, isOn: $includeImagesFiles)
                         .disabled(!enabled)
                     Text(text.includeImagesFilesCaption)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Toggle(text.skipSensitive, isOn: $skipSensitive)
-                        .disabled(!enabled)
-                    Text(text.skipSensitiveCaption)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     ClipboardIgnoredAppsList()

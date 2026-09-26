@@ -18,8 +18,9 @@ enum ClipboardHistoryMoveDirection {
 }
 
 /// Opt-in clipboard history. It records plain text and, optionally, copied
-/// images and files; keeps a small local history and avoids obvious
-/// secret-looking strings by default.
+/// images and files; keeps a small local history. Every copy is kept.
+/// ── CCP PATCH (ccp-pkvz): upstream skips secret-looking strings here;
+/// removed so passwords capture too. See PATCHES.md.
 final class ClipboardHistoryService: ObservableObject {
     // ── CCP PATCH ─────────────────────────────────────────────────────────
     /// Hook so the engine can vend its quick-panel without naming a UI type.
@@ -721,14 +722,8 @@ final class ClipboardHistoryService: ObservableObject {
             captureLog.debug("skip: own write")
             return nil
         }
-        // An app can mark what it puts on the pasteboard as a secret, which is
-        // what the apps that keep passwords do when they hand one over. Said
-        // that plainly by the app itself, it is taken at its word and the
-        // content is never even read, whatever the other options say.
-        if ClipboardHistorySensitiveText.isConcealed(types) {
-            captureLog.debug("skip: concealed type")
-            return nil
-        }
+        // ── CCP PATCH (ccp-pkvz): the concealed-type skip lived here; removed
+        // so password-manager copies capture like everything else. See PATCHES.md.
         // Files first: a Finder copy also carries name strings, and a browser
         // image copy also carries URL text, so richer content wins over its
         // own textual fallbacks.
@@ -935,12 +930,8 @@ final class ClipboardHistoryService: ObservableObject {
             Self.captureLog.debug("drop: empty or oversize text")
             return
         }
-        if UserDefaults.standard.bool(forKey: DefaultsKey.clipboardHistorySkipSensitive),
-           looksSensitive(text) {
-            // ── CCP PATCH (ccp-7z5d): diagnostic for sensitive-text drops.
-            Self.captureLog.debug("drop: sensitive-looking text")
-            return
-        }
+        // ── CCP PATCH (ccp-pkvz): the skip-sensitive gate lived here; removed
+        // so every copied string is kept. See PATCHES.md.
 
         let richRTFFile = rtf.flatMap { ClipboardRichStore.store($0, fileExtension: "rtf") }
         let richHTMLFile = html.flatMap { ClipboardRichStore.store($0, fileExtension: "html") }
@@ -1009,10 +1000,6 @@ final class ClipboardHistoryService: ObservableObject {
             guard next < groupIndices.endIndex else { return nil }
             return groupIndices[next]
         }
-    }
-
-    private func looksSensitive(_ text: String) -> Bool {
-        ClipboardHistorySensitiveText.looksSensitive(text)
     }
 
     /// The history file. Entries used to live as one blob inside UserDefaults,
