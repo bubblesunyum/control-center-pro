@@ -7,6 +7,17 @@
     <link rel="stylesheet" href="vendor/diff2html.min.css" />
     <style>
       :root {
+        /* Section-header palette. Grape is a dusk-heavy oklab mix with bubblegum:
+        purple, but kept clear of pink in hue. Fills use these flat, identical
+        in both modes; only the grey helper lanes adapt. */
+        --dusk: #26547c;
+        --bubblegum: #ef476f;
+        --pollen: #ffd166;
+        --emerald: #06d6a0;
+        --grape: color-mix(in oklab, var(--dusk) 65%, var(--bubblegum));
+        /* Pale neutral bar for the machinery lanes. Fixed, not adaptive, so
+        the dark header ink always holds — the one fill that never changes. */
+        --ash: #d4d5cf;
         --bg: #f6f6f4;
         --panel: #fffffe;
         --ink: #14150f;
@@ -213,9 +224,18 @@
         flex-direction: column;
       }
       .lane > summary {
-        border-bottom: 2px solid var(--idle);
+        background: var(--ash);
+        /* Fallback only — every lane names its own fill below. Fixed dark ink
+        like the rest of the bars. */
+        color: #14150f;
       }
       .lane[open] > summary {
+        border-radius: 14px 14px 0 0;
+      }
+      /* Filled bars meet square content when open — without this the bar's
+      rounded bottom corners butt against the rows below it. */
+      .backlog[open] > summary,
+      .harness[open] > summary {
         border-radius: 14px 14px 0 0;
       }
       .lane > summary h2 {
@@ -318,28 +338,43 @@
         border-color: var(--ok);
         color: var(--ok);
       }
-      .lane.ready > summary {
-        border-bottom-color: var(--accent);
+      /* Section headers take the palette flat, identical in both modes, and
+      neighbouring lanes stay far apart in hue on purpose: lavender for the
+      accent lanes, blue for active work, pink for blocked, green for done,
+      yellow for staging, pale grey for the machinery. Every bar is light
+      enough for the same fixed dark ink — text follows the fill, not the mode. */
+      .lane.ready > summary,
+      .lane.review > summary {
+        background: color-mix(in oklab, var(--grape) 50%, white);
+        color: #14150f;
       }
       .lane.in_progress > summary {
-        border-bottom-color: var(--blue);
+        background: color-mix(in oklab, var(--dusk) 50%, white);
+        color: #14150f;
       }
       .lane.blocked > summary {
-        border-bottom-color: var(--fail);
+        background: var(--bubblegum);
+        color: #14150f;
       }
       .lane.done > summary {
-        border-bottom-color: var(--ok);
-      }
-      .lane.review > summary {
-        border-bottom-color: var(--accent);
+        background: var(--emerald);
+        color: #14150f;
       }
       .lane.staging > summary {
-        border-bottom-color: var(--warn);
+        background: var(--pollen);
+        color: #14150f;
       }
       .lane.worktree > summary {
-        border-bottom-color: var(--teal);
+        background: var(--ash);
+        color: #14150f;
       }
-
+      /* Backlog and the harness have no status colour, so they take pale grey
+      like the work tree. */
+      .backlog > summary,
+      .harness > summary {
+        background: var(--ash);
+        color: #14150f;
+      }
       .lane-name.hoverable {
         position: relative;
         cursor: help;
@@ -1354,6 +1389,15 @@
         margin-left: auto;
         font-size: 11.5px;
         color: var(--dim);
+      }
+      /* Headers are filled bars, so their h2, chevron and count take the bar's
+      own ink instead of --ink/--dim. This sits after the rules above on
+      purpose: `details.panel > summary .n` ties it on specificity, and the
+      later rule wins — from any earlier spot the count stays dim on the fill. */
+      details.panel > summary h2,
+      details.panel > summary .chev,
+      details.panel > summary .n {
+        color: inherit;
       }
       /* Rows, like the lanes below it — the backlog is read the same way the rest
      of the ledger is, and it's behind a disclosure, so its length costs nothing
