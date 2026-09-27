@@ -59,3 +59,6 @@ dashboard/state.json
 
 # The Tiptap spike's npm install (Spikes/tiptap-editor).
 node_modules/
+
+# Per-role models, naming what this machine happens to have — machine-local.
+harness/models.json
