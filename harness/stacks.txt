@@ -6,6 +6,3 @@
 # you added, re-run harness add. The names are the files in the starter's
 # template/harness/stacks/.
 swift
-# Added by hand: no auto-detectable web app in the repo, but reviewers should
-# apply the web checks too.
-web
