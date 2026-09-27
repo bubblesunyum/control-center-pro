@@ -1,39 +1,39 @@
 {
   ".claude/HARNESS.md": {
-    ".claude/agents/librarian.md": "4b8c643b0a364fd5",
-    ".claude/agents/reviewer-correctness.md": "669ff069f68054e2",
-    ".claude/agents/reviewer-design.md": "d289a71e266df753",
-    ".claude/agents/reviewer-taste.md": "c83177597c494ce0",
-    ".claude/skills/workflow/SKILL.md": "845f4996331e6fbd",
+    ".claude/agents/librarian.md": "bd87aae352bdea4f",
+    ".claude/agents/reviewer-correctness.md": "fed46aa1a8c1bdac",
+    ".claude/agents/reviewer-design.md": "6a3b5541dbf2d392",
+    ".claude/agents/reviewer-taste.md": "775f61926ffda44f",
+    ".claude/skills/workflow/SKILL.md": "0a68de68a32dd1f5",
     ".codex/hooks.json": "9ebe2492ec7aec62",
-    "doc": "facf85cc338e1703",
-    "scripts/brief.sh": "00036f6569c97e38",
+    "doc": "10d558bce212a720",
+    "scripts/brief.sh": "2480824f8bfe8220",
     "scripts/codex-support.py": "6f5ff28e0ea19f1d",
-    "scripts/context.py": "97da8c163565235e",
+    "scripts/context.py": "1758842ffc4bf3a1",
     "scripts/opencode-agents.py": "a0ac7edba54c4bf4",
-    "scripts/review.sh": "3c624fa7d6c5923e",
+    "scripts/review.sh": "72ef17f668ab8bc0",
     "scripts/test-codex-support.py": "9ee2042a42cb4514",
-    "scripts/verify.sh": "dd083d6bcd862179"
+    "scripts/verify.sh": "065a3ded306f0840"
   },
   ".claude/skills/agentic-review/SKILL.md": {
-    ".claude/agents/reviewer-correctness.md": "669ff069f68054e2",
-    ".claude/agents/reviewer-taste.md": "c83177597c494ce0",
-    "doc": "337d048a418aa31f",
-    "scripts/review.sh": "3c624fa7d6c5923e"
+    ".claude/agents/reviewer-correctness.md": "fed46aa1a8c1bdac",
+    ".claude/agents/reviewer-taste.md": "775f61926ffda44f",
+    "doc": "97eccd1f8378b040",
+    "scripts/review.sh": "72ef17f668ab8bc0"
   },
   ".claude/skills/handoff/SKILL.md": {
-    "doc": "67f252beb231b475",
-    "scripts/brief.sh": "00036f6569c97e38"
+    "doc": "7fec5b9a76db6581",
+    "scripts/brief.sh": "2480824f8bfe8220"
   },
   ".claude/skills/workflow/SKILL.md": {
-    "doc": "845f4996331e6fbd",
+    "doc": "0a68de68a32dd1f5",
     "\u2026": ""
   },
   "AGENTS.md": {
-    "doc": "a18cfa8e1cb8b839",
-    "scripts/brief.sh": "00036f6569c97e38",
-    "scripts/review.sh": "3c624fa7d6c5923e",
-    "scripts/verify.sh": "dd083d6bcd862179"
+    "doc": "c1ee8cdff8a32738",
+    "scripts/brief.sh": "2480824f8bfe8220",
+    "scripts/review.sh": "72ef17f668ab8bc0",
+    "scripts/verify.sh": "065a3ded306f0840"
   },
   "CLAUDE.md": {
     "Package.swift": "4c855256d0b077b2",

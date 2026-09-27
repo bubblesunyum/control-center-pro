@@ -30,7 +30,24 @@ stamp() { date -r "$1" +%Y%m%d%H%M.%S 2>/dev/null || date -d "@$1" +%Y%m%d%H%M.%
 
 base="${1:-}"
 staged=0
-packet=$(mktemp /tmp/ccp-review.XXXXXX)
+# The ledger's bead prefix, asked of the ledger itself at runtime — baked into
+# this file once per install, which made every copy differ and un-updatable.
+# Falls back to the directory name, derived the same way `harness add` does.
+_harness_prefix() {
+  local p=""
+  if command -v bd >/dev/null 2>&1; then
+    p="$(bd config get issue_prefix 2>/dev/null | tr -d '[:space:]')" || true
+  fi
+  if ! printf '%s' "$p" | grep -qE '^[a-z0-9]{1,10}$'; then
+    # Physical path, matching what `harness add` derived at install time and what
+    # the Python scripts resolve: through a symlink the logical name could be
+    # anything, and two scripts deriving different fallbacks disagree.
+    p="$(basename "$(cd "$ROOT" && pwd -P)" | tr 'A-Z' 'a-z' | tr -cd '[:alnum:]' | sed 's/^[0-9]*//' | cut -c1-3)"
+    [ -n "$p" ] || p="bd"
+  fi
+  printf '%s\n' "$p"
+}
+packet=$(mktemp /tmp/$(_harness_prefix)-review.XXXXXX)
 
 # No base given: review what isn't committed yet, and fall back to the last
 # commit when the tree is clean — "review my work" almost never means "review
@@ -78,8 +95,8 @@ SCOPE=('*.swift' '*.py' '*.sh' '*.md' '*.html' '*.json' '*.js' '*.mjs' '*.css' '
        ':(exclude)Tests/*' ':(exclude)docs/*' ':(exclude)CHANGELOG.md')
 
 # Screenshots the design reviewer looks at. Whatever drives your app should
-# write its captures to /tmp with this prefix.
-CAPTURES='ccp-*.png'
+# write its captures to /tmp with this prefix — the ledger's, resolved above.
+CAPTURES="$(_harness_prefix)-*.png"
 # ── END CONFIGURE ─────────────────────────────────────────────────────────
 
 diff_cmd() {
@@ -123,7 +140,14 @@ else
   # NUL-separated, and forgiving: a changed file may have a space in its name or
   # have been deleted outright, and under `set -e` a stat that fails on one of
   # those would take the whole script down before the fallback below could run.
-  since=$(printf '%s' "$files" | tr '\n' '\0' | xargs -0 mtime 2>/dev/null | sort -n | head -1 || true)
+  # A loop rather than `... | xargs -0 mtime`: mtime is a shell function and
+  # xargs execs, so it cannot see it — the call failed silently and every
+  # uncommitted review fell back to the hour-ago window below. The `|| true`
+  # on mtime is load-bearing: a changed file may be deleted by now, and under
+  # `set -e` that failure would take the script down before the fallback.
+  since=$(printf '%s' "$files" | while IFS= read -r f; do
+    [ -n "$f" ] && mtime "$f" 2>/dev/null || true
+  done | sort -n | head -1 || true)
   [ -n "$since" ] && since=$(stamp "$since")
 fi
 # An hour back is the fallback when there's nothing to date against at all — a
