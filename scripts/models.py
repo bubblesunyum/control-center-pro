@@ -23,6 +23,12 @@ unknowable from here (ollama defaults to 4-8k unless OLLAMA_CONTEXT_LENGTH
 says otherwise), and refusing early beats handing a reviewer a packet it can
 only read part of. A wrong budget is fixed by writing the real one into the
 roster; `budget` never prompts, so review.sh can call it from hooks and gates.
+
+A role may also name a "variant" — the provider's reasoning effort (minimal,
+low, medium, high, xhigh, max; which exist depends on the model, and
+`opencode models --verbose` lists them). It reaches opencode as agent.py's
+`--variant` — the only path; no generated file carries one. Absent, the
+model's own default applies.
 """
 
 import json
@@ -54,7 +60,7 @@ def run(*args, timeout=15):
 
 
 def detect():
-    """(candidates, backends): model ids offerable for opencode agent lines,
+    """(candidates, backends): model ids offerable for roster roles,
     and a one-line account of where they came from."""
     seen, backends = [], []
     opencode = [l.strip() for l in run("opencode", "models").splitlines()
@@ -116,6 +122,14 @@ def roster_state():
 def model_for(role):
     """The configured model id for a role, or empty when there is none."""
     return load_roster().get(role, "")
+
+
+def variant_for(role):
+    """The reasoning variant a role runs at, or empty for the model's default.
+    Tolerant like the roster reader: anything but a non-empty string is none."""
+    entry = load().get(role)
+    variant = entry.get("variant") if isinstance(entry, dict) else None
+    return variant.strip() if isinstance(variant, str) and variant.strip() else ""
 
 
 # Fallback packet budgets, in tokens, when the roster names no explicit
@@ -190,6 +204,10 @@ def ensure(again=False):
     print("per-role models, stored machine-locally in harness/models.json.")
     if backends:
         print("backends seen: " + ", ".join(backends))
+    # What `ensure` doesn't ask about — context, variant — is kept from the
+    # entry it replaces: re-picking one model shouldn't reset every role's
+    # budget and reasoning effort without a word.
+    previous = load() if state in ("ok", "empty") else {}
     roster, default = {}, None
     for role, hint in ROLES.items():
         if candidates:
@@ -208,7 +226,8 @@ def ensure(again=False):
             if not choice:
                 print("left unset; re-run with --again to fill it in.")
                 continue
-        roster[role] = {"model": choice}
+        kept = previous.get(role)
+        roster[role] = {**(kept if isinstance(kept, dict) else {}), "model": choice}
     ROSTER.parent.mkdir(parents=True, exist_ok=True)
     ROSTER.write_text(json.dumps(roster, indent=2, sort_keys=True) + "\n")
     print(f"\nwrote {len(roster)} roles → {ROSTER.relative_to(ROOT)}")

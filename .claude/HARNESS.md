@@ -4,13 +4,14 @@
   .claude/agents/reviewer-design.md
   .claude/agents/reviewer-taste.md
   .claude/skills/workflow/SKILL.md
+  .codex/hooks.json
+  scripts/agent.py
   scripts/brief.sh
+  scripts/codex-support.py
   scripts/context.py
   scripts/opencode-agents.py
-  scripts/codex-support.py
-  scripts/test-codex-support.py
-  .codex/hooks.json
   scripts/review.sh
+  scripts/test-codex-support.py
   scripts/verify.sh
 -->
 
@@ -223,13 +224,48 @@ it worked and fails at spawn. So the prompt body has one home,
 header around it into `.opencode/agent/`. The gate checks the two match, because
 nothing about editing the source makes opencode complain.
 
-The generated agents carry a `model:` line from `harness/models.json` — the
-per-role roster, mapping reviewer-taste and friends to provider-qualified ids.
-The roster is machine-local and gitignored: it names models this machine
-happens to have. A fresh clone has none, so the first review prompts once per
-role and writes it; later runs are silent. With no roster the agents omit
-`model:` and inherit the session's model, which always resolves — the cost is
-that `reviewer-taste` stops being the cheap one under opencode until then.
+The generated agents carry no `model:` line — by design, not omission. The
+roster is machine-local and gitignored: it names models this machine happens
+to have, so a model line would bake one machine's answers into every clone's
+committed files, and a fresh clone with an empty roster would generate
+model-free files that fail check against them. Without a line the agent
+inherits the session's model, which always resolves — the cost is that
+`reviewer-taste` stops being the cheap one under a native opencode spawn. The
+roster still picks the model everywhere a model is actually chosen:
+`scripts/agent.py` passes it as `-m`.
+
+A role's roster entry may add a `variant` — the provider's reasoning effort,
+such as `xhigh` — which becomes agent.py's `--variant`. Only there: no
+generated file carries one, and `implement` runs opencode's own build agent,
+which has no generated file at all.
+
+Three paths to a model: the `.claude/agents/` frontmatter names Claude Code's
+reviewers; the roster names `scripts/agent.py`'s; opencode's generated agents
+and Codex inherit the session's and the host's. A model named in one path says
+nothing about the others.
+
+**`scripts/agent.py` is how any tool reaches the roster.** It runs one role
+through `opencode run` — so Claude Code can put its reviewers, and delegated
+implementation, on another provider's bill without the packet ever entering its
+own context. Three behaviours of `opencode run` shaped it, all found by running
+it:
+
+- `--agent` given a `mode: subagent` agent prints a warning and falls back to
+  the default agent, so the reviewer runs without its prompt. The script
+  promotes the agent to primary for its own process through
+  `OPENCODE_CONFIG_CONTENT`, leaving the generated files — and the picker —
+  alone.
+- OpenCode's free models answer the built-in agents and refuse every custom one
+  (a 403 naming the free tier). A roster pointing a reviewer at a `-free` model
+  works for `implement`, which runs `build`, and fails for every reviewer.
+- Headless, every permission prompt is answered no and the agent carries on
+  without it — including reads outside the project, which is where review.sh
+  puts the packet. Reviewers are granted `/tmp`, and any other refusal makes
+  the script exit non-zero rather than pass on a reply written blind.
+
+The revision cap lives in the script rather than in the `delegate` skill's prose
+because guidance is what a long thread erodes first. It counts the session's
+messages back out of `opencode export`, so there is no counter file to lose.
 
 **There is no session-start hook to write.** opencode's plugin hooks are
 `event`, `chat.message`, `chat.params`, `chat.headers`, `chat.completion`,

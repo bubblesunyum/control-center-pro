@@ -9,9 +9,13 @@
 # Output is deliberately tiny. A build tool prints tens of thousands of lines
 # and an agent that pipes that into its context has spent a chunk of the day's
 # tokens to learn one bit — did it pass. Full logs land in /tmp/<prefix>-verify/
-# (the ledger's bead prefix, resolved below)
-# and are worth reading only when something fails.
+# (the ledger's bead prefix, resolved below) and are worth reading only when
+# something fails.
 #
+# Everything in scripts/verify.steps.sh is yours to replace with your project's
+# real build and test commands. Everything here works as-is: keep checks going
+# through `step`, which swallows the log and reports one line — that is the
+# whole point of the gate.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -69,6 +73,10 @@ step() {
 
 echo "verify: $ROOT"
 
+step "codex support" python3 scripts/codex-support.py check
+step "codex regression" python3 scripts/test-codex-support.py
+step "agent runner" python3 scripts/test-agent.py
+
 # The knowledge layer gets the same treatment as the code. A doc that quietly
 # stopped being true is worse than a missing one, and it can't be caught by
 # reviewing a diff — the stale file isn't in the diff, the thing it describes is.
@@ -92,49 +100,19 @@ else
   echo "$agents_out"
 fi
 
-if codex_out="$(python3 scripts/codex-support.py check 2>&1)"; then
-  echo "$codex_out"
-else
-  failed=1
-  echo "$codex_out"
-fi
-step "codex support tests" python3 scripts/test-codex-support.py
-
 # ── PROJECT STEPS ─────────────────────────────────────────────────────────
-# SwiftPM. Until the package is scaffolded there is nothing to build, and the
-# gate says so rather than reporting a green build it never ran.
-
-if [ ! -f Package.swift ]; then
-  echo "  skip  build   (no Package.swift yet — scaffold the package first)"
-  echo "  skip  tests   (no Package.swift yet)"
+# Your project's build, test, and smoke steps live in scripts/verify.steps.sh,
+# sourced just below. That file is yours — installed once, never compared or
+# overwritten — so scaffolding fixes here still arrive with `harness update`.
+if [ -f "$ROOT/scripts/verify.steps.sh" ]; then
+  . "$ROOT/scripts/verify.steps.sh"
 else
-  # Same stale-plan guard as scripts/app.sh (psy-rfun): a commit that adds a
-  # psymail source file must re-plan, not fail the gate on a cached file list.
-  # Through `step`, so a guard that fails says so — swallowed, it surfaces one
-  # line later as a bare "cannot find X in scope", which is the exact confusion
-  # it exists to prevent.
-  step "plan" scripts/ensure-fresh-plan.sh
-  step "build" swift build
-
-  if [ "$mode" != "--quick" ]; then
-    step "tests" swift test
-
-    # "ok" alone can't tell a green suite from one that ran nothing, so surface
-    # the count. swift-testing and XCTest word it differently; catch both.
-    if [ -f "$LOGS/tests.log" ]; then
-      grep -oE "[0-9]+ tests? passed|Executed [0-9]+ tests?" "$LOGS/tests.log" \
-        | tail -1 | sed -e 's/^/        /'
-    fi
-  fi
-
-  if [ "$mode" = "--full" ]; then
-    # The app is a menu-bar panel: it needs a GUI session, so it only runs here.
-    # Launching and quitting proves the status item and panel came up at all,
-    # which no unit test in this project can.
-    if [ -f scripts/smoke.sh ]; then
-      step "smoke" scripts/smoke.sh
-    fi
-  fi
+  # A gate with no project steps would pass vacuously — the green suite that
+  # ran nothing — so a missing steps file fails loudly instead. `harness add`
+  # installs it; a project from before the split recovers its steps from its
+  # old verify.sh on `harness update --apply`.
+  failed=1
+  echo "  ! no scripts/verify.steps.sh — the gate has no project steps to run."
 fi
 # ── END PROJECT STEPS ─────────────────────────────────────────────────────
 

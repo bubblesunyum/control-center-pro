@@ -1,1 +1,2 @@
 scripts/hooks/commit-msg
+scripts/review.sh
