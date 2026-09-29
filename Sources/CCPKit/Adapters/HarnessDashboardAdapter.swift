@@ -19,6 +19,8 @@ public struct HarnessDashboard: Sendable, Identifiable, Equatable {
         HarnessDashboard(id: "bb-kit", title: "bb-kit", rootPath: "/Users/bubbles/dev/bb-kit"),
         HarnessDashboard(id: "fusebox-migration", title: "Fusebox", rootPath: "/Users/bubbles/dev/fusebox-migration"),
         HarnessDashboard(id: "harness-starter", title: "Starter", rootPath: "/Users/bubbles/dev/harness-starter"),
+        HarnessDashboard(id: "folia", title: "Folia", rootPath: "/Users/bubbles/dev/folia"),
+        HarnessDashboard(id: "gooey", title: "Gooey", rootPath: "/Users/bubbles/dev/gooey"),
     ]
 
     public let id: String

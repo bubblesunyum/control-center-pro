@@ -11,7 +11,7 @@ final class HarnessDashboardAdapterTests: XCTestCase {
 
     func testDashboardsListsHarnessesInOrder() {
         let ids = HarnessDashboard.dashboards.map(\.id)
-        XCTAssertEqual(ids, ["psymail-mini", "control-center-pro", "bb-kit", "fusebox-migration", "harness-starter"])
+        XCTAssertEqual(ids, ["psymail-mini", "control-center-pro", "bb-kit", "fusebox-migration", "harness-starter", "folia", "gooey"])
     }
 
     func testDashboardsPointAtFixedSiblingCheckouts() {
@@ -22,6 +22,8 @@ final class HarnessDashboardAdapterTests: XCTestCase {
             "/Users/bubbles/dev/bb-kit",
             "/Users/bubbles/dev/fusebox-migration",
             "/Users/bubbles/dev/harness-starter",
+            "/Users/bubbles/dev/folia",
+            "/Users/bubbles/dev/gooey",
         ])
     }
 
