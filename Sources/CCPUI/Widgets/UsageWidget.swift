@@ -32,10 +32,9 @@ public final class UsageWidget: CCPWidget {
         self.claude = ClaudeUsageAdapter()
     }
 
-    /// Test seam: a widget backed by fake sources. The spend store stays out —
-    /// a fake source's fixed percents must survive, not be refined away.
+    /// Test seam: a widget backed by fake sources.
     init(openCodeSource: OpenCodeUsageSource, claudeSource: ClaudeUsageSource) {
-        self.openCode = OpenCodeUsageAdapter(source: openCodeSource, spend: nil)
+        self.openCode = OpenCodeUsageAdapter(source: openCodeSource)
         self.claude = ClaudeUsageAdapter(source: claudeSource)
     }
 
