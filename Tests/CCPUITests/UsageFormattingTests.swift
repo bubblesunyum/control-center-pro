@@ -6,9 +6,9 @@ import XCTest
 
 @MainActor
 final class UsageFormattingTests: XCTestCase {
-    func testPercentUsesSingleDecimal() {
-        XCTAssertEqual(UsageWidget.percentText(2), "2.0%")
-        XCTAssertEqual(UsageWidget.percentText(12.34), "12.3%")
+    func testPercentUsesWholeIntegers() {
+        XCTAssertEqual(UsageWidget.percentText(2), "2%")
+        XCTAssertEqual(UsageWidget.percentText(12.6), "13%")
         XCTAssertEqual(UsageWidget.percentText(nil), "--")
     }
 

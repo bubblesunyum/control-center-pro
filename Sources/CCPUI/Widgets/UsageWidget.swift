@@ -320,10 +320,11 @@ private struct ProviderHeader: View {
 // MARK: - Formatting
 
 extension UsageWidget {
-    /// Single-decimal precision: the endpoints send ints today, floats tomorrow.
+    /// Whole integers: the endpoints send ints, and a 30s-ticking readout
+    /// has no business implying decimal precision.
     static func percentText(_ percent: Double?) -> String {
         guard let percent else { return "--" }
-        return String(format: "%.1f%%", percent)
+        return String(format: "%.0f%%", percent)
     }
 
     /// Coarse buckets — the readout ticks every 30s, so seconds would lie.
