@@ -64,6 +64,7 @@ public enum HarnessDashboardOutcome: Sendable, Equatable {
 /// opening the board are not things a test should trigger.
 public protocol HarnessDashboardSource: AnyObject, Sendable {
     func runUp(rootPath: String) async -> HarnessDashboardOutcome
+    func runningURL(rootPath: String) async -> URL?
     func open(_ url: URL)
 }
 
@@ -81,6 +82,21 @@ public final class LiveHarnessDashboardSource: HarnessDashboardSource {
         // only opens once something actually answers on the port.
         guard await Self.waitUntilServing(url: url) else { return .failed }
         return output.contains("already") ? .alreadyRunning(url) : .started(url)
+    }
+
+    /// The board URL when this checkout already has one serving, else nil.
+    /// Read off `.claude/launch.json`, which `dashboard.py` rewrites on every
+    /// bind — a stale entry pointing at nothing serving, or at a port another
+    /// checkout has since taken, reads as not running, so those taps still
+    /// fall through to `up`, whose own port-holder check routes around
+    /// foreign boards.
+    public func runningURL(rootPath: String) async -> URL? {
+        guard let url = Self.launchURL(rootPath: rootPath),
+              let port = url.port,
+              Self.claimRoot(port: port) == rootPath
+        else { return nil }
+        guard await Self.isServing(url: url) else { return nil }
+        return url
     }
 
     public func open(_ url: URL) {
@@ -130,10 +146,7 @@ public final class LiveHarnessDashboardSource: HarnessDashboardSource {
     /// True once something answers at the URL. A just-spawned child needs a
     /// moment to bind, and opening the link before that is a blank tab.
     nonisolated static func waitUntilServing(url: URL, timeout: TimeInterval = 5) async -> Bool {
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 0.5
-        config.timeoutIntervalForResource = 0.5
-        let session = URLSession(configuration: config)
+        let session = Self.probeSession()
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             do {
@@ -145,15 +158,84 @@ public final class LiveHarnessDashboardSource: HarnessDashboardSource {
         }
         return false
     }
+
+    /// One probe, not a wait: the pre-launch check must answer fast enough
+    /// that a tap on a stopped board still feels like a tap.
+    nonisolated static func isServing(url: URL) async -> Bool {
+        do {
+            _ = try await Self.probeSession().data(from: url)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    nonisolated static func probeSession() -> URLSession {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 0.5
+        config.timeoutIntervalForResource = 0.5
+        return URLSession(configuration: config)
+    }
+
+    /// Which checkout holds this port, per the claim file its server wrote on
+    /// bind — nil when nothing claimed it. The prefix varies per checkout
+    /// (each ledger has its own), so the suffix is what identifies a claim.
+    /// Missing or unreadable reads as unclaimed, never as ours: the tap then
+    /// falls through to `up` rather than opening a stranger's board. Claims
+    /// whose pid is dead are skipped: a crash leaves the file behind, and a
+    /// checkout that has since taken the port must not read as still ours.
+    nonisolated static func claimRoot(port: Int) -> String? {
+        let suffix = "-dashboard-\(port).json"
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: "/tmp") else { return nil }
+        for name in names where name.hasSuffix(suffix) {
+            let path = "/tmp/\(name)"
+            guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+                  let doc = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let root = doc["root"] as? String
+            else { continue }
+            if let pid = doc["pid"] as? Int, !Self.isPidAlive(pid) { continue }
+            return root
+        }
+        return nil
+    }
+
+    nonisolated static func isPidAlive(_ pid: Int) -> Bool {
+        if kill(pid_t(pid), 0) == 0 { return true }
+        return errno == EPERM
+    }
+
+    /// The board URL `dashboard.py` last published for this checkout, if any.
+    /// Tolerates a missing file, unreadable JSON, and the wrong shape — all
+    /// read as "no board", never as a throw, since this runs on every tap.
+    nonisolated static func launchURL(rootPath: String) -> URL? {
+        let path = URL(fileURLWithPath: rootPath).appendingPathComponent(".claude/launch.json")
+        guard let data = try? Data(contentsOf: path) else { return nil }
+        return Self.launchURL(fromLaunchJSON: data)
+    }
+
+    nonisolated static func launchURL(fromLaunchJSON data: Data) -> URL? {
+        guard let doc = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let configs = doc["configurations"] as? [[String: Any]]
+        else { return nil }
+        for config in configs {
+            guard (config["name"] as? String) == "harness-dashboard",
+                  let urlString = config["url"] as? String,
+                  let url = URL(string: urlString),
+                  url.scheme == "http" || url.scheme == "https"
+            else { continue }
+            return url
+        }
+        return nil
+    }
 }
 
 // MARK: - Adapter
 
 /// The Tools strip's model for the harness dashboards.
 ///
-/// `up` is idempotent per checkout (it reports "already serving" when its own
-/// board holds the port), so a tap is always safe; the busy flag only guards
-/// against a second tap while the first is still bringing its server up.
+/// A tap reuses the checkout's running board when it has one and only runs
+/// `up` when nothing answers; the busy flag guards against a second tap
+/// while the first is still bringing its server up.
 @MainActor
 @Observable
 public final class HarnessDashboardAdapter {
@@ -173,13 +255,18 @@ public final class HarnessDashboardAdapter {
         busyIDs.contains(dashboard.id)
     }
 
-    /// Bring the dashboard up and open its board. Re-entrant taps on the same
-    /// board return `.failed` rather than stacking servers; the button is
-    /// disabled while busy so this is unreachable from the UI.
+    /// Open the checkout's board, starting its server first when none is
+    /// serving. Re-entrant taps on the same board return `.failed` rather
+    /// than stacking servers; the button is disabled while busy so this is
+    /// unreachable from the UI.
     public func launch(_ dashboard: HarnessDashboard) async -> HarnessDashboardOutcome {
         guard !busyIDs.contains(dashboard.id) else { return .failed }
         busyIDs.insert(dashboard.id)
         defer { busyIDs.remove(dashboard.id) }
+        if let url = await source.runningURL(rootPath: dashboard.rootPath) {
+            source.open(url)
+            return .alreadyRunning(url)
+        }
         let outcome = await source.runUp(rootPath: dashboard.rootPath)
         if let url = outcome.url {
             source.open(url)

@@ -132,6 +132,59 @@ final class HarnessDashboardAdapterTests: XCTestCase {
         XCTAssertFalse(adapter.isBusy(dashboard))
         XCTAssertTrue(source.opened.isEmpty)
     }
+
+    // MARK: - Reuse running board
+
+    func testLaunchReusesRunningBoardWithoutRunningUp() async {
+        let url = URL(string: "http://localhost:7391/")!
+        let source = FakeDashboardSource(result: .started(URL(string: "http://localhost:9999/")!))
+        source.running = url
+        let adapter = HarnessDashboardAdapter(source: source)
+        let dashboard = HarnessDashboard.dashboards[1]
+
+        let outcome = await adapter.launch(dashboard)
+
+        XCTAssertEqual(outcome, .alreadyRunning(url))
+        XCTAssertEqual(source.opened, [url])
+        XCTAssertEqual(source.runningRoots, [dashboard.rootPath])
+        XCTAssertEqual(source.runCount, 0, "a running board must be opened, not relaunched")
+    }
+
+    func testLaunchFallsThroughToUpWhenNothingServing() async {
+        let url = URL(string: "http://localhost:7393/")!
+        let source = FakeDashboardSource(result: .started(url))
+        source.running = nil
+        let adapter = HarnessDashboardAdapter(source: source)
+        let dashboard = HarnessDashboard.dashboards[0]
+
+        let outcome = await adapter.launch(dashboard)
+
+        XCTAssertEqual(outcome, .started(url))
+        XCTAssertEqual(source.runCount, 1)
+        XCTAssertEqual(source.runningRoots, [dashboard.rootPath])
+        XCTAssertEqual(source.runRoots, [dashboard.rootPath])
+        XCTAssertEqual(source.opened, [url])
+    }
+
+    // MARK: - launch.json
+
+    func testParsesLaunchJSONBoardURL() {
+        let json = """
+        {"version":"0.0.1","configurations":[{"name":"harness-dashboard","url":"http://localhost:7391/","port":7391}]}
+        """.data(using: .utf8)!
+        XCTAssertEqual(
+            LiveHarnessDashboardSource.launchURL(fromLaunchJSON: json)?.absoluteString,
+            "http://localhost:7391/")
+    }
+
+    func testLaunchJSONWithoutBoardParsesToNil() {
+        let missing = """
+        {"version":"0.0.1","configurations":[{"name":"other","url":"http://localhost:3000/","port":3000}]}
+        """.data(using: .utf8)!
+        XCTAssertNil(LiveHarnessDashboardSource.launchURL(fromLaunchJSON: missing))
+        XCTAssertNil(LiveHarnessDashboardSource.launchURL(fromLaunchJSON: Data("not json".utf8)))
+        XCTAssertNil(LiveHarnessDashboardSource.launchURL(fromLaunchJSON: Data("{}".utf8)))
+    }
 }
 
 // MARK: - Fake
@@ -143,11 +196,13 @@ final class HarnessDashboardAdapterTests: XCTestCase {
 final class FakeDashboardSource: HarnessDashboardSource, @unchecked Sendable {
     private let lock = NSLock()
     private var _result: HarnessDashboardOutcome
+    private var _running: URL?
     /// When true, `runUp` waits until flipped back rather than returning.
     private var _hold = false
 
     private var _runCount = 0
     private var _runRoots: [String] = []
+    private var _runningRoots: [String] = []
     private var _opened: [URL] = []
 
     var result: HarnessDashboardOutcome {
@@ -160,8 +215,14 @@ final class FakeDashboardSource: HarnessDashboardSource, @unchecked Sendable {
         set { lock.withLock { _hold = newValue } }
     }
 
+    var running: URL? {
+        get { lock.withLock { _running } }
+        set { lock.withLock { _running = newValue } }
+    }
+
     var runCount: Int { lock.withLock { _runCount } }
     var runRoots: [String] { lock.withLock { _runRoots } }
+    var runningRoots: [String] { lock.withLock { _runningRoots } }
     var opened: [URL] { lock.withLock { _opened } }
 
     init(result: HarnessDashboardOutcome) {
@@ -177,6 +238,11 @@ final class FakeDashboardSource: HarnessDashboardSource, @unchecked Sendable {
             try? await Task.sleep(nanoseconds: 1_000_000)
         }
         return result
+    }
+
+    func runningURL(rootPath: String) async -> URL? {
+        lock.withLock { _runningRoots.append(rootPath) }
+        return lock.withLock { _running }
     }
 
     func open(_ url: URL) {
