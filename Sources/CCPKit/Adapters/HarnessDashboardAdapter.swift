@@ -65,12 +65,21 @@ public enum HarnessDashboardOutcome: Sendable, Equatable {
 public protocol HarnessDashboardSource: AnyObject, Sendable {
     func runUp(rootPath: String) async -> HarnessDashboardOutcome
     func runningURL(rootPath: String) async -> URL?
-    func open(_ url: URL)
+    func open(_ url: URL) async
 }
 
 /// The real one, talking to each checkout's `scripts/dashboard.py`.
 public final class LiveHarnessDashboardSource: HarnessDashboardSource {
-    public init() {}
+    private let browserOpener: any BoardBrowserOpener
+    private let fallbackOpen: @Sendable (URL) -> Void
+
+    public init(
+        browserOpener: any BoardBrowserOpener = LiveArcBoardOpener(),
+        fallbackOpen: @escaping @Sendable (URL) -> Void = { NSWorkspace.shared.open($0) }
+    ) {
+        self.browserOpener = browserOpener
+        self.fallbackOpen = fallbackOpen
+    }
 
     public func runUp(rootPath: String) async -> HarnessDashboardOutcome {
         let output = await Task.detached(priority: .userInitiated) {
@@ -99,8 +108,11 @@ public final class LiveHarnessDashboardSource: HarnessDashboardSource {
         return url
     }
 
-    public func open(_ url: URL) {
-        NSWorkspace.shared.open(url)
+    public func open(_ url: URL) async {
+        let reused = await browserOpener.openBoard(url)
+        if !reused {
+            fallbackOpen(url)
+        }
     }
 
     /// Runs `dashboard up` in the checkout and returns its combined output.
@@ -264,12 +276,12 @@ public final class HarnessDashboardAdapter {
         busyIDs.insert(dashboard.id)
         defer { busyIDs.remove(dashboard.id) }
         if let url = await source.runningURL(rootPath: dashboard.rootPath) {
-            source.open(url)
+            await source.open(url)
             return .alreadyRunning(url)
         }
         let outcome = await source.runUp(rootPath: dashboard.rootPath)
         if let url = outcome.url {
-            source.open(url)
+            await source.open(url)
         }
         return outcome
     }

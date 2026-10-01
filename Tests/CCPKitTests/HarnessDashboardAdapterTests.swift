@@ -166,6 +166,40 @@ final class HarnessDashboardAdapterTests: XCTestCase {
         XCTAssertEqual(source.opened, [url])
     }
 
+    // MARK: - Arc tab reuse (opener + fallback)
+
+    func testOpenReusesArcTabAndSuppressesFallback() async {
+        let url = URL(string: "http://localhost:7391/")!
+        let opener = FakeBoardBrowserOpener(succeeds: true)
+        let fallback = FakeFallbackOpen()
+        let source = LiveHarnessDashboardSource(
+            browserOpener: opener,
+            fallbackOpen: { fallback.append($0) })
+
+        await source.open(url)
+
+        XCTAssertEqual(opener.opened, [url])
+        XCTAssertTrue(fallback.opened.isEmpty, "fallback must not run when Arc reuse succeeds")
+    }
+
+    func testOpenFallsBackWhenArcReuseMisses() async {
+        let url = URL(string: "http://localhost:7393/")!
+        let opener = FakeBoardBrowserOpener(succeeds: false)
+        let fallback = FakeFallbackOpen()
+        let source = LiveHarnessDashboardSource(
+            browserOpener: opener,
+            fallbackOpen: { fallback.append($0) })
+
+        await source.open(url)
+
+        XCTAssertEqual(opener.opened, [url])
+        XCTAssertEqual(fallback.opened, [url])
+    }
+
+    func testLiveSourceDefaultInitStillCompiles() {
+        _ = LiveHarnessDashboardSource()
+    }
+
     // MARK: - launch.json
 
     func testParsesLaunchJSONBoardURL() {
@@ -245,7 +279,40 @@ final class FakeDashboardSource: HarnessDashboardSource, @unchecked Sendable {
         return lock.withLock { _running }
     }
 
-    func open(_ url: URL) {
+    func open(_ url: URL) async {
+        lock.withLock { _opened.append(url) }
+    }
+}
+
+// MARK: - Fakes for Arc tab reuse
+
+// Test-only fake: all mutable state goes behind the lock, hence @unchecked Sendable.
+final class FakeBoardBrowserOpener: BoardBrowserOpener, @unchecked Sendable {
+    private let lock = NSLock()
+    private let succeeds: Bool
+    private var _opened: [URL] = []
+
+    var opened: [URL] { lock.withLock { _opened } }
+
+    init(succeeds: Bool) {
+        self.succeeds = succeeds
+    }
+
+    func openBoard(_ url: URL) async -> Bool {
+        lock.withLock { _opened.append(url) }
+        return succeeds
+    }
+}
+
+// Test-only fallback capture: appended from any executor, read on the test
+// thread, so all state goes behind the lock, hence @unchecked Sendable.
+final class FakeFallbackOpen: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _opened: [URL] = []
+
+    var opened: [URL] { lock.withLock { _opened } }
+
+    func append(_ url: URL) {
         lock.withLock { _opened.append(url) }
     }
 }
