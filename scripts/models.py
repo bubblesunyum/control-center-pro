@@ -10,13 +10,18 @@ harness/models.json maps roles to models. It is machine-local and gitignored:
 it names models this machine happens to have, which no commit should carry.
 Missing on first run, `ensure` detects backends (opencode's configured
 providers, `ollama list`, `claude` on PATH), prompts once per role, and writes
-the file. Present, it stays silent — including when there is no terminal, where
-prompting would hang a hook or a gate.
+the file. Each distinct pick is probed first with a trivial run: a candidate
+that can't run here — a bad id, a hosted model whose region isn't enabled —
+fails at prompt time with opencode's own error, and the pick is retried;
+picking it again keeps it on trust. Present,
+the roster stays silent — including when there is no terminal, where prompting
+would hang a hook or a gate.
 
 Roles cover more than reviewers: the librarian audits monthly, and future
 implement/summarize roles resolve through this same file.
 
-A role's packet budget is its explicit "context" (tokens), else a heuristic
+A role's packet budget is its explicit "context" (tokens), else the limit
+opencode's cached models.dev catalog lists for the model, else a heuristic
 from the model id — Claude-pattern ids read as 200000, anything else as 8192.
 The 8192 is deliberately conservative: a local server's allocation is
 unknowable from here (ollama defaults to 4-8k unless OLLAMA_CONTEXT_LENGTH
@@ -26,12 +31,15 @@ roster; `budget` never prompts, so review.sh can call it from hooks and gates.
 
 A role may also name a "variant" — the provider's reasoning effort (minimal,
 low, medium, high, xhigh, max; which exist depends on the model, and
-`opencode models --verbose` lists them). It reaches opencode as agent.py's
-`--variant` — the only path; no generated file carries one. Absent, the
-model's own default applies.
+opencode's models.dev cache lists them). It reaches opencode through agent.py
+as `-m provider/model#variant` — the only path; no generated file carries one.
+Absent, the model's own default applies. The ensure probe doesn't cover it:
+it sends a bare -m, so a variant problem surfaces at runtime, not at prompt
+time.
 """
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -59,11 +67,96 @@ def run(*args, timeout=15):
         return ""
 
 
+def opencode_bin():
+    """The opencode CLI: $OPENCODE_BIN, then PATH, then the official
+    installer's ~/.opencode/bin. The installer puts that directory on PATH
+    only in ~/.zshrc, which the non-interactive shells agents run in (the
+    Claude Code desktop app, Codex) never source, so PATH alone misses a
+    working install. Falls back to the bare name, so a missing CLI still
+    surfaces as FileNotFoundError at the call site."""
+    explicit = os.environ.get("OPENCODE_BIN")
+    if explicit:
+        return explicit
+    found = shutil.which("opencode")
+    if found:
+        return found
+    installed = Path.home() / ".opencode/bin/opencode"
+    return str(installed) if os.access(installed, os.X_OK) else "opencode"
+
+
+# Long enough for a cold hosted model to answer two words; short enough that
+# a dead candidate fails fast at prompt time rather than hanging the setup.
+PROBE_TIMEOUT_SECONDS = 120
+
+PROBE_PROMPT = "Reply with the word ok and nothing else."
+
+
+def probe_error(stdout, returncode, stderr):
+    """The failure line from `opencode run --format json` output — None when
+    the run answered. Only the error is read: a probe's reply is discarded."""
+    errors, texts = [], []
+    for line in stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        if event.get("type") == "error":
+            error = event.get("error", {})
+            if isinstance(error, dict):
+                data = error.get("data", {})
+                message = data.get("message") if isinstance(data, dict) else None
+                message = (message or error.get("message")
+                           or error.get("name") or str(error))
+                errors.append(message)
+            else:
+                errors.append(str(error))
+        elif event.get("type") == "text":
+            part = event.get("part", {})
+            text = part.get("text", "") if isinstance(part, dict) else ""
+            if isinstance(text, str) and text.strip():
+                texts.append(text)
+    if errors:
+        return errors[0]
+    if returncode == 0 and texts:
+        return None
+    lines = (stderr or stdout).strip().splitlines()[-3:]
+    detail = "with no reply" if returncode == 0 else f"exited {returncode}"
+    suffix = " — " + " / ".join(t.strip() for t in lines if t.strip()) if lines else ""
+    return f"opencode run {detail}{suffix}"
+
+
+def probe_model(model):
+    """None when a trivial run on the model answers, else the failure line.
+
+    A dead-on-arrival candidate is caught here at prompt time, not mid-review.
+    Bare -m by design: the probe certifies the model answers, nothing more.
+    Variants ride on -m as model#variant at runtime, so a variant problem can't
+    surface here, and the probe doesn't pretend otherwise. opencode missing is
+    a backstop only — `ensure` skips probing entirely then, and says so once,
+    rather than failing every pick."""
+    try:
+        out = subprocess.run([opencode_bin(), "run", "--standalone", "--format", "json",
+                              "-m", model, "--", PROBE_PROMPT],
+                             capture_output=True, text=True,
+                             stdin=subprocess.DEVNULL, cwd=ROOT,
+                             timeout=PROBE_TIMEOUT_SECONDS)
+    except FileNotFoundError:
+        return "opencode is not on PATH — cannot probe; pick again to keep on trust"
+    except OSError as exc:
+        return f"opencode can't be run ({exc}) — cannot probe; pick again to keep on trust"
+    except subprocess.TimeoutExpired:
+        return (f"no reply in {PROBE_TIMEOUT_SECONDS}s — the model may be slow "
+                f"rather than dead; picking it again keeps it anyway")
+    return probe_error(out.stdout, out.returncode, out.stderr)
+
+
 def detect():
     """(candidates, backends): model ids offerable for roster roles,
     and a one-line account of where they came from."""
     seen, backends = [], []
-    opencode = [l.strip() for l in run("opencode", "models").splitlines()
+    opencode = [l.strip() for l in run(opencode_bin(), "models").splitlines()
                 if "/" in l.strip()]
     if opencode:
         seen += [m for m in opencode if m not in seen]
@@ -140,6 +233,45 @@ BUDGET_CLAUDE = 200000
 BUDGET_DEFAULT = 8192
 
 
+def catalog_entry(model):
+    """The models.dev catalog entry for `model` (provider/name), or None when
+    opencode's cache has no such entry. opencode 2 dropped `models --verbose`;
+    this cache is what's left to ask."""
+    provider, _, name = model.partition("/")
+    if not name:
+        return None
+    cache = (Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+             / "opencode/models.json")
+    try:
+        entry = json.loads(cache.read_text())[provider]["models"][name]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return entry if isinstance(entry, dict) else None
+
+
+def is_free_tier(model):
+    """Whether `model` looks like a free-tier id. Free-tier models refuse every
+    custom agent (all reviewers, the librarian) — but the ensure probe runs
+    without --agent, which is exactly what they refuse, so the probe can't
+    catch them and the roster has to avoid them by name."""
+    return "free" in model.lower()
+
+
+def catalog_context(model):
+    """The context limit opencode's cached models.dev catalog lists for `model`,
+    or None when the cache has no entry. Keeps review.sh's packet budget honest
+    for hosted models whose limits dwarf the local-server fallback below —
+    without it every non-Claude id reads as 8192."""
+    entry = catalog_entry(model)
+    if entry is None:
+        return None
+    limit = entry.get("limit", {})
+    context = limit.get("context") if isinstance(limit, dict) else None
+    if isinstance(context, bool) or not isinstance(context, int):
+        return None
+    return context if context > 0 else None
+
+
 def budget_for(role):
     """The packet budget in tokens for a role, or 0 when the role has no
     model configured (unknown model, unknown budget — the caller skips
@@ -161,6 +293,9 @@ def budget_for(role):
     model = model_for(role)
     if not model:
         return 0
+    cached = catalog_context(model)
+    if cached:
+        return cached
     lowered = model.lower()
     if any(k in lowered for k in ("claude", "anthropic", "sonnet", "opus")):
         return BUDGET_CLAUDE
@@ -186,6 +321,44 @@ def ask(role, hint, candidates, default):
             return raw
 
 
+def prompt_choice(role, hint, candidates, default):
+    """A model id for the role from the terminal, or "" to leave it unset.
+    One branch for the first pick and every re-pick: the prompt names both
+    the situation and the empty escape, so neither call site rewords it."""
+    if candidates:
+        choice = ask(role, hint, candidates, default)
+        return choice, choice
+    try:
+        choice = input(f"\n{role} ({hint}) — no backends detected, type a "
+                       f"model id (empty leaves it unset): ").strip()
+    except EOFError:
+        choice = ""
+    return choice, default
+
+
+def probe_choice(role, hint, choice, candidates, default, probed, failed):
+    """A model id for the role that either probed clean or was re-picked after
+    a failed probe — or "" when the role is left unset. Returns the choice and
+    the default, which chains like `ensure`'s: a re-pick becomes the next
+    role's default."""
+    while choice and choice not in probed:
+        if choice in failed:
+            # Failed once and explicitly re-picked: theirs, on trust — and
+            # trusted for the roles below that inherit it.
+            print(f"  keeping {choice} despite the failed probe — on trust.")
+            probed.add(choice)
+            break
+        error = probe_model(choice)
+        if error is None:
+            probed.add(choice)
+            break
+        failed.add(choice)
+        print(f"  ! probe of {choice} failed: {error}")
+        print("    pick another model, or the same one to keep it anyway.")
+        choice, default = prompt_choice(role, hint, candidates, default)
+    return choice, default
+
+
 def ensure(again=False):
     state = roster_state()
     if state == "ok" and not again:
@@ -208,25 +381,36 @@ def ensure(again=False):
     # entry it replaces: re-picking one model shouldn't reset every role's
     # budget and reasoning effort without a word.
     previous = load() if state in ("ok", "empty") else {}
+    can_probe = shutil.which(opencode_bin()) is not None
+    if not can_probe:
+        print("no opencode on PATH — writing choices without probing them.")
+    probed = set()  # models already seen answering
+    failed = set()   # models already failed; picking one again keeps it
     roster, default = {}, None
     for role, hint in ROLES.items():
         if candidates:
             if default is None:
-                # The cheap reviewer defaults cheap: first free id, else first.
-                default = next((c for c in candidates if "free" in c),
+                # Free-tier ids refuse every custom agent (all reviewers, the
+                # librarian), so defaulting to one writes a roster that fails
+                # at review time. Default to paid; free stays pickable by number.
+                default = next((c for c in candidates if not is_free_tier(c)),
                                candidates[0])
-            choice = ask(role, hint, candidates, default)
-            default = choice
-        else:
-            try:
-                choice = input(f"\n{role} ({hint}) — no backends detected, "
-                               f"type a model id: ").strip()
-            except EOFError:
-                choice = ""
-            if not choice:
-                print("left unset; re-run with --again to fill it in.")
-                continue
+        choice, default = prompt_choice(role, hint, candidates, default)
+        if not choice:
+            print("left unset; re-run with --again to fill it in.")
+            continue
         kept = previous.get(role)
+        if can_probe:
+            choice, default = probe_choice(role, hint, choice, candidates,
+                                           default, probed, failed)
+        if not choice:
+            print("left unset; re-run with --again to fill it in.")
+            continue
+        if is_free_tier(choice) and role != "implement":
+            # The probe can't catch this: it runs without --agent, which is
+            # exactly what free-tier ids refuse.
+            print(f"  ! {choice} looks free-tier, and free-tier models refuse "
+                  f"every custom agent — {role} will fail at review time.")
         roster[role] = {**(kept if isinstance(kept, dict) else {}), "model": choice}
     ROSTER.parent.mkdir(parents=True, exist_ok=True)
     ROSTER.write_text(json.dumps(roster, indent=2, sort_keys=True) + "\n")

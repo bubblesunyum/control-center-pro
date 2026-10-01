@@ -1,68 +1,40 @@
-<!-- tracks: scripts/codex-support.py .codex/hooks.json scripts/review.sh -->
+# Codex harness guidance
 
-# Codex adapter
+Use `AGENTS.md` for the workflow and `CLAUDE.md` for project standards. The
+shared procedures live in `.claude/skills/`; use their Beads and handoff steps.
 
-These instructions apply only to Codex. Follow `AGENTS.md` and read `CLAUDE.md`
-for project architecture and taste. The shared skill bodies and agent prompts
-remain written for Claude Code; use the mappings below in Codex.
-
-## Starting
-
-`.agents/skills/` links to `.claude/skills/`; edit a shared procedure only when
-the change is also intended for Claude Code. Put Codex-only differences here.
-
-The project hooks run the brief on startup, resume, clear and compaction, bring
-up the dashboard on startup/resume/clear, and stop it at SessionEnd. New or
-changed hooks must be reviewed and trusted in Codex's `/hooks` before they run.
-Also check for duplicate user-level Beads hooks there. Until the brief actually
-arrives, run `bash scripts/brief.sh` yourself. Do not add `bd prime` on top.
-
-## Completing work
+Run `bash scripts/brief.sh` if its output has not arrived through the startup
+hook. The brief supplies project state; generic `bd prime` and `bd codex-hook`
+instructions are not part of this harness. Changed project hooks require local
+trust in Codex before they run; the manual brief works without hooks.
 
 The repository authorizes local commits without another user request. Claim the
-bead before implementation and keep its status current. For each completed task,
-run the gate and independent review, commit only your changes with the bead id,
-then close the bead with the outcome before reporting completion. This applies
-to ordinary task replies, not only explicit handoffs. Leave unrelated work out
-of the commit. If blocked or paused, record the remaining work and return the
-bead to open using the handoff procedure. Push only when the user requests it.
+bead before implementation and keep its progress current. For each completed
+task, run the gate and independent review, commit only your changes with the
+bead id, then close the bead with the outcome before reporting completion.
+This applies to ordinary task replies as well as explicit handoffs. If paused
+or blocked, return the bead to open and note the remaining work. Push code branches only when the user requests it; follow the repository’s
+existing ledger-sync policy.
 
-## Shared skill mappings
+## Shared skills and reviewers
 
-- **workflow:** use `open_in_codex` with a browser target for the URL printed by
-  `scripts/dashboard.py up`. Claude's `preview_start` is not a Codex tool.
-  The cost figures and `context.py spend` describe Claude transcripts, not
-  Codex usage. Keep the real `.claude/memory-archive/` path when following the
-  shared memory archive procedure; do not invent a `.Codex/` replacement.
-- **agentic-review:** use `spawn_agent` with `agent_type` set to
-  `reviewer-taste` and `reviewer-correctness`. Run them in parallel; add
-  `reviewer-design` when anything on screen changes, with captures as required
-  by AGENTS.md. Codex inherits the host's model and reasoning settings, including
-  for the taste reviewer; do not pass Haiku or Sonnet as Codex model names.
-  If a running session has not loaded a new role yet, give a fresh default
-  subagent its `.claude/agents/<role>.md` prompt and the review packet path.
-  Use `scripts/review.sh --staged` when other work is present, after staging only
-  the intended change. Packets have unique paths; use the path the script prints.
-- **handoff:** write the shared handoff note and settle the ledger normally.
-  Use `create_thread` only when the user explicitly asks for a new sidebar task;
-  use `send_message_to_thread` for an existing task and `spawn_agent` for a
-  subtask of the current work. Do not translate `claude --bg` into a Codex CLI
-  command. Carry bead ids, remaining work and suggested skills in the handoff.
-- **beads / graphify:** use the shared CLI procedures. If a skill or reviewer is
-  added, removed or renamed, refresh Codex support with the command below.
+Read shared skills through `.agents/skills/`, whose relative directory links
+point to `.claude/skills/`. Edit the shared source when changing the procedure.
+`python3 scripts/codex-support.py write` refreshes links and reviewer TOML from
+`.claude/agents/`; `check` detects drift. The writer leaves project hooks alone
+and refuses to replace a copied skill until its contents have been reconciled.
 
-## Maintaining the adapter
+For the review pass, run each configured reviewer through `scripts/agent.py`.
+Start the applicable roles together so they independently inspect the same
+packet through OpenCode. A visual review requires an image-capable roster model;
+`scripts/agent.py` checks that capability before running it.
+If a role has no suitable model, or an OpenCode run exits non-zero, run it as a
+Codex subagent; a failed run is not a clean review. If a native role is
+unavailable, give a default subagent its `.claude/agents/<role>.md` prompt and
+the review packet.
+Use Codex's browser
+panel for dashboard URLs. Shared cost measurements describe Claude sessions.
+Keep the shared `.claude/memory-archive/` path. For handoffs, use Codex task tools
+only when the user requests a separate task; `claude --bg` is Claude-only.
 
-`python3 scripts/codex-support.py write` regenerates `.codex/agents/*.toml`,
-`.codex/hooks.json` and skill links. It preserves shared agent prompt bodies and
-does not copy Claude's model aliases or tool allowlists into Codex config.
-`check` detects drift without writing; the verify gate runs it and its isolated
-regression tests. The generator refuses to overwrite a copied skill directory:
-reconcile that content before replacing it with a link.
-
-Codex support does not change Claude settings or its model choices. Hook trust
-is user-local and is never bypassed by this adapter.
-
-Official references: [skills](https://learn.chatgpt.com/docs/build-skills),
-[custom agents](https://learn.chatgpt.com/docs/agent-configuration/subagents),
-[hooks](https://learn.chatgpt.com/docs/hooks).
+Skill links follow the [official Codex skill guidance](https://learn.chatgpt.com/docs/build-skills).

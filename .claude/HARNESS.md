@@ -4,14 +4,11 @@
   .claude/agents/reviewer-design.md
   .claude/agents/reviewer-taste.md
   .claude/skills/workflow/SKILL.md
-  .codex/hooks.json
   scripts/agent.py
   scripts/brief.sh
-  scripts/codex-support.py
   scripts/context.py
   scripts/opencode-agents.py
   scripts/review.sh
-  scripts/test-codex-support.py
   scripts/verify.sh
 -->
 
@@ -30,13 +27,16 @@ how the pieces fit together.
   discoveries go there, not into TodoWrite or markdown TODOs. It is the thing
   that survives a session ending, so a bead that's still `open` mid-implementation
   is a ledger that's lying.
+  `scripts/ledger-push.sh` regenerates the tracked `.beads/issues.jsonl` (with
+  memories) on every push — the Dolt ref is the primary transport, the JSONL is
+  what a fresh clone hydrates from, so the file stays committed, never ignored.
 - **Skills:** `.claude/skills/` — `workflow` (the hub), `agentic-review`,
   `beads`, `handoff`. Each costs a description line until invoked; bodies are
   free until then. Add project-specific ones (how to build and drive the app,
   how to add a source file) as you learn what they are.
-- **Reviewers:** `.claude/agents/` — `reviewer-taste` (Sonnet 5 at high
-  effort), `reviewer-correctness` and `reviewer-design` (Opus 5.5 at low
-  effort), run against a
+- **Reviewers:** `.claude/agents/` — `reviewer-taste`,
+  `reviewer-correctness` and `reviewer-design`, each on the model its
+  frontmatter names, run against a
   packet from `scripts/review.sh`. Design reads screenshots rather than the
   diff, because a diff can't show you clipping. The packet carries untracked
   files too, and stages nothing to do it; its captures are dated from the
@@ -48,10 +48,8 @@ how the pieces fit together.
   `.opencode/agent/` holds the reviewers translated into opencode's dialect by
   `scripts/opencode-agents.py`. See below — two of the obvious moves here are
   traps.
-- **Gate:** `scripts/verify.sh` — a stale-plan refresh, build, tests, optional
-  smoke, plus doc staleness. Tiny output on purpose. Every step runs through
-  `step`, including the plan guard: one that failed silently would surface a
-  line later as the compile error it exists to prevent.
+- **Gate:** `scripts/verify.sh` — build, tests, optional smoke, plus doc
+  staleness. Tiny output on purpose.
 - **Dashboard:** `scripts/dashboard.py` serves a live diagram at localhost:7391.
   It never opens a browser itself. It publishes the live port to
   `.claude/launch.json` and prints the link with the instruction to open it in
@@ -94,6 +92,17 @@ block is left for a hand merge, and reviewer sources come with follow-ups — th
 generated agent copies, the hashes, the gate — because the merge is half the
 job.
 
+Some drift is a fork, not a missed fix: a dashboard chip, a widened review
+scope, a generator with project hooks. That stays stale forever under the
+check above, and a warning nobody can clear is one that stops being read.
+`harness/diverged.txt` is the acknowledgment — one path per line, committed,
+with the reason after `#`. `harness update` shows acknowledged files for the
+record but no longer fails on them, and `--apply` never writes them;
+`harness diverge <file>` appends with validation (a real, differing contract
+file only). An entry that matches no template file fails loudly instead, so a
+typo can't silently un-acknowledge the fork it meant. Delete the line to
+un-acknowledge.
+
 The comparison has to allow for the installer's own post-copy edits, or every
 fresh install reads as stale: `bd init` leaves managed blocks in `AGENTS.md`,
 and the tidier rewrites `.claude/settings.json` through `json.dumps`, reordering
@@ -101,44 +110,31 @@ every key. Both are normalised away on both sides. The gate has a step that
 installs into a throwaway repo and asserts the result reads as current, because
 that particular false alarm is invisible in the diff that causes it.
 
-## Codex shares the prompts and skills
+## Stack guidance ships only where the stack is
 
-Codex loads `AGENTS.md`; that file explicitly directs it to read `CLAUDE.md` for
-project standards. Do not rename those standards in a translated copy.
-`.agents/skills/*` are relative directory links to `.claude/skills/*`, including
-Beads and its metadata. Codex supports symlinked skills, so an edit has one home
-and a fresh checkout discovers the same five procedures.
+The reviewers' generic checks used to include force unwraps, retain cycles and
+`List` rows, because the starter grew up on a Swift project. In a web project
+those lines sent reviewers hunting for bugs the code couldn't have. So the
+reviewers stay platform-neutral, and the platform checks live in
+`harness/stacks/<name>.md`, one file per stack, each with a section per
+reviewer. A reviewer reads the sections for the stacks `harness/stacks.txt`
+lists.
 
-`.codex/agents/*.toml` are generated from `.claude/agents/*.md` by
-`python3 scripts/codex-support.py write`. Only the name, description and prompt
-are translated. Model, reasoning and sandbox settings inherit the Codex host;
-Claude's model aliases and tool allowlists are not copied as configuration.
-The gate checks generated agents, orphaned generated roles, skill links, and
-repository hooks. It also runs isolated regression checks. Codex TOML and skill
-metadata are included in the review packet.
+`harness add` detects the stacks once, from markers that can't mean anything
+else, and writes the list. From then on the list belongs to the project. A
+wrong guess is fixed by editing it, and `add` never detects over it again,
+so a correction stays put. The stack files are contract files: they come from
+the starter, `update` keeps them current, and a project's own recurring bugs
+go in the reviewers' FILL THIS IN blocks instead. A new stack is one file in
+`template/harness/stacks/` plus a marker in `harness_detect_stacks`.
 
-The same generator owns `.codex/hooks.json`. SessionStart supplies
-`scripts/brief.sh --hook` on startup, resume, clear and compact; the JSON envelope
-is supported by both Claude Code and Codex. Startup/resume/clear also bring up
-the dashboard, and SessionEnd stops it. Commands resolve the git root so opening
-a session in a subdirectory still works. Generic `bd codex-hook` context hooks
-are replaced, not combined with the brief. Re-running `bd setup codex` can
-restore them; the gate detects that drift.
+## Codex context
 
-Hooks are configured, not silently trusted. Codex requires the project and each
-new or changed hook definition to be trusted. Review them through `/hooks` in
-the Codex CLI, and check for duplicate user-level hooks there too. This repo does
-not edit global configuration or bypass trust. Until hooks run, AGENTS.md's manual
-brief fallback applies. New agent definitions may need a fresh Codex session;
-an existing session can give the source prompt to a default subagent.
-
-The context cost and transcript measurements in `scripts/context.py` describe
-Claude Code. Shared skill links add no second instruction copy, but these
-measurements do not establish Codex's total context or spend.
-
-Compatibility references: [Codex skills](https://learn.chatgpt.com/docs/build-skills),
-[custom agents](https://learn.chatgpt.com/docs/agent-configuration/subagents), and
-[hooks](https://learn.chatgpt.com/docs/hooks).
+The template supplies `.codex/hooks.json` to run the existing project brief and
+`harness/codex.md` for Codex task completion guidance. The installer removes
+generated Beads instruction blocks and replaces generic Beads context hooks,
+preserving unrelated hooks. Re-running it does not restore `bd prime` policy.
+Codex hook trust remains local; run the brief manually until the hook is trusted.
 Claude and OpenCode keep their existing startup configuration.
 
 ## Why it's shaped this way
@@ -191,17 +187,17 @@ rather than a judgment call — a SessionStart hook the harness didn't install, 
 bd managed block outside AGENTS.md, and a doc whose sources moved without it.
 
 That count was also, for a while, quietly reassuring about the wrong number.
-It measures what this *repo* adds, and reported ~4k while every real session
-opened at ~54k — the missing 50k being Claude Code's own system prompt, its
-tool schemas and whatever MCP connectors the app has enabled. None of that is
-readable from a file in the checkout, so it was invisible to a checker that
-only ever read files. It is readable from the session transcripts, which record
-what each turn actually cost, so `context.py` now measures the floor there and
-prints the repo's share inside it. `context.py spend` breaks the same
-transcripts down per session, because the two halves of the bill argue for
-different fixes: a short session is ~80% floor and wants fewer connectors, a
-long one is mostly accumulated conversation and wants its wide reads pushed
-into subagents.
+It measures what the repo adds, and — measured on one project — reported ~4k
+while every real session opened at ~54k: the missing ~50k being Claude Code's
+own system prompt, its tool schemas and whatever MCP connectors the app has
+enabled. None of that is readable from a file in the checkout, so it was
+invisible to a checker that only ever read files. It is readable from the
+session transcripts, which record what each turn actually cost, so `context.py`
+now measures the floor there and prints the repo's share inside it.
+`context.py spend` breaks the same transcripts down per session, because the
+two halves of the bill argue for different fixes: a short session is ~80%
+floor and wants fewer connectors, a long one is mostly accumulated
+conversation and wants its wide reads pushed into subagents.
 
 ## opencode gets a config and generated agents, never a symlink
 
@@ -235,7 +231,7 @@ roster still picks the model everywhere a model is actually chosen:
 `scripts/agent.py` passes it as `-m`.
 
 A role's roster entry may add a `variant` — the provider's reasoning effort,
-such as `xhigh` — which becomes agent.py's `--variant`. Only there: no
+such as `xhigh` — which agent.py sends as `-m provider/model#variant`. Only there: no
 generated file carries one, and `implement` runs opencode's own build agent,
 which has no generated file at all.
 
@@ -244,11 +240,16 @@ reviewers; the roster names `scripts/agent.py`'s; opencode's generated agents
 and Codex inherit the session's and the host's. A model named in one path says
 nothing about the others.
 
-**`scripts/agent.py` is how any tool reaches the roster.** It runs one role
-through `opencode run` — so Claude Code can put its reviewers, and delegated
-implementation, on another provider's bill without the packet ever entering its
-own context. Three behaviours of `opencode run` shaped it, all found by running
-it:
+**`scripts/agent.py` is how every tool except opencode reaches the roster.**
+
+It runs one role through `opencode run` — so Claude Code can put its
+reviewers, and delegated implementation, on another provider's bill without
+the packet ever entering its own context. Inside opencode itself, reviewers
+always run as native subagents on the session model — no reviewer is ever
+routed through `agent.py` from an opencode session. (Delegated implementation
+is the exception: the `delegate` skill sends it through `agent.py` from any
+tool, for the roster model.) Three behaviours of `opencode run` shaped it, all
+found by running it:
 
 - `--agent` given a `mode: subagent` agent prints a warning and falls back to
   the default agent, so the reviewer runs without its prompt. The script
@@ -262,10 +263,14 @@ it:
   without it — including reads outside the project, which is where review.sh
   puts the packet. Reviewers are granted `/tmp`, and any other refusal makes
   the script exit non-zero rather than pass on a reply written blind.
+- `reviewer-design` checks its selected model for image input before running:
+  the legacy `opencode models --verbose` lookup first, then opencode's cached
+  models.dev catalog (v2 dropped the flag). Unknown or text-only models fail,
+  leaving the visual pass to the native reviewer instead of accepting a blind reply.
 
 The revision cap lives in the script rather than in the `delegate` skill's prose
 because guidance is what a long thread erodes first. It counts the session's
-messages back out of `opencode export`, so there is no counter file to lose.
+messages back out of `opencode session export`, so there is no counter file to lose.
 
 **There is no session-start hook to write.** opencode's plugin hooks are
 `event`, `chat.message`, `chat.params`, `chat.headers`, `chat.completion`,
@@ -282,6 +287,17 @@ costs nothing and says what the harness intends. `HARNESS.md` is deliberately
 not in the list: it is the rationale, read when the pieces are being rearranged,
 and always-loading it in one tool and not the other would put the two sessions
 on different budgets while `context.py` counted neither.
+
+The root `opencode.json` is the single source of truth for both keys —
+`instructions` and any `plugin` entries. A `.opencode/opencode.json` shadows
+it: opencode reads only the deeper file when both exist, so a copy carrying a
+plugin but no `instructions` silently unloads `AGENTS.md`, and a copy
+duplicating either key hides drift the contract check never compares, because
+it tracks only the root file. `harness update` fails the check on both — a missing
+`instructions` list, or a copy duplicating either key — and `harness add` merges the root
+instructions into an existing shadow. `.opencode/tui.json` carries UI
+overrides only and must not hold plugin entries; plugin configuration lives in
+the root file.
 
 ## Staleness is the failure review can't catch
 

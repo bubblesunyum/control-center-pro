@@ -15,6 +15,8 @@ Run the project brief if its output has not arrived through the startup hook:
 bash scripts/brief.sh
 ```
 
+In this harness `scripts/brief.sh` is the session start — prefer it over `bd prime`, which is the generic fallback.
+
 If the brief fails, check the workspace below and report the failure. Follow the repository workflow rather than loading generic Beads context:
 
 ```bash
@@ -75,5 +77,6 @@ Use agent-local planning tools only for the current turn's execution checklist. 
 
 - Do not create markdown TODO files as the source of truth when Beads is available.
 - Do not use `bd edit`; it opens an interactive editor. Use `bd update` flags instead.
+- `bd delete` without `--force` only previews and still exits 0 — pass `--force` to actually delete.
 - Prefer `--json` when parsing `bd` output programmatically.
 - Close tasks only when the work is actually complete; update claims and progress as work proceeds.

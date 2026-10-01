@@ -4,42 +4,47 @@
     ".claude/agents/reviewer-correctness.md": "fed46aa1a8c1bdac",
     ".claude/agents/reviewer-design.md": "6a3b5541dbf2d392",
     ".claude/agents/reviewer-taste.md": "775f61926ffda44f",
-    ".claude/skills/workflow/SKILL.md": "d00d3dc8cda08ec5",
-    ".codex/hooks.json": "9ebe2492ec7aec62",
-    "doc": "45a58df7e57f7614",
-    "scripts/agent.py": "ea1859cf36a6f1be",
-    "scripts/brief.sh": "2480824f8bfe8220",
-    "scripts/codex-support.py": "6f5ff28e0ea19f1d",
-    "scripts/context.py": "1758842ffc4bf3a1",
-    "scripts/opencode-agents.py": "1b55c0b1b177666f",
+    ".claude/skills/workflow/SKILL.md": "b0d1c23e3b294f10",
+    "doc": "984d1a4cb54b6634",
+    "scripts/agent.py": "9d06600351b2f27f",
+    "scripts/brief.sh": "300ea9724dfd779c",
+    "scripts/context.py": "57de2a6ebb1adea9",
+    "scripts/opencode-agents.py": "838b979d27801c74",
     "scripts/review.sh": "72ef17f668ab8bc0",
-    "scripts/test-codex-support.py": "9ee2042a42cb4514",
-    "scripts/verify.sh": "7bfca5b876cf1b29"
+    "scripts/verify.sh": "9a95640b7b594361"
   },
   ".claude/skills/agentic-review/SKILL.md": {
     ".claude/agents/reviewer-correctness.md": "fed46aa1a8c1bdac",
+    ".claude/agents/reviewer-design.md": "6a3b5541dbf2d392",
     ".claude/agents/reviewer-taste.md": "775f61926ffda44f",
-    "doc": "7fca8d852ecf8bfe",
-    "scripts/agent.py": "ea1859cf36a6f1be",
+    "doc": "ce2ea257bcab319e",
+    "scripts/agent.py": "9d06600351b2f27f",
     "scripts/review.sh": "72ef17f668ab8bc0"
   },
   ".claude/skills/delegate/SKILL.md": {
     "doc": "73e5637e16ffd9a3",
-    "scripts/agent.py": "ea1859cf36a6f1be"
+    "scripts/agent.py": "9d06600351b2f27f"
   },
   ".claude/skills/handoff/SKILL.md": {
     "doc": "7fec5b9a76db6581",
-    "scripts/brief.sh": "2480824f8bfe8220"
+    "scripts/brief.sh": "300ea9724dfd779c"
+  },
+  ".claude/skills/orchestrate/SKILL.md": {
+    "doc": "ddfcbd64ef8f8a7a",
+    "scripts/agent.py": "9d06600351b2f27f",
+    "scripts/brief.sh": "300ea9724dfd779c",
+    "scripts/review.sh": "72ef17f668ab8bc0",
+    "scripts/verify.sh": "9a95640b7b594361"
   },
   ".claude/skills/workflow/SKILL.md": {
-    "doc": "d00d3dc8cda08ec5",
+    "doc": "b0d1c23e3b294f10",
     "\u2026": ""
   },
   "AGENTS.md": {
-    "doc": "1d3f53f7852d20c9",
-    "scripts/brief.sh": "2480824f8bfe8220",
+    "doc": "89419f2ab783633b",
+    "scripts/brief.sh": "300ea9724dfd779c",
     "scripts/review.sh": "72ef17f668ab8bc0",
-    "scripts/verify.sh": "7bfca5b876cf1b29"
+    "scripts/verify.sh": "9a95640b7b594361"
   },
   "CLAUDE.md": {
     "Package.swift": "4c855256d0b077b2",

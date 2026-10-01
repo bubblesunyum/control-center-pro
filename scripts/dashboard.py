@@ -5,7 +5,7 @@
     scripts/dashboard.py up          # the same thing, spelled the way the hooks call it
     scripts/dashboard.py serve      # stay in the foreground instead (ctrl-c to stop)
     scripts/dashboard.py snapshot   # just write dashboard/state.json
-    scripts/dashboard.py shot [png] # photograph it, for the design review pass
+    scripts/dashboard.py shot [png] [state ...]  # photograph it, for the design review pass
     scripts/dashboard.py --port N   # serve somewhere else
 
 Backgrounding is the default because of who runs this: a hook at the end of a
@@ -22,10 +22,12 @@ its own polling. The snapshot form exists for the Stop hook, which leaves
 a readable file behind even when nothing is serving.
 """
 
+import datetime
 import http.server
 import json
 import os
 import re
+import shutil
 import signal
 import socket
 import subprocess
@@ -37,17 +39,40 @@ from pathlib import Path
 import urllib.request
 from urllib.parse import parse_qs, unquote, urlparse
 
-ROOT = Path(__file__).resolve().parent.parent
+
+def _project_root():
+    """The checkout this server describes, asked of git rather than of this
+    file's own path — the script's location only equals the checkout when it
+    is installed where it was developed. Falls back to the working directory,
+    which is where the hooks and the background child start from."""
+    try:
+        r = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                           capture_output=True, text=True, timeout=10,
+                           cwd=Path(__file__).resolve().parent)
+        top = (r.stdout or "").strip()
+        if r.returncode == 0 and top:
+            return Path(top)
+    except Exception:
+        pass
+    return Path.cwd()
+
+
+ROOT = _project_root()
 
 
 def _bd_prefix():
     """The ledger's bead prefix, asked of the ledger itself at runtime — the
     installer used to bake it into this file, which made every copy differ and
-    un-updatable. The ledger is the one source of truth for it."""
+    un-updatable. The ledger is the one source of truth for it.
+
+    Read off `bd list`, never `bd config get` or `bd info`: both auto-import a
+    stale .beads/issues.jsonl when the ledger looks stale to them, resurrecting
+    deleted beads (har-67c). `bd list` never imports."""
     try:
-        r = subprocess.run(["bd", "config", "get", "issue_prefix"],
+        r = subprocess.run(["bd", "list", "--json", "--all"],
                            capture_output=True, text=True, timeout=10, cwd=ROOT)
-        got = (r.stdout or "").strip()
+        ids = json.loads(r.stdout or "[]")
+        got = str((ids[0].get("id", "") if ids else "").split("-", 1)[0]) if ids else ""
         if r.returncode == 0 and re.fullmatch(r"[a-z0-9]{1,10}", got):
             return got
     except Exception:
@@ -279,11 +304,43 @@ def ledger_state():
     # Neither is claimable: backlog is work deliberately not being done next,
     # and a needs-human bead is one a session already declined to guess at.
     # Both stay out of ready for the same reason they stay out of the brief.
-    ready = bd_json("ready", "--exclude-label", "backlog",
-                    "--exclude-label", "needs-human")
-    ready_ids = {i["id"] for i in ready}
+    #
+    # `available` is the absence half of this state: no `bd` on PATH means no
+    # ledger lanes, not empty ones. The bd reads below already degrade to
+    # empty output on their own (run/bd_json swallow failures), so this flag
+    # is what tells the page the difference between "nothing to do" and
+    # "nothing to ask" — the panels vanish on the former, never on a traceback.
+    available = shutil.which("bd") is not None
+    #
+    # One engine spin, not three: `bd list --all` already carries the labels,
+    # dependencies, parents and sparse flags ready-ness and staleness judge
+    # on, so both derive from its payload. Each derivation declines exotic
+    # graphs by returning None, and the old spawn answers those instead —
+    # a second Dolt engine is cheaper than a confident wrong board.
+    all_issues = bd_json("list", "--all", "--limit", "0")
+    ready_ids = derive_ready_ids(all_issues)
+    if ready_ids is None:
+        ready = bd_json("ready", "--exclude-label", "backlog",
+                        "--exclude-label", "needs-human")
+        ready_ids = {i["id"] for i in ready}
+    # The board's backlog strip reads the same inheritance the ready
+    # derivation does (see _grow_down): a child of shelved work renders
+    # under backlog, not as a card of its own.
+    # Needs-human seeds stay open-only: a closed one is finished work, not
+    # shelved work, and the strip is no place for history. Backlog seeds
+    # keep every status, as before — a closed backlog bead was always shelved.
+    backlog_ids = _grow_down(
+        {i["id"]: _parent_ids(i) for i in all_issues},
+        {i["id"] for i in all_issues
+         if "backlog" in (i.get("labels") or []) or
+         ("needs-human" in (i.get("labels") or []) and
+          i.get("status") == "open")})
+    # The bd-ready fallback above answers own labels only; without this one
+    # id could be both ready and backlog and the count would drift from the
+    # board. Harmless on the derived path, where shelved never made ready.
+    ready_ids -= backlog_ids
     issues = []
-    counts = {"open": 0, "ready": len(ready), "in_progress": 0, "closed": 0, "blocked": 0}
+    counts = {"open": 0, "ready": len(ready_ids), "in_progress": 0, "closed": 0, "blocked": 0}
 
     def blockers(issue, parent):
         """The ids this issue waits on. Belonging to an epic is not being blocked
@@ -292,19 +349,20 @@ def ledger_state():
         child looks stuck."""
         out = []
         for d in issue.get("dependencies") or []:
-            got = d.get("depends_on_id") or d.get("id") or "" if isinstance(d, dict) else d
+            got = _dep_target(d)
             if got and got != parent:
                 out.append(got)
         return out
 
     # One call, not four. `bd list --all` returns closed alongside everything
     # else and carries labels, description, design and notes inline — which is
-    # also what retired the separate `--label review` query. Each bd invocation
+    # also what retired the separate `--label review` query, and now the
+    # `bd ready` and `bd stale` ones too. Each bd invocation
     # spins up an embedded Dolt engine, and that cost is what once made the
     # server fall behind its own polling.
     # --limit 0, because bd's default is 50 and the board silently losing beads
     # past that would look like work disappearing rather than a truncated query.
-    for i in bd_json("list", "--all", "--limit", "0"):
+    for i in all_issues:
         status = i.get("status", "open")
         counts[status] = counts.get(status, 0) + 1
         parent = i.get("parent") or ""
@@ -320,7 +378,7 @@ def ledger_state():
             # review, and inventing a status would mean teaching every other
             # command about it.
             "in_review": "review" in labels,
-            "backlog": "backlog" in labels,
+            "backlog": i["id"] in backlog_ids,
             "labels": labels,
             "priority": i.get("priority", 2),
             "type": i.get("issue_type", "task"),
@@ -358,8 +416,188 @@ def ledger_state():
     # closed beads would then suggest nothing — so the full set rides along.
     # Computed before the closed-bead trim below, which is what would hide them.
     all_labels = sorted({l for i in issues for l in (i.get("labels") or [])})
-    return {"counts": counts, "issues": issues, "stale": cached_stale(),
-            "all_labels": all_labels}
+    return {"counts": counts, "issues": issues, "stale": cached_stale(all_issues),
+            "all_labels": all_labels, "available": available}
+
+
+# Dependency types that never block. Proved inert against bd 1.1.2 on scratch
+# ledgers, and excluded from the blocking predicate bd itself promises not
+# to widen (issueops/blockedstate.go: only blocks/conditional-blocks edges,
+# parent-child inheritance and waits-for gates block). Anything unlisted
+# here makes the derivation decline rather than guess.
+INERT_DEP_TYPES = frozenset({
+    "parent-child", "related", "tracks", "supersedes", "validates",
+    "caused-by", "discovered-from", "relates-to", "until",
+})
+
+# Issue types `bd ready` never returns: workflow machinery (gate, molecule),
+# its review/rig plumbing (merge-request, rig), and the infra beads
+# `bd list --include-infra` names (agent, role, message). Read off the
+# ready-work WHERE clause (internal/storage/sqlbuild/ready.go).
+READY_EXCLUDE_TYPES = frozenset({
+    "merge-request", "gate", "molecule", "rig", "agent", "role", "message",
+})
+
+# The labels ledger_state keeps out of ready, the same pair the `bd ready`
+# fallback is spawned with.
+READY_EXCLUDE_LABELS = frozenset({"backlog", "needs-human"})
+
+# Stored statuses bd 1.x uses. Anything else is a custom status, which `bd
+# ready` may treat as ready-eligible — derivation cannot judge it, so it
+# does not try.
+READY_KNOWN_STATUSES = frozenset({"open", "in_progress", "closed", "blocked", "deferred"})
+
+# `bd ready` answers at most 100 rows and `bd stale` 50 unless told
+# otherwise; past that a derived set and a spawned one stop agreeing, so
+# the derivation declines and the spawn answers.
+READY_LIMIT = 100
+STALE_LIMIT = 50
+
+# Days of silence before the board calls a bead stale. Kept beside the
+# derivation so it cannot drift from the `bd stale --days` fallback.
+STALE_DAYS = 14
+
+
+def _bd_time(value):
+    """Epoch seconds for a bd timestamp, or None when it cannot be read. bd
+    writes RFC 3339 (`...Z`) through the CLI and bare SQL
+    (`YYYY-MM-DD HH:MM:SS`, always UTC) through the back door."""
+    if not value:
+        return None
+    try:
+        dt = datetime.datetime.fromisoformat(str(value).strip())
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    return dt.timestamp()
+
+
+def _dep_target(dep):
+    if isinstance(dep, dict):
+        return dep.get("depends_on_id") or dep.get("id") or ""
+    return dep or ""
+
+
+def _parent_ids(issue):
+    """Who this bead hangs under. The parent column and the parent-child
+    edges agree in practice; either alone would miss a half-written row."""
+    out = set()
+    if issue.get("parent"):
+        out.add(issue["parent"])
+    for d in issue.get("dependencies") or []:
+        if isinstance(d, dict) and d.get("type") == "parent-child":
+            target = _dep_target(d)
+            if target:
+                out.add(target)
+    return out
+
+
+def _grow_down(parents, seeds):
+    """Everything hung under a seed, seeds included. Backlog and needs-human
+    travel down the parent chain — a child of shelved work is shelved work,
+    whatever its own labels say. Both the blocked and the shelved sets in
+    derive_ready_ids propagate through this helper."""
+    got = set(seeds)
+    grown = True
+    while grown:
+        grown = False
+        for bead, bead_parents in parents.items():
+            if bead not in got and bead_parents & got:
+                got.add(bead)
+                grown = True
+    return got
+
+
+def derive_ready_ids(all_issues):
+    """Ready ids from one `bd list --all` payload, or None when it holds
+    something only `bd ready` can judge. Mirrors the ready-work WHERE clause
+    and the blocking predicate behind it: bd derives is_blocked per mutation
+    and never ships it in list JSON, so it is recomputed here from the edges
+    — a blocks-edge onto a live target, inherited down the hierarchy.
+    Verified against bd 1.1.2 on scratch ledgers, exotic corners included
+    (related/until/deferred/pinned/ephemeral/parent-child)."""
+    by_id = {i["id"]: i for i in all_issues}
+    now = time.time()
+    deferred = set()
+    for i in all_issues:
+        if i.get("status") not in READY_KNOWN_STATUSES:
+            return None
+        due = i.get("defer_until")
+        if due:
+            at = _bd_time(due)
+            if at is None:
+                return None
+            if at > now:
+                deferred.add(i["id"])
+    blocked = set()
+    for i in all_issues:
+        for d in i.get("dependencies") or []:
+            dtype = d.get("type") if isinstance(d, dict) else "blocks"
+            if dtype in INERT_DEP_TYPES:
+                continue
+            if dtype != "blocks":
+                # conditional-blocks, waits-for and whatever comes next block
+                # on terms this payload cannot see.
+                return None
+            target = _dep_target(d)
+            if not target or target not in by_id:
+                # external: refs and dangling edges resolve inside bd.
+                return None
+            seen = by_id[target]
+            if seen.get("status") not in READY_KNOWN_STATUSES:
+                return None
+            if seen.get("status") == "closed" or seen.get("pinned"):
+                continue
+            blocked.add(i["id"])
+            break
+    parents = {i["id"]: _parent_ids(i) for i in all_issues}
+    blocked = _grow_down(parents, blocked)
+    # Backlog and needs-human travel down the parent chain: har-whx.5 read
+    # ready under backlog har-whx because only own labels were checked.
+    shelved = _grow_down(parents, {i["id"] for i in all_issues
+                                   if READY_EXCLUDE_LABELS & set(i.get("labels") or [])})
+    ready = set()
+    for i in all_issues:
+        if i.get("status") != "open":
+            continue
+        if i.get("pinned") or i.get("ephemeral"):
+            continue
+        if i["id"] in deferred or parents[i["id"]] & deferred:
+            continue
+        if i.get("issue_type") in READY_EXCLUDE_TYPES:
+            continue
+        if i["id"] in shelved:
+            continue
+        if i["id"] in blocked:
+            continue
+        ready.add(i["id"])
+    if len(ready) > READY_LIMIT:
+        return None
+    return ready
+
+
+def derive_stale_count(all_issues):
+    """What `bd stale --days STALE_DAYS` would count, or None when the payload cannot
+    say. bd's stale scope is open plus in_progress older than the cutoff,
+    minus ephemeral rows. bd 1.1.2 has no leases table, so there is no
+    heartbeat clause to mirror — if a later bd stales around heartbeats,
+    this is where that divergence would show."""
+    cutoff = time.time() - STALE_DAYS * 86400
+    n = 0
+    for i in all_issues:
+        if i.get("status") not in ("open", "in_progress"):
+            continue
+        if i.get("ephemeral"):
+            continue
+        at = _bd_time(i.get("updated_at"))
+        if at is None:
+            return None
+        if at < cutoff:
+            n += 1
+    if n >= STALE_LIMIT:
+        return None
+    return n
 
 
 # How long a stale count is reused before another `bd stale` is spawned.
@@ -367,18 +605,23 @@ STALE_TTL = 300.0
 _stale = {"n": 0, "at": 0.0}
 
 
-def cached_stale():
+def cached_stale(all_issues):
     if time.time() - _stale["at"] > STALE_TTL:
-        _stale["n"] = len(bd_json("stale", "--days", "14"))
+        # Counted off the listing already in hand; the spawn survives only
+        # for graphs the derivation declines to judge.
+        n = derive_stale_count(all_issues)
+        _stale["n"] = n if n is not None else len(bd_json("stale", "--days", str(STALE_DAYS)))
         _stale["at"] = time.time()
     return _stale["n"]
 
 
-# SwiftPM prints no verdict line — a successful `swift build` says nothing at
-# all — so this stays a pattern that matches nothing and the error-line fallback
-# below does the work. Give it a real pattern if we ever move to xcodebuild,
-# which wants r"\*\* (?:BUILD|TEST) (SUCCEEDED|FAILED) \*\*".
-VERDICT = r"(?!)"
+# Your build tool's success/failure line lives in dashboard.toml, beside the run
+# table — [verdict] pattern, e.g. '\*\* (?:BUILD|TEST) (SUCCEED|FAIL)[A-Z]* \*\*'
+# for xcodebuild. Missing means r"(?!)", a pattern that matches nothing, and the
+# error-line fallback in log_ok is what runs then. It lives in the toml rather
+# than here so this file stays byte-identical everywhere: per-project answers
+# belong in project-owned files, never in shipped ones.
+DEFAULT_VERDICT = r"(?!)"
 
 
 def ago_for(at):
@@ -405,10 +648,10 @@ def log_ok(text):
     """The text fallback for a step with no status file beside its log. A build
     tool's own verdict wins where it prints one. Counting "error:" lines does
     not work on its own: a passing test run logs dozens from the app's output,
-    and reading those as failures marks a green suite red. Add your toolchain's
-    verdict line to VERDICT. Empty still fails: a step that never ran must not
-    read green."""
-    verdict = re.findall(VERDICT, text)
+    and reading those as failures marks a green suite red. Set your toolchain's
+    verdict line as [verdict] pattern in dashboard.toml. Empty still fails: a
+    step that never ran must not read green."""
+    verdict = re.findall(verdict_pattern(), text)
     if verdict:
         return verdict[-1].upper() in ("SUCCEEDED", "PASSED", "OK")
     return bool(text.strip()) and not re.search(r"\berror:", text)
@@ -581,7 +824,12 @@ HARNESS = [
         (str(MEMORY_DIR / "*.md"), "claude", "a memory: what was true when it was written"),
     ]),
     ("ledger", "where work is found and left", [
-        (".beads/issues.jsonl", "harness", "the issue graph, exported for git"),
+        # issues.jsonl only exists when the ledger's JSONL export is enabled
+        # (bd ships it disabled); it is a readable copy for diffs, never the
+        # transport — git carries the ledger as the Dolt ref, pushed by
+        # scripts/ledger-push.sh. A row for a file that isn't there is simply
+        # not drawn (see resolve), so this never sends anyone looking for one.
+        (".beads/issues.jsonl", "harness", "the issue graph, as a readable export"),
         (".claude/skills/beads/SKILL.md", "harness", "the bd surface, on demand"),
         (".claude/skills/workflow/SKILL.md", "harness", "how work moves through the system"),
     ]),
@@ -815,16 +1063,46 @@ def commit(message, amend):
     return {"ok": r.returncode == 0, "error": "" if r.returncode == 0 else (r.stderr or r.stdout).strip()[:300]}
 
 
-# The board's own writes: filing a bead and dragging one between lanes. Like
-# TASKS and the work-tree actions, these run fixed `bd` invocations — nothing
-# in a request reaches a shell, and the id, lane and labels are validated
-# before they get near one.
-# Bead ids are validated by bead_re() above, against the runtime prefix.
+# The board's own writes: filing a bead, editing one, closing one, and
+# dragging one between lanes. Like the run table and the work-tree actions,
+# these run fixed `bd` invocations — nothing in a request reaches a shell, and
+# the id, lane and labels are validated before they get near one. Bead ids are
+# checked against bead_re(), the ledger's own prefix resolved at runtime — and
+# then against the ids in the current snapshot, so a request can never name a
+# bead the board isn't showing.
 # The lanes a card can be dropped on. Kept in step with DROP_LANES and the
 # backlog strip's data-drop in dashboard/index.html by hand — the page can't
 # read this table, so a lane added here needs adding there too.
 MOVE_LANES = ("ready", "blocked", "in_progress", "review", "done", "backlog")
 LABEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+
+
+def snapshot_bead_ids():
+    """The ids a bead write may name: the ones in the current snapshot.
+
+    Falls back to a live ledger read before the first build finishes, rather
+    than refusing every write until then — those are the same rows the board
+    is about to show, so nothing unnamed gets through either way."""
+    data = _snapshot["data"]
+    if data:
+        try:
+            return {i["id"] for i in data["ledger"]["issues"]}
+        except (KeyError, TypeError):
+            pass
+    try:
+        return {i["id"] for i in ledger_state()["issues"]}
+    except Exception:
+        return set()
+
+
+def bead_id_error(bead):
+    """Why this id may not be written to, or "" when it may. Format first
+    (cheap, no snapshot needed), then membership in what the board shows."""
+    if not isinstance(bead, str) or not bead_re().match(bead):
+        return "not a bead id"
+    if bead not in snapshot_bead_ids():
+        return "the board isn't showing that bead"
+    return ""
 
 
 def bd_run(*args):
@@ -899,8 +1177,9 @@ def move_bead(payload):
     bead = bead.strip() if isinstance(bead, str) else ""
     lane = payload.get("lane")
     lane = lane.strip() if isinstance(lane, str) else ""
-    if not bead_re().match(bead):
-        return {"ok": False, "error": "not a bead id"}
+    bad = bead_id_error(bead)
+    if bad:
+        return {"ok": False, "error": bad}
     if lane not in MOVE_LANES:
         return {"ok": False, "error": "not a bead lane"}
     # A drag lands a bead in a lane, whatever it was before. Reopening
@@ -934,33 +1213,95 @@ def move_bead(payload):
     return {"ok": True}
 
 
-# The loops a human still triggers by hand. Kept as a fixed table rather than
-# anything the page can name, so the only commands this server will ever run are
-# the ones written here. It is also the only place a run button is described:
-# label, the label while it's going, and where on the page it belongs. The page
-# draws slots from this and names no task of its own.
+def update_bead(payload):
+    """Retitle and/or reprioritise a bead from its sheet. Status moves travel
+    through move_bead (the lane buttons and the drop handler share it); this
+    is the two fields no lane stands for. One fixed `bd update` invocation —
+    the title and priority ride the argv list, never a shell."""
+    if not isinstance(payload, dict):
+        return {"ok": False, "error": "bad request"}
+    bead = payload.get("id")
+    bead = bead.strip() if isinstance(bead, str) else ""
+    bad = bead_id_error(bead)
+    if bad:
+        return {"ok": False, "error": bad}
+    title = payload.get("title", None)
+    if title is not None:
+        title = title.strip() if isinstance(title, str) else ""
+        if not title:
+            return {"ok": False, "error": "title is empty"}
+        if len(title) > 300:
+            return {"ok": False, "error": "title is too long (300 characters)"}
+    priority = payload.get("priority", None)
+    if priority is not None:
+        try:
+            priority = int(priority)
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "priority must be 0–4"}
+        if priority not in (0, 1, 2, 3, 4):
+            return {"ok": False, "error": "priority must be 0–4"}
+    if title is None and priority is None:
+        return {"ok": False, "error": "nothing to update"}
+    args = ["update", bead]
+    if title is not None:
+        args += ["--title", title]
+    if priority is not None:
+        args += ["--priority", str(priority)]
+    code, out, err = bd_run(*args)
+    if code != 0:
+        return {"ok": False, "error": (err or out or "bd update failed")[:300]}
+    return {"ok": True}
+
+
+def close_bead(payload):
+    """Close a bead from its sheet, with the reason the ledger keeps. Unlike
+    the drop-on-done path (a lane move with no words), this carries the close
+    reason — argv, never a shell."""
+    if not isinstance(payload, dict):
+        return {"ok": False, "error": "bad request"}
+    bead = payload.get("id")
+    bead = bead.strip() if isinstance(bead, str) else ""
+    bad = bead_id_error(bead)
+    if bad:
+        return {"ok": False, "error": bad}
+    reason = payload.get("reason", None)
+    reason = reason.strip() if isinstance(reason, str) else ""
+    if len(reason) > 600:
+        return {"ok": False, "error": "reason is too long (600 characters)"}
+    args = ["close", bead]
+    if reason:
+        args += ["--reason", reason]
+    code, out, err = bd_run(*args)
+    if code != 0:
+        return {"ok": False, "error": (err or out or "bd close failed")[:300]}
+    return {"ok": True}
+
+
+# The loops a human still triggers by hand. They live in dashboard.toml beside
+# this file — project-owned, installed once, never touched by
+# `harness update dashboard` — so adding a button is a TOML edit, not a code
+# edit, and this file stays byte-identical everywhere.
+#
+# The build tool's verdict pattern lives in the same file, under [verdict].
+#
+# The table is still a fixed list, never anything a fixed list, never anything
+# the page names: the only commands this server will ever run are the ones
+# written there. It is also the only place a run button is described: label,
+# the label while it's going, and where on the page it belongs. The page draws
+# slots from the state and names no task of its own.
 #
 #   where = "header"       the strip at the top right
 #           "gate"         inside the gate popover, next to the word it proves
 #           "lane:<key>"   in a board lane's header, e.g. lane:staging
 #
-# ── Run buttons live in dashboard.toml ──────────────────────────────────────
-# Buttons used to be a TASKS table here, edited in place — every project with
-# a launch button carried a forked dashboard.py. The table below is only the
-# fallback for a missing dashboard.toml; the file beside this one is the real
-# table. `harness update` never touches it.
+# A missing dashboard.toml serves these defaults; a broken one keeps serving
+# the last good table and says so on stderr. Either way the page never waits.
 DEFAULT_TASKS = {
     "verify": {
         "command": ["scripts/verify.sh"],
         "label": "run",
         "busy": "running…",
         "where": "gate",
-    },
-    "run-mac": {
-        "command": ["scripts/app.sh", "--launch", "--show-panel"],
-        "label": "run mac",
-        "busy": "building…",
-        "where": "header",
     },
     # The only one that leaves this machine. It stays a plain `git push` with no
     # arguments so it can only ever do what the branch is already tracking.
@@ -977,7 +1318,8 @@ _TASK_WHERE = {"header", "gate"} | {
     f"lane:{k}" for k in
     ("ready", "blocked", "in_progress", "review", "done", "backlog", "staging", "worktree")}
 
-_toml = {"mtime": (0.0, 0), "reported": (0.0, 0), "tasks": None, "name": None}
+_toml = {"mtime": (0.0, 0), "reported": (0.0, 0), "tasks": None, "name": None,
+        "verdict": DEFAULT_VERDICT, "verdict_reported": (0.0, 0)}
 _toml_lock = threading.Lock()
 
 
@@ -1020,11 +1362,47 @@ def _check_tasks(doc):
     return tasks, name
 
 
+def _check_verdict(doc):
+    """dashboard.toml's [verdict] pattern, validated. Returns the default when
+    the file says nothing; raises ValueError when it says something unrunnable."""
+    section = doc.get("verdict", {})
+    if section is None:
+        return DEFAULT_VERDICT
+    if not isinstance(section, dict):
+        raise ValueError("[verdict] is not a table")
+    # No verdict section at all: the match-nothing default, silently — it is
+    # the fresh-install case and said nothing wrong. A table that sets keys
+    # but no pattern stays loud below: a typo'd key would otherwise read as
+    # no verdict forever, with no signal.
+    if not section:
+        return DEFAULT_VERDICT
+    if "pattern" not in section:
+        raise ValueError("[verdict] sets no pattern — delete the table or set pattern")
+    pattern = section["pattern"]
+    if not isinstance(pattern, str) or not pattern or len(pattern) > 500:
+        raise ValueError("[verdict].pattern must be a 1–500 character string")
+    try:
+        groups = re.compile(pattern).groups
+    except re.error as e:
+        raise ValueError(f"[verdict].pattern does not compile: {e}")
+    # log_ok reads the verdict word out of findall's last match: with no group
+    # the whole match is compared (never a bare SUCCEEDED), and with two or
+    # more findall hands back tuples, which have no .upper. Either shape would
+    # serve a permanent wrong answer instead of failing, so the shape is
+    # checked here, once, where the complaint names the fix.
+    if groups != 1:
+        raise ValueError("[verdict].pattern must hold exactly one (...) group — "
+                         "the verdict word; group the rest with (?:...)")
+    return pattern
+
+
 def _refresh_toml():
     """Re-read dashboard.toml when it changed. Missing file: the defaults,
-    silently. Broken file: keep serving the last good table and complain once
+    silently. Broken file: keep serving the last good values and complain once
     per change, not once per snapshot build — the stamp only advances past a
-    file that parsed, so a torn read retries instead of sticking."""
+    file that fully parsed, so a torn read retries instead of sticking. The
+    task table and the verdict pattern are read independently: one bad section
+    must not take the other one down with it."""
     global _toml
     try:
         st = (ROOT / "dashboard.toml").stat()
@@ -1035,22 +1413,65 @@ def _refresh_toml():
         if stamp == _toml["mtime"]:
             return
         if stamp == (0.0, 0):
-            _toml = {"mtime": stamp, "reported": stamp, "tasks": dict(DEFAULT_TASKS), "name": None}
+            _toml = {"mtime": stamp, "reported": stamp, "tasks": dict(DEFAULT_TASKS), "name": None,
+                     "verdict": DEFAULT_VERDICT, "verdict_reported": stamp}
             return
         try:
             with open(ROOT / "dashboard.toml", "rb") as f:
-                tasks, name = _check_tasks(tomllib.load(f))
-        except (OSError, tomllib.TOMLDecodeError, ValueError) as e:
-            if stamp != _toml["reported"]:
-                try:
-                    print(f"dashboard: {e} — keeping last good table", file=sys.stderr)
-                except OSError:
-                    pass
-                _toml["reported"] = stamp
+                doc = tomllib.load(f)
+        except (OSError, tomllib.TOMLDecodeError) as e:
+            _complain_once(_toml, stamp, f"dashboard: {e} — keeping last good table",
+                           "reported")
             if _toml["tasks"] is None:
                 _toml["tasks"] = dict(DEFAULT_TASKS)
             return
-        _toml = {"mtime": stamp, "reported": stamp, "tasks": tasks, "name": name}
+        fresh = dict(_toml)
+        try:
+            fresh["tasks"], fresh["name"] = _check_tasks(doc)
+        except ValueError as e:
+            _complain_once(fresh, stamp, f"dashboard: {e} — keeping last good table",
+                           "reported")
+            if fresh["tasks"] is None:
+                fresh["tasks"] = dict(DEFAULT_TASKS)
+        else:
+            fresh["reported"] = stamp
+        try:
+            fresh["verdict"] = _check_verdict(doc)
+        except ValueError as e:
+            _complain_once(fresh, stamp, f"dashboard: {e} — keeping last good verdict",
+                           "verdict_reported")
+        else:
+            fresh["verdict_reported"] = stamp
+        # The stamp advances only past a file that fully parsed; anything less
+        # retries on the next cycle instead of sticking.
+        if fresh["reported"] == stamp and fresh["verdict_reported"] == stamp:
+            fresh["mtime"] = stamp
+        _toml = fresh
+
+
+def _complain_once(scope, stamp, message, key):
+    """One section's once-per-change complaint: said out loud the first time a
+    stamp is seen broken, silent while it stays broken. Scope is _toml or the
+    in-progress fresh dict; key is which stamp it tracks."""
+    if stamp != scope[key]:
+        _complain_guarded(message)
+        scope[key] = stamp
+
+
+def _complain_guarded(message):
+    # A detached server can outlive its stderr, and a logging print that
+    # raises would take the refresher thread — and every future snapshot —
+    # down with it.
+    try:
+        print(message, file=sys.stderr)
+    except OSError:
+        pass
+
+
+def verdict_pattern():
+    """The [verdict] pattern from dashboard.toml, or the match-nothing default."""
+    _refresh_toml()
+    return _toml["verdict"]
 
 
 def tasks():
@@ -1067,7 +1488,7 @@ _runs = {}
 
 
 def start_task(name):
-    """Run one of TASKS in the background and keep its last result. A second
+    """Run one of the dashboard.toml tasks in the background and keep its last result. A second
     press while it's still going is ignored rather than queued — these install
     and relaunch the app, and two at once fight over the same process."""
     if name not in tasks():
@@ -1104,8 +1525,8 @@ def start_task(name):
 
 def runs_state():
     """Every task's last result, plus the label and placement the page draws it
-    with. Presentation travels with the state so that TASKS above stays the one
-    description of a run button."""
+    with. Presentation travels with the state so that the TOML table above
+    stays the one description of a run button."""
     out = {}
     for name, task in tasks().items():
         r = _runs.get(name, {"state": "idle", "output": "", "at": 0})
@@ -1231,7 +1652,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         # The page can only ask for a task by name; the command behind that name
-        # lives in TASKS and nothing in the request reaches a shell.
+        # lives in dashboard.toml and nothing in the request reaches a shell.
         if self.path.startswith("/run/"):
             body = json.dumps(start_task(self.path[len("/run/"):].split("?")[0])).encode()
             self.send_response(200)
@@ -1252,6 +1673,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 result = create_bead(data)
             elif action == "move":
                 result = move_bead(data)
+            elif action == "update":
+                result = update_bead(data)
+            elif action == "close":
+                result = close_bead(data)
             else:
                 return self.send_error(404)
             self.send_json(result)
@@ -1522,19 +1947,39 @@ def announce(url, note):
 
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
+# The states `shot` can photograph beyond the default view it always could.
+# Hover and focus content — the gate popover, the pulse tip, the lane stage
+# tips — can never be triggered by headless Chrome on its own, so the page
+# honours `?shot=<name>` (see SHOT_ACTIONS in dashboard/index.html): after the
+# first poll paints, the matching UI is opened the same way a hover or press
+# would open it, and a .shot class holds the CSS-only tips open. Click-driven
+# UI (the commit composer, the file menu) is opened with a real click instead.
+# These names are the only ones the CLI accepts, and one png is written per
+# state, so the review packet carries them all.
+SHOT_STATES = ("gate", "pulse", "review", "staging", "commit", "filemenu")
 
-def shot(path, port, width=900, height=1400):
+
+def shot(path, port, width=900, height=1400, states=()):
     """Write a picture of the running dashboard, for the design review pass.
 
     The reviewing agent reads screenshots off disk, and a dashboard looked at in
     a browser pane leaves nothing behind — so the change nobody could photograph
     was the change nobody reviewed. Chrome headless renders the same page the
     server is already serving.
+
+    With no states this photographs the page as it loads, exactly as before.
+    With states — a subset of SHOT_STATES — it captures once per state, each
+    with `?shot=<name>` in the URL, writing one png per state beside `path`
+    (`board.png` + `gate` becomes `board-gate.png`).
     """
     if not Path(CHROME).exists():
         return f"no Chrome at {CHROME} — install it or capture by hand"
     if not is_serving(port):
         return f"nothing serving on {port} — run `dashboard.py up` first"
+    unknown = [s for s in states if s not in SHOT_STATES]
+    if unknown:
+        return (f"no such state: {', '.join(unknown)} "
+                f"(try: {', '.join(SHOT_STATES)})")
     # Warmed on real time first. Chrome's virtual clock stops while a request is
     # outstanding, so against a server that hasn't built its first snapshot the
     # page's own poll spends the whole budget waiting — and the capture comes
@@ -1548,13 +1993,29 @@ def shot(path, port, width=900, height=1400):
     except Exception as e:
         return (f"the dashboard on {port} gave no state in "
                 f"{FIRST_BUILD_TIMEOUT + 5:.0f}s, so there is nothing to photograph: {e}")
-    # A budget rather than a sleep: the page paints once its first poll lands,
-    # and virtual time runs it forward without waiting in real seconds.
-    subprocess.run([CHROME, "--headless", "--disable-gpu", "--hide-scrollbars",
-                    f"--window-size={width},{height}", f"--screenshot={path}",
-                    "--virtual-time-budget=2500", f"http://localhost:{port}/"],
-                   capture_output=True)
-    return path if Path(path).exists() else "chrome wrote nothing"
+    base = Path(path)
+    targets = [("", path)] if not states else [
+        (s, str(base.with_name(f"{base.stem}-{s}{base.suffix or '.png'}")))
+        for s in states]
+    written = []
+    for name, out in targets:
+        url = f"http://localhost:{port}/" + (f"?shot={name}" if name else "")
+        # A budget rather than a sleep: the page paints once its first poll lands,
+        # and virtual time runs it forward without waiting in real seconds.
+        # run-all-compositor-stages-before-draw so a popover opened by the
+        # ?shot hook is painted, not just in the DOM, when the capture lands.
+        subprocess.run([CHROME, "--headless", "--disable-gpu", "--hide-scrollbars",
+                        f"--window-size={width},{height}", f"--screenshot={out}",
+                        "--virtual-time-budget=2500",
+                        # At final state for the capture: the sheet slides up
+                        # over 0.44s and virtual time can photograph it mid-way.
+                        "--force-prefers-reduced-motion",
+                        "--run-all-compositor-stages-before-draw", url],
+                       capture_output=True)
+        if not Path(out).exists():
+            return f"chrome wrote nothing for {name or 'the default view'}"
+        written.append(out)
+    return written[0] if len(written) == 1 else "\n".join(written)
 
 
 COMMANDS = ("up", "down", "serve", "snapshot", "shot")
@@ -1587,9 +2048,26 @@ def main():
     port = int(args[args.index("--port") + 1]) if explicit_port else free_port(PORT)
 
     # Named so `scripts/review.sh` picks it up with the app's own captures.
+    # Extra positionals name states (see SHOT_STATES): one png per state,
+    # written beside the path. A first positional that names a state keeps
+    # the default path, so `shot gate` captures just the gate popover.
     if command == "shot":
-        target = args[1] if len(args) > 1 else f"/tmp/{prefix()}-dashboard.png"
-        print(shot(target, port))
+        pos = []
+        i = 1
+        while i < len(args):
+            if args[i] == "--port":
+                i += 2
+                continue
+            if args[i].startswith("-"):
+                i += 1
+                continue
+            pos.append(args[i])
+            i += 1
+        if pos and pos[0] not in SHOT_STATES:
+            target, states = pos[0], pos[1:]
+        else:
+            target, states = f"/tmp/{prefix()}-dashboard.png", pos
+        print(shot(target, port, states=states))
         return
 
     # The default, and what both hooks call: leave a dashboard running at the

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Generate Codex agents, skill links and hooks from the shared harness.
+"""Generate Codex agents and skill links from the shared harness.
 
     python3 scripts/codex-support.py write
     python3 scripts/codex-support.py check   # read-only drift check
@@ -35,24 +35,6 @@ def agent_text(source, root):
     return header + metadata + '\ndeveloper_instructions = """\n' + prompt + '"""\n'
 
 
-def hook_config():
-    def command(script, args, message, runner="bash"):
-        return {"type": "command", "command":
-                f'{runner} "$(git rev-parse --show-toplevel)/scripts/{script}" {args}',
-                "timeout": 60, "statusMessage": message}
-
-    brief = command("brief.sh", "--hook", "Loading the harness brief")
-    start_board = command("dashboard.py", "up", "Starting the harness dashboard", "python3")
-    stop_board = command("dashboard.py", "down", "Stopping the harness dashboard", "python3")
-    return {"hooks": {
-        "SessionStart": [
-            {"matcher": "^(startup|resume|clear|compact)$", "hooks": [brief]},
-            {"matcher": "^(startup|resume|clear)$", "hooks": [start_board]},
-        ],
-        "SessionEnd": [{"hooks": [stop_board]}],
-    }}
-
-
 def artifacts(root):
     sources = sorted((root / ".claude/agents").glob("*.md"))
     skills = sorted((root / ".claude/skills").glob("*/SKILL.md"))
@@ -60,7 +42,6 @@ def artifacts(root):
         raise ValueError("shared agents and skills must exist under .claude/")
     files = {root / ".codex/agents" / f"{p.stem}.toml": agent_text(p, root)
              for p in sources}
-    files[root / ".codex/hooks.json"] = json.dumps(hook_config(), indent=2) + "\n"
     links = {root / ".agents/skills" / p.parent.name: p.parent for p in skills}
     return files, links
 
@@ -90,7 +71,7 @@ def check(root=ROOT):
     if problems:
         print("        run python3 scripts/codex-support.py write")
         return 1
-    print(f"  ok    {len(files) - 1} Codex agents, {len(links)} skill links and startup hooks")
+    print(f"  ok    {len(files)} Codex agents and {len(links)} skill links")
     return 0
 
 

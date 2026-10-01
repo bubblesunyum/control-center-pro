@@ -41,9 +41,15 @@ bd ready → claim → build → scripts/verify.sh → review → commit → clo
    code; `--full` adds the slower checks. Don't ask the user to look at
    something you can check yourself: if the project has a way to drive the real
    app and screenshot it, that is the step, and it belongs in its own skill.
-5. **Review it.** `bd label add <id> review`, then `scripts/review.sh` runs the
-   diff past an agent that didn't write it. See the `agentic-review` skill.
+5. **Review it.** `bd label add <id> review`, then `scripts/review.sh` builds
+   the packet and the `agentic-review` skill runs it past agents that didn't
+   write it.
    `bd label remove <id> review` when the findings are dealt with.
+   Batch before you gate: collect every reviewer's findings first, apply them
+   in one revision, then run the gate once on a frozen tree — no edits until
+   it reports. A gate per revision round multiplies slow probe runs for no new
+   signal, and editing mid-run manufactures phantom failures (a probe split
+   across an edit reads as drift that isn't there).
 6. **Close it.** `bd close <id> --reason "<what actually happened>"`, and commit.
    Commit often — CLAUDE.md means it. The reason is where the outcome lives when
    it differs from the plan, which is most of the time.
@@ -161,42 +167,40 @@ is invisible to `bd ready` and will still be there in a year.
 
 The whole harness is shaped by having one account. `scripts/context.py spend`
 prints what recent sessions actually cost, and the shape it shows is the reason
-for every rule below: a session opens at ~54k tokens before it has done
-anything, and that opening context is re-sent on every single turn. In a
-60-turn session it *is* 80% of the bill.
+for every rule below: measured on one project, a session opens at ~54k tokens
+before it has done anything, and that opening context is re-sent on every
+single turn. In a 60-turn session it *is* 80% of the bill.
 
-Only ~4k of that floor is this repo, and almost none of the rest is worth
-hunting. Deferred tool schemas already work: Figma's 42 tools and Notion's 38
-cost ~230 tokens each as bare names, not the thousands a loaded schema would.
-What is left that anyone controls is about 5k — the skill listing (~3.4k, of
-which this project's five skills are 378; the rest are global and plugin skills
-that a session here never invokes), the agent listing (~1k), and MCP
-instruction blocks (~0.8k). The other ~44k is Claude Code's own system prompt
-and built-in tool schemas, and no amount of editing this repo touches it.
+Only ~4k of that floor is the repo, and almost none of the rest is worth
+hunting. Deferred tool schemas already do the heavy lifting: a connector with
+~40 tools costs ~230 tokens as bare names, not the thousands a loaded schema
+would. What is left that anyone controls is about 5k — the skill listing
+(~3.4k; most of it global and plugin skills a session here never invokes), the
+agent listing (~1k), and MCP instruction blocks (~0.8k). The other ~44k is
+Claude Code's own system prompt and built-in tool schemas, and no amount of
+editing the repo touches it.
 
 So the floor is worth *measuring* and mostly not worth fighting. The lever that
 actually moves is the second half of the bill.
 
 Past a hundred turns the floor stops dominating and accumulated conversation
-takes over: the worst measured session reached 300k and paid roughly four times
-per turn what it paid at the start. Everything read into the main window is paid
-for again on every turn that follows it, so *where* a read lands matters more
-than how big it is.
+takes over: measured on one project, the worst session reached 300k and paid
+roughly four times per turn what it paid at the start. Everything read into the
+main window is paid for again on every turn that follows it, so *where* a read
+lands matters more than how big it is.
 
 The rules that follow from that:
 
 - **The session brief is capped.** `scripts/brief.sh` prints ~500 tokens: the
-  seat and what it's for, the ready list and the memory keys. It replaced `bd prime`, which prints ~1750
-  every session — the whole command reference plus every memory in full —
-  whether or not the ledger gets touched. For the full `bd` surface, the `beads`
-  skill has it, on demand.
+  seat and what it's for, the ready list and the memory keys. Don't run
+  `bd prime` — it prints the whole command reference and every memory in full.
+  For the full `bd` surface, the `beads` skill has it, on demand.
 - **Query narrowly.** `bd show <id>` for one issue beats `bd list` for forty.
   Use `--json` only when you are actually parsing it.
 - **Read the diff, not the repo.** Review and verification are scoped to what
   changed. `git diff` is the unit of work, not the file tree.
-- **Spend effort where it pays.** Review passes run through subagents — taste
-  on Sonnet 5 at high effort, correctness and design on Opus 5.5 at low
-  effort. Log triage and screenshot checks stay at low effort; reserve full
+- **Spend effort where it pays.** Review passes run through subagents, each on
+  the model and effort in its frontmatter. Log triage and screenshot checks stay at low effort; reserve full
   effort for code you actually intend to keep.
 - **Subagents are for fan-out, not for delegation theater.** A subagent starts
   cold and re-derives context you already have. Use one when the work is a wide
@@ -210,15 +214,10 @@ The rules that follow from that:
   The asymmetry is the whole argument. A search that opens eight files costs the
   main window ~30k tokens *for the rest of the session*; the same search in an
   `Explore` subagent costs its summary, once. The review pass is the proof that
-  this is affordable — every reviewer ever run, across every session, returned
-  about 15k tokens in total, roughly one percent of what a single working
-  session spends. Reviewers are the cheapest thing in the harness; the expensive
-  habit is reading the repo into your own window.
-
-- **Ask the graph before you open the files.** `graphify explain <symbol>`
-  answers "what touches this" in 1.4KB where reading the matching files costs
-  58KB — 41x, measured. The `graphify` skill has the build line; build it once
-  per session that needs it.
+  this is affordable — measured across 16 sessions on one project, every
+  reviewer ever run returned about 15k tokens in total, roughly one percent of
+  what a single working session spends. Reviewers are the cheapest thing in the
+  harness; the expensive habit is reading the repo into your own window.
 
 ## Waking up and handing off
 

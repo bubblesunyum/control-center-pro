@@ -21,6 +21,7 @@ argument is cheap.
 
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -223,11 +224,16 @@ def bless():
 
 def _bd_prefix():
     """The ledger's bead prefix, asked of the ledger itself at runtime — it used
-    to be baked into this file at install time, which made every copy differ."""
+    to be baked into this file at install time, which made every copy differ.
+
+    Read off `bd list`, never `bd config get` or `bd info`: both auto-import a
+    stale .beads/issues.jsonl when the ledger looks stale to them, resurrecting
+    deleted beads (har-67c). `bd list` never imports."""
     try:
-        r = subprocess.run(["bd", "config", "get", "issue_prefix"],
+        r = subprocess.run(["bd", "list", "--json", "--all"],
                            capture_output=True, text=True, timeout=10, cwd=ROOT)
-        got = (r.stdout or "").strip()
+        ids = json.loads(r.stdout or "[]")
+        got = str((ids[0].get("id", "") if ids else "").split("-", 1)[0]) if ids else ""
         if r.returncode == 0 and re.fullmatch(r"[a-z0-9]{1,10}", got):
             return got
     except Exception:
@@ -261,7 +267,7 @@ def digest():
     out.append(f"\n## Memories ({len(entries)})\n")
     out += [f"\n### {k}\n{v}" for k, v in sorted(entries.items())]
 
-    packet = Path(f"/tmp/{_bd_prefix()}-knowledge-digest.md")
+    packet = Path(f"/tmp/{_bd_prefix()}-knowledge-digest-{os.getpid()}.md")
     packet.write_text("\n".join(out) + "\n")
     print(packet)
 

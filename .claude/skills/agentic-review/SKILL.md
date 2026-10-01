@@ -17,50 +17,41 @@ scripts/verify.sh            # 1. it has to build and pass tests first
 scripts/review.sh            # 3. build the packet, prints its path
 ```
 
-Then spawn all three reviewers **in parallel, in one message**, each pointed at
-the packet path:
+Run the applicable reviewers against the same packet:
 
-- `reviewer-taste` — the project's own standards, on Sonnet 5 at high effort
-- `reviewer-correctness` — real defects, on Opus 5.5 at low effort
-- `reviewer-design` — what it actually renders, on Opus 5.5 at low effort
+- `reviewer-taste` — the project's own standards
+- `reviewer-correctness` — real defects
+- `reviewer-design` — what it actually renders
 
-In Claude Code spawn via `Task` subagents; in opencode spawn the same three
-agents (`reviewer-taste`, `reviewer-correctness`, `reviewer-design` from
-`.opencode/agent/`) in parallel. Both discover `.claude/skills/` and the packet
-is the same — only the spawn tool differs.
-
-The packet's scope excludes the vendored fork — `Sources/Vorssaint/`,
-`Sources/FanControlHelper/`, `Sources/VMStatisticsCompat/`, `Tools/`, `Tests/`,
-`docs/`. That is upstream's code, not ours, and without the exclusion a
-`merge upstream/main` would drop six figures of lines into the packet and drown
-whatever is actually under review. Our adapters over those engines live in
-`CCPKit` and stay in scope, which is the part worth reviewing anyway.
-
-Config and the board are in scope too — `opencode.json` is three lines deciding
-what every session loads, and `dashboard/index.html` is the board itself. So
-are JS and CSS, which is where a web editor's real code lives. Only the
-generated files are cut: the ledger export, `dashboard/state.json`,
-`.claude/context.lock`, npm lockfiles and built bundles are churn that dilutes
-the read.
+`scripts/review.sh` refuses (non-zero) when the packet exceeds the smallest
+reviewer budget instead of printing a path — narrow the range and re-run.
 
 Give each one only the packet path and one line on what the change was meant to
 do. They read `CLAUDE.md` themselves. Don't paste the diff into the prompt —
 that's the packet's job, and pasting it doubles the cost.
 
-**Off the account, when the roster allows.** If `harness/models.json` names a
-model for `reviewer-taste` and `reviewer-correctness`, run those two through
-opencode instead of spawning them — each as its own background command, so
-the two run at once:
+**In opencode, always spawn the reviewers natively as parallel subagents —
+never `scripts/agent.py`.** That script is how every tool except opencode
+runs reviewers against the roster; inside opencode the generated agents
+inherit the session model and always resolve, so shelling out buys nothing.
+
+Everywhere else, go off the account when the roster allows. Run each reviewer
+with a model in `harness/models.json` through opencode — each as its own
+background command, so the applicable roles run at once. The design model must
+support image input. Outside opencode only (in opencode, spawn native
+subagents instead — never run these):
 
 ```bash
 scripts/agent.py reviewer-taste "Review <packet> — <what it was meant to do>"
 scripts/agent.py reviewer-correctness "Review <packet> — <what it was meant to do>"
+scripts/agent.py reviewer-design "Review <packet> — <what it was meant to do>"
 ```
 
-Same prompts, same packet, different model and bill. A non-zero exit is a
-reviewer that didn't run, not one that found nothing — spawn it natively
-instead. `reviewer-design` stays native: it reads screenshots, and a roster
-model that can't see pixels would pass every one of them.
+Run `reviewer-design` only when the change affects the screen; it must inspect
+every listed capture. Through `scripts/agent.py`, each role gets its own prompt
+and the same packet, outside the calling session. A non-zero exit is a reviewer
+that didn't run, not one that found nothing — spawn it natively instead. Run a
+role with no suitable roster model natively too.
 
 Review a change that doesn't build yet and you'll get findings about the
 breakage instead of the design, so keep the order.
@@ -92,7 +83,7 @@ nobody looked at is the defect.
 
 - **Diff-scoped.** Reviewers see the change, not the repo. A review that reads
   the whole tree costs more than writing the feature did. The cost of that is a
-  `SCOPE` list in `scripts/review.sh` that has to earn every suffix it carries:
+  `SCOPE` list in `scripts/review.scope.sh` that has to earn every suffix it carries:
   a file type missing from it is a file no reviewer has ever read.
 - **One packet, many readers.** `scripts/review.sh` writes the diff to a file
   once; each reviewer reads that file instead of running its own git commands.
@@ -104,10 +95,11 @@ nobody looked at is the defect.
   `git commit -a`, which would ride an untracked scratch file into someone
   else's commit.
 - **Fit the model to the read.** A native Claude Code spawn runs the model and
-  effort in the reviewer's `.claude/agents/` frontmatter. Under opencode — and
-  through `scripts/agent.py` from anywhere — each role runs whatever
-  `harness/models.json` gives it. Under Codex every role inherits the host
-  model.
+  effort in the reviewer's `.claude/agents/` frontmatter. Through
+  `scripts/agent.py` — how every tool except opencode reaches the roster —
+  each role runs whatever `harness/models.json` gives it. A native opencode
+  spawn inherits the session's model, and under Codex every role inherits the
+  host model.
 - **One reviewer looks at pixels.** In the project this came from, both diff
   readers passed a card that clipped every value it existed to show — and were
   right to: nothing in the diff was wrong. The defect lived in the render, in a
@@ -143,4 +135,4 @@ that's the pass that costs the least to run and catches what nothing else can.
 thorough than this. It's user-triggered and billed separately — mention it when
 a change genuinely warrants it, but never try to launch it yourself.
 
-<!-- tracks: scripts/review.sh scripts/agent.py .claude/agents/reviewer-taste.md .claude/agents/reviewer-correctness.md -->
+<!-- tracks: scripts/review.sh scripts/agent.py .claude/agents/reviewer-taste.md .claude/agents/reviewer-correctness.md .claude/agents/reviewer-design.md -->
