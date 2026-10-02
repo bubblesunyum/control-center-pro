@@ -140,12 +140,20 @@ public struct ProjectGroupViewModel: Identifiable, Equatable, Sendable {
     }
 
     /// Header line: the directory name, with the toml display name alongside
-    /// when one is known and differs.
+    /// when one is known and differs. The compare is case- and
+    /// separator-insensitive, so `PSYMAIL-MINI` vs `PSYMAIL MINI` collapses;
+    /// the displayed form stays the exact directory name.
     public var headerTitle: String {
-        guard let displayName, !displayName.isEmpty, displayName != directoryName else {
+        guard let displayName, !displayName.isEmpty,
+              Self.canonical(displayName) != Self.canonical(directoryName)
+        else {
             return directoryName
         }
         return "\(directoryName) · \(displayName)"
+    }
+
+    private static func canonical(_ value: String) -> String {
+        value.lowercased().filter { $0.isLetter || $0.isNumber }
     }
 }
 
@@ -324,6 +332,10 @@ public final class ProjectsWidget: CCPWidget {
 
     private let model: ProjectsModel
 
+    /// Weight-matched restart glyph: the `arrow.clockwise` outline reads
+    /// disabled next to the `.fill` play/stop at caption size.
+    public static let restartSymbolName = "arrow.triangle.2.circlepath"
+
     public init() {
         self.model = ProjectsModel(source: LiveProjectsSource())
     }
@@ -474,7 +486,7 @@ private struct ProjectTargetRow: View {
             ProjectActionButton(systemImage: "stop.fill", label: "Stop \(row.label)", isEnabled: model.canStop(row)) {
                 await stopTarget()
             }
-            ProjectActionButton(systemImage: "arrow.clockwise", label: "Restart \(row.label)", isEnabled: model.canRestart(row)) {
+            ProjectActionButton(systemImage: ProjectsWidget.restartSymbolName, label: "Restart \(row.label)", isEnabled: model.canRestart(row)) {
                 await restartTarget()
             }
         }
@@ -489,7 +501,7 @@ private struct ProjectTargetRow: View {
     }
 
     private func restartTarget() async {
-        await perform(verb: "restart", past: "restarted", icon: "arrow.clockwise") { await model.restart(row) }
+        await perform(verb: "restart", past: "restarted", icon: ProjectsWidget.restartSymbolName) { await model.restart(row) }
     }
 
     /// One tap's outcome: a HUD either way, and a board that just opened gets

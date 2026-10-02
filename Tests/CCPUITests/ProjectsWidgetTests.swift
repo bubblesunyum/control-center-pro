@@ -33,6 +33,15 @@ final class ProjectsWidgetTests: XCTestCase {
         XCTAssertEqual(group.headerTitle, "api")
     }
 
+    func testHeaderCollapsesCaseAndSeparatorInsensitiveMatch() {
+        let group = ProjectGroupViewModel(id: "/x/psymail-mini", directoryName: "PSYMAIL-MINI", displayName: "PSYMAIL MINI")
+        XCTAssertEqual(group.headerTitle, "PSYMAIL-MINI")
+    }
+
+    func testRestartSymbolIsWeightMatched() {
+        XCTAssertEqual(ProjectsWidget.restartSymbolName, "arrow.triangle.2.circlepath")
+    }
+
     func testStoppedRowOnlyRuns() {
         let row = ProjectRowViewModel(id: "a", label: "Serve", isRunning: false)
         XCTAssertTrue(row.canRun)
