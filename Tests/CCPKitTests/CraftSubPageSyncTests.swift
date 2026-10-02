@@ -14,6 +14,11 @@ import XCTest
 /// user's report is the last test here, end to end.
 @MainActor
 final class CraftSubPageSyncTests: XCTestCase {
+    override nonisolated func setUpWithError() throws {
+        // Craft sync is paused (ccp-80ss): the adapter never pushes.
+        try XCTSkipIf(NotesAdapter.craftSyncDisabled)
+    }
+
     private let base = URL(string: "https://connect.craft.do/links/test/api/v1")!
 
     private func defaults(_ name: String) throws -> UserDefaults {

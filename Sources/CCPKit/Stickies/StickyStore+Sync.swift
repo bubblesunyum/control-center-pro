@@ -57,13 +57,16 @@ extension StickyStore {
     }
 
     /// A saved connection exists. Without one the desk is local-only notes.
+    /// Paused (ccp-80ss): always absent, so the desk never leaves the Mac.
     public var hasCraftCredential: Bool {
+        if Self.craftSyncDisabled { return false }
         if craftCredentialUnavailable { return false }
         if craftBaseURLOverride != nil { return true }
         return cachedCredentialFilePresence
     }
 
     public var syncStatus: SyncStatus {
+        guard !Self.craftSyncDisabled else { return .localOnly }
         guard hasCraftCredential else { return .localOnly }
         guard isSyncVerified else { return isSyncCheckFailed ? .offline : .syncing }
         if deskTextMoved { return hasPushFailed ? .failed : .unsavedChanges }
@@ -78,6 +81,8 @@ extension StickyStore {
         isPanelOpen = true
         pullRetryTask?.cancel()
         pullRetryTask = nil
+        // Paused (ccp-80ss): the desk stays local; no pull proves anything.
+        guard !Self.craftSyncDisabled else { return }
         // The panel was shut: Craft may have moved under us. Pull now in
         // the background without locking the desk; a failed read changes
         // nothing, and an adopt never lands on unpushed edits without the
@@ -169,6 +174,8 @@ extension StickyStore {
     }
 
     private func craftBaseURL() -> URL? {
+        // Paused (ccp-80ss): no round ever learns the credential.
+        if Self.craftSyncDisabled { return nil }
         if craftCredentialUnavailable { return nil }
         if let cached = cachedCraftBaseURL { return cached }
         let loaded = craftBaseURLOverride ?? (try? FileCraftCredentialStore().loadConnectionURL())
@@ -179,6 +186,7 @@ extension StickyStore {
     // MARK: - Push
 
     private func scheduleCraftPush() {
+        guard !Self.craftSyncDisabled else { return }
         // The retry task is deliberately NOT cancelled here: an edit during
         // backoff must not eat the only scheduled healing.
         pushTask?.cancel()
@@ -202,11 +210,13 @@ extension StickyStore {
         pushTask = nil
         pushRetryTask?.cancel()
         pushRetryTask = nil
+        guard !Self.craftSyncDisabled else { return }
         await pushNow()
     }
 
     private func runCraftPush() async {
         pushTask = nil
+        guard !Self.craftSyncDisabled else { return }
         if isPushThrottled {
             if pushRetryTask == nil, let until = pushThrottledUntil {
                 schedulePushRetry(after: max(until.timeIntervalSinceNow, 0))
@@ -222,6 +232,7 @@ extension StickyStore {
 
     internal func pushNow() async {
         pushTask = nil
+        guard !Self.craftSyncDisabled else { return }
         // One round at a time: a push deciding inside a pull reads a
         // half-written remote as a move, and vice versa (ccp-r3el).
         guard !isPushInFlight, !isPullInFlight else { needsPushAfterFlight = true; return }
@@ -423,6 +434,7 @@ extension StickyStore {
     // MARK: - Pull
 
     internal func pullAll(fromRetry: Bool = false) async {
+        guard !Self.craftSyncDisabled else { return }
         if fromRetry {
             guard pullRetryTask != nil else { return }
         } else {
@@ -559,6 +571,7 @@ extension StickyStore {
     }
 
     private func schedulePull() {
+        guard !Self.craftSyncDisabled else { return }
         pullTask?.cancel()
         pullTask = Task { [weak self] in await self?.pullAll() }
     }

@@ -513,6 +513,11 @@ final class DefaultsMapTests: XCTestCase {
 /// holds afterwards as the new agreement.
 @MainActor
 final class CraftPushAdapterTests: XCTestCase {
+    override nonisolated func setUpWithError() throws {
+        // Craft sync is paused (ccp-80ss): the adapter never pushes.
+        try XCTSkipIf(NotesAdapter.craftSyncDisabled)
+    }
+
     private let base = URL(string: "https://connect.craft.do/links/test/api/v1")!
 
     private func defaults(_ name: String) throws -> UserDefaults {

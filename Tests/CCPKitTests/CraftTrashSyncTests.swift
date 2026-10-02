@@ -12,6 +12,11 @@ import XCTest
 /// scripted transport.
 @MainActor
 final class CraftTrashSyncTests: XCTestCase {
+    override nonisolated func setUpWithError() throws {
+        // Craft sync is paused (ccp-80ss): no trash sweep runs.
+        try XCTSkipIf(NotesAdapter.craftSyncDisabled)
+    }
+
     private let base = URL(string: "https://connect.craft.do/links/test/api/v1")!
     private let connection = ScriptedTransport.Script(statusCode: 200, json: """
         {"space":{"name":"Test"},"utc":{"time":"2026-09-06T19:00:00Z"}}

@@ -288,6 +288,8 @@ final class NotesDocumentStorageTests: XCTestCase {
     /// re-marked it. Now the relaunch owns the bit and the activate push
     /// spends it.
     func testRelaunchPushesDurableMappedEdits() async throws {
+        // Craft sync is paused (ccp-80ss): no activate pull or push runs.
+        try XCTSkipIf(NotesAdapter.craftSyncDisabled)
         let base = URL(string: "https://connect.craft.do/links/test/api/v1")!
         let clock = ScriptedTransport.Script(statusCode: 200, json: """
             {"space":{"name":"S"},"utc":{"time":"2026-09-06T19:00:00Z"}}

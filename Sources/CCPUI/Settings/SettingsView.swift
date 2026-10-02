@@ -87,11 +87,14 @@ struct SettingsView: View {
             } header: {
                 Text("Craft Sync")
             } footer: {
-                Text("Create an API connection in Craft's Imagine tab and paste its URL here. "
-                    + "The URL is the credential: it lives in an owner-only file and is never shown again.")
+                // Paused (ccp-80ss): notes stay on this Mac. The saved
+                // connection is kept, not deleted — the row is only disabled.
+                Text("Craft sync is paused for now — notes stay on this Mac. "
+                    + "Your saved connection is kept and will reconnect when sync returns.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+            .disabled(NotesAdapter.craftSyncDisabled)
 
             Section {
                 if claudeToken.isConfigured {
@@ -125,7 +128,8 @@ struct SettingsView: View {
         .frame(width: Layout.settingsWidth)
         .fixedSize(horizontal: false, vertical: true)
         .task {
-            if craft.isConfigured { craft.verify() }
+            // Paused (ccp-80ss): no verify round while the row is disabled.
+            if !NotesAdapter.craftSyncDisabled, craft.isConfigured { craft.verify() }
         }
     }
 

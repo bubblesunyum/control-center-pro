@@ -277,6 +277,7 @@ public final class NotesAdapter {
     /// changes), never here: a read can run the one-time Keychain migration
     /// as a side effect, which has no business inside view rendering.
     public var hasCraftCredential: Bool {
+        if Self.craftSyncDisabled { return false }
         if craftCredentialUnavailable { return false }
         if craftBaseURLOverride != nil { return true }
         return cachedCredentialFilePresence
@@ -305,6 +306,7 @@ public final class NotesAdapter {
     }
 
     public var syncStatus: SyncStatus {
+        guard !Self.craftSyncDisabled else { return .localOnly }
         guard hasCraftCredential else { return .localOnly }
         guard isSyncVerified else { return isSyncCheckFailed ? .offline : .syncing }
         if let selectedNoteID {
@@ -450,6 +452,12 @@ public final class NotesAdapter {
     /// disk or the network.
     @ObservationIgnored internal var craftTransport: (any CraftTransport)?
     @ObservationIgnored internal var craftBaseURLOverride: URL?
+    /// Craft sync is paused (ccp-80ss): notes save locally only. While true,
+    /// no push or pull round starts, the status reads local-only, and the
+    /// credential path answers absent — without deleting any stored
+    /// credential or Craft state, so re-enabling is this flag plus the sync
+    /// tests' skip gates.
+    public static let craftSyncDisabled = true
     /// Test seam: reads as unconfigured without touching the real store — the
     /// app-support path is a fixed bundle id, so a plain nil override still
     /// finds the developer's credential on their own machine.
@@ -622,6 +630,7 @@ public final class NotesAdapter {
     /// Nothing is scheduled without a credential — an unconfigured launch
     /// must not burn a push round on every panel open.
     private func dirtyUnmappedNonEmptyPads() {
+        guard !Self.craftSyncDisabled else { return }
         guard craftBaseURL() != nil, let document else { return }
         let fresh = document.notes
             .filter { !$0.text.isEmpty && craftDestination.craftDocumentID(for: $0.id) == nil }
@@ -1257,6 +1266,8 @@ public final class NotesAdapter {
     }
 
     private func craftBaseURL() -> URL? {
+        // Paused (ccp-80ss): no round ever learns the credential.
+        if Self.craftSyncDisabled { return nil }
         // Cached: the file read is cheap but pointless to repeat per push.
         // Cleared when the credential is saved or forgotten (see observeCraftCredentialChanges).
         if craftCredentialUnavailable { return nil }
@@ -1267,6 +1278,7 @@ public final class NotesAdapter {
     }
 
     private func scheduleCraftPush() {
+        guard !Self.craftSyncDisabled else { return }
         // The retry task is deliberately NOT cancelled here: an edit during
         // backoff must not eat the only scheduled healing. Both tasks funnel
         // into runCraftPush, where the second is a cheap no-op.
@@ -1287,6 +1299,7 @@ public final class NotesAdapter {
     /// stands down cooperatively; the gate keeps the overlap honest — a new
     /// round arriving inside the old one yields and re-runs after it.
     private func schedulePull() {
+        guard !Self.craftSyncDisabled else { return }
         pullTask?.cancel()
         pullTask = Task { [weak self] in await self?.pullAll() }
     }
@@ -1313,11 +1326,13 @@ public final class NotesAdapter {
         pushTask = nil
         pushRetryTask?.cancel()
         pushRetryTask = nil
+        guard !Self.craftSyncDisabled else { return }
         await pushNow()
     }
 
     private func runCraftPush() async {
         pushTask = nil
+        guard !Self.craftSyncDisabled else { return }
         // A throttled drop must not lose the retry: the edit that armed this
         // run cancelled nothing, but an older topology might have, so top up
         // a missing retry for the remaining window.
@@ -1338,6 +1353,7 @@ public final class NotesAdapter {
 
     private func pushNow() async {
         pushTask = nil
+        guard !Self.craftSyncDisabled else { return }
         // One round at a time: re-entry coalesces, and a pull deciding
         // mid-push reads a half-written remote as a move — so a debounced
         // push landing inside a pull waits for the next round instead.
@@ -1843,6 +1859,7 @@ public final class NotesAdapter {
     /// and one pad's failure never skips the rest. Observable for tests; the
     /// activate path fires it as a task.
     func pullAll(fromRetry: Bool = false) async {
+        guard !Self.craftSyncDisabled else { return }
         // A retry round must stay cancellable while it runs, so entry only
         // clears the handle it did not arrive on: a fresh round cancels a
         // pending retry, while the retry itself keeps its handle so a later

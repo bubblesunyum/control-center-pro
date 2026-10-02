@@ -12,6 +12,11 @@ import XCTest
 /// own spelling is never mistaken for someone editing the document.
 @MainActor
 final class CraftDialectSyncTests: XCTestCase {
+    override nonisolated func setUpWithError() throws {
+        // Craft sync is paused (ccp-80ss): the adapter never pushes.
+        try XCTSkipIf(NotesAdapter.craftSyncDisabled)
+    }
+
     private let base = URL(string: "https://connect.craft.do/links/test/api/v1")!
 
     private func defaults(_ name: String) throws -> UserDefaults {
@@ -149,6 +154,11 @@ final class CraftDialectSyncTests: XCTestCase {
 /// into a document that already holds it.
 @MainActor
 final class CraftBaseMigrationTests: XCTestCase {
+    override nonisolated func setUpWithError() throws {
+        // Craft sync is paused (ccp-80ss): the adapter never pushes.
+        try XCTSkipIf(NotesAdapter.craftSyncDisabled)
+    }
+
     private let base = URL(string: "https://connect.craft.do/links/test/api/v1")!
 
     private func defaults(_ name: String) throws -> UserDefaults {

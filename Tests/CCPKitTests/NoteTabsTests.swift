@@ -272,6 +272,8 @@ final class NoteTabsTests: XCTestCase {
     }
 
     func testPullCachesTheSpaceIDForDeepLinks() async throws {
+        // Craft sync is paused (ccp-80ss): the pull never runs.
+        try XCTSkipIf(NotesAdapter.craftSyncDisabled)
         let (defaults, name) = try store()
         defer { defaults.removePersistentDomain(forName: name) }
         let destination = CraftNoteDestination(defaults: defaults)
@@ -289,6 +291,8 @@ final class NoteTabsTests: XCTestCase {
     }
 
     func testCredentialChangeClearsTheSpaceID() async throws {
+        // Craft sync is paused (ccp-80ss): the pull never runs.
+        try XCTSkipIf(NotesAdapter.craftSyncDisabled)
         let (defaults, name) = try store()
         defer { defaults.removePersistentDomain(forName: name) }
         let destination = CraftNoteDestination(defaults: defaults)

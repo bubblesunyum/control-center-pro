@@ -15,6 +15,11 @@ import XCTest
 /// whatever Craft held that markdown cannot express.
 @MainActor
 final class CraftRealignSyncTests: XCTestCase {
+    override nonisolated func setUpWithError() throws {
+        // Craft sync is paused (ccp-80ss): the adapter never pushes.
+        try XCTSkipIf(NotesAdapter.craftSyncDisabled)
+    }
+
     private let baseURL = URL(string: "https://connect.craft.do/links/test/api/v1")!
 
     private func defaults(_ name: String) throws -> UserDefaults {

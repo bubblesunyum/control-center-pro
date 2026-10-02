@@ -11,6 +11,11 @@ import XCTest
 /// Craft's respelling is in the loop, not echoed away.
 @MainActor
 final class StickyCraftSyncTests: XCTestCase {
+    override nonisolated func setUpWithError() throws {
+        // Craft sync is paused (ccp-80ss): the desk never syncs.
+        try XCTSkipIf(StickyStore.craftSyncDisabled)
+    }
+
     private let base = URL(string: "https://connect.craft.do/links/test/api/v1")!
 
     private func defaults(_ name: String) throws -> UserDefaults {

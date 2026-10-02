@@ -44,6 +44,11 @@ public final class StickyStore {
 
     // MARK: - Craft sync state (the engine lives in StickyStore+Sync.swift)
 
+    /// Craft sync is paused (ccp-80ss): the desk saves locally only. Same
+    /// contract as NotesAdapter's flag — no rounds, local-only status, the
+    /// credential answers absent — and no stored state is deleted.
+    public static let craftSyncDisabled = true
+
     /// The desk's Craft-side memory behind the same seam Notes syncs through
     /// (ccp-2zi.4): sync base, document id, conflict records, history. One
     /// fixed desk id addresses all of it — titles stay untouched, so the
@@ -212,6 +217,8 @@ public final class StickyStore {
         // Called from willTerminate and panel hide — must drain before exit,
         // so synchronous.
         try? store.save(snapshot)
+        // Paused (ccp-80ss): local bytes are safe above; nothing pushes.
+        guard !Self.craftSyncDisabled else { return }
         // Best-effort only, like NotesAdapter: local bytes are safe above;
         // Craft heals on the next push.
         Task { [weak self] in await self?.flushCraftPush() }
