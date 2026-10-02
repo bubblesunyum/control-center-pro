@@ -52,6 +52,12 @@ public enum Layout {
     /// Height of the scrollable clipboard list — 50% taller than the original 220 to show ~7 rows.
     static let clipboardListHeight: CGFloat = 330
 
+    /// Height of the scrollable projects list. The card never caps its own
+    /// content — `WidgetSize.tall` is a floor, not a ceiling — so an
+    /// unbounded section list grows the lane off screen. Past this the
+    /// sections scroll instead, matching the clipboard's capped list above.
+    static let projectsListHeight: CGFloat = 330
+
     /// How tall the note editor stands. Live-styled Markdown needs the
     /// room: at 148pt a heading and a short list filled the card, and a note you
     /// cannot see is a worse note than a plain-text one. Set here rather than on

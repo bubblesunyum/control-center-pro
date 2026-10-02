@@ -381,15 +381,18 @@ private struct ProjectsContent: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                VStack(alignment: .leading, spacing: Space.half) {
-                    ForEach(model.sections) { group in
-                        ProjectGroupSection(group: group, model: model)
-                        if group.id != model.sections.last?.id {
-                            WidgetSectionGap()
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(alignment: .leading, spacing: Space.half) {
+                        ForEach(model.sections) { group in
+                            ProjectGroupSection(group: group, model: model)
+                            if group.id != model.sections.last?.id {
+                                WidgetSectionGap()
+                            }
                         }
                     }
+                    .padding(.top, Space.half)
                 }
-                .padding(.top, Space.half)
+                .frame(maxHeight: Layout.projectsListHeight)
             }
         }
         .animation(.smooth(duration: 0.2), value: isMinimized)
