@@ -49,6 +49,7 @@ public func makeStandardRegistry() -> WidgetRegistry {
     registry.register(SystemStatsWidget.self)
     registry.register(UsageWidget.self)
     registry.register(QuickTogglesWidget.self)
+    registry.register(ProjectsWidget.self)
     registry.register(NowPlayingWidget.self)
     registry.register(AudioMixerWidget.self)
     registry.register(ClipboardWidget.self)
