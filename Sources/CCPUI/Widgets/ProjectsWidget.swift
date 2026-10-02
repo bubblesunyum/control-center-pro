@@ -50,7 +50,7 @@ public final class LiveProjectsSource: ProjectsSource {
                         id: target.id,
                         label: target.label,
                         isRunning: runningByID[target.id] ?? false,
-                        busyMessage: target.busy,
+                        busyText: target.busy,
                         opensURL: target.kind == .board)
                 })
         }
@@ -101,26 +101,26 @@ public struct ProjectRowViewModel: Identifiable, Equatable, Sendable {
     public let id: String
     public let label: String
     public let isRunning: Bool
-    /// Non-nil while the target is transitioning; drawn as a spinner with
-    /// this string (the toml busy text when the adapter knows one).
-    public let busyMessage: String?
+    /// Static toml `busy` text, shown only while the row has in-flight work
+    /// (see `ProjectsModel/busyMessage(for:)`). Alone it never means busy.
+    public let busyText: String?
     /// URL tasks open their board after serving instead of just flipping state.
     public let opensURL: Bool
 
-    public init(id: String, label: String, isRunning: Bool, busyMessage: String? = nil, opensURL: Bool = false) {
+    public init(id: String, label: String, isRunning: Bool, busyText: String? = nil, opensURL: Bool = false) {
         self.id = id
         self.label = label
         self.isRunning = isRunning
-        self.busyMessage = busyMessage
+        self.busyText = busyText
         self.opensURL = opensURL
     }
 
-    public var isBusy: Bool { busyMessage != nil }
-    /// Run is only valid on a settled, stopped target.
-    public var canRun: Bool { !isRunning && !isBusy }
+    /// Settled-state gates; in-flight busy is overlaid by the model, so a
+    /// static `busyText` alone never disables anything.
+    public var canRun: Bool { !isRunning }
     /// Stop and restart are only valid on a settled, running target.
-    public var canStop: Bool { isRunning && !isBusy }
-    public var canRestart: Bool { isRunning && !isBusy }
+    public var canStop: Bool { isRunning }
+    public var canRestart: Bool { isRunning }
 }
 
 /// One project section: its directory and, when the toml names one, its
@@ -201,9 +201,10 @@ public final class EmptyProjectsSource: ProjectsSource {
 
 /// The widget's model: discovered project sections plus the in-flight taps.
 ///
-/// Busy comes from two places: the row's own `busyMessage` (the adapter's
-/// truth, refreshed by polling) and `busyIDs` (this tap's async work, so the
-/// row answers instantly even before the next poll lands).
+/// Busy is transient only: the toml `busy` text rides the row as `busyText`,
+/// and the spinner/message appear solely while the row's id sits in
+/// `busyIDs` (this tap's async work, so the row answers instantly even
+/// before the next poll lands). A refresh never makes a row busy by itself.
 @MainActor
 @Observable
 public final class ProjectsModel {
@@ -223,8 +224,30 @@ public final class ProjectsModel {
         self.pollInterval = pollInterval
     }
 
+    /// Whether the row has in-flight work. Static `busyText` alone never
+    /// counts — only `busyIDs` does.
     public func isBusy(_ row: ProjectRowViewModel) -> Bool {
-        row.isBusy || busyIDs.contains(row.id)
+        busyIDs.contains(row.id)
+    }
+
+    public func canRun(_ row: ProjectRowViewModel) -> Bool {
+        row.canRun && !busyIDs.contains(row.id)
+    }
+
+    public func canStop(_ row: ProjectRowViewModel) -> Bool {
+        row.canStop && !busyIDs.contains(row.id)
+    }
+
+    public func canRestart(_ row: ProjectRowViewModel) -> Bool {
+        row.canRestart && !busyIDs.contains(row.id)
+    }
+
+    /// The message to draw while busy: the row's static text, gated on
+    /// in-flight work and nil whenever settled. The generic fallback wording
+    /// is the view's call.
+    public func busyMessage(for row: ProjectRowViewModel) -> String? {
+        guard busyIDs.contains(row.id) else { return nil }
+        return row.busyText
     }
 
     /// One discovery pass. Public so tests can drive it deterministically
@@ -380,8 +403,16 @@ private struct ProjectGroupSection: View {
         VStack(alignment: .leading, spacing: Space.half) {
             WidgetSectionLabel(group.headerTitle)
                 .padding(.horizontal, Space.half)
-            ForEach(group.rows) { row in
-                ProjectTargetRow(row: row, model: model)
+            if group.rows.isEmpty {
+                Text("nothing runnable")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, Space.half)
+                    .accessibilityLabel("nothing runnable in \(group.headerTitle)")
+            } else {
+                ForEach(group.rows) { row in
+                    ProjectTargetRow(row: row, model: model)
+                }
             }
         }
     }
@@ -410,8 +441,8 @@ private struct ProjectTargetRow: View {
                     .font(.callout)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                if let busy = row.busyMessage {
-                    Text(busy)
+                if isBusy {
+                    Text(model.busyMessage(for: row) ?? "Working…")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -430,20 +461,20 @@ private struct ProjectTargetRow: View {
 
     private var statusDot: some View {
         Circle()
-            .fill(row.isRunning ? Color.green : Color.secondary.opacity(0.4))
+            .fill(row.isRunning ? Color.projectRunning : Color.secondary.opacity(0.4))
             .frame(width: Space.one, height: Space.one)
             .accessibilityHidden(true)
     }
 
     private var actionButtons: some View {
         HStack(spacing: Space.quarter) {
-            ProjectActionButton(systemImage: "play.fill", label: "Run \(row.label)", isEnabled: row.canRun) {
+            ProjectActionButton(systemImage: "play.fill", label: "Run \(row.label)", isEnabled: model.canRun(row)) {
                 await runTarget()
             }
-            ProjectActionButton(systemImage: "stop.fill", label: "Stop \(row.label)", isEnabled: row.canStop) {
+            ProjectActionButton(systemImage: "stop.fill", label: "Stop \(row.label)", isEnabled: model.canStop(row)) {
                 await stopTarget()
             }
-            ProjectActionButton(systemImage: "arrow.clockwise", label: "Restart \(row.label)", isEnabled: row.canRestart) {
+            ProjectActionButton(systemImage: "arrow.clockwise", label: "Restart \(row.label)", isEnabled: model.canRestart(row)) {
                 await restartTarget()
             }
         }
@@ -469,19 +500,19 @@ private struct ProjectTargetRow: View {
     ) async {
         switch await action() {
         case .started(let url), .restarted(let url):
-            ProjectsHUD.show(icon: icon, message: "\(row.label) \(past)")
+            HUD.show(icon: icon, message: "\(row.label) \(past)")
             if let url {
                 await model.open(url)
                 hidePanel?()
             }
         case .alreadyRunning(let url):
-            ProjectsHUD.show(icon: icon, message: "\(row.label) board opened")
+            HUD.show(icon: icon, message: "\(row.label) board opened")
             await model.open(url)
             hidePanel?()
         case .stopped:
-            ProjectsHUD.show(icon: icon, message: "\(row.label) stopped")
+            HUD.show(icon: icon, message: "\(row.label) stopped")
         case .failed:
-            ProjectsHUD.show(icon: icon, message: "Couldn't \(verb) \(row.label)")
+            HUD.show(icon: icon, message: "Couldn't \(verb) \(row.label)")
         }
     }
 }
@@ -518,91 +549,3 @@ private struct ProjectActionButton: View {
     }
 }
 
-// MARK: - HUD (lightweight copy of the Tools strip's ToolHUD)
-
-private enum ProjectsHUD {
-    private static var panel: NSPanel?
-    private static var dismissWork: DispatchWorkItem?
-    private static var generation = 0
-    private static let messageWidthLimit: CGFloat = 360
-
-    static func show(icon: String, message: String) {
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async { show(icon: icon, message: message) }
-            return
-        }
-        let content = HStack(spacing: Space.one) {
-            Image(systemName: icon)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(Color.accentColor)
-            Text(message)
-                .font(.caption.weight(.semibold))
-                .lineLimit(2)
-                .truncationMode(.tail)
-                .frame(maxWidth: messageWidthLimit, alignment: .leading)
-        }
-        .padding(.horizontal, Space.oneHalf)
-        .padding(.vertical, Space.one)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-        present(AnyView(content), dismissAfter: 1.5)
-    }
-
-    private static func present(_ content: AnyView, dismissAfter: Double) {
-        let host = NSHostingController(rootView: content)
-        host.view.layoutSubtreeIfNeeded()
-        let size = host.view.fittingSize
-        let panel = ensurePanel()
-        panel.contentViewController = host
-        let frame: NSRect
-        // The panel opens top-right, so anchor to the screen holding the
-        // mouse rather than whichever screen is main.
-        let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ?? NSScreen.main
-        if let visible = screen?.visibleFrame {
-            frame = NSRect(x: visible.midX - size.width / 2, y: visible.maxY - size.height - Space.three, width: size.width, height: size.height)
-        } else {
-            frame = NSRect(x: 200, y: 200, width: size.width, height: size.height)
-        }
-        panel.setFrame(frame, display: true)
-        generation += 1
-        panel.alphaValue = 0
-        panel.orderFrontRegardless()
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.12
-            panel.animator().alphaValue = 1
-        }
-        dismissWork?.cancel()
-        let work = DispatchWorkItem { dismiss() }
-        dismissWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + dismissAfter, execute: work)
-    }
-
-    private static func dismiss() {
-        guard let panel else { return }
-        let dismissed = generation
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.22
-            panel.animator().alphaValue = 0
-        }, completionHandler: {
-            guard generation == dismissed else { return }
-            panel.orderOut(nil)
-            panel.contentViewController = nil
-            dismissWork = nil
-        })
-    }
-
-    private static func ensurePanel() -> NSPanel {
-        if let panel { return panel }
-        let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        panel.level = .statusBar
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = true
-        panel.ignoresMouseEvents = true
-        panel.hidesOnDeactivate = false
-        panel.isReleasedWhenClosed = false
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
-        self.panel = panel
-        return panel
-    }
-}

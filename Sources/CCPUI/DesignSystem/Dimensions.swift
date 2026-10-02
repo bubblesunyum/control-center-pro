@@ -202,4 +202,19 @@ public extension Layout {
     /// The Settings window's content width — wide enough that a label and its
     /// shortcut field sit on one line without crowding.
     static let settingsWidth: CGFloat = 420
+    /// A HUD toast: how wide its message may grow before truncating, how long
+    /// it lingers, and how fast it fades in and out. One set so every
+    /// widget's toast reads as one — the Tools and Projects copies drifted
+    /// here before they were extracted (ccp-irhh).
+    static let hudMessageMaxWidth: CGFloat = 360
+    static let hudDismissDelay: Double = 1.5
+    static let hudFadeInDuration: Double = 0.12
+    static let hudFadeOutDuration: Double = 0.22
+    /// How far below the visible frame's top edge a HUD toast sits. Three
+    /// steps — one past the panel's own inset, so the toast floats on the
+    /// desktop rather than reading as pinned to glass.
+    static let hudTopOffset: CGFloat = Space.three
+    /// Where a HUD toast lands when no screen reports a visible frame. Off
+    /// to the side rather than centered — this path only fires headless.
+    static let hudFallbackOrigin: CGFloat = 200
 }

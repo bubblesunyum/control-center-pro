@@ -47,15 +47,70 @@ final class ProjectsWidgetTests: XCTestCase {
         XCTAssertTrue(row.canRestart)
     }
 
-    func testBusyRowDisablesEveryButton() {
-        let stopped = ProjectRowViewModel(id: "a", label: "Serve", isRunning: false, busyMessage: "Starting…")
-        XCTAssertFalse(stopped.canRun)
+    func testStaticBusyTextNeverDisablesSettledRow() {
+        let stopped = ProjectRowViewModel(id: "a", label: "Serve", isRunning: false, busyText: "Starting…")
+        XCTAssertTrue(stopped.canRun)
         XCTAssertFalse(stopped.canStop)
         XCTAssertFalse(stopped.canRestart)
-        let running = ProjectRowViewModel(id: "b", label: "Serve", isRunning: true, busyMessage: "Stopping…")
+        let running = ProjectRowViewModel(id: "b", label: "Serve", isRunning: true, busyText: "Stopping…")
         XCTAssertFalse(running.canRun)
-        XCTAssertFalse(running.canStop)
-        XCTAssertFalse(running.canRestart)
+        XCTAssertTrue(running.canStop)
+        XCTAssertTrue(running.canRestart)
+    }
+
+    func testSettledRowWithBusyTextShowsNoSpinner() async {
+        let (model, _) = makeModel()
+        await model.refresh()
+        // Fake's stopped Serve row carries static toml text yet is settled.
+        let row = model.sections[0].rows[0]
+        XCTAssertEqual(row.busyText, "Starting…")
+        XCTAssertFalse(model.isBusy(row))
+        XCTAssertNil(model.busyMessage(for: row))
+        XCTAssertTrue(row.canRun)
+    }
+
+    func testInflightRowShowsBusyText() async {
+        let gated = GatedProjectsSource(busyText: "Deploying…")
+        let model = ProjectsModel(source: gated, pollInterval: 3600)
+        await model.refresh()
+        let row = model.sections[0].rows[0]
+        XCTAssertFalse(model.isBusy(row))
+        XCTAssertNil(model.busyMessage(for: row))
+        let task = Task { await model.run(row) }
+        while !model.busyIDs.contains(row.id) { await Task.yield() }
+        XCTAssertTrue(model.isBusy(row))
+        XCTAssertEqual(model.busyMessage(for: row), "Deploying…")
+        gated.finish()
+        _ = await task.value
+        XCTAssertTrue(model.busyIDs.isEmpty)
+        XCTAssertNil(model.busyMessage(for: model.sections[0].rows[0]))
+    }
+
+    func testInflightRowWithoutBusyTextLeavesMessageToView() async {
+        let gated = GatedProjectsSource(busyText: nil)
+        let model = ProjectsModel(source: gated, pollInterval: 3600)
+        await model.refresh()
+        let row = model.sections[0].rows[0]
+        let task = Task { await model.run(row) }
+        while !model.busyIDs.contains(row.id) { await Task.yield() }
+        XCTAssertTrue(model.isBusy(row))
+        XCTAssertNil(model.busyMessage(for: row))
+        gated.finish()
+        _ = await task.value
+    }
+
+    func testRefreshWithStaticBusyTextNeverDisablesRun() async {
+        let (model, _) = makeModel()
+        await model.refresh()
+        let first = model.sections[0].rows[0]
+        XCTAssertEqual(first.busyText, "Starting…")
+        XCTAssertTrue(first.canRun)
+        XCTAssertFalse(model.isBusy(first))
+        await model.refresh()
+        let second = model.sections[0].rows[0]
+        XCTAssertTrue(second.canRun)
+        XCTAssertFalse(model.isBusy(second))
+        XCTAssertNil(model.busyMessage(for: second))
     }
 
     func testOutcomeExposesBoardURL() {
@@ -178,7 +233,7 @@ final class ProjectsWidgetTests: XCTestCase {
         XCTAssertEqual(api?.headerTitle, "api")
         XCTAssertEqual(api?.rows.map(\.label), ["Board"])
         XCTAssertEqual(api?.rows.first?.opensURL, true)
-        XCTAssertEqual(api?.rows.first?.busyMessage, nil)
+        XCTAssertEqual(api?.rows.first?.busyText, nil)
         let web = sections.first(where: { $0.directoryName == "web" })
         XCTAssertEqual(web?.rows.map(\.label), ["app.sh"])
         XCTAssertEqual(web?.rows.first?.opensURL, false)
@@ -272,8 +327,32 @@ final class ProjectsWidgetTests: XCTestCase {
         XCTAssertEqual(api?.displayName, "API Server")
         XCTAssertEqual(api?.headerTitle, "api · API Server")
         let worker = api?.rows.first(where: { $0.label == "Worker" })
-        XCTAssertEqual(worker?.busyMessage, "working…")
-        XCTAssertTrue(worker?.isBusy ?? false)
+        XCTAssertEqual(worker?.busyText, "working…")
+        XCTAssertFalse(worker?.isRunning ?? true)
+        XCTAssertTrue(worker?.canRun ?? false)
+    }
+
+    func testLiveSourceStaticBusyTextLeavesRowSettled() async {
+        let (source, _) = makeLiveSource {
+            $0.dashboardTOML["/dev/api/dashboard.toml"] = """
+                [project]
+                name = "API Server"
+
+                [[task]]
+                name = "worker"
+                command = ["scripts/worker.sh"]
+                label = "Worker"
+                busy = "working…"
+                """
+        }
+        let sections = await source.fetchSections()
+        let worker = sections.first(where: { $0.directoryName == "api" })?.rows.first(where: { $0.label == "Worker" })!
+        let model = ProjectsModel(source: FakeProjectsSource(staticRows: [worker!]), pollInterval: 3600)
+        await model.refresh()
+        let row = model.sections[0].rows[0]
+        XCTAssertFalse(model.isBusy(row))
+        XCTAssertNil(model.busyMessage(for: row))
+        XCTAssertTrue(row.canRun)
     }
 
     // MARK: - Helpers
@@ -306,23 +385,28 @@ final class ProjectsWidgetTests: XCTestCase {
 /// Stand-in for the not-yet-landed adapter: an in-memory section list whose
 /// actions mutate state and record calls instead of spawning anything.
 final class FakeProjectsSource: ProjectsSource, @unchecked Sendable {
-    private var groups: [ProjectGroupViewModel] = [
-        ProjectGroupViewModel(id: "/x/api", directoryName: "api", displayName: "API Server", rows: [
-            ProjectRowViewModel(id: "api/serve", label: "Serve", isRunning: false, opensURL: true),
-            ProjectRowViewModel(id: "api/worker", label: "Worker", isRunning: true),
-        ]),
-        ProjectGroupViewModel(id: "/x/web", directoryName: "web", rows: [
-            ProjectRowViewModel(id: "web/dev", label: "Dev", isRunning: false, opensURL: true),
-        ]),
-    ]
+    private var groups: [ProjectGroupViewModel]
     private let alreadyRunning: Bool
     private(set) var runCalls: [String] = []
     private(set) var stopCalls: [String] = []
     private(set) var restartCalls: [String] = []
     private(set) var openedURLs: [URL] = []
 
-    init(alreadyRunning: Bool = false) {
+    init(alreadyRunning: Bool = false, staticRows: [ProjectRowViewModel]? = nil) {
         self.alreadyRunning = alreadyRunning
+        if let staticRows {
+            self.groups = [ProjectGroupViewModel(id: "/x/api", directoryName: "api", rows: staticRows)]
+        } else {
+            self.groups = [
+                ProjectGroupViewModel(id: "/x/api", directoryName: "api", displayName: "API Server", rows: [
+                    ProjectRowViewModel(id: "api/serve", label: "Serve", isRunning: false, busyText: "Starting…", opensURL: true),
+                    ProjectRowViewModel(id: "api/worker", label: "Worker", isRunning: true),
+                ]),
+                ProjectGroupViewModel(id: "/x/web", directoryName: "web", rows: [
+                    ProjectRowViewModel(id: "web/dev", label: "Dev", isRunning: false, opensURL: true),
+                ]),
+            ]
+        }
     }
 
     func fetchSections() async -> [ProjectGroupViewModel] { groups }
@@ -365,10 +449,41 @@ final class FakeProjectsSource: ProjectsSource, @unchecked Sendable {
                 let old = groups[gi].rows[ri]
                 groups[gi].rows[ri] = ProjectRowViewModel(
                     id: old.id, label: old.label, isRunning: running,
-                    busyMessage: old.busyMessage, opensURL: old.opensURL
+                    busyText: old.busyText, opensURL: old.opensURL
                 )
             }
         }
+    }
+}
+
+/// A source whose run blocks until the test releases it, so the test can
+/// observe the model's in-flight overlay mid-tap.
+final class GatedProjectsSource: ProjectsSource, @unchecked Sendable {
+    private let row: ProjectRowViewModel
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    init(busyText: String?) {
+        self.row = ProjectRowViewModel(id: "api/serve", label: "Serve", isRunning: false, busyText: busyText)
+    }
+
+    func fetchSections() async -> [ProjectGroupViewModel] {
+        [ProjectGroupViewModel(id: "/x/api", directoryName: "api", rows: [row])]
+    }
+
+    func run(rowID: String) async -> ProjectActionOutcome {
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            continuation = cont
+        }
+        return .started(nil)
+    }
+
+    func stop(rowID: String) async -> ProjectActionOutcome { .failed }
+    func restart(rowID: String) async -> ProjectActionOutcome { .failed }
+    func open(_ url: URL) async {}
+
+    func finish() {
+        continuation?.resume()
+        continuation = nil
     }
 }
 

@@ -69,6 +69,10 @@ public extension Color {
     static let paceFill = Color.secondary.opacity(0.35)
     /// What a completed action reads as — the drop-catcher's tick.
     static let success = Color.green
+    /// What a running project reads as — the status dot beside its name.
+    /// Today's answer is the same green as a completed action; the name is
+    /// what a different answer would change.
+    static let projectRunning = Color.green
     static let labelMuted = Color.secondary
     /// Baseline drawn behind a sparkline so its zero is readable.
     static let sparklineBaseline = Color.secondary.opacity(0.28)

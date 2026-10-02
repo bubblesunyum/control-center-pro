@@ -179,11 +179,11 @@ private struct ToolsContent: View {
                 let outcome = await dashboards.launch(dashboard)
                 switch outcome {
                 case .started:
-                    ToolHUD.show(icon: dashboard.systemImage, message: "\(dashboard.title) dashboard started")
+                    HUD.show(icon: dashboard.systemImage, message: "\(dashboard.title) dashboard started")
                 case .alreadyRunning:
-                    ToolHUD.show(icon: dashboard.systemImage, message: "\(dashboard.title) board opened")
+                    HUD.show(icon: dashboard.systemImage, message: "\(dashboard.title) board opened")
                 case .failed:
-                    ToolHUD.show(icon: dashboard.systemImage, message: "Couldn't start \(dashboard.title) dashboard")
+                    HUD.show(icon: dashboard.systemImage, message: "Couldn't start \(dashboard.title) dashboard")
                 }
                 // A board just opened in the browser, so the panel gets out of
                 // the way. A failure keeps it open for the retry.
@@ -207,11 +207,11 @@ private struct ToolsContent: View {
             case .shown:
                 hidePanel?()
             case .launched:
-                ToolHUD.show(icon: "rocket", message: "Rocket launched")
+                HUD.show(icon: "rocket", message: "Rocket launched")
             case .needsAccessibility:
-                ToolHUD.show(icon: "rocket", message: "Allow Accessibility to open Rocket's menu")
+                HUD.show(icon: "rocket", message: "Allow Accessibility to open Rocket's menu")
             case .failed:
-                ToolHUD.show(icon: "rocket", message: "Couldn't open Rocket's menu")
+                HUD.show(icon: "rocket", message: "Couldn't open Rocket's menu")
             case .notInstalled:
                 break // Unreachable: the button only draws when installed.
             }
@@ -233,14 +233,14 @@ private struct ToolsContent: View {
         case .promptSystem:
             CopyTextCaptureGate.didPrompt = true
             CopyTextCaptureGate.requestAccess()
-            ToolHUD.show(icon: "text.viewfinder", message: "Allow Screen Recording to copy text")
+            HUD.show(icon: "text.viewfinder", message: "Allow Screen Recording to copy text")
             return
         case .settingsHint:
             if CopyTextCaptureGate.shouldOpenSettings(lastOpened: CopyTextCaptureGate.lastSettingsOpened, now: Date()) {
                 CopyTextCaptureGate.lastSettingsOpened = Date()
                 CopyTextCaptureGate.openSettings()
             }
-            ToolHUD.show(icon: "text.viewfinder", message: "Turn on Screen Recording, then quit and reopen the app")
+            HUD.show(icon: "text.viewfinder", message: "Turn on Screen Recording, then quit and reopen the app")
             return
         }
 
@@ -260,9 +260,9 @@ private struct ToolsContent: View {
                     if cancelled { return }
                     guard let cgImage else {
                         if CopyTextCaptureGate.isGranted() {
-                            ToolHUD.show(icon: "text.viewfinder", message: "Quit and reopen the app, then try again")
+                            HUD.show(icon: "text.viewfinder", message: "Quit and reopen the app, then try again")
                         } else {
-                            ToolHUD.show(icon: "text.viewfinder", message: "Allow Screen Recording to copy text")
+                            HUD.show(icon: "text.viewfinder", message: "Allow Screen Recording to copy text")
                         }
                         return
                     }
@@ -275,14 +275,14 @@ private struct ToolsContent: View {
                         let pb = NSPasteboard.general
                         pb.clearContents()
                         pb.setString(payload, forType: .string)
-                        ToolHUD.show(icon: "qrcode", message: "QR copied")
+                        HUD.show(icon: "qrcode", message: "QR copied")
                     case .text(let text):
                         let pb = NSPasteboard.general
                         pb.clearContents()
                         pb.setString(text, forType: .string)
-                        ToolHUD.show(icon: "text.viewfinder", message: "Text copied")
+                        HUD.show(icon: "text.viewfinder", message: "Text copied")
                     case .empty:
-                        ToolHUD.show(icon: "text.viewfinder", message: "No text found")
+                        HUD.show(icon: "text.viewfinder", message: "No text found")
                     }
                 }
             }
@@ -657,87 +657,3 @@ private extension NSScreen {
     }
 }
 
-// MARK: - HUD (lightweight copy of QuickToolHUD for CCPUI)
-
-private enum ToolHUD {
-    private static var panel: NSPanel?
-    private static var dismissWork: DispatchWorkItem?
-    private static var generation = 0
-    private static let messageWidthLimit: CGFloat = 360
-
-    static func show(icon: String, message: String) {
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async { show(icon: icon, message: message) }
-            return
-        }
-        let content = HStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-            Text(message)
-                .font(.system(size: 12, weight: .semibold))
-                .lineLimit(2)
-                .truncationMode(.tail)
-                .frame(maxWidth: messageWidthLimit, alignment: .leading)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 9)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        present(AnyView(content), dismissAfter: 1.5)
-    }
-
-    private static func present(_ content: AnyView, dismissAfter: Double) {
-        let host = NSHostingController(rootView: content)
-        host.view.layoutSubtreeIfNeeded()
-        let size = host.view.fittingSize
-        let panel = ensurePanel()
-        panel.contentViewController = host
-        let frame: NSRect
-        if let visible = NSScreen.main?.visibleFrame {
-            frame = NSRect(x: visible.midX - size.width / 2, y: visible.maxY - size.height - 24, width: size.width, height: size.height)
-        } else {
-            frame = NSRect(x: 200, y: 200, width: size.width, height: size.height)
-        }
-        panel.setFrame(frame, display: true)
-        generation += 1
-        panel.alphaValue = 0
-        panel.orderFrontRegardless()
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.12
-            panel.animator().alphaValue = 1
-        }
-        dismissWork?.cancel()
-        let work = DispatchWorkItem { dismiss() }
-        dismissWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + dismissAfter, execute: work)
-    }
-
-    private static func dismiss() {
-        guard let panel else { return }
-        let dismissed = generation
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.22
-            panel.animator().alphaValue = 0
-        }, completionHandler: {
-            guard generation == dismissed else { return }
-            panel.orderOut(nil)
-            panel.contentViewController = nil
-            dismissWork = nil
-        })
-    }
-
-    private static func ensurePanel() -> NSPanel {
-        if let panel { return panel }
-        let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        panel.level = .statusBar
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = true
-        panel.ignoresMouseEvents = true
-        panel.hidesOnDeactivate = false
-        panel.isReleasedWhenClosed = false
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
-        self.panel = panel
-        return panel
-    }
-}
