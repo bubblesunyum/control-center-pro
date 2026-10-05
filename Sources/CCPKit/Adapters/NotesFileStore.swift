@@ -65,6 +65,16 @@ public enum NotesIndexRead: Equatable, Sendable {
     case unreadable
 }
 
+/// What a text write found. Thrown, never returned: the adapter's persist
+/// treats any write error as a failed save, which keeps the in-memory
+/// document standing instead of committing an index over lost bytes.
+public enum NotesFileWriteError: Error, Equatable, Sendable {
+    /// The new text is empty while the file still holds words. The write is
+    /// skipped — zeroing is how pads lose text they never meant to, and an
+    /// empty save over a non-empty file is a conflict, not an edit.
+    case emptyOverNonempty(filename: String)
+}
+
 /// Local truth for Notes: one markdown file per pad plus the index above.
 ///
 /// The index is authoritative for membership — files on disk that it does not
@@ -152,10 +162,18 @@ public struct NotesFileStore {
 
     /// Writes one pad's text atomically. A file whose bytes are not text is
     /// set aside first, once only — overwriting bytes we could not read is
-    /// exactly the loss the old blob's rescue path existed for.
+    /// exactly the loss the old blob's rescue path existed for. An empty
+    /// write over a file that still holds words throws
+    /// ``NotesFileWriteError/emptyOverNonempty`` and writes nothing: the
+    /// caller keeps its in-memory text and the disk keeps the words.
     public func writeText(_ text: String, filename: String) throws {
         let url = directory.appendingPathComponent(filename)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        if text.isEmpty, let data = try? Data(contentsOf: url),
+           let existing = String(data: data, encoding: .utf8),
+           !HardBreak.normalized(existing).isEmpty {
+            throw NotesFileWriteError.emptyOverNonempty(filename: filename)
+        }
         setAsideUnreadableFile(at: url)
         try text.write(to: url, atomically: true, encoding: .utf8)
     }
@@ -169,11 +187,41 @@ public struct NotesFileStore {
         try? FileManager.default.moveItem(at: url, to: corrupt)
     }
 
-    /// Removes a pad's file. Best-effort: the index entry is already gone by
-    /// the time this runs, so a file left behind is an ignored orphan, never
-    /// a resurrected note.
+    /// Removes a pad's file by moving it into `.trash` under a timestamped
+    /// name. Best-effort: the index entry is already gone by the time this
+    /// runs, so a file left behind is an ignored orphan, never a resurrected
+    /// note — and the listing below never looks inside `.trash`, so a
+    /// relaunch never adopts what was deleted. Falls back to deleting
+    /// outright when the trash move itself fails.
     public func deleteFile(_ filename: String) {
-        try? FileManager.default.removeItem(at: directory.appendingPathComponent(filename))
+        let source = directory.appendingPathComponent(filename)
+        guard FileManager.default.fileExists(atPath: source.path) else { return }
+        do {
+            let trash = directory.appendingPathComponent(Self.trashDirectoryName, isDirectory: true)
+            try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+            let trashed = trash.appendingPathComponent(uniqueTrashName(for: filename))
+            try FileManager.default.moveItem(at: source, to: trashed)
+            // A move preserves mtime, and pruneTrash ages by modification
+            // date — touch the copy so the day runs from the delete, not the edit.
+            try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: trashed.path)
+        } catch {
+            try? FileManager.default.removeItem(at: source)
+        }
+    }
+
+    /// Drops trashed copies older than `maxAge`. Runs on the periodic pass,
+    /// not on delete — a trashed copy is evidence until its day is up, and a
+    /// file whose age cannot be read is kept, never pruned.
+    public func pruneTrash(olderThan maxAge: TimeInterval = 24 * 60 * 60, now: Date = Date()) {
+        let trash = directory.appendingPathComponent(Self.trashDirectoryName, isDirectory: true)
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: trash.path) else { return }
+        for name in names {
+            let url = trash.appendingPathComponent(name)
+            guard let modified = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date,
+                  now.timeIntervalSince(modified) > maxAge
+            else { continue }
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     /// Renames a pad's file, following a tab rename. A missing source is not
@@ -218,11 +266,42 @@ public struct NotesFileStore {
     }
 
     /// Every markdown file in the folder, sorted. Only consulted when there
-    /// is no index at all — the rebuild adopts what it finds.
+    /// is no index at all — the rebuild adopts what it finds. The listing is
+    /// top-level, so `.trash` and its timestamped copies never surface here
+    /// and a deleted note never adopts its way back.
     public func markdownFiles() -> [String] {
         (try? FileManager.default.contentsOfDirectory(atPath: directory.path))?.filter {
-            $0.hasSuffix(".md")
+            $0.hasSuffix(".md") && $0 != Self.trashDirectoryName
         }.sorted() ?? []
+    }
+
+    // MARK: - Trash
+
+    /// Where deleted pads wait out their day before the periodic prune.
+    public static let trashDirectoryName = ".trash"
+
+    /// `<stem>-<UTC-timestamp>.md`, suffixed on collision: two deletes of
+    /// one name inside the same second still keep both copies.
+    private func uniqueTrashName(for filename: String) -> String {
+        let stem = (filename as NSString).deletingPathExtension
+        let stamp = Self.utcTimestamp()
+        let trash = directory.appendingPathComponent(Self.trashDirectoryName, isDirectory: true)
+        var candidate = "\(stem)-\(stamp).md"
+        var number = 2
+        while FileManager.default.fileExists(atPath: trash.appendingPathComponent(candidate).path) {
+            candidate = "\(stem)-\(stamp)-\(number).md"
+            number += 1
+        }
+        return candidate
+    }
+
+    /// Compact UTC stamp for trash and backup names. Sortable, filename-safe.
+    static func utcTimestamp(_ date: Date = Date()) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "yyyyMMdd'T'HHmmss"
+        return formatter.string(from: date)
     }
 
     // MARK: - Filenames

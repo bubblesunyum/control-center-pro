@@ -182,4 +182,212 @@ final class NotesFileStoreTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: first.appendingPathComponent("B.md"), encoding: .utf8),
                        "b")
     }
+
+    // MARK: - Empty-over-nonempty refusal
+
+    func testEmptyWriteOverNonemptyFileThrowsAndKeepsBytes() throws {
+        let dir = freshNotesDirectory()
+        let name = "ccp.nfs.refuse.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let fileStore = NotesFileStore(defaults: store, directory: dir)
+        try fileStore.writeText("kept", filename: "Note.md")
+
+        XCTAssertThrowsError(try fileStore.writeText("", filename: "Note.md")) { error in
+            XCTAssertEqual(error as? NotesFileWriteError, .emptyOverNonempty(filename: "Note.md"))
+        }
+        XCTAssertEqual(try String(contentsOf: dir.appendingPathComponent("Note.md"), encoding: .utf8),
+                       "kept")
+    }
+
+    func testEmptyWriteOverMissingFileCreatesIt() throws {
+        let dir = freshNotesDirectory()
+        let name = "ccp.nfs.fresh.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let fileStore = NotesFileStore(defaults: store, directory: dir)
+
+        try fileStore.writeText("", filename: "Note.md")
+
+        XCTAssertEqual(try String(contentsOf: dir.appendingPathComponent("Note.md"), encoding: .utf8), "")
+    }
+
+    func testEmptyWriteOverEmptyFileSucceeds() throws {
+        let dir = freshNotesDirectory()
+        let name = "ccp.nfs.stillempty.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let fileStore = NotesFileStore(defaults: store, directory: dir)
+        try fileStore.writeText("", filename: "Note.md")
+
+        XCTAssertNoThrow(try fileStore.writeText("", filename: "Note.md"))
+    }
+
+    func testEmptyWriteOverWhitespaceOnlyFileSucceeds() throws {
+        // Debris zeroing is not loss: what reads as empty may be emptied.
+        let dir = freshNotesDirectory()
+        let name = "ccp.nfs.debris.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let fileStore = NotesFileStore(defaults: store, directory: dir)
+        try "   ".write(to: dir.appendingPathComponent("Note.md"), atomically: true, encoding: .utf8)
+
+        XCTAssertNoThrow(try fileStore.writeText("", filename: "Note.md"))
+        XCTAssertEqual(try String(contentsOf: dir.appendingPathComponent("Note.md"), encoding: .utf8), "")
+    }
+
+    // MARK: - Trash
+
+    func testDeleteMovesTheFileToTrash() throws {
+        let dir = freshNotesDirectory()
+        let name = "ccp.nfs.trash.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let fileStore = NotesFileStore(defaults: store, directory: dir)
+        try fileStore.writeText("words", filename: "Note.md")
+
+        fileStore.deleteFile("Note.md")
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("Note.md").path))
+        let trash = dir.appendingPathComponent(NotesFileStore.trashDirectoryName, isDirectory: true)
+        let kept = try XCTUnwrap(FileManager.default.contentsOfDirectory(atPath: trash.path))
+        XCTAssertEqual(kept.count, 1)
+        let trashed = try XCTUnwrap(kept.first)
+        XCTAssertTrue(trashed.hasPrefix("Note-"), "the stem survives: \(trashed)")
+        XCTAssertTrue(trashed.hasSuffix(".md"))
+        XCTAssertEqual(try String(contentsOf: trash.appendingPathComponent(trashed), encoding: .utf8),
+                       "words")
+    }
+
+    func testDeleteOfAMissingFileIsSilent() throws {
+        let dir = freshNotesDirectory()
+        let name = "ccp.nfs.trashmiss.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let fileStore = NotesFileStore(defaults: store, directory: dir)
+
+        fileStore.deleteFile("Nope.md")
+
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: dir.appendingPathComponent(NotesFileStore.trashDirectoryName).path))
+    }
+
+    func testMarkdownFilesIgnoresTrash() throws {
+        let dir = freshNotesDirectory()
+        let name = "ccp.nfs.noadopt.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let fileStore = NotesFileStore(defaults: store, directory: dir)
+        try fileStore.writeText("doomed", filename: "A.md")
+
+        fileStore.deleteFile("A.md")
+
+        XCTAssertEqual(fileStore.markdownFiles(), [],
+                       "a deleted note never adopts its way back")
+    }
+
+    func testPruneTrashRemovesOnlyOldEntries() throws {
+        let dir = freshNotesDirectory()
+        let name = "ccp.nfs.prune.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let fileStore = NotesFileStore(defaults: store, directory: dir)
+        let trash = dir.appendingPathComponent(NotesFileStore.trashDirectoryName, isDirectory: true)
+        try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+        let old = trash.appendingPathComponent("Old-20200101T000000.md")
+        let fresh = trash.appendingPathComponent("Fresh.md")
+        try "old".write(to: old, atomically: true, encoding: .utf8)
+        try "fresh".write(to: fresh, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-25 * 3600)],
+                                              ofItemAtPath: old.path)
+
+        fileStore.pruneTrash()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: old.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fresh.path))
+    }
+
+    func testDeleteTouchesTrashCopySoPruneKeepsFreshDeletes() throws {
+        let dir = freshNotesDirectory()
+        let name = "ccp.nfs.trashage.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let fileStore = NotesFileStore(defaults: store, directory: dir)
+        try fileStore.writeText("old words", filename: "Old.md")
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-3 * 24 * 3600)],
+                                              ofItemAtPath: dir.appendingPathComponent("Old.md").path)
+
+        fileStore.deleteFile("Old.md")
+        fileStore.pruneTrash()
+
+        let trash = dir.appendingPathComponent(NotesFileStore.trashDirectoryName, isDirectory: true)
+        let kept = try XCTUnwrap(FileManager.default.contentsOfDirectory(atPath: trash.path))
+        XCTAssertEqual(kept.count, 1)
+        XCTAssertEqual(try String(contentsOf: trash.appendingPathComponent(kept[0]), encoding: .utf8),
+                       "old words")
+    }
+
+    // MARK: - Adapter: delete and zeroing
+
+    @MainActor
+    private func notesAdapter(_ store: UserDefaults, dir: URL) -> NotesAdapter {
+        // Local-only: a deactivate's trailing push must never reach past the
+        // scripted transport, and sync is paused anyway.
+        let adapter = NotesAdapter(defaults: store, defaultName: "Note", notesDirectory: dir,
+                                   destination: CraftNoteDestination(defaults: store))
+        adapter.craftCredentialUnavailable = true
+        return adapter
+    }
+
+    /// deleteNote leaves bytes in `.trash`, and a relaunch never resurrects
+    /// the pad: the index no longer lists it and the listing never looks
+    /// inside `.trash`.
+    @MainActor
+    func testDeleteNoteTrashesAndStaysDeleted() throws {
+        let name = "ccp.nfs.trashnote.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let dir = freshNotesDirectory()
+        let adapter = notesAdapter(store, dir: dir)
+        adapter.text = "doomed"
+        adapter.createNote()
+        let doomed = try XCTUnwrap(adapter.notes.first(where: { $0.text == "doomed" })?.id)
+
+        XCTAssertTrue(adapter.deleteNote(doomed))
+
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted(),
+                       [NotesFileStore.trashDirectoryName, "Note 2.md"])
+        let trash = dir.appendingPathComponent(NotesFileStore.trashDirectoryName, isDirectory: true)
+        let kept = try XCTUnwrap(FileManager.default.contentsOfDirectory(atPath: trash.path))
+        XCTAssertEqual(kept.count, 1)
+        let trashed = try XCTUnwrap(kept.first)
+        XCTAssertEqual(try String(contentsOf: trash.appendingPathComponent(trashed), encoding: .utf8),
+                       "doomed")
+
+        let second = notesAdapter(store, dir: dir)
+        XCTAssertFalse(second.notes.map(\.id).contains(doomed))
+        XCTAssertEqual(NotesFileStore(defaults: store, directory: dir).markdownFiles(), ["Note 2.md"])
+    }
+
+    /// Zeroing a saved pad's file on disk, then saving, leaves the non-empty
+    /// bytes intact while memory keeps the user's text.
+    @MainActor
+    func testZeroingASavedPadKeepsDiskBytes() throws {
+        let name = "ccp.nfs.zero.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let dir = freshNotesDirectory()
+        let adapter = notesAdapter(store, dir: dir)
+        adapter.text = "kept"
+        adapter.deactivate()
+        XCTAssertEqual(try String(contentsOf: dir.appendingPathComponent("Note 1.md"), encoding: .utf8),
+                       "kept")
+
+        adapter.text = ""
+        adapter.deactivate()
+
+        XCTAssertEqual(try String(contentsOf: dir.appendingPathComponent("Note 1.md"), encoding: .utf8),
+                       "kept", "zeroing leaves non-empty bytes intact")
+        XCTAssertEqual(adapter.text, "", "memory keeps the user's text")
+    }
 }
