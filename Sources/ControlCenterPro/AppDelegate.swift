@@ -23,6 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var hotkey: GlobalHotkey?
     private var settingsWindow: SettingsWindowController?
     private var dropOverlay: DropOverlayController?
+    private var notesBackupTimer: Timer?
+    private var notesBackups = NotesBackupStore()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         BridgedDefaults.register()
@@ -71,6 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             statusFrame: { [weak self] in self?.statusItem?.button?.window?.frame },
             isSuppressed: { panel.isVisible || ShelfWindowController.shared.isVisible }
         )
+        startNotesBackups()
 
         // An agent can't click a menu bar item, and a screenshot of a panel
         // nobody opened is a screenshot of the desktop. This is how the smoke
@@ -86,6 +89,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
         if CommandLine.arguments.contains("--show-shelf") {
             ShelfWindowController.shared.show()
+        }
+    }
+
+    /// Notes survive a kill -9 by at most one snapshot interval: an
+    /// app-level repeating snapshot — panel-open or not — plus a launch
+    /// snapshot (a crash may have skipped the termination flush) and a
+    /// termination flush next to the other stores'.
+    private func startNotesBackups() {
+        notesBackups.run()
+        notesBackupTimer = Timer.scheduledTimer(withTimeInterval: NotesBackupStore.snapshotInterval,
+                                                repeats: true) { [weak self] _ in
+            self?.notesBackups.run()
         }
     }
 
@@ -113,6 +128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         arrangement?.flush()
         ShelfStore.shared.flush()
         StickyStore.shared.flush()
+        notesBackups.run()
     }
 
     // MARK: - Notifications
