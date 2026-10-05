@@ -224,7 +224,7 @@ final class NotesDocumentStorageTests: XCTestCase {
         XCTAssertEqual(files(in: dir).count, 2)
         // The trash deletes the doc: the file goes with it.
         XCTAssertTrue(adapter.deleteNote(doomed))
-        XCTAssertEqual(files(in: dir).count, 1)
+        XCTAssertEqual(files(in: dir).filter { $0 != ".trash" }.count, 1)
     }
 
     func testRenameRenamesTheFile() throws {
@@ -365,12 +365,20 @@ final class NotesDocumentStorageTests: XCTestCase {
         defer { store.removePersistentDomain(forName: name) }
         let settingsDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ccp.settings.\(UUID().uuidString)", isDirectory: true)
+        let dirA = freshNotesDirectory()
+        // The switch must start from dirA, never the real vault: a temp
+        // settings file with no path resolves to the default folder, and the
+        // ephemeral index still names real files — the first switch would
+        // move the user's live notes into tmp (ccp-mam1).
+        try JSONFileStore(filename: "settings.json",
+                          default: StoredSettings(),
+                          in: settingsDir)
+            .save(StoredSettings(notesFolderPath: dirA.path))
         let settings = SettingsStore(
             file: JSONFileStore(filename: "settings.json",
                                 default: StoredSettings(),
                                 in: settingsDir),
             notesDefaults: store)
-        let dirA = freshNotesDirectory()
         let pads = notesAdapter(store, dir: dirA)
         let id = try XCTUnwrap(pads.selectedNoteID)
         pads.text = "moves with me"
@@ -417,7 +425,7 @@ final class NotesDocumentStorageTests: XCTestCase {
 
         XCTAssertEqual(second.notes.count, 1)
         XCTAssertFalse(second.notes.map(\.id).contains(doomed))
-        XCTAssertEqual(files(in: dir).count, 1)
+        XCTAssertEqual(files(in: dir).filter { $0 != ".trash" }.count, 1)
     }
 
     /// A failed migration keeps both legacy copies for the retry: the blob

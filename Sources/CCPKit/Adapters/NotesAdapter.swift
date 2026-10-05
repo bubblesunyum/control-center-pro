@@ -203,6 +203,9 @@ public final class NotesAdapter {
     public var text: String = "" {
         didSet {
             guard hasLoaded, !isReplacingText, var document else { return }
+            // An explicit retype heals a quarantine: real bytes stand
+            // behind the pad again, so saves may persist it (ccp-zm7f).
+            if let selectedNoteID { healQuarantine(for: selectedNoteID) }
             document.updateSelectedText(text, modifiedAt: Date())
             self.document = document
             notes = document.notes
@@ -351,6 +354,8 @@ public final class NotesAdapter {
     /// them; the surface marks the pad view-only while they are present.
     /// True per-range inert regions wait on the fork (ccp-i7g).
     public var containsReadOnlyBlocks: Bool {
+        // Paused (ccp-18rb): the base is stale, so it must not mark the UI.
+        guard !Self.craftSyncDisabled else { return false }
         _ = readOnlyBlocksVersion
         guard let selectedNoteID else { return false }
         return craftDestination.base(for: selectedNoteID).blocks.contains { !$0.isWritable }
@@ -445,6 +450,20 @@ public final class NotesAdapter {
     @ObservationIgnored private var dirtyPadIDs: Set<UUID> = [] {
         didSet { saveIndex() }
     }
+    /// Pads whose file holds nothing the index remembers — deleted or
+    /// zeroed under us (ccp-zm7f). A quarantined pad keeps its tab and its
+    /// in-memory text but loads unsaved: no save path persists it until an
+    /// explicit retype heals it or a delete discards it. Reassigned, never
+    /// mutated in place, like the dirty set above.
+    @ObservationIgnored private var quarantinedPadIDs: Set<UUID> = []
+    /// Test seam: whether the pad's file went missing or zeroed under us.
+    func isQuarantined(_ id: UUID) -> Bool { quarantinedPadIDs.contains(id) }
+    /// Retypes, pulled adopts, pinned restores and snapshot restores all put
+    /// real bytes behind the pad again — each heals through here, so the
+    /// next persist may write its file.
+    private func healQuarantine(for id: UUID) {
+        quarantinedPadIDs = quarantinedPadIDs.subtracting([id])
+    }
     /// Seconds of quiet before an edit pushes. Owned by the type, not a
     /// design token — the 12s focus-dim clock is a different thing (ccp-srw).
     private static let pushDebounce: TimeInterval = 3
@@ -457,6 +476,12 @@ public final class NotesAdapter {
     /// credential path answers absent — without deleting any stored
     /// credential or Craft state, so re-enabling is this flag plus the sync
     /// tests' skip gates.
+    ///
+    /// Edits made while paused still accrue their bookkeeping — the dirty
+    /// bit, the title-rename stamp (ccp-18rb, intentional carryover, not an
+    /// oversight): with no round running they cost nothing, and re-enabling
+    /// converges them on the next push instead of stranding them until a
+    /// later keystroke.
     public static let craftSyncDisabled = true
     /// Test seam: reads as unconfigured without touching the real store — the
     /// app-support path is a fixed bundle id, so a plain nil override still
@@ -712,22 +737,35 @@ public final class NotesAdapter {
 
     /// Rebuild the document from a decoded index: texts come from the files,
     /// everything else from the entries. A missing file is an empty pad, not
-    /// a missing one — the tab survives whatever happened on disk.
+    /// a missing one — the tab survives whatever happened on disk. A file
+    /// holding nothing the index remembers (missing or zeroed while the pad
+    /// carries a date) quarantines instead: the tab keeps its in-memory
+    /// text — a reload must never clobber it — and loads unsaved, with no
+    /// save path persisting it until the user retypes or deletes (ccp-zm7f).
+    /// A pad the index remembers as empty is genuinely empty, not corrupt.
     private func loadFromIndex(_ index: NotesFileIndex) {
+        let liveTexts = Dictionary(uniqueKeysWithValues: (document?.notes ?? []).map { ($0.id, $0.text) })
+        var quarantined: Set<UUID> = []
         let notes = index.pads.map { entry -> Note in
             let text = notesStore.readText(filename: entry.filename) ?? ""
+            if text.isEmpty, entry.modifiedAt != nil {
+                quarantined.insert(entry.id)
+                let kept = liveTexts[entry.id] ?? ""
+                return Note(id: entry.id, name: entry.name, text: kept,
+                            // An emptied pad carries no date — same rule as the
+                            // sanitise pass, so a missing file never reads as a change to save back.
+                            modifiedAt: kept.isEmpty ? nil : entry.modifiedAt)
+            }
             return Note(id: entry.id,
                         name: entry.name,
                         text: text,
-                        // An emptied pad carries no date — same rule as the
-                        // sanitise pass, applied here so a missing file does
-                        // not look like a change that must be saved back.
                         modifiedAt: text.isEmpty ? nil : entry.modifiedAt)
         }
         let decoded = NotesDocument(notes: notes, selectedID: index.selectedID)
         lastSavedFilenames = Dictionary(uniqueKeysWithValues: index.pads.map { ($0.id, $0.filename) })
         closedNoteIDs = Set(index.pads.filter(\.closed).map(\.id))
         dirtyPadIDs = Set(index.dirtyPadIDs)
+        quarantinedPadIDs = quarantined
         let loaded = decoded.sanitized(defaultName: defaultName)
         apply(loaded)
         if loaded == decoded {
@@ -937,6 +975,9 @@ public final class NotesAdapter {
         }
         for note in document.notes {
             guard let file = assigned[note.id] else { return false }
+            // A quarantined pad keeps its missing/zeroed file: no save path
+            // recreates or rewrites it until an explicit retype heals it.
+            guard !quarantinedPadIDs.contains(note.id) else { continue }
             let oldText = previous?.notes.first(where: { $0.id == note.id })?.text
             if oldText == note.text, known[note.id] != nil { continue }
             do { try notesStore.writeText(note.text, filename: file) }
@@ -1047,7 +1088,11 @@ public final class NotesAdapter {
     /// Craft either way.
     @discardableResult
     public func closeTab(_ id: UUID) -> Bool {
-        if notes.first(where: { $0.id == id })?.text.isEmpty == true {
+        // A quarantined empty hides, never deletes: the file's loss is not
+        // the user's discard, and deletion would destroy the tab the retype
+        // needs (ccp-zm7f).
+        if notes.first(where: { $0.id == id })?.text.isEmpty == true,
+           !quarantinedPadIDs.contains(id) {
             if notes.count == 1 {
                 // Sole blank tab: deletion refuses the last doc, so reset —
                 // fresh blank in place of the dismissed one. Count 1 mints.
@@ -1113,6 +1158,8 @@ public final class NotesAdapter {
         if let filename { notesStore.deleteFile(filename) }
         dropSyncState(for: id)
         dropHistory(for: id)
+        // The discard lands: a deleted pad leaves quarantine with it.
+        quarantinedPadIDs = quarantinedPadIDs.subtracting([id])
         unhide(id)
         apply(next)
         return true
@@ -1144,7 +1191,10 @@ public final class NotesAdapter {
     /// confirmed keeps its text and goes local-only instead: deleting that
     /// would destroy the only copy in either place. A sole pad mints its
     /// replacement first, since deleteNote refuses the last doc.
-    private func settleTrashedPad(_ padID: UUID) {
+    func settleTrashedPad(_ padID: UUID) {
+        // Paused (ccp-18rb): no trash listing runs, so nothing settles —
+        // neither the delete nor the local-only unmap may fire on stale state.
+        guard !Self.craftSyncDisabled else { return }
         guard craftDestination.craftDocumentID(for: padID) != nil,
               document?.notes.contains(where: { $0.id == padID }) == true
         else { return }
@@ -1636,7 +1686,9 @@ public final class NotesAdapter {
     /// unattributable, or the pad moved under us. The base is left alone:
     /// advancing it would absorb writable edits sharing the round into an
     /// agreement Craft never confirmed.
-    private func restorePinnedBlocks(padID: UUID, base: PadSyncBase, padText: String) -> String? {
+    func restorePinnedBlocks(padID: UUID, base: PadSyncBase, padText: String) -> String? {
+        // Paused (ccp-18rb): a stale base must not rewrite the pad.
+        guard !Self.craftSyncDisabled else { return nil }
         guard let restored = base.restoredPinnedText(in: padText), restored != padText,
               var live = document,
               let index = live.notes.firstIndex(where: { $0.id == padID }),
@@ -1654,6 +1706,8 @@ public final class NotesAdapter {
             text = restored
             isReplacingText = false
         }
+        // Restored pins are real bytes: the persist below may write them.
+        healQuarantine(for: padID)
         _ = persist(live)
         return restored
     }
@@ -1829,6 +1883,9 @@ public final class NotesAdapter {
         guard let snapshot = craftDestination.snapshots(for: id).first(where: { $0.id == snapshotID }),
               var document, let index = document.notes.firstIndex(where: { $0.id == id })
         else { return }
+        // An empty snapshot restores nothing: adopting it blanks the pad
+        // with no way back but retyping. Refused before anything snapshots.
+        guard !snapshot.markdown.isEmpty else { return }
         let current = document.notes[index].text
         guard current != snapshot.markdown else { return }
         if !current.isEmpty,
@@ -1847,6 +1904,9 @@ public final class NotesAdapter {
             // Through didSet: persists, marks dirty, schedules the push.
             text = snapshot.markdown
         } else {
+            // A snapshot restore puts real bytes behind the pad: it heals
+            // a quarantine before the persist below may write its file.
+            healQuarantine(for: id)
             _ = persist(document)
             dirtyPadIDs.insert(id)
             scheduleCraftPush()
@@ -1999,8 +2059,10 @@ public final class NotesAdapter {
     }
 
     /// Reconcile one pad's name against the fetched page-root title.
-    private func reconcileTitle(padID: UUID, remoteTitle: String?,
-                                remoteModified: Date?, serverTime: Date?) {
+    func reconcileTitle(padID: UUID, remoteTitle: String?,
+                         remoteModified: Date?, serverTime: Date?) {
+        // Paused (ccp-18rb): the baseline is stale, so titles stay local.
+        guard !Self.craftSyncDisabled else { return }
         guard let document,
               let index = document.notes.firstIndex(where: { $0.id == padID }),
               craftDestination.craftDocumentID(for: padID) != nil
@@ -2068,7 +2130,9 @@ public final class NotesAdapter {
     /// Take a Craft-side rename silently: no dirty bit, no push — what just
     /// arrived must not echo back. The rename date becomes the adoption's
     /// clock, so a later local rename still has something to beat.
-    private func adoptTitle(padID: UUID, title: String, date: Date?) {
+    func adoptTitle(padID: UUID, title: String, date: Date?) {
+        // Paused (ccp-18rb): renames from a stale pull must not land.
+        guard !Self.craftSyncDisabled else { return }
         guard let document,
               let next = document.renaming(padID, to: title),
               persist(next)
@@ -2083,11 +2147,17 @@ public final class NotesAdapter {
     /// the merged text until the push lands. Silent: the replacing flag keeps
     /// the widget from re-dirtying and re-pushing what just arrived, and the
     /// persist lands now rather than on the save debounce.
-    private func adoptRemote(padID: UUID, text: String, base: PadSyncBase?,
-                             snapshotReason: SnapshotReason, snapshotDate: Date?) {
+    func adoptRemote(padID: UUID, text: String, base: PadSyncBase?,
+                      snapshotReason: SnapshotReason, snapshotDate: Date?) {
+        // Paused (ccp-18rb): the apply layer stands down with the transport —
+        // a stale base must neither mark nor move the pad while sync is off.
+        guard !Self.craftSyncDisabled else { return }
         guard var document,
               let index = document.notes.firstIndex(where: { $0.id == padID })
         else { return }
+        // A pulled text is real bytes behind the pad: it heals a quarantine
+        // before the persist below, which would otherwise skip the file.
+        healQuarantine(for: padID)
         let current = document.notes[index].text
         let replaced = current != text
         if replaced, !current.isEmpty {
@@ -2147,6 +2217,8 @@ public final class NotesAdapter {
         let before = document
         document.appendText(fragment, to: landingID, modifiedAt: Date())
         guard document != before else { return }
+        // Dropped text is an explicit addition: it heals a quarantine.
+        healQuarantine(for: landingID)
         self.document = document
         notes = document.notes
         if landingID == selectedNoteID {
