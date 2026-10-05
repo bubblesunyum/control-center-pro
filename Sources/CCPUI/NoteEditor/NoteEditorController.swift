@@ -32,7 +32,10 @@ final class NoteEditorController: NSObject, WKScriptMessageHandler, WKNavigation
 
     @ObservationIgnored let webView: NoteEditorWebView
     /// The shown document's caret while it is focused; nil otherwise.
-    private(set) var caret: Caret?
+    /// Internal (not private) so tests can simulate a focused page: the
+    /// headless test window never takes focus, so no script can produce a
+    /// real selection message there.
+    var caret: Caret?
 
     @ObservationIgnored private let style: NoteEditorStyle
     @ObservationIgnored private let pageURL: URL
@@ -41,6 +44,9 @@ final class NoteEditorController: NSObject, WKScriptMessageHandler, WKNavigation
     @ObservationIgnored private var readyWaiters: [CheckedContinuation<Void, Never>] = []
     @ObservationIgnored private var documents: [String: Document] = [:]
     @ObservationIgnored private var shownDocumentId: String?
+    /// Documents with an `open` already in flight, so a second `show` while
+    /// the first is still backing off does not start a second chain.
+    @ObservationIgnored private var opening: Set<String> = []
 
     /// What the app and the page each last knew of one document.
     private struct Document {
@@ -52,6 +58,10 @@ final class NoteEditorController: NSObject, WKScriptMessageHandler, WKNavigation
         var pageMarkdown: String?
         /// The pad text last handed to, or taken from, the app.
         var text: String
+        /// Changes heard while the document has no baseline yet: the page's
+        /// cold empty state arrives before `open` resolves, and applying it
+        /// verbatim would wipe the app's text.
+        var pending: [String] = []
         var onText: (String) -> Void
         /// The baseline cut once (ccp-giwa): source and loaded never move
         /// between replaces, so a keystroke cuts only the save instead of
@@ -110,16 +120,47 @@ final class NoteEditorController: NSObject, WKScriptMessageHandler, WKNavigation
         }
         guard shownDocumentId != documentId || documents[documentId]?.loaded == nil else { return Task {} }
         shownDocumentId = documentId
-        return Task {
-            await ready()
-            guard let loaded = try? await call("return bbEditor.open(id, markdown)",
-                                                ["id": documentId, "markdown": text]) as? String
-            else { return }
-            if documents[documentId]?.loaded == nil {
-                documents[documentId]?.loaded = loaded
-                documents[documentId]?.loadedMarkdowns =
-                    CraftBlockSplitter.slices(in: loaded).map(\.markdown)
+        guard opening.insert(documentId).inserted else { return Task {} }
+        return Task { await openDocument(documentId: documentId) }
+    }
+
+    /// Open the document's current text, retrying with backoff while it
+    /// exists: a failed `open` must not leave the document permanently
+    /// unbaselined on the verbatim path of `receiveChange`.
+    private func openDocument(documentId: String) async {
+        await ready()
+        var attempt = 0
+        while let document = documents[documentId] {
+            let sent = document.text
+            if let loaded = try? await call("return bbEditor.open(id, markdown)",
+                                            ["id": documentId, "markdown": sent]) as? String {
+                if documents[documentId]?.loaded == nil {
+                    documents[documentId]?.loaded = loaded
+                    documents[documentId]?.loadedMarkdowns =
+                        CraftBlockSplitter.slices(in: loaded).map(\.markdown)
+                }
+                drainPending(documentId: documentId)
+                if documents[documentId]?.text != sent, let current = documents[documentId]?.text {
+                    replace(documentId: documentId, with: current)
+                }
+                opening.remove(documentId)
+                return
             }
+            let delay = min(100 * (1 << min(attempt, 4)), 2000)
+            try? await Task.sleep(for: .milliseconds(delay))
+            attempt += 1
+        }
+        opening.remove(documentId)
+    }
+
+    /// Replay what arrived before the baseline existed, now that reports can
+    /// be told apart from the page's cold empty state.
+    private func drainPending(documentId: String) {
+        guard documents[documentId]?.pending.isEmpty == false else { return }
+        let queued = documents[documentId]?.pending ?? []
+        documents[documentId]?.pending = []
+        for markdown in queued {
+            receiveChange(documentId: documentId, markdown: markdown)
         }
     }
 
@@ -151,6 +192,7 @@ final class NoteEditorController: NSObject, WKScriptMessageHandler, WKNavigation
     func closeDocuments(except documentIds: Set<String>) {
         for id in documents.keys where !documentIds.contains(id) {
             documents[id] = nil
+            opening.remove(id)
             if shownDocumentId == id { shownDocumentId = nil }
             if caret?.documentId == id { caret = nil }
             Task {
@@ -251,8 +293,23 @@ final class NoteEditorController: NSObject, WKScriptMessageHandler, WKNavigation
         }
     }
 
-    private func receiveChange(documentId: String, markdown: String) {
+    /// Internal for the page-round-trip tests, which script reports.
+    func receiveChange(documentId: String, markdown: String) {
         guard var document = documents[documentId] else { return }
+        guard document.loaded != nil else {
+            document.pending.append(markdown)
+            documents[documentId] = document
+            return
+        }
+        // Cold loads, background tabs and terminated-reload empties arrive
+        // unfocused and stay dropped below; a focused page is the user
+        // deleting, so its report is trusted including "". A stray focused
+        // empty is backstopped by the file layer's empty-over-nonempty refusal plus adapter quarantine.
+        if caret?.documentId != documentId,
+           isDestructiveReport(markdown: markdown, document: document) {
+            reseedPage(documentId: documentId)
+            return
+        }
         document.pageMarkdown = markdown
         let text: String
         if let loaded = document.loaded {
@@ -267,6 +324,29 @@ final class NoteEditorController: NSObject, WKScriptMessageHandler, WKNavigation
         document.text = text
         documents[documentId] = document
         document.onText(text)
+    }
+
+    /// An empty report, or fewer blocks than the baseline holds, while the
+    /// app's text is non-empty: the page shedding content it never heard a
+    /// keystroke for, not a deletion.
+    private func isDestructiveReport(markdown: String, document: Document) -> Bool {
+        guard !document.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        if markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+        return CraftBlockSplitter.slices(in: markdown).count < document.loadedMarkdowns.count
+    }
+
+    /// Put the app's text back in the page after dropping its report. The
+    /// latest text is read at send time, so a keystroke heard in between
+    /// is what gets restored.
+    private func reseedPage(documentId: String) {
+        Task {
+            await ready()
+            guard let text = documents[documentId]?.text else { return }
+            if let loaded = try? await call("return bbEditor.open(id, markdown)",
+                                            ["id": documentId, "markdown": text]) as? String {
+                documents[documentId]?.pageMarkdown = loaded
+            }
+        }
     }
 
     // MARK: - Navigation

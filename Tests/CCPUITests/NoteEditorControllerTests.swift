@@ -61,6 +61,47 @@ final class NoteEditorControllerTests: XCTestCase {
         XCTAssertEqual(shown, "old typed")
     }
 
+    func testEmptyPageReportNeverWipesAppText() async throws {
+        var saved: [String] = []
+        await controller.show(documentId: "a", text: "one\n\ntwo\n\nthree",
+                              onText: { saved.append($0) }).value
+        let seededMarkdown = try await page("return bbEditor.markdown('a')") as? String
+        let seeded = try XCTUnwrap(seededMarkdown)
+        saved.removeAll()
+
+        controller.receiveChange(documentId: "a", markdown: "")
+        controller.receiveChange(documentId: "a", markdown: "one")
+        XCTAssertTrue(saved.isEmpty)
+
+        try await waitUntil { (try? await self.page("return bbEditor.markdown('a')")) as? String == seeded }
+    }
+
+    func testChangeBeforeOpenNeverAppliesPreOpenEmpty() async throws {
+        var saved: [String] = []
+        let opened = controller.show(documentId: "a", text: "hello", onText: { saved.append($0) })
+        controller.receiveChange(documentId: "a", markdown: "")
+        await opened.value
+
+        XCTAssertFalse(saved.contains(""))
+        controller.receiveChange(documentId: "a", markdown: "hello typed")
+        XCTAssertEqual(saved.last, "hello typed")
+    }
+
+    func testFocusedSelectionDeletePropagates() async throws {
+        var saved: [String] = []
+        await controller.show(documentId: "a", text: "one\n\ntwo\n\nthree",
+                              onText: { saved.append($0) }).value
+        saved.removeAll()
+
+        // The headless test window never takes focus, so no page script can
+        // produce a real selection message: simulate the focused page
+        // through the same caret state the selection message would set.
+        controller.caret = NoteEditorController.Caret(documentId: "a", midY: 0, headingLevel: 0)
+        controller.receiveChange(documentId: "a", markdown: "")
+
+        XCTAssertEqual(saved.last, "")
+    }
+
     private func waitUntil(timeout: Duration = .seconds(10), _ condition: @escaping () async -> Bool) async throws {
         let deadline = ContinuousClock.now + timeout
         while !(await condition()) {
