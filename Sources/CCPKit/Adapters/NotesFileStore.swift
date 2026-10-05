@@ -36,19 +36,43 @@ public struct NotesFileIndexEntry: Codable, Equatable, Sendable {
 /// minted fresh — which heals the tabs at the cost of the sync mappings,
 /// since those are keyed by pad id.
 public struct NotesFileIndex: Codable, Equatable, Sendable {
-    public static let currentVersion = 1
+    public static let currentVersion = 2
 
     public var version: Int
     public var selectedID: UUID
     public var pads: [NotesFileIndexEntry]
     /// Sorted on write so the encoding is stable.
     public var dirtyPadIDs: [UUID]
+    /// Sorted on write, like the dirty set above. Absent on v1 indexes.
+    public var quarantinedPadIDs: [UUID]
 
-    public init(selectedID: UUID, pads: [NotesFileIndexEntry], dirtyPadIDs: [UUID] = []) {
+    /// The stored keys are the on-disk contract: renaming a property
+    /// renames its key and strands every existing index.
+    private enum CodingKeys: String, CodingKey {
+        case version
+        case selectedID
+        case pads
+        case dirtyPadIDs
+        case quarantinedPadIDs
+    }
+
+    public init(selectedID: UUID, pads: [NotesFileIndexEntry], dirtyPadIDs: [UUID] = [],
+                quarantinedPadIDs: [UUID] = []) {
         self.version = Self.currentVersion
         self.selectedID = selectedID
         self.pads = pads
         self.dirtyPadIDs = dirtyPadIDs.sorted(by: { $0.uuidString < $1.uuidString })
+        self.quarantinedPadIDs = quarantinedPadIDs.sorted(by: { $0.uuidString < $1.uuidString })
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(Int.self, forKey: .version)
+        selectedID = try container.decode(UUID.self, forKey: .selectedID)
+        pads = try container.decode([NotesFileIndexEntry].self, forKey: .pads)
+        dirtyPadIDs = try container.decode([UUID].self, forKey: .dirtyPadIDs)
+        // A v1 index has no such key: missing reads as unquarantined, not corrupt.
+        quarantinedPadIDs = try container.decodeIfPresent([UUID].self, forKey: .quarantinedPadIDs) ?? []
     }
 }
 
@@ -114,12 +138,12 @@ public struct NotesFileStore {
     public func loadIndex() -> NotesIndexRead {
         guard let data = defaults.data(forKey: indexKey) else { return .absent }
         if let index = try? JSONDecoder().decode(NotesFileIndex.self, from: data),
-           index.version == NotesFileIndex.currentVersion {
+           (1...NotesFileIndex.currentVersion).contains(index.version) {
             return .index(index, rescued: false)
         }
         if let data = defaults.data(forKey: rescueKey),
            let index = try? JSONDecoder().decode(NotesFileIndex.self, from: data),
-           index.version == NotesFileIndex.currentVersion {
+           (1...NotesFileIndex.currentVersion).contains(index.version) {
             defaults.removeObject(forKey: rescueKey)
             return .index(index, rescued: true)
         }
@@ -217,9 +241,8 @@ public struct NotesFileStore {
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: trash.path) else { return }
         for name in names {
             let url = trash.appendingPathComponent(name)
-            guard let modified = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date,
-                  now.timeIntervalSince(modified) > maxAge
-            else { continue }
+            let modified = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+            guard Self.isExpired(modified: modified, now: now, olderThan: maxAge) else { continue }
             try? FileManager.default.removeItem(at: url)
         }
     }
@@ -284,15 +307,11 @@ public struct NotesFileStore {
     /// one name inside the same second still keep both copies.
     private func uniqueTrashName(for filename: String) -> String {
         let stem = (filename as NSString).deletingPathExtension
-        let stamp = Self.utcTimestamp()
         let trash = directory.appendingPathComponent(Self.trashDirectoryName, isDirectory: true)
-        var candidate = "\(stem)-\(stamp).md"
-        var number = 2
-        while FileManager.default.fileExists(atPath: trash.appendingPathComponent(candidate).path) {
-            candidate = "\(stem)-\(stamp)-\(number).md"
-            number += 1
+        let base = Self.uniqueTimestampedName(base: "\(stem)-\(Self.utcTimestamp())") {
+            FileManager.default.fileExists(atPath: trash.appendingPathComponent($0 + ".md").path)
         }
-        return candidate
+        return base + ".md"
     }
 
     /// Compact UTC stamp for trash and backup names. Sortable, filename-safe.
@@ -302,6 +321,26 @@ public struct NotesFileStore {
         formatter.timeZone = TimeZone(identifier: "UTC")
         formatter.dateFormat = "yyyyMMdd'T'HHmmss"
         return formatter.string(from: date)
+    }
+
+    /// Whether `modified` is older than `maxAge` at `now`. An unreadable
+    /// date keeps, never prunes — shared by the trash and snapshot prunes.
+    static func isExpired(modified: Date?, now: Date, olderThan maxAge: TimeInterval) -> Bool {
+        guard let modified else { return false }
+        return now.timeIntervalSince(modified) > maxAge
+    }
+
+    /// First free of `<base>`, `<base>-2`, `<base>-3`, … Snapshots pass the
+    /// bare stamp; trash passes `<stem>-<stamp>` and restores the extension
+    /// after. One counter, so two names inside the same second keep both.
+    static func uniqueTimestampedName(base: String, exists: (String) -> Bool) -> String {
+        var candidate = base
+        var number = 2
+        while exists(candidate) {
+            candidate = "\(base)-\(number)"
+            number += 1
+        }
+        return candidate
     }
 
     // MARK: - Filenames

@@ -125,6 +125,26 @@ final class NotesFileStoreTests: XCTestCase {
                      "the rescue is consumed so a good live index never eats its own backup")
     }
 
+    func testV1IndexWithoutTheQuarantineKeyStillDecodes() throws {
+        let name = "ccp.nfs.v1.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let selected = UUID()
+        let pad = UUID()
+        store.set(Data("""
+            {"version":1,"selectedID":"\(selected.uuidString)",\
+            "pads":[{"id":"\(pad.uuidString)","filename":"Note 1.md","name":"Note 1","closed":false}],\
+            "dirtyPadIDs":[]}
+            """.utf8), forKey: "scratchpadNotesIndex")
+        let fileStore = NotesFileStore(defaults: store, directory: freshNotesDirectory())
+
+        guard case .index(let loaded, _) = fileStore.loadIndex() else {
+            return XCTFail("a v1 index without the quarantine key still loads")
+        }
+        XCTAssertEqual(loaded.version, 1)
+        XCTAssertEqual(loaded.quarantinedPadIDs, [])
+    }
+
     // MARK: - Text files
 
     func testUnreadableFileIsSetAsideOnWrite() throws {

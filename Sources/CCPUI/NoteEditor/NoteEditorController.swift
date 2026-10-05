@@ -46,7 +46,12 @@ final class NoteEditorController: NSObject, WKScriptMessageHandler, WKNavigation
     @ObservationIgnored private var shownDocumentId: String?
     /// Documents with an `open` already in flight, so a second `show` while
     /// the first is still backing off does not start a second chain.
-    @ObservationIgnored private var opening: Set<String> = []
+    /// Internal (not private) so tests can prove a superseded chain exits.
+    @ObservationIgnored var opening: Set<String> = []
+    /// One open generation per document: a newer `show` bumps it, and the
+    /// in-flight `openDocument` chain exits instead of baselining stale
+    /// text. Internal for the same tests.
+    @ObservationIgnored private var openGenerations: [String: Int] = [:]
 
     /// What the app and the page each last knew of one document.
     private struct Document {
@@ -120,20 +125,26 @@ final class NoteEditorController: NSObject, WKScriptMessageHandler, WKNavigation
         }
         guard shownDocumentId != documentId || documents[documentId]?.loaded == nil else { return Task {} }
         shownDocumentId = documentId
+        openGenerations[documentId, default: 0] += 1
+        let generation = openGenerations[documentId]!
+        // Already opening: the in-flight chain sees the bump and hands off
+        // to a successor under it, so no second chain starts here.
         guard opening.insert(documentId).inserted else { return Task {} }
-        return Task { await openDocument(documentId: documentId) }
+        return Task { await openDocument(documentId: documentId, generation: generation) }
     }
 
     /// Open the document's current text, retrying with backoff while it
     /// exists: a failed `open` must not leave the document permanently
-    /// unbaselined on the verbatim path of `receiveChange`.
-    private func openDocument(documentId: String) async {
+    /// unbaselined on the verbatim path of `receiveChange`. A superseded
+    /// chain exits — the successor below reopens from the current text, so
+    /// the stale send never baselines.
+    private func openDocument(documentId: String, generation: Int) async {
         await ready()
         var attempt = 0
-        while let document = documents[documentId] {
+        while let document = documents[documentId], openGenerations[documentId] == generation {
             let sent = document.text
-            if let loaded = try? await call("return bbEditor.open(id, markdown)",
-                                            ["id": documentId, "markdown": sent]) as? String {
+            if let loaded = await openInPage(documentId: documentId, markdown: sent) {
+                guard openGenerations[documentId] == generation else { break }
                 if documents[documentId]?.loaded == nil {
                     documents[documentId]?.loaded = loaded
                     documents[documentId]?.loadedMarkdowns =
@@ -151,6 +162,21 @@ final class NoteEditorController: NSObject, WKScriptMessageHandler, WKNavigation
             attempt += 1
         }
         opening.remove(documentId)
+        // Superseded while backing off: reopen under the newer generation
+        // from the current text, now that the slot is free.
+        if documents[documentId] != nil,
+           let current = openGenerations[documentId], current != generation,
+           opening.insert(documentId).inserted {
+            await openDocument(documentId: documentId, generation: current)
+        }
+    }
+
+    /// One `open` round-trip with the page: hands it markdown, hears back
+    /// what it loaded. Shared by the open chain and the reseed, which both
+    /// restore the app's text over whatever the page holds.
+    private func openInPage(documentId: String, markdown: String) async -> String? {
+        (try? await call("return bbEditor.open(id, markdown)",
+                         ["id": documentId, "markdown": markdown])) as? String
     }
 
     /// Replay what arrived before the baseline existed, now that reports can
@@ -193,6 +219,7 @@ final class NoteEditorController: NSObject, WKScriptMessageHandler, WKNavigation
         for id in documents.keys where !documentIds.contains(id) {
             documents[id] = nil
             opening.remove(id)
+            openGenerations.removeValue(forKey: id)
             if shownDocumentId == id { shownDocumentId = nil }
             if caret?.documentId == id { caret = nil }
             Task {
@@ -328,7 +355,8 @@ final class NoteEditorController: NSObject, WKScriptMessageHandler, WKNavigation
 
     /// An empty report, or fewer blocks than the baseline holds, while the
     /// app's text is non-empty: the page shedding content it never heard a
-    /// keystroke for, not a deletion.
+    /// keystroke for, not a deletion. A focused page is the user deleting,
+    /// so its reports skip the check before the re-slice below.
     private func isDestructiveReport(markdown: String, document: Document) -> Bool {
         guard !document.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
         if markdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
@@ -342,8 +370,7 @@ final class NoteEditorController: NSObject, WKScriptMessageHandler, WKNavigation
         Task {
             await ready()
             guard let text = documents[documentId]?.text else { return }
-            if let loaded = try? await call("return bbEditor.open(id, markdown)",
-                                            ["id": documentId, "markdown": text]) as? String {
+            if let loaded = await openInPage(documentId: documentId, markdown: text) {
                 documents[documentId]?.pageMarkdown = loaded
             }
         }

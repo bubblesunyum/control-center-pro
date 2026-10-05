@@ -26,7 +26,11 @@ import Foundation
 public struct NotesBackupStore {
     public static let backupsFolderName = "Backups-Notes"
     public static let indexFilename = "scratchpadNotesIndex.json"
-    public static let companionFilenames = ["settings.json", "stickies.json", "shelf.json", "layout.json"]
+    public static let settingsFilename = "settings.json"
+    public static let stickiesFilename = "stickies.json"
+    public static let shelfFilename = "shelf.json"
+    public static let layoutFilename = "layout.json"
+    public static let companionFilenames = [settingsFilename, stickiesFilename, shelfFilename, layoutFilename]
     /// Seconds between snapshots. A kill -9 loses at most this much.
     public static let snapshotInterval: TimeInterval = 5 * 60
     /// Snapshots older than this are pruned on every run.
@@ -49,7 +53,7 @@ public struct NotesBackupStore {
         if let notesDirectory {
             self.notesDirectory = notesDirectory
         } else {
-            let settings = JSONFileStore<StoredSettings>(filename: "settings.json",
+            let settings = JSONFileStore<StoredSettings>(filename: Self.settingsFilename,
                                                          default: StoredSettings(),
                                                          in: appSupportDirectory).load()
             self.notesDirectory = NotesFileStore.resolveDirectory(settings: settings)
@@ -119,20 +123,17 @@ public struct NotesBackupStore {
             }
             var isDirectory: ObjCBool = false
             guard manager.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue else { continue }
-            guard let modified = (try? manager.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date,
-                  now.timeIntervalSince(modified) > Self.retention
+            let modified = (try? manager.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+            guard NotesFileStore.isExpired(modified: modified, now: now, olderThan: Self.retention)
             else { continue }
             try? manager.removeItem(at: url)
         }
     }
 
     private func uniqueSnapshotDirectory(now: Date) -> URL {
-        var candidate = backupsDirectory.appendingPathComponent(NotesFileStore.utcTimestamp(now), isDirectory: true)
-        var number = 2
-        while FileManager.default.fileExists(atPath: candidate.path) {
-            candidate = backupsDirectory.appendingPathComponent("\(NotesFileStore.utcTimestamp(now))-\(number)", isDirectory: true)
-            number += 1
+        let name = NotesFileStore.uniqueTimestampedName(base: NotesFileStore.utcTimestamp(now)) {
+            FileManager.default.fileExists(atPath: backupsDirectory.appendingPathComponent($0).path)
         }
-        return candidate
+        return backupsDirectory.appendingPathComponent(name, isDirectory: true)
     }
 }

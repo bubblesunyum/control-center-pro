@@ -87,6 +87,16 @@ final class NoteEditorControllerTests: XCTestCase {
         XCTAssertEqual(saved.last, "hello typed")
     }
 
+    func testSupersededOpenRetryExitsOnGenerationBump() async throws {
+        let stale = controller.show(documentId: "a", text: "one", onText: { _ in })
+        // A newer show supersedes before the first chain baselines: the
+        // bump stands the stale chain down instead of doubling the opens.
+        controller.show(documentId: "a", text: "two", onText: { _ in })
+        await stale.value
+        try await waitUntil { (try? await self.page("return bbEditor.markdown('a')")) as? String == "two" }
+        XCTAssertFalse(controller.opening.contains("a"))
+    }
+
     func testFocusedSelectionDeletePropagates() async throws {
         var saved: [String] = []
         await controller.show(documentId: "a", text: "one\n\ntwo\n\nthree",

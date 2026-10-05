@@ -117,6 +117,30 @@ final class NotesLocalGuardTests: XCTestCase {
         XCTAssertFalse(fileExists("Note 1.md", in: dir), "and closing still writes nothing for it")
     }
 
+    /// The quarantine bit rides in the index now: a pad quarantined on one
+    /// launch is still quarantined on the next, and closing still writes
+    /// nothing for it.
+    func testQuarantinePersistsAcrossARelaunch() throws {
+        let name = "ccp.guard.sticky.\(UUID().uuidString)"
+        let store = try defaults(name)
+        defer { store.removePersistentDomain(forName: name) }
+        let dir = freshNotesDirectory()
+        let first = localAdapter(store, dir: dir)
+        let id = try XCTUnwrap(first.selectedNoteID)
+        first.text = "kept"
+        first.deactivate()
+        try FileManager.default.removeItem(at: dir.appendingPathComponent("Note 1.md"))
+
+        let second = localAdapter(store, dir: dir)
+        XCTAssertTrue(second.isQuarantined(id))
+        second.deactivate()
+
+        XCTAssertFalse(fileExists("Note 1.md", in: dir), "closing a quarantined pad recreates nothing")
+        let third = localAdapter(store, dir: dir)
+        XCTAssertTrue(third.isQuarantined(id), "the bit survives the relaunch")
+        XCTAssertFalse(fileExists("Note 1.md", in: dir))
+    }
+
     func testCloseTabHidesQuarantinedPadInsteadOfDeleting() throws {
         let name = "ccp.guard.close.\(UUID().uuidString)"
         let store = try defaults(name)

@@ -203,8 +203,6 @@ public final class NotesAdapter {
     public var text: String = "" {
         didSet {
             guard hasLoaded, !isReplacingText, var document else { return }
-            // An explicit retype heals a quarantine: real bytes stand
-            // behind the pad again, so saves may persist it (ccp-zm7f).
             if let selectedNoteID { healQuarantine(for: selectedNoteID) }
             document.updateSelectedText(text, modifiedAt: Date())
             self.document = document
@@ -458,9 +456,10 @@ public final class NotesAdapter {
     @ObservationIgnored private var quarantinedPadIDs: Set<UUID> = []
     /// Test seam: whether the pad's file went missing or zeroed under us.
     func isQuarantined(_ id: UUID) -> Bool { quarantinedPadIDs.contains(id) }
-    /// Retypes, pulled adopts, pinned restores and snapshot restores all put
-    /// real bytes behind the pad again — each heals through here, so the
-    /// next persist may write its file.
+    /// Real bytes stand behind the pad again — a retype, a pulled adopt, a
+    /// pinned or snapshot restore, a drop — so the next persist may write
+    /// its file (ccp-zm7f). Every path that puts bytes back heals through
+    /// here; call sites stay bare.
     private func healQuarantine(for id: UUID) {
         quarantinedPadIDs = quarantinedPadIDs.subtracting([id])
     }
@@ -617,7 +616,7 @@ public final class NotesAdapter {
 
     private static func resolveNotesDirectory() -> URL {
         NotesFileStore.resolveDirectory(settings: JSONFileStore<StoredSettings>(
-            filename: "settings.json",
+            filename: NotesBackupStore.settingsFilename,
             default: StoredSettings()
         ).load())
     }
@@ -765,14 +764,19 @@ public final class NotesAdapter {
         lastSavedFilenames = Dictionary(uniqueKeysWithValues: index.pads.map { ($0.id, $0.filename) })
         closedNoteIDs = Set(index.pads.filter(\.closed).map(\.id))
         dirtyPadIDs = Set(index.dirtyPadIDs)
-        quarantinedPadIDs = quarantined
+        // The stored bit joins the computed one: a pad quarantined before
+        // the quit is still quarantined after it, even with its file back.
+        let storedQuarantined = Set(index.quarantinedPadIDs)
+        quarantinedPadIDs = quarantined.union(storedQuarantined)
         let loaded = decoded.sanitized(defaultName: defaultName)
         apply(loaded)
         if loaded == decoded {
             lastSavedDocument = loaded
             // A rescue re-commits what it recovered, so the recovery
-            // survives a quit — and sets the live bytes aside first.
-            if isStoredIndexUnreadable { saveIndex() }
+            // survives a quit — and sets the live bytes aside first. A
+            // newly quarantined pad commits its bit the same way, so the
+            // stickiness survives a quit before the next edit.
+            if isStoredIndexUnreadable || !quarantinedPadIDs.isSubset(of: storedQuarantined) { saveIndex() }
         } else {
             // Sanitising dropped or repaired a pad: save the clean state.
             lastSavedDocument = nil
@@ -790,6 +794,7 @@ public final class NotesAdapter {
                 lastSavedFilenames = [:]
                 closedNoteIDs = []
                 dirtyPadIDs = []
+                quarantinedPadIDs = []
                 apply(fresh)
                 lastSavedDocument = nil
                 _ = persist(fresh)
@@ -831,6 +836,7 @@ public final class NotesAdapter {
         dirtyPadIDs = Set(decoded.notes.map(\.id).filter {
             craftDestination.craftDocumentID(for: $0) != nil && hasUnconfirmedEdits($0)
         })
+        quarantinedPadIDs = []
         guard persist(decoded), verifyMigration(of: decoded) else { return }
         // Two consecutive corruptions: the rescue key already holds older
         // evidence and once-only keeps it, so the blob stays as the newer
@@ -904,6 +910,7 @@ public final class NotesAdapter {
         lastSavedFilenames = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0.filename) })
         closedNoteIDs = []
         dirtyPadIDs = []
+        quarantinedPadIDs = []
         apply(adopted)
         lastSavedDocument = adopted
         saveIndex()
@@ -1027,7 +1034,8 @@ public final class NotesAdapter {
                                        modifiedAt: note.modifiedAt, closed: closedNoteIDs.contains(note.id))
         }
         notesStore.saveIndex(NotesFileIndex(selectedID: document.selectedID, pads: entries,
-                                            dirtyPadIDs: Array(dirtyPadIDs)),
+                                            dirtyPadIDs: Array(dirtyPadIDs),
+                                            quarantinedPadIDs: Array(quarantinedPadIDs)),
                              settingAsideUnreadable: isStoredIndexUnreadable)
         isStoredIndexUnreadable = false
     }
@@ -1706,7 +1714,6 @@ public final class NotesAdapter {
             text = restored
             isReplacingText = false
         }
-        // Restored pins are real bytes: the persist below may write them.
         healQuarantine(for: padID)
         _ = persist(live)
         return restored
@@ -1904,8 +1911,6 @@ public final class NotesAdapter {
             // Through didSet: persists, marks dirty, schedules the push.
             text = snapshot.markdown
         } else {
-            // A snapshot restore puts real bytes behind the pad: it heals
-            // a quarantine before the persist below may write its file.
             healQuarantine(for: id)
             _ = persist(document)
             dirtyPadIDs.insert(id)
@@ -2155,8 +2160,6 @@ public final class NotesAdapter {
         guard var document,
               let index = document.notes.firstIndex(where: { $0.id == padID })
         else { return }
-        // A pulled text is real bytes behind the pad: it heals a quarantine
-        // before the persist below, which would otherwise skip the file.
         healQuarantine(for: padID)
         let current = document.notes[index].text
         let replaced = current != text
@@ -2217,7 +2220,6 @@ public final class NotesAdapter {
         let before = document
         document.appendText(fragment, to: landingID, modifiedAt: Date())
         guard document != before else { return }
-        // Dropped text is an explicit addition: it heals a quarantine.
         healQuarantine(for: landingID)
         self.document = document
         notes = document.notes
