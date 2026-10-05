@@ -67,4 +67,4 @@
 
 sync.remote: "git+https://github.com/bubblesunyum/control-center-pro.git"
 export:
-    auto: true
+    auto: false

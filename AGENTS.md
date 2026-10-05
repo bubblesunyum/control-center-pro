@@ -13,6 +13,10 @@ any tool — Claude Code, opencode, Codex, whatever comes next.
 **[CLAUDE.md](./CLAUDE.md) is the other half** — this project's architecture,
 standards and taste. Read it too. Neither file repeats the other.
 
+If `AGENTS.local.md` exists, read it too. Put additive project guidance there;
+the harness installs it once and preserves it on re-add and `update --apply`,
+so the shared contract can keep receiving updates.
+
 ## Start every session with the brief
 
 ```bash
@@ -68,6 +72,10 @@ a normal `git push` carries none of it. It travels on its own ref
 the push. `.beads/issues.jsonl` is a passive export for human-readable diffs,
 not the source of truth.
 
+The harness disables bd auto-export (`export.auto=false`): its plain export can
+omit memories. Regenerate manually with `bd export --include-memories`, as the
+gate and ledger-push procedure require.
+
 ## Memory that another session can find
 
 `bd remember` / `bd recall` is the durable, cross-tool memory: every agent here
@@ -79,14 +87,17 @@ itself in `bd remember`.
 ## Prove it with the gate
 
 ```bash
-scripts/verify.sh          # build + tests + throwaway-repo probes
-scripts/verify.sh --quick  # fast lane only, no probes — iterate here
-scripts/verify.sh --full   # accepted, same as the default today: no --full-only tier yet
+scripts/verify.sh          # quick steps + project probes
+scripts/verify.sh --quick  # quick steps only — iterate here
+scripts/verify.sh --full   # also include full-only project steps, when configured
 ```
 
 Run this rather than raw build commands. It swallows tens of thousands of log
 lines and prints one line per step, which is the difference between proving your
 work and spending the day's context learning one bit.
+
+The project's `scripts/verify.steps.sh` defines its steps and lanes. Document
+project-specific gate guidance in `AGENTS.local.md`.
 
 The gate also checks the committed ledger export matches the ledger. If it
 fails, regen with `bd export --include-memories -o .beads/issues.jsonl` and

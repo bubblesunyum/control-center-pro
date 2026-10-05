@@ -29,6 +29,9 @@ import os
 import re
 import shutil
 import signal
+import struct
+import zlib
+from collections import Counter
 import socket
 import subprocess
 import sys
@@ -342,7 +345,7 @@ def ledger_state():
     issues = []
     counts = {"open": 0, "ready": len(ready_ids), "in_progress": 0, "closed": 0, "blocked": 0}
 
-    def blockers(issue, parent):
+    def blockers(issue):
         """The ids this issue waits on. Belonging to an epic is not being blocked
         by it — the parent arrives in `dependencies` alongside real blockers, and
         drawn as one kind of edge it turns the graph into a hairball where every
@@ -350,7 +353,7 @@ def ledger_state():
         out = []
         for d in issue.get("dependencies") or []:
             got = _dep_target(d)
-            if got and got != parent:
+            if got and got not in _parent_ids(issue):
                 out.append(got)
         return out
 
@@ -365,7 +368,8 @@ def ledger_state():
     for i in all_issues:
         status = i.get("status", "open")
         counts[status] = counts.get(status, 0) + 1
-        parent = i.get("parent") or ""
+        parents = sorted(_parent_ids(i))
+        parent = i.get("parent") or next(iter(parents), "")
         labels = i.get("labels") or []
         issues.append({
             "id": i["id"],
@@ -383,9 +387,10 @@ def ledger_state():
             "priority": i.get("priority", 2),
             "type": i.get("issue_type", "task"),
             "parent": parent,
+            "parents": parents,
             "updated_at": i.get("updated_at", ""),
             "created_at": i.get("created_at", ""),
-            "deps": blockers(i, parent),
+            "deps": blockers(i),
             # The detail pane reads these; capped because the page re-fetches
             # the whole state every few seconds and a long design note would be
             # paid for on every poll.
@@ -402,9 +407,10 @@ def ledger_state():
     for i in issues:
         i["children"] = []
     for i in issues:
-        parent = by_id.get(i["parent"])
-        if parent:
-            parent["children"].append(i["id"])
+        for parent_id in i["parents"]:
+            parent = by_id.get(parent_id)
+            if parent:
+                parent["children"].append(i["id"])
 
     # Yegge's Beadle watches for work that's simply stuck or dropped. With one
     # person there's no agent to nudge, so the number just has to be visible.
@@ -982,7 +988,7 @@ def state():
     staged = [i for i in closed if "commit_count" in i]
     staged_ids = {i["id"] for i in staged}
     roots = [i for i in closed
-             if i["parent"] not in by_id and i["id"] not in staged_ids]
+             if not any(p in by_id for p in i["parents"]) and i["id"] not in staged_ids]
     keep = {i["id"] for i in live + staged + roots}
 
     # Then close the family over what survived, in both directions. A kept child
@@ -990,9 +996,10 @@ def state():
     # child precisely by finding its parent in the payload — and a kept parent
     # needs its children for the detail pane to name them.
     while True:
-        grow = {i["parent"] for i in ledger["issues"]
-                if i["id"] in keep and i["parent"] in by_id and i["parent"] not in keep}
-        grow |= {i["id"] for i in closed if i["parent"] in keep and i["id"] not in keep}
+        grow = {p for i in ledger["issues"] if i["id"] in keep
+                for p in i["parents"] if p in by_id and p not in keep}
+        grow |= {i["id"] for i in closed
+                 if any(p in keep for p in i["parents"]) and i["id"] not in keep}
         if not grow:
             break
         keep |= grow
@@ -1612,7 +1619,7 @@ _last_poll = {"at": time.monotonic()}
 # `down` there still reaches it. Every exit that isn't ctrl-c happens away
 # from the `serve` block's `finally`, and a claim file left behind after the
 # process is gone makes the next `up` report a dashboard that isn't there.
-_bound_port = {"port": None, "claim": None}
+_bound_port = {"port": None, "claim": None, "identity": None}
 
 
 def shutdown(reason, code=0):
@@ -1750,6 +1757,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_error(404)
 
     def do_GET(self):
+        if urlparse(self.path).path == "/identity":
+            return self.send_json(_bound_port["identity"])
         if self.path.startswith("/state.json"):
             # A poll is the only evidence anyone is watching. Recording it before
             # the wake means the refresher re-reads a fresh `_last_poll`, so the
@@ -2039,7 +2048,7 @@ def stop_serving(force=False):
     Matched on the claim's root, not its filename prefix: a switched server
     answers for another checkout but still belongs to the one that started
     it, so `down` there reaches it however it is showing."""
-    stopped, persistent = [], False
+    stopped, refused, persistent = [], [], False
     try:
         files = sorted(Path("/tmp").glob("*-dashboard-*.json"))
     except OSError:
@@ -2055,10 +2064,21 @@ def stop_serving(force=False):
         if not isinstance(claim, dict) or claim.get("root") != str(ROOT):
             continue
         pid = claim.get("pid")
-        if not isinstance(pid, int) or not is_serving(port):
+        if type(pid) is not int or pid <= 0 or not is_serving(port):
             continue
         if claim.get("persist") and not force:
             persistent = True
+            continue
+        # A stale claim can name a recycled pid while somebody else owns the
+        # port. Prove this listener holds the same launch identity before kill.
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/identity", timeout=1) as r:
+                identity = json.load(r)
+            if not claim.get("token") or identity != {
+                    "root": claim["root"], "pid": pid, "token": claim["token"]}:
+                raise ValueError("identity mismatch")
+        except Exception:
+            refused.append(port)
             continue
         try:
             os.kill(pid, signal.SIGTERM)
@@ -2068,6 +2088,12 @@ def stop_serving(force=False):
             f.unlink(missing_ok=True)
             continue
         stopped.append(port)
+    if refused:
+        prefix = f"stopped the dashboard on {', '.join(map(str, stopped))}; " if stopped else ""
+        return (prefix + f"refused to stop dashboard on {', '.join(map(str, refused))}: "
+                "process ownership could not be verified; stop older boards in "
+                "the session that launched them, then restart" +
+                ("; a persistent board is still running" if persistent else ""))
     if stopped and persistent:
         names = ", ".join(map(str, stopped))
         return (f"stopped the dashboard on {names} — a persistent board is "
@@ -2227,6 +2253,81 @@ CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 SHOT_STATES = ("gate", "pulse", "review", "staging", "commit", "filemenu", "peers")
 
 
+def screenshot_problem(path):
+    """Check actual screenshot pixels; an all-background PNG can be large."""
+    try:
+        data = Path(path).read_bytes()
+        if data[:8] != b"\x89PNG\r\n\x1a\n":
+            return "capture is not a PNG"
+        pos, compressed, header = 8, bytearray(), None
+        while pos + 12 <= len(data):
+            size, kind = struct.unpack(">I4s", data[pos:pos + 8])
+            chunk = data[pos + 8:pos + 8 + size]
+            if kind == b"IHDR":
+                header = struct.unpack(">IIBBBBB", chunk)
+            elif kind == b"IDAT":
+                compressed.extend(chunk)
+            pos += size + 12
+        if not header:
+            return "PNG has no image header"
+        width, height, depth, color, compression, filtering, interlace = header
+        if not width or not height or depth != 8 or color not in (2, 6) or any((compression, filtering, interlace)):
+            return "PNG uses an unsupported pixel format"
+        channels = 3 if color == 2 else 4
+        stride = width * channels
+        raw = zlib.decompress(compressed)
+        if len(raw) != height * (stride + 1):
+            return "PNG has incomplete image data"
+        previous = bytearray(stride)
+        colors = Counter()
+        sample = max(1, width * height // 65536)
+        for y in range(height):
+            start = y * (stride + 1)
+            mode = raw[start]
+            row = bytearray(raw[start + 1:start + 1 + stride])
+            if mode not in range(5):
+                return "PNG has an invalid row filter"
+            for x in range(stride):
+                left = row[x - channels] if x >= channels else 0
+                up = previous[x]
+                corner = previous[x - channels] if x >= channels else 0
+                if mode == 1:
+                    predictor = left
+                elif mode == 2:
+                    predictor = up
+                elif mode == 3:
+                    predictor = (left + up) // 2
+                elif mode == 4:
+                    p = left + up - corner
+                    distances = (abs(p - left), abs(p - up), abs(p - corner))
+                    predictor = (left, up, corner)[distances.index(min(distances))]
+                else:
+                    predictor = 0
+                row[x] = (row[x] + predictor) & 255
+            for x in range((-y * width) % sample, width, sample):
+                offset = x * channels
+                rgb = tuple(v // 16 for v in row[offset:offset + 3])
+                if channels == 4 and row[offset + 3] == 0:
+                    rgb = (15, 15, 15)
+                colors[rgb] += 1
+            previous = row
+        total = sum(colors.values())
+        if not total or max(colors.values()) / total > 0.99:
+            return "capture is blank or nearly blank (over 99% background pixels)"
+    except (OSError, ValueError, struct.error, zlib.error) as e:
+        return f"capture could not be read: {e}"
+    return None
+
+
+class ScreenshotError(RuntimeError):
+    """A capture failed validation and must not enter the review packet."""
+
+
+def reject_screenshot(path, message):
+    Path(path).unlink(missing_ok=True)
+    raise ScreenshotError(message)
+
+
 def shot(path, port, width=900, height=1400, states=()):
     """Write a picture of the running dashboard, for the design review pass.
 
@@ -2241,12 +2342,12 @@ def shot(path, port, width=900, height=1400, states=()):
     (`board.png` + `gate` becomes `board-gate.png`).
     """
     if not Path(CHROME).exists():
-        return f"no Chrome at {CHROME} — install it or capture by hand"
+        raise ScreenshotError(f"no Chrome at {CHROME} — install it or capture by hand")
     if not is_serving(port):
-        return f"nothing serving on {port} — run `dashboard.py up` first"
+        raise ScreenshotError(f"nothing serving on {port} — run `dashboard.py up` first")
     unknown = [s for s in states if s not in SHOT_STATES]
     if unknown:
-        return (f"no such state: {', '.join(unknown)} "
+        raise ScreenshotError(f"no such state: {', '.join(unknown)} "
                 f"(try: {', '.join(SHOT_STATES)})")
     # Warmed on real time first. Chrome's virtual clock stops while a request is
     # outstanding, so against a server that hasn't built its first snapshot the
@@ -2259,7 +2360,7 @@ def shot(path, port, width=900, height=1400, states=()):
                                     timeout=FIRST_BUILD_TIMEOUT + 5) as r:
             r.read()
     except Exception as e:
-        return (f"the dashboard on {port} gave no state in "
+        raise ScreenshotError(f"the dashboard on {port} gave no state in "
                 f"{FIRST_BUILD_TIMEOUT + 5:.0f}s, so there is nothing to photograph: {e}")
     base = Path(path)
     targets = [("", path)] if not states else [
@@ -2272,16 +2373,26 @@ def shot(path, port, width=900, height=1400, states=()):
         # and virtual time runs it forward without waiting in real seconds.
         # run-all-compositor-stages-before-draw so a popover opened by the
         # ?shot hook is painted, not just in the DOM, when the capture lands.
-        subprocess.run([CHROME, "--headless", "--disable-gpu", "--hide-scrollbars",
+        Path(out).unlink(missing_ok=True)
+        result = subprocess.run([CHROME, "--headless", "--disable-gpu", "--hide-scrollbars", "--dump-dom",
                         f"--window-size={width},{height}", f"--screenshot={out}",
                         "--virtual-time-budget=2500",
                         # At final state for the capture: the sheet slides up
                         # over 0.44s and virtual time can photograph it mid-way.
                         "--force-prefers-reduced-motion",
                         "--run-all-compositor-stages-before-draw", url],
-                       capture_output=True)
+                       capture_output=True, text=True)
+        view = name or 'the default view'
+        if result.returncode != 0:
+            reject_screenshot(out, f"Chrome capture failed for {view} (exit {result.returncode})")
         if not Path(out).exists():
-            return f"chrome wrote nothing for {name or 'the default view'}"
+            reject_screenshot(out, f"Chrome wrote nothing for {view}")
+        if 'data-board-ready="true"' not in result.stdout or (
+                name and f'data-shot-ready="{name}"' not in result.stdout):
+            reject_screenshot(out, f"invalid screenshot for {view}: the board did not finish painting; retry after it loads")
+        problem = screenshot_problem(out)
+        if problem:
+            reject_screenshot(out, f"invalid screenshot for {view}: {problem}; retry after the board finishes loading")
         written.append(out)
     return written[0] if len(written) == 1 else "\n".join(written)
 
@@ -2336,7 +2447,10 @@ def main():
             target, states = pos[0], pos[1:]
         else:
             target, states = f"/tmp/{prefix()}-dashboard.png", pos
-        print(shot(target, port, states=states))
+        try:
+            print(shot(target, port, states=states))
+        except ScreenshotError as e:
+            raise SystemExit(str(e)) from None
         return
 
     # The default, and what both hooks call: leave a dashboard running at the
@@ -2415,8 +2529,9 @@ def main():
         # hour: the claim says so, and the refresher stops counting idle.
         # For a board that watches several checkouts at once, not a session's.
         persist = os.environ.get("DASHBOARD_PERSIST") == "1"
-        claim_file(port).write_text(json.dumps({"root": str(ROOT), "pid": os.getpid(),
-                                                "persist": persist}))
+        identity = {"root": str(ROOT), "pid": os.getpid(), "token": os.urandom(16).hex()}
+        _bound_port["identity"] = identity
+        claim_file(port).write_text(json.dumps({**identity, "persist": persist}))
         # `down` sends SIGTERM, whose default disposition kills the process
         # outright — past the `finally` below, leaving the claim file behind.
         signal.signal(signal.SIGTERM, lambda *_: shutdown("stopped"))

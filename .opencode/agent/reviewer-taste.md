@@ -1,5 +1,6 @@
 ---
 description: Reviews a project diff against the project's documented taste — composition, module size, naming, comments, accessibility. Covers the app and the harness scripts. Reads a review packet and reports violations. Runs on Sonnet 5 at high effort; use for every change worth reviewing.
+model: opencode-go/muse-spark-1.3-contributor#xhigh
 mode: subagent
 permission:
   bash: deny
