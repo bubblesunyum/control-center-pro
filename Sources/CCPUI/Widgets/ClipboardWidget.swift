@@ -315,23 +315,42 @@ private struct ClipboardRow: View {
         }
     }
 
+    @ViewBuilder
     private var rowContent: some View {
-        HStack(alignment: .center, spacing: Space.one) {
-            VStack(alignment: .leading, spacing: Space.quarter) {
-                Text(entry.preview)
-                    .font(.caption)
-                    .lineLimit(2)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .multilineTextAlignment(.leading)
-                if entry.kind == .files, !entry.filePaths.isEmpty {
-                    Text(entry.filePaths.count == 1 ? ((entry.filePaths.first.map { ($0 as NSString).lastPathComponent } ) ?? entry.preview) : "\(entry.filePaths.count) files")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+        if entry.kind == .image {
+            imageRowContent
+        } else {
+            HStack(alignment: .center, spacing: Space.one) {
+                VStack(alignment: .leading, spacing: Space.quarter) {
+                    Text(entry.preview)
+                        .font(.caption)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .multilineTextAlignment(.leading)
+                    if entry.kind == .files, !entry.filePaths.isEmpty {
+                        Text(entry.filePaths.count == 1 ? ((entry.filePaths.first.map { ($0 as NSString).lastPathComponent } ) ?? entry.preview) : "\(entry.filePaths.count) files")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+                if let thumb = adapter.thumbnail(for: entry) {
+                    Image(nsImage: thumb)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: Layout.clipboardThumbnailWidth, maxHeight: Layout.clipboardThumbnailHeight)
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.thumbnail, style: .continuous))
+                        .accessibilityHidden(true)
                 }
             }
+            .contentShape(Rectangle())
+        }
+    }
+
+    private var imageRowContent: some View {
+        HStack(alignment: .center, spacing: Space.one) {
             if let thumb = adapter.thumbnail(for: entry) {
                 Image(nsImage: thumb)
                     .resizable()
@@ -340,6 +359,12 @@ private struct ClipboardRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: Radius.thumbnail, style: .continuous))
                     .accessibilityHidden(true)
             }
+            Text(entry.preview)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .multilineTextAlignment(.trailing)
         }
         .contentShape(Rectangle())
     }
