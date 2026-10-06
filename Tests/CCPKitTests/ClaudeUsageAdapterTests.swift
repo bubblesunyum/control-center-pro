@@ -226,8 +226,11 @@ final class ClaudeUsageAdapterTests: XCTestCase {
     }
 
     func testFileStoreRoundTripsAndKeepsOtherKeys() throws {
-        let file = FileManager.default.temporaryDirectory
-            .appending(path: "ccp-claude-\(UUID().uuidString).json")
+        // Isolated subdir so foreign .tmp strays in shared TMPDIR stay out of the leftover scan.
+        let dir = FileManager.default.temporaryDirectory
+            .appending(path: "ccp-claude-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appending(path: "ccp-claude.json")
         try Data(#"{"claudeAiOauth":{"subscriptionType":"max_5x"}}"#.utf8).write(to: file)
         let store = FileClaudeCredentialStore(credentialsFile: file)
 
