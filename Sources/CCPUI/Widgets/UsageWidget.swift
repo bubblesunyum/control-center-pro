@@ -139,7 +139,7 @@ private struct UsageContent: View {
         // Even-pace reference, behind the main fill. Nil without a reset to
         // split — no interval, no pace.
         let pace = paceDays.flatMap {
-            UsagePace.fraction(now: now, resetsAt: window?.resetsAt, totalHours: $0 * 24, ceilToNextHour: true)
+            UsagePace.dailyFraction(now: now, resetsAt: window?.resetsAt, totalDays: $0)
         } ?? paceHours.flatMap {
             UsagePace.fraction(now: now, resetsAt: window?.resetsAt, totalHours: $0)
         }
