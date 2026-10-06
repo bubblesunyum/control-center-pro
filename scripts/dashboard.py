@@ -629,6 +629,33 @@ def cached_stale(all_issues):
 # belong in project-owned files, never in shipped ones.
 DEFAULT_VERDICT = r"(?!)"
 
+# The dashboard.toml [theme] table maps a CSS variable name to its value, and
+# the page applies each pair as an inline custom property. Empty until a
+# project sets one — no theme section means no overrides.
+DEFAULT_THEME = {}
+_THEME_NAME = re.compile(r"^--[a-z0-9-]+$")
+
+# The [board] table hides and reorders the page's own sections. The valid keys
+# are enumerated once, here, from what dashboard/index.html actually renders:
+# the board lanes (ready/blocked/in_progress/review/staging/worktree/done),
+# the backlog strip, the harness diagram, the context-budget block, the gate
+# strip, and the peer tabs. Anything off this list is a ValueError.
+BOARD_SECTIONS = frozenset({
+    "ready", "blocked", "in_progress", "review", "staging", "worktree",
+    "done", "backlog", "harness", "budget", "gate", "peers",
+})
+
+# The [assets] table names project-owned CSS/JS served beside the page. Every
+# entry is a project-relative path that must sit under dashboard-assets/, a
+# top-level directory the dashboard updater never scans, so custom files
+# survive updates. Served as static bytes with fixed content-types, never
+# executed server-side. The state carries them stripped to their path inside
+# that directory, which is also the /assets/ URL that serves them.
+ASSETS_PREFIX = "dashboard-assets/"
+# What one served asset may weigh. Past it the request 404s rather than
+# handing a multi-megabyte bundle to every poll.
+ASSET_MAX_BYTES = 200 * 1024
+
 
 def ago_for(at):
     """How long ago, in the board's words. Empty for something that never ran."""
@@ -925,6 +952,159 @@ def cached_budget(skills, agents):
     return _budget["data"]
 
 
+# Vercel deploy status: is production at origin/main yet? Polled from the
+# deployments API on its own slower clock — every poll would burn rate limit
+# for a number that moves when Vercel finishes something, not between polls.
+# The token lives in VERCEL_API_TOKEN (env) or .env.local (gitignored) and
+# never leaves the server: the state carries only states, shas, and API
+# status text with any credential material scrubbed out. Unlinked checkouts
+# carry no `.vercel/project.json` and serve no key at all — no chip, no noise.
+_vercel = {"at": 0.0, "head": "", "data": None}
+VERCEL_TTL = 60.0
+# After a push lands, Vercel needs a minute or three to pick it up and build
+# it — asleep on the 60s clock the chip would miss deploying entirely and jump
+# from behind to deployed. So origin/main moving arms a hot poll: 10s cadence
+# until the deploy for the new head lands or ten minutes pass. This watches
+# the ref, not the button, so pushes from a terminal count too.
+_vercel_boost = {"until": 0.0}
+VERCEL_BOOST_TTL = 10.0
+VERCEL_BOOST_WINDOW = 600.0
+
+
+def vercel_ttl():
+    """This poll's refetch cadence: hot while a fresh push is still building."""
+    return VERCEL_BOOST_TTL if time.time() < _vercel_boost["until"] else VERCEL_TTL
+
+
+def vercel_ids():
+    """The project and org the link names, or blanks — a missing or torn
+    `.vercel/project.json` reads as unlinked, never as an error."""
+    try:
+        proj = json.loads((ROOT / ".vercel" / "project.json").read_text())
+        return proj.get("projectId", ""), proj.get("orgId", "")
+    except (OSError, ValueError):
+        return "", ""
+
+
+def vercel_token():
+    """The API token from the environment or the gitignored `.env.local`.
+    Quoted and `export`-prefixed shapes both read; anything unreadable reads
+    as absent. Never logged — only states and scrubbed status cross into state."""
+    tok = os.environ.get("VERCEL_API_TOKEN", "").strip()
+    if tok:
+        return tok
+    try:
+        with open(ROOT / ".env.local") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("export "):
+                    line = line[len("export "):].strip()
+                key, eq, val = line.partition("=")
+                if eq and key.strip() == "VERCEL_API_TOKEN":
+                    return val.strip().strip("\"'")
+    except (OSError, ValueError):
+        pass
+    return ""
+
+
+def vercel_fetch(project_id, org_id, token):
+    """The newest deployments for this project, most recent first."""
+    # Limit headroom: this sha may sit pages deep among other-branch deploys.
+    url = ("https://api.vercel.com/v6/deployments"
+           f"?projectId={project_id}&limit=10")
+    if org_id:
+        url += f"&teamId={org_id}"  # the API calls the org the team
+    req = urllib.request.Request(url, headers={"Authorization": "Bearer " + token})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.load(r).get("deployments", [])
+
+
+def vercel_summarize(deps, head):
+    """Match a deployment to origin/main by full sha. Only states and shas
+    come back — no secret ever touches this dict."""
+    match = next((d for d in deps
+                  if (d.get("meta") or {}).get("githubCommitSha") == head), None)
+    if match is None:
+        return {"status": "behind", "sha": None, "state": None,
+                "url": None, "when": None}
+    meta, state = match.get("meta") or {}, match.get("state")
+    status = ("deployed" if state == "READY"
+              else "deploying" if state in ("QUEUED", "INITIALIZING", "BUILDING")
+              else "failed")
+    created = meta.get("githubCommitCreatedAt") or match.get("createdAt", 0)
+    try:
+        when = time.strftime("%m-%d %H:%M", time.localtime(int(created) / 1000))
+    except (TypeError, ValueError):
+        when = None
+    return {"status": status, "sha": head[:7], "state": state,
+            "url": "https://" + match["url"] if match.get("url") else None,
+            "when": when}
+
+
+def vercel_scrub_error(e):
+    """One short line for the chip, with any credential material blanked."""
+    text = str(e).splitlines()[0][:120] if str(e) else "fetch failed"
+    return re.sub(r"(Bearer\s+)\S+", r"\1…", text)
+
+
+def vercel_head():
+    """origin/main's sha, or "". `--verify`, because a bare rev-parse echoes
+    an unresolvable ref onto stdout even while failing — which would read
+    here as a sha and burn a fetch for it."""
+    try:
+        r = subprocess.run(["git", "rev-parse", "--verify", "origin/main"],
+                           capture_output=True, text=True, timeout=25, cwd=ROOT)
+        return r.stdout.strip() if r.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+def vercel_state(fast=False):
+    """This checkout's deploy status, or None when it links nowhere. Token,
+    link, upstream, and API failures all read as reasons, never exceptions —
+    the state build must not break over a chip."""
+    project_id, org_id = vercel_ids()
+    if not project_id:
+        # A torn link reads as re-link, not silence: the file exists but
+        # names no project, so the page can say so. Missing stays None.
+        if (ROOT / ".vercel" / "project.json").is_file():
+            return {"configured": False, "why": "link"}
+        return None
+    # The ref is read ahead of the cache so a push arms the hot poll even on
+    # a poll that reuses the last fetch.
+    head = vercel_head()
+    prev = _vercel.get("head")
+    _vercel["head"] = head
+    if head and prev and head != prev:
+        _vercel_boost["until"] = time.time() + VERCEL_BOOST_WINDOW
+        _vercel["at"] = 0.0
+    # The snapshot form runs cold on the hook path: reuse the last fetch
+    # rather than stalling session-end on a live round trip. The serving
+    # refresher always fetches, so the board still converges within a minute.
+    if fast or time.time() - _vercel["at"] < vercel_ttl():
+        return _vercel["data"]
+    token = vercel_token()
+    if not token:
+        data = {"configured": False, "why": "token"}
+    elif not head:
+        data = {"configured": False, "why": "upstream"}
+    else:
+        data = {"configured": True, "head": head[:7]}
+        try:
+            deps = vercel_fetch(project_id, org_id, token)
+            # A ragged payload reads as unreachable, never as an exception —
+            # a null entry or explicit-null list must not freeze the build.
+            data.update(vercel_summarize(deps, head))
+        except Exception as e:
+            data.update({"status": "unreachable", "error": vercel_scrub_error(e)})
+        else:
+            if data.get("status") in ("deployed", "failed"):
+                _vercel_boost["until"] = 0.0
+    _vercel["data"] = data
+    _vercel["at"] = time.time()
+    return data
+
+
 def budget(skills, agents):
     claude_md = (ROOT / "CLAUDE.md")
     brief = run("bash", str(ROOT / "scripts/brief.sh"))
@@ -952,7 +1132,7 @@ def budget(skills, agents):
 _harness_files = {}
 
 
-def state():
+def state(fast=False):
     skills, agents = catalog()
     git, verify, ledger = git_state(), verify_state(), ledger_state()
     # Swapped whole, not cleared and refilled: a sheet opening mid-rebuild would
@@ -1006,7 +1186,7 @@ def state():
 
     ledger["issues"] = live + [i for i in closed if i["id"] in keep]
 
-    return {
+    out = {
         "generated": time.strftime("%H:%M:%S"),
         # The checkout this snapshot describes. The page matches it after a
         # peer switch and repaints only once the rebuild has landed there.
@@ -1021,7 +1201,17 @@ def state():
         "agents": agents,
         "harness": stages,
         "budget": cached_budget(skills, agents),
+        "theme": theme(),
+        "board": board(),
+        "assets": assets(),
     }
+    # Linked-only: an unlinked checkout carries no `.vercel/project.json`,
+    # so the key stays absent and the page renders no chip — the board reads
+    # exactly as before this reader existed.
+    vercel = vercel_state(fast=fast)
+    if vercel is not None:
+        out["vercel"] = vercel
+    return out
 
 
 # The work-tree row actions. Each takes the path straight off a request body,
@@ -1328,8 +1518,14 @@ _TASK_WHERE = {"header", "gate"} | {
     f"lane:{k}" for k in
     ("ready", "blocked", "in_progress", "review", "done", "backlog", "staging", "worktree")}
 
-_toml = {"mtime": ("", 0.0, 0), "reported": ("", 0.0, 0), "tasks": None, "name": None,
-        "verdict": DEFAULT_VERDICT, "verdict_reported": ("", 0.0, 0)}
+# First-read defaults: a missing file returns early on the ("", 0.0, 0)
+# stamp below, so the table starts as the documented defaults rather than
+# Nones that tasks() would hand to an iterator.
+_toml = {"mtime": ("", 0.0, 0), "reported": ("", 0.0, 0), "tasks": dict(DEFAULT_TASKS), "name": None,
+        "verdict": DEFAULT_VERDICT, "verdict_reported": ("", 0.0, 0),
+        "theme": dict(DEFAULT_THEME), "theme_reported": ("", 0.0, 0),
+        "board": {"hidden": [], "order": []}, "board_reported": ("", 0.0, 0),
+        "assets": {"css": [], "js": []}, "assets_reported": ("", 0.0, 0)}
 _toml_lock = threading.Lock()
 
 
@@ -1406,13 +1602,115 @@ def _check_verdict(doc):
     return pattern
 
 
+def _check_theme(doc):
+    """dashboard.toml's [theme] overrides, validated. Returns {} when the file
+    says nothing; raises ValueError naming the fix when it says something the
+    page must not render."""
+    section = doc.get("theme", {})
+    if section is None:
+        return {}
+    if not isinstance(section, dict):
+        raise ValueError("[theme] is not a table — map '--var' = 'value' or delete it")
+    if not section:
+        return {}
+    theme = {}
+    for name, value in section.items():
+        # A non-string key arrives from a quoted TOML key holding a number or
+        # the like; name it rather than crashing on the match below.
+        if (not isinstance(name, str) or not _THEME_NAME.match(name)
+                or len(name) > 40):
+            raise ValueError(f"[theme] has a bad variable name {name!r} — "
+                             "use --lowercase-letters-and-dashes (max 40 chars)")
+        if not isinstance(value, str) or not value or len(value) > 200:
+            raise ValueError(f"[theme] {name} must be a 1–200 character string")
+        # An override lands verbatim in a stylesheet, so markup and remote
+        # references never render: the first closes the style element, the
+        # second pulls a URL into it.
+        if "</" in value or "url(" in value.lower():
+            raise ValueError(f"[theme] {name} must not hold markup or url(...)")
+        theme[name] = value
+    return theme
+
+
+def _check_board(doc):
+    """dashboard.toml's [board] hide/reorder lists, validated. Missing keys
+    default to []; raises ValueError when a key is off BOARD_SECTIONS."""
+    section = doc.get("board", {})
+    if section is None:
+        return {"hidden": [], "order": []}
+    if not isinstance(section, dict):
+        raise ValueError("[board] is not a table — set hidden/order lists or delete it")
+    if not section:
+        return {"hidden": [], "order": []}
+    unknown = set(section) - {"hidden", "order"}
+    if unknown:
+        raise ValueError(f"[board] sets unknown key(s) {sorted(unknown)} — "
+                         "only hidden and order exist")
+    out = {}
+    for key in ("hidden", "order"):
+        entries = section.get(key, [])
+        if not isinstance(entries, list):
+            raise ValueError(f"[board].{key} must be a list of section keys or be deleted")
+        for entry in entries:
+            if not isinstance(entry, str) or entry not in BOARD_SECTIONS:
+                raise ValueError(f"[board].{key} names an unknown section {entry!r} — "
+                                 f"valid sections are: {', '.join(sorted(BOARD_SECTIONS))}")
+        out[key] = list(entries)
+    return out
+
+
+def _check_asset_path(entry, kind):
+    """One [assets] entry, validated. Project-relative, under dashboard-assets/,
+    with the extension the list demands, and no absolute path or parent escape
+    — a request can only name what this lets through."""
+    ext = ".css" if kind == "css" else ".js"
+    if not isinstance(entry, str) or not entry or len(entry) > 200:
+        raise ValueError(f"[assets].{kind} entries must be 1–200 character paths")
+    if entry.startswith("/") or "\\" in entry:
+        raise ValueError(f"[assets] must not hold absolute paths: {entry!r}")
+    if not entry.startswith(ASSETS_PREFIX):
+        raise ValueError(f"[assets].{kind} entries must sit under {ASSETS_PREFIX}: {entry!r}")
+    rel = entry[len(ASSETS_PREFIX):]
+    if not rel or rel.startswith("/") or not rel.endswith(ext):
+        raise ValueError(f"[assets].{kind} entries must name a {ext} file "
+                         f"under {ASSETS_PREFIX}: {entry!r}")
+    # Dot-segments, not substrings: "a..b.css" is a filename, "../" is a jailbreak.
+    if any(part in (".", "..") for part in rel.split("/")):
+        raise ValueError(f"[assets] must not escape {ASSETS_PREFIX}: {entry!r}")
+    return rel
+
+
+def _check_assets(doc):
+    """dashboard.toml's [assets] file lists, validated. Returns the paths
+    stripped to their location inside dashboard-assets/, which is also the
+    /assets/ URL that serves them."""
+    section = doc.get("assets", {})
+    if section is None:
+        return {"css": [], "js": []}
+    if not isinstance(section, dict):
+        raise ValueError("[assets] is not a table — set css/js lists or delete it")
+    if not section:
+        return {"css": [], "js": []}
+    unknown = set(section) - {"css", "js"}
+    if unknown:
+        raise ValueError(f"[assets] sets unknown key(s) {sorted(unknown)} — "
+                         "only css and js exist")
+    out = {}
+    for kind in ("css", "js"):
+        entries = section.get(kind, [])
+        if not isinstance(entries, list):
+            raise ValueError(f"[assets].{kind} must be a list of paths or be deleted")
+        out[kind] = [_check_asset_path(e, kind) for e in entries]
+    return out
+
+
 def _refresh_toml():
     """Re-read dashboard.toml when it changed. Missing file: the defaults,
     silently. Broken file: keep serving the last good values and complain once
     per change, not once per snapshot build — the stamp only advances past a
-    file that fully parsed, so a torn read retries instead of sticking. The
-    task table and the verdict pattern are read independently: one bad section
-    must not take the other one down with it."""
+    file that fully parsed, so a torn read retries instead of sticking. Every
+    section is read independently: one bad table must not take the others down
+    with it."""
     global _toml
     try:
         st = (ROOT / "dashboard.toml").stat()
@@ -1426,7 +1724,10 @@ def _refresh_toml():
             return
         if stamp == ("", 0.0, 0):
             _toml = {"mtime": stamp, "reported": stamp, "tasks": dict(DEFAULT_TASKS), "name": None,
-                     "verdict": DEFAULT_VERDICT, "verdict_reported": stamp}
+                     "verdict": DEFAULT_VERDICT, "verdict_reported": stamp,
+                     "theme": dict(DEFAULT_THEME), "theme_reported": stamp,
+                     "board": {"hidden": [], "order": []}, "board_reported": stamp,
+                     "assets": {"css": [], "js": []}, "assets_reported": stamp}
             return
         try:
             with open(ROOT / "dashboard.toml", "rb") as f:
@@ -1454,9 +1755,33 @@ def _refresh_toml():
                            "verdict_reported")
         else:
             fresh["verdict_reported"] = stamp
+        try:
+            fresh["theme"] = _check_theme(doc)
+        except ValueError as e:
+            _complain_once(fresh, stamp, f"dashboard: {e} — keeping last good theme",
+                           "theme_reported")
+        else:
+            fresh["theme_reported"] = stamp
+        try:
+            fresh["board"] = _check_board(doc)
+        except ValueError as e:
+            _complain_once(fresh, stamp, f"dashboard: {e} — keeping last good board",
+                           "board_reported")
+        else:
+            fresh["board_reported"] = stamp
+        try:
+            fresh["assets"] = _check_assets(doc)
+        except ValueError as e:
+            _complain_once(fresh, stamp, f"dashboard: {e} — keeping last good assets",
+                           "assets_reported")
+        else:
+            fresh["assets_reported"] = stamp
         # The stamp advances only past a file that fully parsed; anything less
         # retries on the next cycle instead of sticking.
-        if fresh["reported"] == stamp and fresh["verdict_reported"] == stamp:
+        if (fresh["reported"] == stamp and fresh["verdict_reported"] == stamp
+                and fresh["theme_reported"] == stamp
+                and fresh["board_reported"] == stamp
+                and fresh["assets_reported"] == stamp):
             fresh["mtime"] = stamp
         _toml = fresh
 
@@ -1495,6 +1820,58 @@ def project_name():
     """Display name for the title. The TOML's, or the directory's."""
     _refresh_toml()
     return _toml["name"] or ROOT.name
+
+
+def theme():
+    """The [theme] overrides from dashboard.toml, or {} — copied, so a caller
+    can never mutate the last-good table the refresher keeps."""
+    _refresh_toml()
+    return dict(_toml["theme"])
+
+
+def board():
+    """The [board] hide/reorder lists from dashboard.toml, or empty lists."""
+    _refresh_toml()
+    return {"hidden": list(_toml["board"]["hidden"]),
+            "order": list(_toml["board"]["order"])}
+
+
+def assets():
+    """The [assets] file lists from dashboard.toml, as paths inside
+    dashboard-assets/ — the same strings /assets/ serves them at."""
+    _refresh_toml()
+    return {"css": list(_toml["assets"]["css"]),
+            "js": list(_toml["assets"]["js"])}
+
+
+def asset_body(rel):
+    """The bytes for one /assets/ path, with its fixed content-type — or None,
+    which the handler answers as a 404. Only a validated [assets] entry
+    resolves: the allowlist is the toml the refresher last accepted, so a path
+    the project never listed, a traversal, an overweight file, or a file that
+    isn't there all read as missing. Static bytes only; nothing here ever runs
+    server-side."""
+    if not isinstance(rel, str) or not rel or rel.startswith("/") or "\\" in rel:
+        return None
+    if any(part in (".", "..") for part in rel.split("/")):
+        return None
+    allowed = assets()
+    if rel not in allowed["css"] and rel not in allowed["js"]:
+        return None
+    base = ROOT / ASSETS_PREFIX.rstrip("/")
+    try:
+        # Resolved before the containment check, so a symlink pointing out of
+        # the directory reads as missing rather than as an escape.
+        path = (base / rel).resolve()
+        if not path.is_relative_to(base.resolve()):
+            return None
+        if not path.is_file() or path.stat().st_size > ASSET_MAX_BYTES:
+            return None
+        data = path.read_bytes()
+    except OSError:
+        return None
+    content_type = "text/css" if rel.endswith(".css") else "text/javascript"
+    return content_type, data
 
 _runs = {}
 
@@ -1795,6 +2172,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if body is None:
                 return self.send_error(404)
             return self.send_json({"id": wanted, "body": body})
+        # Project-owned static files from dashboard-assets/, allowlisted by the
+        # [assets] table. A path the toml never validated 404s, whatever it is.
+        if urlparse(self.path).path.startswith("/assets/"):
+            rel = unquote(urlparse(self.path).path[len("/assets/"):])
+            got = asset_body(rel)
+            if got is None:
+                return self.send_error(404)
+            content_type, data = got
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         super().do_GET()
 
     def send_json(self, payload):
@@ -2021,6 +2413,11 @@ def switch_root(payload):
         _verify["key"] = None
         _budget["data"] = None
         _stale["at"] = 0.0
+        # The deploy cache and its hot poll describe the old checkout's ref.
+        _vercel["data"] = None
+        _vercel["head"] = ""
+        _vercel["at"] = 0.0
+        _vercel_boost["until"] = 0.0
         # Run history belongs to the old checkout. The generation moves too, so
         # a run pressed over there that finishes over here lands nowhere.
         _runs.clear()
@@ -2030,9 +2427,14 @@ def switch_root(payload):
         # must not leak across as this checkout's buttons and verdict.
         with _toml_lock:
             _toml["mtime"] = None
-            _toml["tasks"] = None
+            # Defaults, never None: a read landing between here and the
+            # forced re-read must serve buttons, not crash on them.
+            _toml["tasks"] = dict(DEFAULT_TASKS)
             _toml["name"] = None
             _toml["verdict"] = DEFAULT_VERDICT
+            _toml["theme"] = dict(DEFAULT_THEME)
+            _toml["board"] = {"hidden": [], "order": []}
+            _toml["assets"] = {"css": [], "js": []}
     touch()
     return {"ok": True}
 
@@ -2131,7 +2533,7 @@ def write_snapshot():
     # Path and build under one lock: ROOT must not move between them, or the
     # snapshot lands in a checkout whose board it doesn't describe.
     with _state_lock:
-        data = state()
+        data = state(fast=True)
         out = ROOT / "dashboard/state.json"
         out.parent.mkdir(exist_ok=True)
         out.write_text(json.dumps(data, indent=2))
