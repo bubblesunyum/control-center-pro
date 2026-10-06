@@ -20,5 +20,19 @@
       "*>*/private/var/folders/*": "deny",
       "*>*TMPDIR*": "deny"
     }
+  },
+  "mcp": {
+    "servers": {
+      "figma": {
+        "type": "remote",
+        "url": "https://mcp.figma.com/mcp",
+        "disabled": true
+      },
+      "figma-desktop": {
+        "type": "remote",
+        "url": "http://127.0.0.1:3845/mcp",
+        "oauth": false
+      }
+    }
   }
 }
