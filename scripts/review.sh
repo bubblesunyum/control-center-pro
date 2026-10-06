@@ -27,6 +27,13 @@ scripts/models.py ensure || true
 # machine it was written on.
 mtime() { stat -f '%m' "$@" 2>/dev/null || stat -c '%Y' "$@"; }
 stamp() { date -r "$1" +%Y%m%d%H%M.%S 2>/dev/null || date -d "@$1" +%Y%m%d%H%M.%S; }
+# Human-readable sibling of stamp(): stamp() is touch(1) format for the marker
+# above, this one is for the reviewer's eyes in the Captures list. Same BSD/GNU
+# split — date -r on BSD, date -d @epoch on GNU — so the list reads the same
+# everywhere the packet builds. Read-only about /tmp: it stamps each capture
+# with its mtime so a stale shot reads as stale, never deleting what it didn't
+# take.
+mtime_human() { date -r "$1" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -d "@$1" '+%Y-%m-%d %H:%M:%S'; }
 
 base="${1:-}"
 staged=0
@@ -188,8 +195,24 @@ rm -f "$marker"
     echo "Where several show the same screen, the **last** is how it looks now and"
     echo "the earlier ones are states already fixed — review the last, and don't"
     echo "report a defect a later capture shows resolved."
+    echo "Each capture carries its modification time, so a stale shot from an"
+    echo "earlier session reads as stale."
     echo
-    echo "$shots" | sed 's/^/- /'
+    # Stamped, not swept: /tmp holds other sessions' captures too, and this
+    # script is read-only about them — deleting what it didn't take would eat a
+    # sibling session's verification. The stamp lets the reviewer tell current
+    # from stale instead. Re-stat is load-bearing under set -e: a capture may
+    # vanish between the find above and this list, and that must fall back to a
+    # bare path, not take the packet down with it.
+    printf '%s\n' "$shots" | while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      t=$(mtime "$f" 2>/dev/null || true)
+      if [ -n "$t" ]; then
+        echo "- $f ($(mtime_human "$t"))"
+      else
+        echo "- $f"
+      fi
+    done
   else
     echo "None. If this change alters anything on screen, that is itself a finding:"
     echo "it shipped unseen. Drive the app and capture it first."

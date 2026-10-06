@@ -60,8 +60,9 @@ breakage instead of the design, so keep the order.
 
 `scripts/review.sh` collects the `/tmp/<prefix>-*.png` captures (the ledger's
 prefix, resolved at runtime) and lists them
-in the packet, so whatever you shot while verifying is what the design reviewer
-looks at. Shoot the screens the change touches, on every surface it ships to.
+in the packet, each stamped with its modification time so a stale shot from
+an earlier session reads as stale — so whatever you shot while verifying is
+what the design reviewer looks at. Shoot the screens the change touches, on every surface it ships to.
 
 For an uncommitted tree the window starts at the working tree's first edit, not
 at HEAD — HEAD can be days old, and a packet dated against it swept in whole

@@ -107,7 +107,9 @@ here — this skill *is* it.)
    before a revision is evidence about a tree that no longer exists.
 3. Captures are cheap when the app has an e2e scene spec: include
    capture-on-demand in reviewer briefs (which scenes, which states)
-   rather than treating screenshots as a separate expedition.
+   rather than treating screenshots as a separate expedition. Every
+   capture in the packet carries its mtime, so a stale shot reads as
+   stale rather than current.
 
 ## Phase 6 — Adjudicate and follow up
 
