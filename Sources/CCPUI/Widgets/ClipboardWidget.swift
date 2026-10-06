@@ -58,6 +58,29 @@ private struct ClipboardContent: View {
 
     private var hasUnpinned: Bool { adapter.entries.contains(where: { !$0.isPinned }) }
 
+    @Environment(\.panelArrangement) private var arrangement
+    @Environment(\.currentWidgetID) private var currentWidgetID
+
+    /// This card's height span, 1 where the environment is absent (previews).
+    private var heightSpan: Int {
+        guard let id = currentWidgetID else { return 1 }
+        return arrangement?.lanes.joined().first { $0.id == id }?.span.height ?? 1
+    }
+
+    /// How tall the list stands: the token floor at base span, the card's
+    /// span floor minus the header above it when resized taller, so the list
+    /// fills a tall card instead of leaving dead glass under a capped scroll
+    /// view. The header never grows past its accessory icons, so the
+    /// subtraction is exact; an uncapped ScrollView would size to its content
+    /// and grow the lane off screen, which is why this stays explicit.
+    private var listHeight: CGFloat {
+        max(
+            Layout.clipboardListHeight,
+            CGFloat(heightSpan) * ClipboardWidget.descriptor.size.height
+                - (Space.oneHalf + Layout.headerAccessorySize)
+        )
+    }
+
     var body: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 0) {
@@ -186,7 +209,7 @@ private struct ClipboardContent: View {
                         .padding(.top, Space.oneHalf)
                     }
                 }
-                .frame(maxHeight: Layout.clipboardListHeight)
+                .frame(height: listHeight)
                 .id("clipboard-\(adapter.hideGeneration)")
                 .onChange(of: adapter.hideGeneration) { _, _ in
                     proxy.scrollTo("ccp.clipboard.top", anchor: .top)
