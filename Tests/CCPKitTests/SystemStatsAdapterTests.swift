@@ -160,14 +160,16 @@ final class SystemStatsAdapterTests: XCTestCase {
 
     func testActivateIsIdempotent() async {
         let source = FakeSystemStatsSource(sample: SystemStatsSample(cpuUsage: 0.5))
-        let adapter = SystemStatsAdapter(source: source, interval: .milliseconds(20))
+        // 200ms interval against a 50ms watch: full-suite scheduling must not
+        // land an interval tick inside the window and read as a resample.
+        let adapter = SystemStatsAdapter(source: source, interval: .milliseconds(200))
 
         adapter.activate()
         // Wait for first async sample
         _ = await becomesTrue { source.sampleCount >= 1 }
         let countAfterFirst = source.sampleCount
         adapter.activate()
-        try? await Task.sleep(for: .milliseconds(10))
+        try? await Task.sleep(for: .milliseconds(50))
         XCTAssertEqual(source.sampleCount, countAfterFirst, "second activate should not trigger another immediate sample")
 
         adapter.deactivate()
@@ -223,7 +225,9 @@ final class SystemStatsAdapterTests: XCTestCase {
         let adapter = SystemStatsAdapter(source: source, interval: .milliseconds(20), historyCapacity: 10)
 
         adapter.activate()
-        try? await Task.sleep(for: .milliseconds(80))
+        // 300ms at a 20ms cadence: coalesced ticks under full-suite load
+        // still leave order-of-magnitude margin for the >2 assertion.
+        try? await Task.sleep(for: .milliseconds(300))
 
         XCTAssertGreaterThan(adapter.snapshot.cpuHistory.count, 2, "graph should have accumulated while open")
 
