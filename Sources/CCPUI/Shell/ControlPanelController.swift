@@ -432,12 +432,12 @@ public final class ControlPanelController {
         guard !StickyStore.shared.isDragging, !editor.isDragging else { return false }
         // A delete confirmation open is modal-ish: the dialog answers clicks
         // instead of the backdrop dismissing under the question.
-        let hitRects = Self.hitRects(
+        let hitRects = PanelBackdrop.hitRects(
             lanesFrame: lanesFrame,
             cardFrames: cardFrames,
             isEditing: editor.isEditing
         )
-        let interactive = !lanesFrameValid || StickyStore.shared.isConfirmingDelete || Self.isInteractive(
+        let interactive = !lanesFrameValid || StickyStore.shared.isConfirmingDelete || PanelBackdrop.isInteractive(
             at: NSEvent.mouseLocation,
             windowFrame: window.frame,
             hitRects: hitRects,
@@ -445,61 +445,6 @@ public final class ControlPanelController {
             galleryOpen: editor.isShowingGallery
         )
         return !interactive
-    }
-
-    /// Outward slack on the edit-mode hit box. The resize target overshoots
-    /// its card and the remove badge caps past it, and on an edge card that
-    /// overhang sits past the lanes' outer boundary where the box doesn't
-    /// reach — without slack a press there dismisses and exits edit mode
-    /// instead of resizing or removing.
-    nonisolated static let editHitTestOutset: CGFloat = 12
-
-    /// Which rects count as the panel's. At rest the cards' union is exact,
-    /// so gutter clicks are backdrop; editing keeps the lanes' box (with
-    /// slack) because the union would punch holes mid-gesture — the lifted
-    /// card leaves its lane as a frameless gap, and backdrop under a held
-    /// drag would dismiss from under it. Nil frames mean the first
-    /// report hasn't arrived, so the box stands in; an empty panel reports
-    /// nothing to click and is all backdrop. Pure so the mode rule is provable
-    /// without ordering windows.
-    nonisolated static func hitRects(lanesFrame: CGRect, cardFrames: [CGRect]?, isEditing: Bool) -> [CGRect] {
-        if isEditing {
-            return [lanesFrame.insetBy(dx: -editHitTestOutset, dy: -editHitTestOutset)]
-        }
-        return cardFrames ?? [lanesFrame]
-    }
-
-    /// Whether the screen point is the panel's own content. Pure so the
-    /// hit-test math is provable without ordering windows: panel rects are
-    /// top-leading origin, screen points are bottom-leading. Sticky geometry
-    /// reads through the card's own frame helper — one definition shared with
-    /// the desk and the drag guard.
-    ///
-    /// The rects are tested as a union, not as their bounding box: the
-    /// gutters between cards are blank backdrop, and a point there is outside
-    /// the panel — it dismisses (and is swallowed) rather than reaching the
-    /// app below. The caller picks the set:
-    /// the cards' frames at rest, the lanes' box until they arrive, in edit
-    /// mode, and never for an empty panel (no rects at all is all backdrop).
-    nonisolated static func isInteractive(
-        at screenPoint: CGPoint,
-        windowFrame: CGRect,
-        hitRects: [CGRect],
-        stickies: [Sticky],
-        galleryOpen: Bool
-    ) -> Bool {
-        if galleryOpen { return true }
-        let toScreen = { (panel: CGRect) in CGRect(
-            x: windowFrame.minX + panel.minX,
-            y: windowFrame.maxY - panel.maxY,
-            width: panel.width,
-            height: panel.height
-        ) }
-        if hitRects.contains(where: { toScreen($0).contains(screenPoint) }) { return true }
-        return stickies.contains { sticky in
-            toScreen(StickyCard.frame(of: sticky, inWidth: windowFrame.size.width))
-                .contains(screenPoint)
-        }
     }
 
     // MARK: - Content tracking
