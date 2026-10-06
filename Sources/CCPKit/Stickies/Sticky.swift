@@ -49,10 +49,14 @@ public struct Sticky: Codable, Equatable, Identifiable, Sendable {
         self.id = id
         self.text = text
         self.color = color
-        self.trailingX = trailingX
-        self.y = y
-        self.width = width
-        self.height = height
+        // Non-finite geometry never commits: JSON has no NaN or infinities,
+        // so persisting one fails the encode and the file never heals.
+        // Finite values pass through untouched — seat-relative clamping
+        // stays with reclaim, which alone knows the seat width.
+        self.trailingX = trailingX.isFinite ? trailingX : 0
+        self.y = y.isFinite ? y : 0
+        self.width = width.isFinite ? width : Self.minWidth
+        self.height = height.isFinite ? height : Self.minHeight
         self.isArchived = isArchived
     }
 
@@ -104,10 +108,13 @@ public struct Sticky: Codable, Equatable, Identifiable, Sendable {
         return unmarked.isEmpty ? "New Sticky" : String(unmarked.prefix(40))
     }
 
+    /// Every move path lands here, so a poisoned commit (a NaN drag delta,
+    /// an inf seat width) falls back to the origin instead of reaching the
+    /// file. Finite values pass through — reclaim owns those.
     func movedTo(trailingX: Double, y: Double) -> Sticky {
         var copy = self
-        copy.trailingX = trailingX
-        copy.y = y
+        copy.trailingX = trailingX.isFinite ? trailingX : 0
+        copy.y = y.isFinite ? y : 0
         return copy
     }
 
@@ -124,16 +131,21 @@ public struct Sticky: Codable, Equatable, Identifiable, Sendable {
     }
 
     public mutating func convertToTrailingAnchoring(inWidth width: Double) {
-        trailingX = width - trailingX
+        let converted = width - trailingX
+        // A value poisoned before the commit guards existed must not
+        // survive the one-time migration.
+        trailingX = converted.isFinite ? converted : 0
     }
 
     /// The one resize rule: every resize path lands here, so the minimum
     /// holds wherever the size came from — the grip, an accessibility step,
-    /// or a hand-edited file on load.
+    /// or a hand-edited file on load. `max` lets NaN and +inf through
+    /// (every comparison with NaN is false), so non-finite sizes fall back
+    /// before the minimum applies.
     public func resizedTo(width: Double, height: Double) -> Sticky {
         var copy = self
-        copy.width = max(width, Self.minWidth)
-        copy.height = max(height, Self.minHeight)
+        copy.width = width.isFinite ? max(width, Self.minWidth) : Self.minWidth
+        copy.height = height.isFinite ? max(height, Self.minHeight) : Self.minHeight
         return copy
     }
 }

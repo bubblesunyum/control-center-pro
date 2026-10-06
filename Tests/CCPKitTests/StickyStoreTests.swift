@@ -260,4 +260,88 @@ final class StickyStoreTests: XCTestCase {
         XCTAssertEqual(Sticky(text: "groceries\nmilk\neggs").displayTitle, "groceries")
         XCTAssertEqual(Sticky(text: "# headed\nbody").displayTitle, "headed")
     }
+
+    func testAddFallsBackWhenCoordinatesAreNonFinite() {
+        let store = store()
+
+        for bad in [Double.nan, .infinity, -.infinity] {
+            let sticky = store.add(trailingX: bad, y: bad)
+
+            XCTAssertEqual(sticky.trailingX, 0, "trailingX \(bad)")
+            XCTAssertEqual(sticky.y, 0, "y \(bad)")
+        }
+    }
+
+    func testMoveFallsBackWhenCoordinatesAreNonFinite() {
+        let store = store()
+        let sticky = store.add(trailingX: 100, y: 100)
+
+        for bad in [Double.nan, .infinity, -.infinity] {
+            store.move(sticky.id, toTrailingX: bad, toY: bad)
+
+            XCTAssertEqual(store.visible.first?.trailingX, 0, "trailingX \(bad)")
+            XCTAssertEqual(store.visible.first?.y, 0, "y \(bad)")
+
+            store.move(sticky.id, toTrailingX: 100, toY: 100)
+        }
+    }
+
+    func testMoveByHealsNonFiniteTravel() {
+        let store = store()
+        let note = store.add(trailingX: 800, y: 600)
+
+        // A NaN drag delta poisons the axis it touches; the other axis
+        // keeps its travel.
+        store.moveBy(note.id, dx: .nan, dy: 50)
+        XCTAssertEqual(store.visible.first?.trailingX, 0)
+        XCTAssertEqual(store.visible.first?.y, 650)
+
+        store.move(note.id, toTrailingX: 800, toY: 600)
+        store.moveBy(note.id, dx: 100, dy: .infinity)
+        XCTAssertEqual(store.visible.first?.trailingX, 700)
+        XCTAssertEqual(store.visible.first?.y, 0)
+
+        // Infinite travel off either edge still commits finite geometry.
+        store.move(note.id, toTrailingX: 800, toY: 600)
+        store.moveBy(note.id, dx: -.infinity, dy: -.infinity)
+        XCTAssertEqual(store.visible.first?.trailingX, 0)
+        XCTAssertEqual(store.visible.first?.y, 0)
+    }
+
+    func testResizeFallsBackToMinimumWhenSizeIsNonFinite() {
+        let store = store()
+        let sticky = store.add()
+
+        for bad in [Double.nan, .infinity, -.infinity, -10] {
+            store.resize(sticky.id, width: bad, height: bad)
+
+            XCTAssertEqual(store.visible.first?.width, Sticky.minWidth, "width \(bad)")
+            XCTAssertEqual(store.visible.first?.height, Sticky.minHeight, "height \(bad)")
+        }
+    }
+
+    func testMigrationHealsNonFiniteTrailingOffsets() {
+        // A value poisoned before the commit guards existed still converts
+        // to something finite instead of surviving another generation.
+        var sticky = Sticky(trailingX: 200, y: 100)
+        sticky.trailingX = .nan
+
+        sticky.convertToTrailingAnchoring(inWidth: 1000)
+
+        XCTAssertEqual(sticky.trailingX, 0)
+    }
+
+    func testFiniteAbsurdCoordinatesPassThroughTheStoreUntouched() {
+        // The store never knows the seat width, so finite values — however
+        // absurd — are reclaim's and the draw clamp's to tame, not the
+        // commit's to rewrite. Only non-finite geometry falls back.
+        let store = store()
+        let sticky = store.add(trailingX: 1e308, y: -1e308)
+        store.resize(sticky.id, width: 1e308, height: 240)
+
+        XCTAssertEqual(store.visible.first?.trailingX, 1e308)
+        XCTAssertEqual(store.visible.first?.y, -1e308)
+        XCTAssertEqual(store.visible.first?.width, 1e308)
+        XCTAssertEqual(store.visible.first?.height, 240)
+    }
 }
