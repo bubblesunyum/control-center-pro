@@ -61,7 +61,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let settingsWindow = SettingsWindowController(settings: settings,
                                                         craft: craftConnection,
                                                         claudeToken: ClaudeTokenModel(),
-                                                        claudeConnect: ClaudeConnectModel(),
                                                         hotkey: hotkey)
         self.settingsWindow = settingsWindow
         statusItem = StatusItemController(panel: panel, settingsWindow: settingsWindow)
