@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Control Center Pro contributors
 
+import AppKit
 import CCPKit
 import CoreLocation
 import MapKit
@@ -173,8 +174,11 @@ private struct WeatherContent: View {
 
     var body: some View {
         WidgetCard(WeatherWidget.descriptor, accessory: {
-            HeaderIconButton(systemImage: "arrow.clockwise", label: "Refresh weather") {
-                model.refresh()
+            HStack(spacing: Space.half) {
+                WeatherUnitPicker(settings: model.settings)
+                HeaderIconButton(systemImage: "arrow.clockwise", label: "Refresh weather") {
+                    model.refresh()
+                }
             }
         }) {
             // A snapshot on screen stays on screen: background refreshes must
@@ -284,6 +288,30 @@ private struct WeatherFailedView: View {
     }
 }
 
+// MARK: - Header interactions
+
+/// The C/F picker in the card header. Writes to the shared settings, so
+/// persistence rides the settings didSet and every readout formats through
+/// the live unit.
+private struct WeatherUnitPicker: View {
+    @Bindable var settings: WeatherSettings
+
+    var body: some View {
+        Picker("Temperature unit", selection: $settings.unit) {
+            Text(WeatherUnit.celsius.symbol)
+                .tag(WeatherUnit.celsius)
+                .accessibilityLabel("Celsius")
+            Text(WeatherUnit.fahrenheit.symbol)
+                .tag(WeatherUnit.fahrenheit)
+                .accessibilityLabel("Fahrenheit")
+        }
+        .pickerStyle(.segmented)
+        .controlSize(.small)
+        .accessibilityLabel("Temperature unit")
+        .help("Show temperatures in Celsius or Fahrenheit")
+    }
+}
+
 private struct WeatherLoadedView: View {
     let snapshot: WeatherSnapshot
     let unit: WeatherUnit
@@ -296,24 +324,40 @@ private struct WeatherLoadedView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            HStack(alignment: .top, spacing: Space.one) {
-                VStack(alignment: .leading, spacing: Space.quarter) {
-                    if let tempC = snapshot.tempC {
-                        Text(unit.format(celsius: tempC))
-                            .font(.largeTitle.weight(.semibold))
-                            .accessibilityLabel("Temperature \(unit.format(celsius: tempC))")
+            // One VoiceOver label for action plus readout: a bare action
+            // label would shadow the temperature inside the button.
+            let heroLabel = [
+                "Open Weather app",
+                snapshot.tempC.map { "temperature \(unit.format(celsius: $0))" },
+                snapshot.condition?.label
+            ].compactMap { $0 }.joined(separator: ", ")
+            Button {
+                let fallback = URL(fileURLWithPath: "/System/Applications/Weather.app")
+                let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Weather") ?? fallback
+                NSWorkspace.shared.open(url)
+            } label: {
+                HStack(alignment: .top, spacing: Space.one) {
+                    VStack(alignment: .leading, spacing: Space.quarter) {
+                        if let tempC = snapshot.tempC {
+                            Text(unit.format(celsius: tempC))
+                                .font(.largeTitle.weight(.semibold))
+                        }
+                        if let condition = snapshot.condition {
+                            Text(condition.label)
+                                .font(.subheadline)
+                        }
                     }
-                    if let condition = snapshot.condition {
-                        Text(condition.label)
-                            .font(.subheadline)
-                    }
+                    Spacer(minLength: Space.half)
+                    Image(systemName: snapshot.condition?.symbolName ?? "cloud")
+                        .font(.title)
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                 }
-                Spacer(minLength: Space.half)
-                Image(systemName: snapshot.condition?.symbolName ?? "cloud")
-                    .font(.title)
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(heroLabel)
+            .help("Open in Weather")
             if snapshot.highC != nil || snapshot.lowC != nil {
                 Text("H:\(snapshot.highC.map { unit.format(celsius: $0) } ?? "–")  L:\(snapshot.lowC.map { unit.format(celsius: $0) } ?? "–")")
                     .font(.subheadline)
@@ -330,6 +374,10 @@ private struct WeatherLoadedView: View {
             if let uvIndex = snapshot.uvIndex {
                 Divider()
                 WeatherUVRow(uvIndex: uvIndex)
+            }
+            if snapshot.hourly.filter({ $0.uvIndex != nil }).count >= 2 {
+                Divider()
+                WeatherUVDayCurve(hours: snapshot.hourly)
             }
             if !snapshot.hourly.isEmpty {
                 Divider()
@@ -392,19 +440,97 @@ private extension UVBand {
     }
 }
 
+// MARK: - UV day curve
+
+/// Shared drawing constants for the UV day curve: the Sparkline stroke/fill
+/// language, and the one x-inset both the curve endpoints and the tick
+/// labels honor so each label centers on the point it names.
+private enum WeatherUVStyle {
+    static let xInset: CGFloat = Space.half
+    static let lineWidth: CGFloat = 1.5
+    static let fillOpacity: Double = 0.16
+}
+
+/// UV through the day in the Mac Weather manner: a curve over the hourly
+/// uvIndex values with a gradient fill, a now-marker dot, and a peak
+/// callout. The call site hides it unless at least two hourly points carry
+/// UV, leaving the legacy UV row to stand alone.
+private struct WeatherUVDayCurve: View {
+    let hours: [WeatherHourPoint]
+
+    private var points: [WeatherHourPoint] { Array(hours.prefix(WeatherLayout.uvDayCount)) }
+    private var values: [Double] { points.map { $0.uvIndex ?? 0 } }
+    private var peak: Double { values.max() ?? 0 }
+    private var ceiling: Double { max(peak, 1) }
+    private var peakIndex: Int { values.firstIndex(of: peak) ?? 0 }
+    private var curveColor: Color { UVBand(uvIndex: peak).dotColor }
+
+    /// Sparse x ticks — first, last, and two thirds between — deduped so a
+    /// short list never repeats an index.
+    private var tickIndices: [Int] {
+        let last = points.count - 1
+        guard last > 0 else { return [] }
+        return Array(Set([0, last / 3, (last * 2) / 3, last])).sorted()
+    }
+
+    var body: some View {
+        let now = Date()
+        VStack(alignment: .leading, spacing: Space.quarter) {
+            Text("Peak \(Int(peak.rounded())) at \(hourLabel(peakIndex, from: now))")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            GeometryReader { proxy in
+                let plot = uvDayPlot(values: values, ceiling: ceiling, size: proxy.size)
+                ZStack {
+                    uvDayPath(plot: plot, bottomY: proxy.size.height, closed: true)
+                        .fill(
+                            LinearGradient(
+                                colors: [curveColor.opacity(WeatherUVStyle.fillOpacity), curveColor.opacity(0)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                    uvDayPath(plot: plot, bottomY: proxy.size.height, closed: false)
+                        .stroke(curveColor, style: StrokeStyle(lineWidth: WeatherUVStyle.lineWidth, lineCap: .round, lineJoin: .round))
+                    if let first = plot.first {
+                        Circle()
+                            .fill(Color.primary)
+                            .frame(width: Space.one, height: Space.one)
+                            .position(first)
+                    }
+                }
+            }
+            .frame(height: Layout.sparklineHeight)
+            GeometryReader { proxy in
+                // The y mapping is height-independent, so only x is read here.
+                let plot = uvDayPlot(values: values, ceiling: ceiling, size: proxy.size)
+                ZStack(alignment: .topLeading) {
+                    Color.clear
+                    ForEach(tickIndices, id: \.self) { index in
+                        Text(hourLabel(index, from: now))
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .position(x: min(max(plot[index].x, WeatherUVStyle.xInset), proxy.size.width - WeatherUVStyle.xInset), y: Space.one)
+                    }
+                }
+            }
+            .frame(height: Space.two)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("UV through the day, peak \(Int(peak.rounded())) at \(hourLabel(peakIndex, from: now))")
+    }
+}
+
 private struct WeatherHourStrip: View {
     let hours: [WeatherHourPoint]
     let unit: WeatherUnit
 
     var body: some View {
-        // Kit's points carry no timestamps — the source selects the next
-        // hours from now, so the first reads Now and the rest count forward.
         let now = Date()
         HStack(alignment: .top, spacing: Space.half) {
             ForEach(Array(hours.prefix(WeatherLayout.hourCount).enumerated()), id: \.offset) { index, hour in
-                let date = now.addingTimeInterval(Double(index) * 3600)
                 VStack(spacing: Space.quarter) {
-                    Text(index == 0 ? "Now" : date.formatted(.dateTime.hour()))
+                    Text(hourLabel(index, from: now))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Image(systemName: hour.condition.symbolName)
@@ -415,7 +541,7 @@ private struct WeatherHourStrip: View {
                 }
                 .frame(maxWidth: .infinity)
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("\(index == 0 ? "Now" : date.formatted(.dateTime.hour())): \(unit.format(celsius: hour.tempC))")
+                .accessibilityLabel("\(hourLabel(index, from: now)): \(unit.format(celsius: hour.tempC))")
             }
         }
     }
@@ -462,6 +588,9 @@ private struct WeatherDayRows: View {
 private enum WeatherLayout {
     static let hourCount = 8
     static let dayCount = 3
+    /// How many hourly points the UV day curve draws. The source holds a full
+    /// day; shorter lists simply plot what they have.
+    static let uvDayCount = 24
 }
 
 /// Miles in a kilometre, for the imperial wind readout.
@@ -470,6 +599,50 @@ private let milesPerKilometer = 0.621371
 private func displayWind(_ kph: Double) -> String {
     Locale.current.measurementSystem == .metric
         ? "\(Int(kph.rounded())) km/h" : "\(Int((kph * milesPerKilometer).rounded())) mph"
+}
+
+/// An hour on the panel clock. Shared by the hour strip and the UV curve so
+/// their synthesized labels cannot drift apart.
+private let secondsPerHour: TimeInterval = 3600
+
+/// Kit's points carry no timestamps — the source selects the next hours from
+/// now, so the first reads Now and the rest count forward from it.
+private func hourLabel(_ index: Int, from now: Date) -> String {
+    index == 0 ? "Now" : now.addingTimeInterval(Double(index) * secondsPerHour).formatted(.dateTime.hour())
+}
+
+/// Plot points for the UV day curve: x is hour index across the width with
+/// the shared dot-radius inset so end markers never clip; y is UV over
+/// 0...ceiling inside Sparkline-style top and baseline insets, clamped to
+/// 0...1 so peaks and zeros never push the stroke off the frame.
+private func uvDayPlot(values: [Double], ceiling: Double, size: CGSize) -> [CGPoint] {
+    guard values.count >= 2, ceiling > 0, size.width > 0, size.height > 0 else { return [] }
+    let inset = WeatherUVStyle.xInset
+    let span = max(size.width - (inset * 2), 0)
+    let topY: CGFloat = 0.5
+    let baselineY = max(topY, size.height - 0.5)
+    let plotHeight = max(1, baselineY - topY)
+    return values.enumerated().map { index, value in
+        let x = inset + (span * CGFloat(index) / CGFloat(values.count - 1))
+        let normalized = min(1, max(0, value / ceiling))
+        let y = baselineY - (plotHeight * CGFloat(normalized))
+        return CGPoint(x: x, y: y)
+    }
+}
+
+/// The day-curve path through normalized plot points, dropped to the bottom
+/// edge when filling under the curve.
+private func uvDayPath(plot: [CGPoint], bottomY: CGFloat, closed: Bool) -> Path {
+    Path { path in
+        guard let first = plot.first else { return }
+        path.move(to: first)
+        for point in plot.dropFirst() { path.addLine(to: point) }
+        if closed, let last = plot.last {
+            path.addLine(to: CGPoint(x: last.x, y: bottomY))
+            path.addLine(to: CGPoint(x: first.x, y: bottomY))
+            path.closeSubpath()
+        }
+    }
 }
 
 // MARK: - Location
@@ -625,14 +798,14 @@ private extension WeatherSnapshot {
             windKph: 14,
             uvIndex: 5,
             hourly: [
-                WeatherHourPoint(tempC: 21, code: 2),
-                WeatherHourPoint(tempC: 21, code: 2),
-                WeatherHourPoint(tempC: 22, code: 1),
-                WeatherHourPoint(tempC: 22, code: 1),
-                WeatherHourPoint(tempC: 23, code: 0),
-                WeatherHourPoint(tempC: 22, code: 1),
-                WeatherHourPoint(tempC: 21, code: 2),
-                WeatherHourPoint(tempC: 20, code: 2),
+                WeatherHourPoint(tempC: 21, code: 2, uvIndex: 4),
+                WeatherHourPoint(tempC: 21, code: 2, uvIndex: 5),
+                WeatherHourPoint(tempC: 22, code: 1, uvIndex: 6),
+                WeatherHourPoint(tempC: 22, code: 1, uvIndex: 7),
+                WeatherHourPoint(tempC: 23, code: 0, uvIndex: 6),
+                WeatherHourPoint(tempC: 22, code: 1, uvIndex: 5),
+                WeatherHourPoint(tempC: 21, code: 2, uvIndex: 4),
+                WeatherHourPoint(tempC: 20, code: 2, uvIndex: 2),
             ],
             daily: [
                 WeatherDayPoint(highC: 22, lowC: 14, code: 2, uvMax: 5),
