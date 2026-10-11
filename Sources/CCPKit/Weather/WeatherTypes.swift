@@ -46,14 +46,16 @@ public struct WeatherSnapshot: Sendable, Equatable {
     public static let empty = WeatherSnapshot()
 }
 
-/// One hourly point: temperature and WMO weather code.
+/// One hourly point: temperature, WMO weather code, and UV index.
 public struct WeatherHourPoint: Sendable, Equatable {
     public var tempC: Double
     public var code: Int
+    public var uvIndex: Double?
 
-    public init(tempC: Double, code: Int) {
+    public init(tempC: Double, code: Int, uvIndex: Double? = nil) {
         self.tempC = tempC
         self.code = code
+        self.uvIndex = uvIndex
     }
 
     public var condition: WeatherCondition { .from(code: code) }

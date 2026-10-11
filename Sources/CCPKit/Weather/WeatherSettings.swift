@@ -10,6 +10,12 @@ public enum WeatherUnit: String, Codable, Sendable, CaseIterable {
     case celsius
     case fahrenheit
 
+    /// Fresh-install default: US locales read Fahrenheit, everything else
+    /// reads Celsius — including .uk, which is metric for temperature.
+    public static var localeDefault: WeatherUnit {
+        Locale.current.measurementSystem == .us ? .fahrenheit : .celsius
+    }
+
     public var symbol: String {
         switch self {
         case .celsius: "°C"
@@ -36,7 +42,7 @@ public struct WeatherStoredSettings: Codable, Sendable, Equatable {
         manualCity: String? = nil,
         latitude: Double? = nil,
         longitude: Double? = nil,
-        unit: WeatherUnit = .celsius
+        unit: WeatherUnit = .localeDefault
     ) {
         self.manualCity = manualCity
         self.latitude = latitude

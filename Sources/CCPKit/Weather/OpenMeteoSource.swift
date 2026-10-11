@@ -23,7 +23,7 @@ public protocol WeatherSource: AnyObject, Sendable {
 /// The real one, against Open-Meteo's forecast endpoint — no API key.
 public final class LiveOpenMeteoSource: WeatherSource {
     /// How many hourly points a snapshot carries.
-    public static let hourlyPoints = 12
+    public static let hourlyPoints = 24
     /// How many daily points a snapshot carries.
     public static let dailyPoints = 3
 
@@ -50,7 +50,7 @@ public final class LiveOpenMeteoSource: WeatherSource {
                 name: "current",
                 value: "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,uv_index"
             ),
-            .init(name: "hourly", value: "temperature_2m,weather_code"),
+            .init(name: "hourly", value: "temperature_2m,weather_code,uv_index"),
             .init(name: "daily", value: "weather_code,temperature_2m_max,temperature_2m_min,uv_index_max"),
             .init(name: "timezone", value: "auto"),
             .init(name: "forecast_days", value: "4"),
@@ -145,6 +145,7 @@ struct OpenMeteoHourly: Decodable {
     var time: [String]?
     var temperature_2m: [Double]?
     var weather_code: [Double]?
+    var uv_index: [Double]?
 
     /// The next `hours` points at or after `now`. Hourly times are wall
     /// clock in the location's zone, so they are shifted by the response's
@@ -157,7 +158,8 @@ struct OpenMeteoHourly: Decodable {
             ?? 0
         return times.indices.dropFirst(start).prefix(hours).compactMap { i in
             guard i < temps.count, i < codes.count else { return nil }
-            return WeatherHourPoint(tempC: temps[i], code: Int(codes[i]))
+            let uv = uv_index.flatMap { i < $0.count ? $0[i] : nil }
+            return WeatherHourPoint(tempC: temps[i], code: Int(codes[i]), uvIndex: uv)
         }
     }
 

@@ -25,8 +25,46 @@ final class WeatherAdapterTests: XCTestCase {
         XCTAssertEqual(snapshot.windKph, 14.5)
         XCTAssertEqual(snapshot.highC, 24.1)
         XCTAssertEqual(snapshot.lowC, 14.8)
-        XCTAssertEqual(snapshot.hourly.count, 12)
+        XCTAssertEqual(snapshot.hourly.count, 24)
         XCTAssertEqual(snapshot.daily.count, 3)
+    }
+
+    func testHourlyPointsCarryPerHourUV() throws {
+        let snapshot = try LiveOpenMeteoSource.decodeSnapshot(from: Data(Self.sampleJSON.utf8), now: Self.sampleNow)
+
+        XCTAssertEqual(snapshot.hourly.map(\.uvIndex), [
+            5.4, 5.1, 4.4, 3.5, 2.4, 1.3, 0.4, 0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.8, 2.0, 3.2, 4.2,
+        ])
+    }
+
+    func testHourlyPointsTolerateMissingOrShortUV() throws {
+        let missingJSON = """
+            {
+              "utc_offset_seconds": -25200,
+              "hourly": {
+                "time": ["2026-10-06T12:00", "2026-10-06T13:00"],
+                "temperature_2m": [21.3, 21.8],
+                "weather_code": [2, 1]
+              }
+            }
+            """
+        let missing = try LiveOpenMeteoSource.decodeSnapshot(from: Data(missingJSON.utf8), now: Self.sampleNow)
+        XCTAssertEqual(missing.hourly.count, 2)
+        XCTAssertNil(missing.hourly[0].uvIndex)
+        XCTAssertNil(missing.hourly[1].uvIndex)
+
+        let short = OpenMeteoHourly(
+            time: ["2026-10-06T12:00", "2026-10-06T13:00", "2026-10-06T14:00"],
+            temperature_2m: [21.3, 21.8, 22.4],
+            weather_code: [2, 2, 1],
+            uv_index: [5.4]
+        )
+        let points = short.next(hours: 3, from: Self.sampleNow, offsetSeconds: -25200)
+        XCTAssertEqual(points.count, 3)
+        XCTAssertEqual(points[0].uvIndex, 5.4)
+        XCTAssertNil(points[1].uvIndex)
+        XCTAssertNil(points[2].uvIndex)
     }
 
     func testFakeSourceServesTheRecordedSample() async throws {
@@ -130,7 +168,8 @@ final class WeatherAdapterTests: XCTestCase {
         )
 
         XCTAssertTrue(settings.isAutoLocated)
-        XCTAssertEqual(settings.unit, .celsius)
+        XCTAssertEqual(settings.unit, .localeDefault)
+        XCTAssertEqual(WeatherStoredSettings().unit, .localeDefault)
     }
 
     func testManualCityAndUnitSurviveRelaunch() {
@@ -174,7 +213,7 @@ final class WeatherAdapterTests: XCTestCase {
         let settings = WeatherSettings(store: store)
 
         XCTAssertTrue(settings.isAutoLocated)
-        XCTAssertEqual(settings.unit, .celsius)
+        XCTAssertEqual(settings.unit, .localeDefault)
         XCTAssertEqual(
             try String(contentsOf: store.url, encoding: .utf8),
             "{ this is not the weather }",
@@ -212,13 +251,24 @@ final class WeatherAdapterTests: XCTestCase {
               "2026-10-06T15:00", "2026-10-06T16:00", "2026-10-06T17:00",
               "2026-10-06T18:00", "2026-10-06T19:00", "2026-10-06T20:00",
               "2026-10-06T21:00", "2026-10-06T22:00", "2026-10-06T23:00",
-              "2026-10-07T00:00", "2026-10-07T01:00"
+              "2026-10-07T00:00", "2026-10-07T01:00", "2026-10-07T02:00",
+              "2026-10-07T03:00", "2026-10-07T04:00", "2026-10-07T05:00",
+              "2026-10-07T06:00", "2026-10-07T07:00", "2026-10-07T08:00",
+              "2026-10-07T09:00", "2026-10-07T10:00", "2026-10-07T11:00",
+              "2026-10-07T12:00", "2026-10-07T13:00"
             ],
             "temperature_2m": [
-              21.3, 21.8, 22.4, 22.9, 23.1, 22.6, 21.2, 19.8, 18.5, 17.6, 16.9, 16.4, 16.1, 15.8
+              21.3, 21.8, 22.4, 22.9, 23.1, 22.6, 21.2, 19.8, 18.5, 17.6,
+              16.9, 16.4, 16.1, 15.8, 15.5, 15.2, 14.9, 14.8, 15.0, 15.6,
+              16.8, 18.2, 19.5, 20.6, 21.4, 21.9
             ],
             "weather_code": [
-              2, 2, 1, 1, 0, 0, 1, 2, 2, 3, 3, 45, 45, 3
+              2, 2, 1, 1, 0, 0, 1, 2, 2, 3, 3, 45, 45, 3, 3, 3, 2, 2, 1, 1,
+              0, 0, 1, 2, 2, 3
+            ],
+            "uv_index": [
+              5.4, 5.1, 4.4, 3.5, 2.4, 1.3, 0.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+              0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.8, 2.0, 3.2, 4.2, 4.9, 5.2
             ]
           },
           "daily": {
