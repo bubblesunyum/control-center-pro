@@ -174,11 +174,8 @@ private struct WeatherContent: View {
 
     var body: some View {
         WidgetCard(WeatherWidget.descriptor, accessory: {
-            HStack(spacing: Space.half) {
-                WeatherUnitPicker(settings: model.settings)
-                HeaderIconButton(systemImage: "arrow.clockwise", label: "Refresh weather") {
-                    model.refresh()
-                }
+            HeaderIconButton(systemImage: "arrow.clockwise", label: "Refresh weather") {
+                model.refresh()
             }
         }) {
             // A snapshot on screen stays on screen: background refreshes must
@@ -186,7 +183,7 @@ private struct WeatherContent: View {
             if let snapshot = model.adapter.snapshot {
                 if model.place == .needsCity {
                     VStack(alignment: .leading, spacing: Space.one) {
-                        WeatherLoadedView(snapshot: snapshot, unit: model.settings.unit, placeName: placeName)
+                        WeatherLoadedView(snapshot: snapshot, unit: weatherDisplayUnit, placeName: placeName)
                         Divider()
                         Button {
                             model.useCurrentLocation()
@@ -201,7 +198,7 @@ private struct WeatherContent: View {
                         }
                     }
                 } else {
-                    WeatherLoadedView(snapshot: snapshot, unit: model.settings.unit, placeName: placeName)
+                    WeatherLoadedView(snapshot: snapshot, unit: weatherDisplayUnit, placeName: placeName)
                 }
             } else if model.place == .needsCity {
                 WeatherManualEntryView(cityDraft: $cityDraft, error: model.cityError) {
@@ -285,30 +282,6 @@ private struct WeatherFailedView: View {
                 .accessibilityLabel("Retry loading weather")
         }
         .accessibilityElement(children: .contain)
-    }
-}
-
-// MARK: - Header interactions
-
-/// The C/F picker in the card header. Writes to the shared settings, so
-/// persistence rides the settings didSet and every readout formats through
-/// the live unit.
-private struct WeatherUnitPicker: View {
-    @Bindable var settings: WeatherSettings
-
-    var body: some View {
-        Picker("Temperature unit", selection: $settings.unit) {
-            Text(WeatherUnit.celsius.symbol)
-                .tag(WeatherUnit.celsius)
-                .accessibilityLabel("Celsius")
-            Text(WeatherUnit.fahrenheit.symbol)
-                .tag(WeatherUnit.fahrenheit)
-                .accessibilityLabel("Fahrenheit")
-        }
-        .pickerStyle(.segmented)
-        .controlSize(.small)
-        .accessibilityLabel("Temperature unit")
-        .help("Show temperatures in Celsius or Fahrenheit")
     }
 }
 
@@ -458,6 +431,10 @@ private enum WeatherUVStyle {
 private struct WeatherUVDayCurve: View {
     let hours: [WeatherHourPoint]
 
+    /// Pointer position over the graph, fed by the hover tracker; nil when
+    /// the pointer is off the graph. The hovered hour derives from it.
+    @State private var hoverLocation: CGPoint?
+
     private var points: [WeatherHourPoint] { Array(hours.prefix(WeatherLayout.uvDayCount)) }
     private var values: [Double] { points.map { $0.uvIndex ?? 0 } }
     private var peak: Double { values.max() ?? 0 }
@@ -481,7 +458,11 @@ private struct WeatherUVDayCurve: View {
                 .foregroundStyle(.secondary)
             GeometryReader { proxy in
                 let plot = uvDayPlot(values: values, ceiling: ceiling, size: proxy.size)
+                let hoverIndex = hoverLocation.flatMap { uvHoverIndex(x: $0.x, width: proxy.size.width, count: points.count) }
                 ZStack {
+                    // Sizes the stack to the graph so the hover tracker
+                    // behind it covers exactly the plotted area.
+                    Color.clear
                     uvDayPath(plot: plot, bottomY: proxy.size.height, closed: true)
                         .fill(
                             LinearGradient(
@@ -498,7 +479,19 @@ private struct WeatherUVDayCurve: View {
                             .frame(width: Space.one, height: Space.one)
                             .position(first)
                     }
+                    // Pointer-only readout: VoiceOver already carries these
+                    // values through the combined label and peak callout.
+                    if plot.count >= 2, let hoverIndex {
+                        WeatherUVHoverCallout(
+                            point: plot[hoverIndex],
+                            graphSize: proxy.size,
+                            color: curveColor,
+                            hour: hourLabel(hoverIndex, from: now),
+                            uv: "\(Int(values[hoverIndex].rounded()))"
+                        )
+                    }
                 }
+                .background(WeatherUVHoverViewRepresentable(location: $hoverLocation))
             }
             .frame(height: Layout.sparklineHeight)
             GeometryReader { proxy in
@@ -518,6 +511,56 @@ private struct WeatherUVDayCurve: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("UV through the day, peak \(Int(peak.rounded())) at \(hourLabel(peakIndex, from: now))")
+        // The window goes down with the graph intact, so mouseExited never
+        // fires on hide — without this a reopen shows a phantom readout.
+        .onPanelHidden { hoverLocation = nil }
+    }
+}
+
+/// The hover readout: rule, point, and value chip. Extracted so the curve
+/// body reads as layers.
+private struct WeatherUVHoverCallout: View {
+    let point: CGPoint
+    let graphSize: CGSize
+    let color: Color
+    let hour: String
+    let uv: String
+
+    var body: some View {
+        Group {
+            Path { path in
+                path.move(to: CGPoint(x: point.x, y: 0))
+                path.addLine(to: CGPoint(x: point.x, y: graphSize.height))
+            }
+            .stroke(Color.secondary, style: StrokeStyle(lineWidth: Stroke.hairline, lineCap: .round))
+            Circle()
+                .fill(color)
+                .frame(width: Space.one + WeatherUVStyle.lineWidth, height: Space.one + WeatherUVStyle.lineWidth)
+                .overlay(Circle().stroke(Color.primary, style: StrokeStyle(lineWidth: Stroke.hairline)))
+                .position(point)
+            // CountBadge's capsule language at medium weight.
+            Text("\(hour) · UV \(uv)")
+                .font(.caption2.weight(.medium))
+                .monospacedDigit()
+                .padding(.horizontal, Space.half)
+                .padding(.vertical, Space.quarter / 2)
+                .background(Capsule().fill(Color.controlFill))
+                .overlay(Capsule().strokeBorder(Color.cardStroke, lineWidth: Stroke.hairline))
+                .foregroundStyle(.secondary)
+                .position(x: chipX, y: chipY)
+        }
+        .accessibilityHidden(true)
+    }
+
+    /// Centered on the point like the tick labels, so edge hours stay on
+    /// the graph; near the top the chip flips below the point instead of
+    /// painting over the peak callout.
+    private var chipX: CGFloat {
+        min(max(point.x, WeatherUVStyle.xInset), graphSize.width - WeatherUVStyle.xInset)
+    }
+
+    private var chipY: CGFloat {
+        point.y < Space.two ? point.y + Space.three : point.y - Space.three
     }
 }
 
@@ -601,6 +644,10 @@ private func displayWind(_ kph: Double) -> String {
         ? "\(Int(kph.rounded())) km/h" : "\(Int((kph * milesPerKilometer).rounded())) mph"
 }
 
+/// Fahrenheit-only while the unit switch is parked (ccp-ywe9); revert to
+/// model.settings.unit when it returns.
+private let weatherDisplayUnit: WeatherUnit = .fahrenheit
+
 /// An hour on the panel clock. Shared by the hour strip and the UV curve so
 /// their synthesized labels cannot drift apart.
 private let secondsPerHour: TimeInterval = 3600
@@ -642,6 +689,73 @@ private func uvDayPath(plot: [CGPoint], bottomY: CGFloat, closed: Bool) -> Path 
             path.addLine(to: CGPoint(x: first.x, y: bottomY))
             path.closeSubpath()
         }
+    }
+}
+
+/// The hovered hour: nearest plot index to the pointer x, if the pointer is
+/// over the graph. Shares the plot's x-inset so the selection lands on the
+/// point the eye sees.
+private func uvHoverIndex(x: CGFloat, width: CGFloat, count: Int) -> Int? {
+    guard count >= 2, width > 0 else { return nil }
+    let inset = WeatherUVStyle.xInset
+    let span = max(width - (inset * 2), 0)
+    guard span > 0 else { return nil }
+    let position = ((x - inset) / span) * CGFloat(count - 1)
+    return min(max(Int(position.rounded()), 0), count - 1)
+}
+
+/// Reports pointer position over the UV graph: a tracking area covering the
+/// view writes each move into a binding and clears it on exit. SwiftUI
+/// offers hover callbacks but no hover position, so this is the AppKit
+/// primitive for "which hour is the pointer over".
+private struct WeatherUVHoverViewRepresentable: NSViewRepresentable {
+    @Binding var location: CGPoint?
+
+    func makeNSView(context: Context) -> WeatherUVHoverView {
+        WeatherUVHoverView(location: $location)
+    }
+
+    func updateNSView(_ view: WeatherUVHoverView, context: Context) {
+        view.location = $location
+    }
+}
+
+/// Covers the UV graph and reports the pointer: moved positions select the
+/// nearest hour, exit clears the selection. An NSView subclass rather than a
+/// bare NSObject owner so the mouse methods genuinely override NSResponder
+/// (which carries the UI actor in this SDK).
+@MainActor
+private final class WeatherUVHoverView: NSView {
+    var location: Binding<CGPoint?>
+
+    init(location: Binding<CGPoint?>) {
+        self.location = location
+        super.init(frame: .zero)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        // The rect is the graph itself, and the panel never activates, so
+        // the area tracks always rather than while active.
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways],
+            owner: self,
+            userInfo: nil
+        ))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        location.wrappedValue = convert(event.locationInWindow, from: nil)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        location.wrappedValue = nil
     }
 }
 

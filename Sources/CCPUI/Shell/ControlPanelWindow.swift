@@ -27,6 +27,12 @@ final class ControlPanelWindow: NSPanel {
         isMovable = false
         isReleasedWhenClosed = false
 
+        // Mouse-moved delivery is opt-in and off by default: without this
+        // the UV graph's hover tracker never fires. No open cost — nothing
+        // listens while the panel is shut (RadialMenuService sets the same
+        // flag on its borderless nonactivating panel).
+        acceptsMouseMovedEvents = true
+
         // The window is a sheet of nothing holding cards that each blur the
         // desktop themselves; between them the desktop shows through
         // untouched. macOS derives the shadow from what the content actually
