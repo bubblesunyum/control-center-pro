@@ -348,9 +348,9 @@ private struct WeatherLoadedView: View {
                 Divider()
                 WeatherUVRow(uvIndex: uvIndex)
             }
-            if snapshot.hourly.filter({ $0.uvIndex != nil }).count >= 2 {
+            if uvDayWindow(pastHours: snapshot.pastHours, hours: snapshot.hourly).points.filter({ $0.uvIndex != nil }).count >= 2 {
                 Divider()
-                WeatherUVDayCurve(hours: snapshot.hourly)
+                WeatherUVDayCurve(pastHours: snapshot.pastHours, hours: snapshot.hourly)
             }
             if !snapshot.hourly.isEmpty {
                 Divider()
@@ -424,41 +424,51 @@ private enum WeatherUVStyle {
     static let fillOpacity: Double = 0.16
 }
 
-/// UV through the day in the Mac Weather manner: a curve over the hourly
-/// uvIndex values with a gradient fill, a now-marker dot, and a peak
-/// callout. The call site hides it unless at least two hourly points carry
-/// UV, leaving the legacy UV row to stand alone.
+/// UV through the day in the Mac Weather manner: a 12-point window straddling
+/// now, drawn as a curve over the hourly uvIndex values with a gradient
+/// fill, a now-marker dot, and a peak callout. The call site hides it unless
+/// the window holds at least two UV values, leaving the legacy UV row alone.
 private struct WeatherUVDayCurve: View {
+    let pastHours: [WeatherHourPoint]
     let hours: [WeatherHourPoint]
 
     /// Pointer position over the graph, fed by the hover tracker; nil when
     /// the pointer is off the graph. The hovered hour derives from it.
     @State private var hoverLocation: CGPoint?
 
-    private var points: [WeatherHourPoint] { Array(hours.prefix(WeatherLayout.uvDayCount)) }
-    private var values: [Double] { points.map { $0.uvIndex ?? 0 } }
+    /// The drawn slice plus where now sits in it — one source for the curve,
+    /// ticks, hover, and callouts.
+    private var window: (points: [WeatherHourPoint], nowPosition: Int) {
+        uvDayWindow(pastHours: pastHours, hours: hours)
+    }
+
+    private var values: [Double] { window.points.map { $0.uvIndex ?? 0 } }
     private var peak: Double { values.max() ?? 0 }
     private var ceiling: Double { max(peak, 1) }
     private var peakIndex: Int { values.firstIndex(of: peak) ?? 0 }
     private var curveColor: Color { UVBand(uvIndex: peak).dotColor }
 
-    /// Sparse x ticks — first, last, and two thirds between — deduped so a
-    /// short list never repeats an index.
+    /// Sparse x ticks over the window: edges, thirds, and always now. Thirds
+    /// adjacent to Now are dropped so tick labels never collide with the Now
+    /// label — steady state yields [0, 3, Now, last]. Deduped so short lists
+    /// never repeat an index.
     private var tickIndices: [Int] {
-        let last = points.count - 1
+        let last = window.points.count - 1
         guard last > 0 else { return [] }
-        return Array(Set([0, last / 3, (last * 2) / 3, last])).sorted()
+        let thirds = [0, last / 3, (last * 2) / 3, last]
+        let clear = thirds.filter { abs($0 - window.nowPosition) > 1 }
+        return Array(Set(clear + [min(window.nowPosition, last)])).sorted()
     }
 
     var body: some View {
         let now = Date()
         VStack(alignment: .leading, spacing: Space.quarter) {
-            Text("Peak \(Int(peak.rounded())) at \(hourLabel(peakIndex, from: now))")
+            Text("Peak \(Int(peak.rounded())) at \(hourLabel(at: peakIndex, from: now))")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
             GeometryReader { proxy in
                 let plot = uvDayPlot(values: values, ceiling: ceiling, size: proxy.size)
-                let hoverIndex = hoverLocation.flatMap { uvHoverIndex(x: $0.x, width: proxy.size.width, count: points.count) }
+                let hoverIndex = hoverLocation.flatMap { uvHoverIndex(x: $0.x, width: proxy.size.width, count: window.points.count) }
                 ZStack {
                     // Sizes the stack to the graph so the hover tracker
                     // behind it covers exactly the plotted area.
@@ -473,11 +483,11 @@ private struct WeatherUVDayCurve: View {
                         )
                     uvDayPath(plot: plot, bottomY: proxy.size.height, closed: false)
                         .stroke(curveColor, style: StrokeStyle(lineWidth: WeatherUVStyle.lineWidth, lineCap: .round, lineJoin: .round))
-                    if let first = plot.first {
+                    if window.nowPosition < plot.count {
                         Circle()
                             .fill(Color.primary)
                             .frame(width: Space.one, height: Space.one)
-                            .position(first)
+                            .position(plot[window.nowPosition])
                     }
                     // Pointer-only readout: VoiceOver already carries these
                     // values through the combined label and peak callout.
@@ -486,7 +496,7 @@ private struct WeatherUVDayCurve: View {
                             point: plot[hoverIndex],
                             graphSize: proxy.size,
                             color: curveColor,
-                            hour: hourLabel(hoverIndex, from: now),
+                            hour: hourLabel(at: hoverIndex, from: now),
                             uv: "\(Int(values[hoverIndex].rounded()))"
                         )
                     }
@@ -500,7 +510,7 @@ private struct WeatherUVDayCurve: View {
                 ZStack(alignment: .topLeading) {
                     Color.clear
                     ForEach(tickIndices, id: \.self) { index in
-                        Text(hourLabel(index, from: now))
+                        Text(hourLabel(at: index, from: now))
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                             .position(x: min(max(plot[index].x, WeatherUVStyle.xInset), proxy.size.width - WeatherUVStyle.xInset), y: Space.one)
@@ -510,10 +520,20 @@ private struct WeatherUVDayCurve: View {
             .frame(height: Space.two)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("UV through the day, peak \(Int(peak.rounded())) at \(hourLabel(peakIndex, from: now))")
+        .accessibilityLabel("UV through the day, peak \(Int(peak.rounded())) at \(hourLabel(at: peakIndex, from: now))")
         // The window goes down with the graph intact, so mouseExited never
         // fires on hide — without this a reopen shows a phantom readout.
         .onPanelHidden { hoverLocation = nil }
+    }
+
+    /// An x label inside the window: the now position reads Now, stamped
+    /// points format their own date like the strip, and dateless points fall
+    /// back to the synthesized offset-from-now formula.
+    private func hourLabel(at windowIndex: Int, from now: Date) -> String {
+        if windowIndex == window.nowPosition { return "Now" }
+        if let date = window.points[windowIndex].date { return date.formatted(.dateTime.hour()) }
+        let offset = windowIndex - window.nowPosition
+        return now.addingTimeInterval(Double(offset) * secondsPerHour).formatted(.dateTime.hour())
     }
 }
 
@@ -631,9 +651,9 @@ private struct WeatherDayRows: View {
 private enum WeatherLayout {
     static let hourCount = 8
     static let dayCount = 3
-    /// How many hourly points the UV day curve draws. The source holds a full
-    /// day; shorter lists simply plot what they have.
-    static let uvDayCount = 24
+    /// How many hourly points the UV day curve draws: a 12-point window
+    /// centered on now. Shorter lists plot what they have.
+    static let uvDayCount = 12
 }
 
 /// Miles in a kilometre, for the imperial wind readout.
@@ -652,10 +672,28 @@ private let weatherDisplayUnit: WeatherUnit = .fahrenheit
 /// their synthesized labels cannot drift apart.
 private let secondsPerHour: TimeInterval = 3600
 
-/// Kit's points carry no timestamps — the source selects the next hours from
-/// now, so the first reads Now and the rest count forward from it.
+/// Synthesized hour labels for dateless (hand-built/preview) points: the
+/// first reads Now and the rest count forward from it. Stamped points format
+/// their own date instead — see the curve's hourLabel(at:from:).
 private func hourLabel(_ index: Int, from now: Date) -> String {
     index == 0 ? "Now" : now.addingTimeInterval(Double(index) * secondsPerHour).formatted(.dateTime.hour())
+}
+
+/// The slice of the past+future timeline the UV graph draws: 12 points
+/// centered on the now boundary, or everything when shorter — plus where now
+/// sits inside the slice. One computation shared by the call-site gate and
+/// the curve's window var, so both read the same points.
+func uvDayWindow(pastHours: [WeatherHourPoint], hours: [WeatherHourPoint]) -> (points: [WeatherHourPoint], nowPosition: Int) {
+    // No future data means no window: past alone would clamp "Now" onto a
+    // stale point.
+    guard !hours.isEmpty else { return ([], 0) }
+    let combined = pastHours + hours
+    let boundary = min(pastHours.count, combined.count)
+    let span = WeatherLayout.uvDayCount
+    let start = min(max(boundary - (span / 2), 0), max(0, combined.count - span))
+    let end = min(start + span, combined.count)
+    let points = Array(combined[start..<end])
+    return (points, min(boundary - start, max(points.count - 1, 0)))
 }
 
 /// Plot points for the UV day curve: x is hour index across the width with
@@ -920,6 +958,14 @@ private extension WeatherSnapshot {
                 WeatherHourPoint(tempC: 22, code: 1, uvIndex: 5),
                 WeatherHourPoint(tempC: 21, code: 2, uvIndex: 4),
                 WeatherHourPoint(tempC: 20, code: 2, uvIndex: 2),
+            ],
+            pastHours: [
+                WeatherHourPoint(tempC: 16, code: 3, uvIndex: 0),
+                WeatherHourPoint(tempC: 15, code: 3, uvIndex: 0),
+                WeatherHourPoint(tempC: 15, code: 2, uvIndex: 0),
+                WeatherHourPoint(tempC: 16, code: 2, uvIndex: 1),
+                WeatherHourPoint(tempC: 18, code: 1, uvIndex: 2),
+                WeatherHourPoint(tempC: 20, code: 2, uvIndex: 3),
             ],
             daily: [
                 WeatherDayPoint(highC: 22, lowC: 14, code: 2, uvMax: 5),
