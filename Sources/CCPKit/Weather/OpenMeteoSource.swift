@@ -24,6 +24,8 @@ public protocol WeatherSource: AnyObject, Sendable {
 public final class LiveOpenMeteoSource: WeatherSource {
     /// How many hourly points a snapshot carries.
     public static let hourlyPoints = 24
+    /// How many past hourly points a snapshot carries.
+    public static let pastHoursPoints = 6
     /// How many daily points a snapshot carries.
     public static let dailyPoints = 3
 
@@ -95,6 +97,7 @@ public final class LiveOpenMeteoSource: WeatherSource {
             snapshot.lowC = first.lowC
         }
         snapshot.hourly = forecast.hourly?.next(hours: hourlyPoints, from: now, offsetSeconds: forecast.utc_offset_seconds ?? 0) ?? []
+        snapshot.pastHours = forecast.hourly?.prior(hours: pastHoursPoints, from: now, offsetSeconds: forecast.utc_offset_seconds ?? 0) ?? []
         snapshot.daily = Array((forecast.daily?.points() ?? []).prefix(dailyPoints))
         return snapshot
     }
@@ -154,13 +157,44 @@ struct OpenMeteoHourly: Decodable {
     func next(hours: Int, from now: Date, offsetSeconds: Double) -> [WeatherHourPoint] {
         guard let times = time, let temps = temperature_2m, let codes = weather_code else { return [] }
         let wallClock = Self.makeWallClock()
-        let start = times.firstIndex(where: { Self.absolute($0, offsetSeconds: offsetSeconds, wallClock: wallClock) ?? .distantPast >= now })
-            ?? 0
-        return times.indices.dropFirst(start).prefix(hours).compactMap { i in
-            guard i < temps.count, i < codes.count else { return nil }
-            let uv = uv_index.flatMap { i < $0.count ? $0[i] : nil }
-            return WeatherHourPoint(tempC: temps[i], code: Int(codes[i]), uvIndex: uv)
+        let start = Self.nowBoundaryIndex(times: times, offsetSeconds: offsetSeconds, wallClock: wallClock, from: now)
+        return times.indices.dropFirst(start).prefix(hours).compactMap {
+            point(at: $0, times: times, temps: temps, codes: codes, offsetSeconds: offsetSeconds, wallClock: wallClock)
         }
+    }
+
+    /// The `hours` points immediately before `now`, oldest first and stamped
+    /// like `next(hours:from:offsetSeconds:)`. Fewer available returns fewer —
+    /// mornings hold less past.
+    func prior(hours: Int, from now: Date, offsetSeconds: Double) -> [WeatherHourPoint] {
+        guard let times = time, let temps = temperature_2m, let codes = weather_code else { return [] }
+        let wallClock = Self.makeWallClock()
+        let start = Self.nowBoundaryIndex(times: times, offsetSeconds: offsetSeconds, wallClock: wallClock, from: now)
+        return times.indices.prefix(start).suffix(hours).compactMap {
+            point(at: $0, times: times, temps: temps, codes: codes, offsetSeconds: offsetSeconds, wallClock: wallClock)
+        }
+    }
+
+    /// First index at or after `now`, or `times.count` when nothing is — an
+    /// all-past array (skewed clock, truncated body) starts past its end, so
+    /// next() slices forward to nothing and prior() slices back to the tail.
+    private static func nowBoundaryIndex(times: [String], offsetSeconds: Double, wallClock: DateFormatter, from now: Date) -> Int {
+        times.firstIndex(where: { Self.absolute($0, offsetSeconds: offsetSeconds, wallClock: wallClock) ?? .distantPast >= now })
+            ?? times.count
+    }
+
+    /// One selected point with its absolute time. Shared so next and prior
+    /// stamp identically; a short array drops the hour rather than shifting
+    /// the ones after it.
+    private func point(at i: Int, times: [String], temps: [Double], codes: [Double], offsetSeconds: Double, wallClock: DateFormatter) -> WeatherHourPoint? {
+        guard i < temps.count, i < codes.count else { return nil }
+        let uv = uv_index.flatMap { i < $0.count ? $0[i] : nil }
+        return WeatherHourPoint(
+            tempC: temps[i],
+            code: Int(codes[i]),
+            uvIndex: uv,
+            date: Self.absolute(times[i], offsetSeconds: offsetSeconds, wallClock: wallClock)
+        )
     }
 
     private static func makeWallClock() -> DateFormatter {

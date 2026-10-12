@@ -17,6 +17,7 @@ public struct WeatherSnapshot: Sendable, Equatable {
     public var windKph: Double?
     public var uvIndex: Double?
     public var hourly: [WeatherHourPoint] // next hours, oldest first
+    public var pastHours: [WeatherHourPoint] // hours before now, oldest first; with hourly, now sits at the seam — one fetch-now builds both
     public var daily: [WeatherDayPoint] // today first
 
     public init(
@@ -29,6 +30,7 @@ public struct WeatherSnapshot: Sendable, Equatable {
         windKph: Double? = nil,
         uvIndex: Double? = nil,
         hourly: [WeatherHourPoint] = [],
+        pastHours: [WeatherHourPoint] = [],
         daily: [WeatherDayPoint] = []
     ) {
         self.tempC = tempC
@@ -40,22 +42,26 @@ public struct WeatherSnapshot: Sendable, Equatable {
         self.windKph = windKph
         self.uvIndex = uvIndex
         self.hourly = hourly
+        self.pastHours = pastHours
         self.daily = daily
     }
 
     public static let empty = WeatherSnapshot()
 }
 
-/// One hourly point: temperature, WMO weather code, and UV index.
+/// One hourly point: temperature, WMO weather code, UV index, and the hour's
+/// absolute time. Hand-built points leave the date nil.
 public struct WeatherHourPoint: Sendable, Equatable {
     public var tempC: Double
     public var code: Int
     public var uvIndex: Double?
+    public var date: Date?
 
-    public init(tempC: Double, code: Int, uvIndex: Double? = nil) {
+    public init(tempC: Double, code: Int, uvIndex: Double? = nil, date: Date? = nil) {
         self.tempC = tempC
         self.code = code
         self.uvIndex = uvIndex
+        self.date = date
     }
 
     public var condition: WeatherCondition { .from(code: code) }

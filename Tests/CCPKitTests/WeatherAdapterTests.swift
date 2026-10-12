@@ -67,6 +67,62 @@ final class WeatherAdapterTests: XCTestCase {
         XCTAssertNil(points[2].uvIndex)
     }
 
+    func testNextHoursAreStampedWithAbsoluteDates() throws {
+        let snapshot = try LiveOpenMeteoSource.decodeSnapshot(from: Data(Self.sampleJSON.utf8), now: Self.sampleNow)
+
+        XCTAssertEqual(snapshot.hourly.count, 24)
+        let dates = snapshot.hourly.compactMap(\.date)
+        XCTAssertEqual(dates.count, 24)
+        // Noon wall clock in UTC-7 is 19:00 UTC.
+        XCTAssertEqual(dates.first, Date(timeIntervalSince1970: 1_791_313_200))
+        XCTAssertEqual(dates.last?.timeIntervalSince(dates.first ?? .distantPast), 23 * 3600)
+    }
+
+    func testPastHoursAreOldestFirstWithAbsoluteDates() throws {
+        let snapshot = try LiveOpenMeteoSource.decodeSnapshot(from: Data(Self.sampleJSON.utf8), now: Self.sampleNow)
+
+        XCTAssertEqual(snapshot.pastHours.map(\.tempC), [15.2, 15.0, 15.8, 17.1, 18.6, 20.1])
+        let dates = snapshot.pastHours.compactMap(\.date)
+        XCTAssertEqual(dates.count, 6)
+        // 06:00 wall clock in UTC-7 is 13:00 UTC.
+        XCTAssertEqual(dates.first, Date(timeIntervalSince1970: 1_791_291_600))
+        for (earlier, later) in zip(dates, dates.dropFirst()) {
+            XCTAssertEqual(later.timeIntervalSince(earlier), 3600)
+        }
+        let nextDates = snapshot.hourly.compactMap(\.date)
+        XCTAssertEqual(nextDates.first?.timeIntervalSince(dates.last ?? .distantPast), 3600)
+    }
+
+    func testPriorClampsToAvailableHours() {
+        let morning = OpenMeteoHourly(
+            time: ["2026-10-06T10:00", "2026-10-06T11:00", "2026-10-06T12:00"],
+            temperature_2m: [18.6, 20.1, 21.3],
+            weather_code: [1, 2, 2],
+            uv_index: [2.1, 3.8, 5.4]
+        )
+        let points = morning.prior(hours: 6, from: Self.sampleNow, offsetSeconds: -25200)
+        XCTAssertEqual(points.map(\.tempC), [18.6, 20.1])
+        XCTAssertEqual(points.compactMap(\.date), [
+            Date(timeIntervalSince1970: 1_791_306_000),
+            Date(timeIntervalSince1970: 1_791_309_600),
+        ])
+    }
+
+    func testAllPastBodyYieldsEmptyNextAndTailPrior() {
+        let stale = OpenMeteoHourly(
+            time: ["2026-10-06T06:00", "2026-10-06T07:00", "2026-10-06T08:00"],
+            temperature_2m: [15.2, 15.0, 15.8],
+            weather_code: [3, 3, 2],
+            uv_index: [0.0, 0.0, 0.1]
+        )
+        // sampleNow sits hours after the last entry: everything is past, so
+        // next() is empty instead of a stale head and prior() holds the tail.
+        XCTAssertEqual(stale.next(hours: 24, from: Self.sampleNow, offsetSeconds: -25200).count, 0)
+        let tail = stale.prior(hours: 6, from: Self.sampleNow, offsetSeconds: -25200)
+        XCTAssertEqual(tail.map(\.tempC), [15.2, 15.0, 15.8])
+        XCTAssertEqual(tail.compactMap(\.date).count, 3)
+    }
+
     func testFakeSourceServesTheRecordedSample() async throws {
         let source = FakeWeatherSource(snapshot: try LiveOpenMeteoSource.decodeSnapshot(
             from: Data(Self.sampleJSON.utf8),
@@ -223,13 +279,15 @@ final class WeatherAdapterTests: XCTestCase {
 
     // MARK: - Recorded body
 
-    /// Pinned just before the sample window, so hourly selection is exact
+    /// Pinned a minute before noon in the sample window, so next() starts at
+    /// 12:00, prior() holds the six morning hours, and selection is exact
     /// rather than depending on the clock the test runs under.
-    private static let sampleNow = Date(timeIntervalSince1970: 1_790_000_000)
+    private static let sampleNow = Date(timeIntervalSince1970: 1_791_313_140)
 
-    /// Recorded Open-Meteo forecast shape for one San Francisco noon. Hourly
-    /// times are wall clock in the location's zone (UTC-7); `utc_offset_seconds`
-    /// shifts them before comparing against `sampleNow`.
+    /// Recorded Open-Meteo forecast shape for one San Francisco noon, with
+    /// six morning hours before it. Hourly times are wall clock in the
+    /// location's zone (UTC-7); `utc_offset_seconds` shifts them before
+    /// comparing against `sampleNow`.
     private static let sampleJSON = """
         {
           "latitude": 37.7749,
@@ -247,6 +305,8 @@ final class WeatherAdapterTests: XCTestCase {
           },
           "hourly": {
             "time": [
+              "2026-10-06T06:00", "2026-10-06T07:00", "2026-10-06T08:00",
+              "2026-10-06T09:00", "2026-10-06T10:00", "2026-10-06T11:00",
               "2026-10-06T12:00", "2026-10-06T13:00", "2026-10-06T14:00",
               "2026-10-06T15:00", "2026-10-06T16:00", "2026-10-06T17:00",
               "2026-10-06T18:00", "2026-10-06T19:00", "2026-10-06T20:00",
@@ -258,15 +318,18 @@ final class WeatherAdapterTests: XCTestCase {
               "2026-10-07T12:00", "2026-10-07T13:00"
             ],
             "temperature_2m": [
+              15.2, 15.0, 15.8, 17.1, 18.6, 20.1,
               21.3, 21.8, 22.4, 22.9, 23.1, 22.6, 21.2, 19.8, 18.5, 17.6,
               16.9, 16.4, 16.1, 15.8, 15.5, 15.2, 14.9, 14.8, 15.0, 15.6,
               16.8, 18.2, 19.5, 20.6, 21.4, 21.9
             ],
             "weather_code": [
+              3, 3, 2, 2, 1, 2,
               2, 2, 1, 1, 0, 0, 1, 2, 2, 3, 3, 45, 45, 3, 3, 3, 2, 2, 1, 1,
               0, 0, 1, 2, 2, 3
             ],
             "uv_index": [
+              0.0, 0.0, 0.1, 0.6, 2.1, 3.8,
               5.4, 5.1, 4.4, 3.5, 2.4, 1.3, 0.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
               0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.8, 2.0, 3.2, 4.2, 4.9, 5.2
             ]
