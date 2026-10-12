@@ -426,7 +426,7 @@ private enum WeatherUVStyle {
 
 /// UV through the day in the Mac Weather manner: a 12-point window straddling
 /// now, drawn as a curve over the hourly uvIndex values with a gradient
-/// fill, a now-marker dot, and a peak callout. The call site hides it unless
+/// fill, a now-marker dot, and a forward-looking peak callout. The call site hides it unless
 /// the window holds at least two UV values, leaving the legacy UV row alone.
 private struct WeatherUVDayCurve: View {
     let pastHours: [WeatherHourPoint]
@@ -443,9 +443,11 @@ private struct WeatherUVDayCurve: View {
     }
 
     private var values: [Double] { window.points.map { $0.uvIndex ?? 0 } }
-    private var peak: Double { values.max() ?? 0 }
+    /// The peak looks forward only: the max from now on, never a past high.
+    private var forwardValues: [Double] { Array(window.points.dropFirst(window.nowPosition)).map { $0.uvIndex ?? 0 } }
+    private var peak: Double { forwardValues.max() ?? 0 }
     private var ceiling: Double { max(peak, 1) }
-    private var peakIndex: Int { values.firstIndex(of: peak) ?? 0 }
+    private var peakIndex: Int { window.nowPosition + (forwardValues.firstIndex(of: peak) ?? 0) }
     private var curveColor: Color { UVBand(uvIndex: peak).dotColor }
 
     /// Sparse x ticks over the window: edges, thirds, and always now. Thirds
