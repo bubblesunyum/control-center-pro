@@ -443,11 +443,15 @@ private struct WeatherUVDayCurve: View {
     }
 
     private var values: [Double] { window.points.map { $0.uvIndex ?? 0 } }
-    /// The peak looks forward only: the max from now on, never a past high.
-    private var forwardValues: [Double] { Array(window.points.dropFirst(window.nowPosition)).map { $0.uvIndex ?? 0 } }
-    private var peak: Double { forwardValues.max() ?? 0 }
+    /// The next peak, even past the drawn edge: the max over every future
+    /// hour, so evenings report tomorrow's high rather than the window tail.
+    private var futurePeak: (value: Double, offsetHours: Int, point: WeatherHourPoint)? {
+        let uvs = hours.map { $0.uvIndex ?? 0 }
+        guard let value = uvs.max(), let offset = uvs.firstIndex(of: value) else { return nil }
+        return (value, offset, hours[offset])
+    }
+    private var peak: Double { futurePeak?.value ?? 0 }
     private var ceiling: Double { max(peak, 1) }
-    private var peakIndex: Int { window.nowPosition + (forwardValues.firstIndex(of: peak) ?? 0) }
     private var curveColor: Color { UVBand(uvIndex: peak).dotColor }
 
     /// Sparse x ticks over the window: edges, thirds, and always now. Thirds
@@ -465,7 +469,7 @@ private struct WeatherUVDayCurve: View {
     var body: some View {
         let now = Date()
         VStack(alignment: .leading, spacing: Space.quarter) {
-            Text("Peak \(Int(peak.rounded())) at \(hourLabel(at: peakIndex, from: now))")
+            Text("Peak \(Int(peak.rounded())) at \(peakLabel(from: now))")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
             GeometryReader { proxy in
@@ -522,7 +526,7 @@ private struct WeatherUVDayCurve: View {
             .frame(height: Space.two)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("UV through the day, peak \(Int(peak.rounded())) at \(hourLabel(at: peakIndex, from: now))")
+        .accessibilityLabel("UV through the day, peak \(Int(peak.rounded())) at \(peakLabel(from: now))")
         // The window goes down with the graph intact, so mouseExited never
         // fires on hide — without this a reopen shows a phantom readout.
         .onPanelHidden { hoverLocation = nil }
@@ -536,6 +540,16 @@ private struct WeatherUVDayCurve: View {
         if let date = window.points[windowIndex].date { return date.formatted(.dateTime.hour()) }
         let offset = windowIndex - window.nowPosition
         return now.addingTimeInterval(Double(offset) * secondsPerHour).formatted(.dateTime.hour())
+    }
+
+    /// The peak's hour, which may lie past the drawn edge: the stamped date
+    /// when the point has one, else the synthesized offset from now.
+    private func peakLabel(from now: Date) -> String {
+        guard let future = futurePeak else { return "Now" }
+        if let date = future.point.date { return date.formatted(.dateTime.hour()) }
+        // The file-scope hourLabel(_:from:) is shadowed by the method below,
+        // so the fallback inlines its one-line formula.
+        return now.addingTimeInterval(Double(future.offsetHours) * secondsPerHour).formatted(.dateTime.hour())
     }
 }
 
