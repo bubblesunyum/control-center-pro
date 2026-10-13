@@ -152,8 +152,27 @@ if [[ -n "$DEVID" ]]; then
   codesign --force --deep --sign "$DEVID" "$BUNDLE" > /dev/null 2>&1
 elif security find-identity -p codesigning 2>/dev/null | grep -q "$LEGACY_IDENTITY"; then
   echo "  signing with $LEGACY_IDENTITY" >&2
-  codesign --force --deep --sign "$LEGACY_IDENTITY" "$BUNDLE" > /dev/null 2>&1
+  if ! codesign --force --deep --sign "$LEGACY_IDENTITY" "$BUNDLE" > /dev/null 2>&1; then
+    # The identity is listed but unusable — invariably the keychain password
+    # mismatched again (ccp-2bdz). This used to die silently with codesign's
+    # output swallowed; refuse loudly instead, with the fix attached.
+    echo "signing with '$LEGACY_IDENTITY' failed — not falling back to ad-hoc." >&2
+    echo "  usual cause: the vorssaint-signing keychain password mismatched — prove with:" >&2
+    echo "    security unlock-keychain -p vorssaint-signing \"\$HOME/Library/Keychains/vorssaint-signing.keychain-db\"" >&2
+    echo "  fix: security delete-keychain \"\$HOME/Library/Keychains/vorssaint-signing.keychain-db\" && ./Tools/setup-signing.sh" >&2
+    echo "  keychain state: $(stat -f '%Sm size %z' -t '%Y-%m-%d %H:%M' "$HOME/Library/Keychains/vorssaint-signing.keychain-db" 2>/dev/null || echo missing)" >&2
+    exit 1
+  fi
 else
+  if [[ -f "$HOME/Library/Keychains/vorssaint-signing.keychain-db" ]]; then
+    # A keychain file exists but the identity isn't listed: the keychain is
+    # mid-rot (locked, delisted, or password-mismatched — ccp-2bdz). This is
+    # never a fresh clone, so ad-hoc here just orphans TCC grants again.
+    echo "signing identity '$LEGACY_IDENTITY' not found, but its keychain exists — not signing ad-hoc." >&2
+    echo "  usual fix: security delete-keychain \"\$HOME/Library/Keychains/vorssaint-signing.keychain-db\" && ./Tools/setup-signing.sh" >&2
+    echo "  keychain state: $(stat -f '%Sm size %z' -t '%Y-%m-%d %H:%M' "$HOME/Library/Keychains/vorssaint-signing.keychain-db" 2>/dev/null || echo missing)" >&2
+    exit 1
+  fi
   echo "  signing ad-hoc (no stable identity — run Tools/setup-signing.sh to keep TCC grants across rebuilds)" >&2
   codesign --force --deep --sign - "$BUNDLE" > /dev/null 2>&1
 fi
