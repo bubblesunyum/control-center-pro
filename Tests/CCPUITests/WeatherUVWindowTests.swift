@@ -14,19 +14,19 @@ final class WeatherUVWindowTests: XCTestCase {
     }
 
     func testEmptyCombinedYieldsEmptyWindow() {
-        let window = uvDayWindow(pastHours: [], hours: [])
+        let window = uvDayWindow(pastHours: [], hours: [], now: Date())
         XCTAssertEqual(window.points.count, 0)
         XCTAssertEqual(window.nowPosition, 0)
     }
 
     func testHoursEmptyYieldsNoWindow() {
-        let window = uvDayWindow(pastHours: [point(0), point(1), point(2)], hours: [])
+        let window = uvDayWindow(pastHours: [point(0), point(1), point(2)], hours: [], now: Date())
         XCTAssertEqual(window.points.count, 0)
         XCTAssertEqual(window.nowPosition, 0)
     }
 
     func testSinglePointPlotsWhatExists() {
-        let window = uvDayWindow(pastHours: [], hours: [point(7)])
+        let window = uvDayWindow(pastHours: [], hours: [point(7)], now: Date())
         XCTAssertEqual(window.points.map(\.tempC), [7])
         XCTAssertEqual(window.nowPosition, 0)
     }
@@ -34,7 +34,8 @@ final class WeatherUVWindowTests: XCTestCase {
     func testExactlyTwelveKeepsAllCentered() {
         let window = uvDayWindow(
             pastHours: (0..<6).map { point(Double($0)) },
-            hours: (6..<12).map { point(Double($0)) }
+            hours: (6..<12).map { point(Double($0)) },
+            now: Date()
         )
         XCTAssertEqual(window.points.map(\.tempC), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
         XCTAssertEqual(window.nowPosition, 6)
@@ -43,7 +44,8 @@ final class WeatherUVWindowTests: XCTestCase {
     func testFullWindowCentersNow() {
         let window = uvDayWindow(
             pastHours: (0..<6).map { point(Double($0)) },
-            hours: (6..<30).map { point(Double($0)) }
+            hours: (6..<30).map { point(Double($0)) },
+            now: Date()
         )
         XCTAssertEqual(window.points.map(\.tempC), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
         XCTAssertEqual(window.nowPosition, 6)
@@ -52,7 +54,8 @@ final class WeatherUVWindowTests: XCTestCase {
     func testEarlyMorningClampFillsForward() {
         let window = uvDayWindow(
             pastHours: [point(0), point(1)],
-            hours: (2..<26).map { point(Double($0)) }
+            hours: (2..<26).map { point(Double($0)) },
+            now: Date()
         )
         XCTAssertEqual(window.points.map(\.tempC), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
         XCTAssertEqual(window.nowPosition, 2)

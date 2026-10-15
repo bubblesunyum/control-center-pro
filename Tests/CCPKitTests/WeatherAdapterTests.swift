@@ -26,7 +26,7 @@ final class WeatherAdapterTests: XCTestCase {
         XCTAssertEqual(snapshot.highC, 24.1)
         XCTAssertEqual(snapshot.lowC, 14.8)
         XCTAssertEqual(snapshot.hourly.count, 24)
-        XCTAssertEqual(snapshot.daily.count, 3)
+        XCTAssertEqual(snapshot.daily.count, 5)
     }
 
     func testHourlyPointsCarryPerHourUV() throws {
@@ -335,11 +335,11 @@ final class WeatherAdapterTests: XCTestCase {
             ]
           },
           "daily": {
-            "time": ["2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09"],
-            "weather_code": [2, 3, 61, 0],
-            "temperature_2m_max": [24.1, 22.8, 19.4, 23.0],
-            "temperature_2m_min": [14.8, 14.1, 13.2, 13.9],
-            "uv_index_max": [5.4, 4.8, 2.1, 5.9]
+            "time": ["2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09", "2026-10-10", "2026-10-11"],
+            "weather_code": [2, 3, 61, 0, 1, 2],
+            "temperature_2m_max": [24.1, 22.8, 19.4, 23.0, 21.5, 20.0],
+            "temperature_2m_min": [14.8, 14.1, 13.2, 13.9, 13.5, 12.8],
+            "uv_index_max": [5.4, 4.8, 2.1, 5.9, 3.3, 4.1]
           }
         }
         """

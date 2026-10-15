@@ -169,15 +169,19 @@ final class WeatherPanelModel {
 // MARK: - Content
 
 private struct WeatherContent: View {
+    // Card type runs 2pt over the macOS semantic default (measured via
+    // NSFont.preferredFont: caption 10, caption2 10, subheadline 11,
+    // headline 13, largeTitle 26) and keeps scaling via the relative style.
+    @ScaledMetric(relativeTo: .caption) private var captionPt: CGFloat = 12
     @Bindable var model: WeatherPanelModel
     @State private var cityDraft = ""
 
     var body: some View {
         WidgetCard(WeatherWidget.descriptor, accessory: {
-            HStack(spacing: Space.half) {
+            HStack(spacing: Space.one) {
                 if let placeName {
                     Text(placeName)
-                        .font(.caption)
+                        .font(.system(size: captionPt))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -191,7 +195,7 @@ private struct WeatherContent: View {
             // not flash the card back to a spinner.
             if let snapshot = model.adapter.snapshot {
                 if model.place == .needsCity {
-                    VStack(alignment: .leading, spacing: Space.one) {
+                    VStack(alignment: .leading, spacing: Space.two) {
                         WeatherLoadedView(snapshot: snapshot, unit: weatherDisplayUnit)
                         Divider()
                         Button {
@@ -230,13 +234,14 @@ private struct WeatherContent: View {
 }
 
 private struct WeatherLoadingView: View {
+    @ScaledMetric(relativeTo: .caption) private var captionPt: CGFloat = 12
     var body: some View {
         RoundedRectangle(cornerRadius: Radius.sparkline, style: .continuous)
             .fill(Color.controlFill)
             .frame(minHeight: Layout.toolIconSize)
             .overlay(
                 Text("Measuring…")
-                    .font(.caption)
+                    .font(.system(size: captionPt))
                     .foregroundStyle(.secondary)
             )
             .accessibilityLabel("Loading weather")
@@ -244,18 +249,20 @@ private struct WeatherLoadingView: View {
 }
 
 private struct WeatherManualEntryView: View {
+    @ScaledMetric(relativeTo: .headline) private var headlinePt: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption) private var captionPt: CGFloat = 12
     @Binding var cityDraft: String
     let error: String?
     let submit: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Space.one) {
+        VStack(alignment: .leading, spacing: Space.two) {
             Label("Location unavailable", systemImage: "location.slash")
-                .font(.headline)
+                .font(.system(size: headlinePt, weight: .bold))
             Text("Enter a city to see its weather.")
-                .font(.caption)
+                .font(.system(size: captionPt))
                 .foregroundStyle(.secondary)
-            HStack(spacing: Space.half) {
+            HStack(spacing: Space.one) {
                 TextField("City", text: $cityDraft)
                     .textFieldStyle(.roundedBorder)
                     .accessibilityLabel("City")
@@ -267,7 +274,7 @@ private struct WeatherManualEntryView: View {
             }
             if let error {
                 Text(error)
-                    .font(.caption)
+                    .font(.system(size: captionPt))
                     .foregroundStyle(.secondary)
             }
         }
@@ -276,14 +283,16 @@ private struct WeatherManualEntryView: View {
 }
 
 private struct WeatherFailedView: View {
+    @ScaledMetric(relativeTo: .headline) private var headlinePt: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption) private var captionPt: CGFloat = 12
     let retry: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Space.one) {
+        VStack(alignment: .leading, spacing: Space.two) {
             Label("Couldn't load weather", systemImage: "exclamationmark.triangle")
-                .font(.headline)
+                .font(.system(size: headlinePt, weight: .bold))
             Text("Check your connection and try again.")
-                .font(.caption)
+                .font(.system(size: captionPt))
                 .foregroundStyle(.secondary)
             Button("Retry", action: retry)
                 .buttonStyle(.bordered)
@@ -295,11 +304,13 @@ private struct WeatherFailedView: View {
 }
 
 private struct WeatherLoadedView: View {
+    @ScaledMetric(relativeTo: .largeTitle) private var largeTitlePt: CGFloat = 28
+    @ScaledMetric(relativeTo: .subheadline) private var subheadlinePt: CGFloat = 13
     let snapshot: WeatherSnapshot
     let unit: WeatherUnit
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Space.one) {
+        VStack(alignment: .leading, spacing: Space.two) {
             // One VoiceOver label for action plus readout: a bare action
             // label would shadow the temperature inside the button.
             let heroLabel = [
@@ -312,22 +323,27 @@ private struct WeatherLoadedView: View {
                 let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Weather") ?? fallback
                 NSWorkspace.shared.open(url)
             } label: {
-                HStack(alignment: .top, spacing: Space.one) {
-                    VStack(alignment: .leading, spacing: Space.quarter) {
+                HStack(alignment: .top, spacing: Space.two) {
+                    VStack(alignment: .leading, spacing: Space.half) {
                         if let tempC = snapshot.tempC {
                             Text(degreeOnly(tempC, in: unit))
-                                .font(.largeTitle.weight(.semibold))
-                        }
-                        if let condition = snapshot.condition {
-                            Text(condition.label)
-                                .font(.subheadline)
+                                .font(.system(size: largeTitlePt, weight: .semibold))
                         }
                     }
-                    Spacer(minLength: Space.half)
-                    Image(systemName: snapshot.condition?.symbolName ?? "cloud")
-                        .font(.title)
-                        .foregroundStyle(.secondary)
-                        .accessibilityHidden(true)
+                    Spacer(minLength: Space.one)
+                    HStack(alignment: .top, spacing: Space.one) {
+                        if let condition = snapshot.condition {
+                            Text(condition.label)
+                                .font(.system(size: subheadlinePt))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .multilineTextAlignment(.trailing)
+                        }
+                        Image(systemName: snapshot.condition?.symbolName ?? "cloud")
+                            .font(.title)
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                    }
                 }
                 .contentShape(Rectangle())
             }
@@ -335,10 +351,10 @@ private struct WeatherLoadedView: View {
             .accessibilityLabel(heroLabel)
             .help("Open in Weather")
             if snapshot.highC != nil || snapshot.lowC != nil || snapshot.humidity != nil || snapshot.windKph != nil {
-                HStack(alignment: .firstTextBaseline, spacing: Space.half) {
+                HStack(alignment: .firstTextBaseline, spacing: Space.one) {
                     if snapshot.highC != nil || snapshot.lowC != nil {
-                        HStack(spacing: Space.half) {
-                            HStack(spacing: Space.quarter) {
+                        HStack(spacing: Space.one) {
+                            HStack(spacing: Space.half) {
                                 Text("H:")
                                     .foregroundStyle(.secondary)
                                 if let highC = snapshot.highC {
@@ -352,7 +368,7 @@ private struct WeatherLoadedView: View {
                                         .foregroundStyle(.secondary)
                                 }
                             }
-                            HStack(spacing: Space.quarter) {
+                            HStack(spacing: Space.half) {
                                 Text("L:")
                                     .foregroundStyle(.secondary)
                                 if let lowC = snapshot.lowC {
@@ -367,7 +383,7 @@ private struct WeatherLoadedView: View {
                                 }
                             }
                         }
-                        .font(.subheadline)
+                        .font(.system(size: subheadlinePt))
                         .lineLimit(1)
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel("High \(snapshot.highC.map { unit.format(celsius: $0) } ?? "unknown"), low \(snapshot.lowC.map { unit.format(celsius: $0) } ?? "unknown")")
@@ -376,10 +392,10 @@ private struct WeatherLoadedView: View {
                         if snapshot.highC != nil || snapshot.lowC != nil {
                             Spacer()
                         }
-                        HStack(spacing: Space.one) {
+                        HStack(spacing: Space.two) {
                             if let humidity = snapshot.humidity {
                                 WeatherStatItem(
-                                    icon: "droplet",
+                                    icon: "droplet.fill",
                                     text: "\(humidity)%",
                                     label: "Humidity \(humidity) percent"
                                 )
@@ -396,7 +412,7 @@ private struct WeatherLoadedView: View {
                 }
             }
             WeatherUVSection(uvIndex: snapshot.uvIndex, pastHours: snapshot.pastHours, hours: snapshot.hourly)
-            if !snapshot.hourly.isEmpty {
+            if snapshot.hourly.count > 1 {
                 Divider()
                 WeatherHourStrip(hours: snapshot.hourly, unit: unit)
             }
@@ -409,18 +425,19 @@ private struct WeatherLoadedView: View {
 }
 
 private struct WeatherStatItem: View {
+    @ScaledMetric(relativeTo: .caption) private var captionPt: CGFloat = 12
     let icon: String
     let text: String
     let label: String
 
     var body: some View {
-        HStack(spacing: Space.half) {
+        HStack(spacing: Space.one) {
             Image(systemName: icon)
-                .font(.caption)
+                .font(.system(size: captionPt))
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
             Text(text)
-                .font(.caption.weight(.medium))
+                .font(.system(size: captionPt, weight: .medium))
                 .monospacedDigit()
                 .lineLimit(1)
         }
@@ -430,27 +447,29 @@ private struct WeatherStatItem: View {
 }
 
 private struct WeatherUVRow: View {
+    @ScaledMetric(relativeTo: .caption) private var captionPt: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption2) private var caption2Pt: CGFloat = 12
     let uvIndex: Double
     let peakText: String?
 
     private var band: UVBand { UVBand(uvIndex: uvIndex) }
 
     var body: some View {
-        HStack(spacing: Space.half) {
+        HStack(spacing: Space.one) {
             Circle()
                 .fill(band.dotColor)
                 .frame(width: Space.one, height: Space.one)
                 .accessibilityHidden(true)
             Text("UV \(Int(uvIndex.rounded()))")
-                .font(.caption.weight(.semibold))
+                .font(.system(size: captionPt, weight: .semibold))
                 .monospacedDigit()
             Text(band.label)
-                .font(.caption)
+                .font(.system(size: captionPt))
                 .foregroundStyle(.secondary)
-            Spacer(minLength: Space.half)
+            Spacer(minLength: Space.one)
             if let peakText {
                 Text(peakText)
-                    .font(.caption2)
+                    .font(.system(size: caption2Pt, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -529,24 +548,25 @@ private struct WeatherUVSection: View {
     let pastHours: [WeatherHourPoint]
     let hours: [WeatherHourPoint]
 
-    private var hasCurve: Bool {
-        uvDayWindow(pastHours: pastHours, hours: hours).points.filter { $0.uvIndex != nil }.count >= 2
+    private func hasCurve(now: Date) -> Bool {
+        uvDayWindow(pastHours: pastHours, hours: hours, now: now).points.filter { $0.uvIndex != nil }.count >= 2
     }
 
     var body: some View {
         let now = Date()
         let peak = uvSameDayPeak(pastHours: pastHours, hours: hours, now: now)
-        if uvIndex != nil || hasCurve {
+        let showsCurve = hasCurve(now: now)
+        if uvIndex != nil || showsCurve {
             Divider()
         }
-        if let uvIndex, hasCurve {
-            VStack(alignment: .leading, spacing: Space.one) {
+        if let uvIndex, showsCurve {
+            VStack(alignment: .leading, spacing: Space.two) {
                 WeatherUVRow(uvIndex: uvIndex, peakText: peak?.display)
                 WeatherUVDayCurve(pastHours: pastHours, hours: hours, peak: peak, now: now)
             }
         } else if let uvIndex {
             WeatherUVRow(uvIndex: uvIndex, peakText: peak?.display)
-        } else if hasCurve {
+        } else if showsCurve {
             WeatherUVDayCurve(pastHours: pastHours, hours: hours, peak: peak, now: now)
         }
     }
@@ -570,19 +590,23 @@ private extension UVBand {
 
 /// Shared drawing constants for the UV day curve: the Sparkline stroke/fill
 /// language, and the one x-inset both the curve endpoints and the tick
-/// labels honor so each label centers on the point it names.
+/// labels honor so each label centers on the point it names. The inset
+/// matches the card's own padding (WidgetCard pads by Space.oneHalf), so
+/// endpoints, tick labels, and the hover chip never paint into it; tick
+/// centers clamp by the same half-label-width for the same reason.
 private enum WeatherUVStyle {
-    static let xInset: CGFloat = Space.half
+    static let xInset: CGFloat = Space.oneHalf
     static let lineWidth: CGFloat = 1.5
     static let fillOpacity: Double = 0.16
 }
 
-/// UV through the day in the Mac Weather manner: a 12-point window straddling
-/// now, drawn as a curve over the hourly uvIndex values with a gradient
-/// fill, a now-marker dot, and edge ticks. The same-day peak callout lives in
-/// the UV row above the graph. The section hides the curve unless the window
-/// holds at least two UV values.
+/// UV through the day in the Mac Weather manner: today's 9AM–6PM points
+/// drawn as a curve over the hourly uvIndex values with a gradient
+/// fill, a now-marker dot, and fixed 9/12/3/6 ticks. The same-day peak
+/// callout lives in the UV row above the graph. The section hides the curve
+/// unless the window holds at least two UV values.
 private struct WeatherUVDayCurve: View {
+    @ScaledMetric(relativeTo: .caption2) private var caption2Pt: CGFloat = 12
     let pastHours: [WeatherHourPoint]
     let hours: [WeatherHourPoint]
     let peak: UVPeak?
@@ -595,21 +619,60 @@ private struct WeatherUVDayCurve: View {
     /// The drawn slice plus where now sits in it — one source for the curve,
     /// ticks, hover, and callouts.
     private var window: (points: [WeatherHourPoint], nowPosition: Int) {
-        uvDayWindow(pastHours: pastHours, hours: hours)
+        uvDayWindow(pastHours: pastHours, hours: hours, now: now)
     }
 
     private var values: [Double] { window.points.map { $0.uvIndex ?? 0 } }
     /// The same-day peak, shared with the row callout above the graph: the
-    /// ceiling and stroke colour follow today's high, not the window tail.
+    /// ceiling and fill wash follow today's high, not the window tail. The
+    /// stroke itself carries a stop per drawn point (see strokeGradient).
     private var peakValue: Double { peak?.value ?? 0 }
     private var ceiling: Double { max(peakValue, 1) }
     private var curveColor: Color { UVBand(uvIndex: peakValue).dotColor }
 
-    /// Sparse x ticks over the window: edges, thirds, and always now. Thirds
-    /// adjacent to Now are dropped so tick labels never collide with the Now
-    /// label — steady state yields [0, 3, Now, last]. Deduped so short lists
-    /// never repeat an index.
+    /// One gradient stop per drawn point in its own UV band colour, spread
+    /// evenly — the points are hourly, so even spacing is exact.
+    private var strokeGradient: LinearGradient {
+        let colors = values.map { UVBand(uvIndex: $0).dotColor }
+        guard colors.count >= 2 else {
+            return LinearGradient(colors: [curveColor, curveColor], startPoint: .leading, endPoint: .trailing)
+        }
+        let stops = colors.enumerated().map { index, color in
+            Gradient.Stop(color: color, location: Double(index) / Double(colors.count - 1))
+        }
+        return LinearGradient(gradient: Gradient(stops: stops), startPoint: .leading, endPoint: .trailing)
+    }
+
+    /// The now dot shows only when now sits inside today's 9–18 window;
+    /// outside it (morning, evening) the curve stands without a marker.
+    /// Dateless fallback windows have no day to be inside of, so they keep
+    /// the dot at the now boundary as before.
+    private var showsNowDot: Bool {
+        if window.points.contains(where: { $0.date != nil }) {
+            guard let anchor = window.points.compactMap(\.date).first else { return false }
+            let calendar = Calendar.current
+            return calendar.isDate(now, inSameDayAs: anchor)
+                && (9...18).contains(calendar.component(.hour, from: now))
+        }
+        return window.nowPosition < window.points.count
+    }
+
+    /// Fixed x ticks at 9AM/12PM/3PM/6PM wherever the window holds them.
+    /// Dateless fallback windows (previews) keep the old edges-plus-now
+    /// ticks so they still label something.
     private var tickIndices: [Int] {
+        let calendar = Calendar.current
+        let fixed = window.points.indices.filter { index in
+            guard let date = window.points[index].date else { return false }
+            return [9, 12, 15, 18].contains(calendar.component(.hour, from: date))
+        }
+        if !fixed.isEmpty { return fixed }
+        if window.points.contains(where: { $0.date != nil }) {
+            // Stamped window with no 9/12/15/18 point (early/late hours):
+            // label the drawn endpoints so the lane is never empty.
+            guard window.points.count >= 2 else { return [] }
+            return [0, window.points.count - 1]
+        }
         let last = window.points.count - 1
         guard last > 0 else { return [] }
         let thirds = [0, last / 3, (last * 2) / 3, last]
@@ -618,7 +681,7 @@ private struct WeatherUVDayCurve: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Space.quarter) {
+        VStack(alignment: .leading, spacing: Space.half) {
             GeometryReader { proxy in
                 let plot = uvDayPlot(values: values, ceiling: ceiling, size: proxy.size)
                 let hoverIndex = hoverLocation.flatMap { uvHoverIndex(x: $0.x, width: proxy.size.width, count: window.points.count) }
@@ -635,8 +698,8 @@ private struct WeatherUVDayCurve: View {
                             )
                         )
                     uvDayPath(plot: plot, bottomY: proxy.size.height, closed: false)
-                        .stroke(curveColor, style: StrokeStyle(lineWidth: WeatherUVStyle.lineWidth, lineCap: .round, lineJoin: .round))
-                    if window.nowPosition < plot.count {
+                        .stroke(strokeGradient, style: StrokeStyle(lineWidth: WeatherUVStyle.lineWidth, lineCap: .round, lineJoin: .round))
+                    if showsNowDot, window.nowPosition < plot.count {
                         Circle()
                             .fill(Color.primary)
                             .frame(width: Space.one, height: Space.one)
@@ -649,7 +712,7 @@ private struct WeatherUVDayCurve: View {
                             point: plot[hoverIndex],
                             graphSize: proxy.size,
                             color: curveColor,
-                            hour: hourLabel(at: hoverIndex, from: now),
+                            hour: tickLabel(at: hoverIndex, from: now),
                             uv: "\(Int(values[hoverIndex].rounded()))"
                         )
                     }
@@ -663,14 +726,14 @@ private struct WeatherUVDayCurve: View {
                 ZStack(alignment: .topLeading) {
                     Color.clear
                     ForEach(tickIndices, id: \.self) { index in
-                        Text(hourLabel(at: index, from: now))
-                            .font(.caption2)
+                        Text(tickLabel(at: index, from: now))
+                            .font(.system(size: caption2Pt, weight: .medium))
                             .foregroundStyle(.tertiary)
                             .position(x: min(max(plot[index].x, WeatherUVStyle.xInset), proxy.size.width - WeatherUVStyle.xInset), y: Space.one)
                     }
                 }
             }
-            .frame(height: Space.two)
+            .frame(height: max(Space.two, caption2Pt + Space.half))
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(uvCurveLabel)
@@ -695,11 +758,20 @@ private struct WeatherUVDayCurve: View {
         let offset = windowIndex - window.nowPosition
         return now.addingTimeInterval(Double(offset) * secondsPerHour).formatted(.dateTime.hour())
     }
+
+    /// Tick labels prefer the stamp: fixed 9/12/3/6 ticks never read Now
+    /// even when now sits exactly on the hour. Dateless fallbacks have no
+    /// stamp, so they use the window label (with its Now) instead.
+    private func tickLabel(at windowIndex: Int, from now: Date) -> String {
+        if let date = window.points[windowIndex].date { return date.formatted(.dateTime.hour()) }
+        return hourLabel(at: windowIndex, from: now)
+    }
 }
 
 /// The hover readout: rule, point, and value chip. Extracted so the curve
 /// body reads as layers.
 private struct WeatherUVHoverCallout: View {
+    @ScaledMetric(relativeTo: .caption2) private var caption2Pt: CGFloat = 12
     let point: CGPoint
     let graphSize: CGSize
     let color: Color
@@ -720,10 +792,10 @@ private struct WeatherUVHoverCallout: View {
                 .position(point)
             // CountBadge's capsule language at medium weight.
             Text("\(hour) · UV \(uv)")
-                .font(.caption2.weight(.medium))
+                .font(.system(size: caption2Pt, weight: .medium))
                 .monospacedDigit()
-                .padding(.horizontal, Space.half)
-                .padding(.vertical, Space.quarter / 2)
+                .padding(.horizontal, Space.one)
+                .padding(.vertical, Space.quarter)
                 .background(Capsule().fill(Color.controlFill))
                 .overlay(Capsule().strokeBorder(Color.cardStroke, lineWidth: Stroke.hairline))
                 .foregroundStyle(.secondary)
@@ -736,7 +808,10 @@ private struct WeatherUVHoverCallout: View {
     /// the graph; near the top the chip flips below the point instead of
     /// painting over the peak callout.
     private var chipX: CGFloat {
-        min(max(point.x, WeatherUVStyle.xInset), graphSize.width - WeatherUVStyle.xInset)
+        // The chip is wider than a tick label, so clamp by half its estimated
+        // width (~45pt); max() keeps the upper bound sane on narrow graphs.
+        let halfChip: CGFloat = 45
+        return min(max(point.x, halfChip), max(graphSize.width - halfChip, halfChip))
     }
 
     private var chipY: CGFloat {
@@ -745,59 +820,74 @@ private struct WeatherUVHoverCallout: View {
 }
 
 private struct WeatherHourStrip: View {
+    @ScaledMetric(relativeTo: .caption) private var captionPt: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption2) private var caption2Pt: CGFloat = 12
     let hours: [WeatherHourPoint]
     let unit: WeatherUnit
 
     var body: some View {
         let now = Date()
-        HStack(alignment: .top, spacing: Space.half) {
-            ForEach(Array(hours.prefix(WeatherLayout.hourCount).enumerated()), id: \.offset) { index, hour in
-                VStack(spacing: Space.quarter) {
-                    Text(hourLabel(index, from: now))
-                        .font(.caption2)
+        let visibleHours = Array(hours.dropFirst().prefix(WeatherLayout.hourCount))
+        HStack(alignment: .top, spacing: Space.one) {
+            ForEach(Array(visibleHours.enumerated()), id: \.offset) { index, hour in
+                let label = stripHourLabel(hour, at: index, from: now)
+                VStack(spacing: Space.half) {
+                    Text(label)
+                        .font(.system(size: caption2Pt, weight: .medium))
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
                     Image(systemName: hour.condition.symbolName)
-                        .font(.caption)
+                        .font(.system(size: captionPt))
                     Text(degreeOnly(hour.tempC, in: unit))
-                        .font(.caption.weight(.medium))
+                        .font(.system(size: captionPt, weight: .medium))
                         .monospacedDigit()
+                        .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity)
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("\(hourLabel(index, from: now)): \(unit.format(celsius: hour.tempC))")
+                .accessibilityLabel("\(label): \(unit.format(celsius: hour.tempC))")
             }
         }
     }
 }
 
 private struct WeatherDayRows: View {
+    @ScaledMetric(relativeTo: .caption) private var captionPt: CGFloat = 12
+    @ScaledMetric(relativeTo: .caption2) private var caption2Pt: CGFloat = 12
     let days: [WeatherDayPoint]
     let unit: WeatherUnit
 
     var body: some View {
         // Today first, then forward — the source orders them that way.
         let today = Calendar.current.startOfDay(for: Date())
-        VStack(alignment: .leading, spacing: Space.half) {
+        VStack(alignment: .leading, spacing: Space.one) {
             ForEach(Array(days.prefix(WeatherLayout.dayCount).enumerated()), id: \.offset) { index, day in
                 let date = Calendar.current.date(byAdding: .day, value: index, to: today) ?? today
-                HStack(spacing: Space.half) {
+                HStack(spacing: Space.one) {
                     Text(index == 0 ? "Today" : date.formatted(.dateTime.weekday(.abbreviated)))
-                        .font(.caption)
+                        .font(.system(size: captionPt))
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Image(systemName: day.condition.symbolName)
-                        .font(.caption)
+                        .font(.system(size: captionPt))
                         .foregroundStyle(.secondary)
                     if let uvMax = day.uvMax {
                         Text("UV \(Int(uvMax.rounded()))")
-                            .font(.caption2)
+                            .font(.system(size: caption2Pt, weight: .medium))
                             .foregroundStyle(.tertiary)
                             .monospacedDigit()
+                    } else {
+                        // Reserve the UV slot so high/low columns align across rows.
+                        Text("UV 11")
+                            .font(.system(size: caption2Pt, weight: .medium))
+                            .monospacedDigit()
+                            .hidden()
+                            .accessibilityHidden(true)
                     }
                     Text(degreeOnly(day.highC, in: unit))
-                        .font(.caption.weight(.medium))
+                        .font(.system(size: captionPt, weight: .medium))
                         .monospacedDigit()
                     Text(degreeOnly(day.lowC, in: unit))
-                        .font(.caption)
+                        .font(.system(size: captionPt))
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                 }
@@ -809,10 +899,11 @@ private struct WeatherDayRows: View {
 }
 
 private enum WeatherLayout {
-    static let hourCount = 8
-    static let dayCount = 3
-    /// How many hourly points the UV day curve draws: a 12-point window
-    /// centered on now. Shorter lists plot what they have.
+    static let hourCount = 6
+    static let dayCount = 5
+    /// How many hourly points the UV day curve draws in dateless fallback:
+    /// a 12-point window centered on now. Shorter lists plot what they have.
+    /// Stamped timelines instead draw today's 9AM–6PM hours (see uvDayWindow).
     static let uvDayCount = 12
 }
 
@@ -843,23 +934,40 @@ private let weatherDisplayUnit: WeatherUnit = .fahrenheit
 /// their synthesized labels cannot drift apart.
 private let secondsPerHour: TimeInterval = 3600
 
-/// Synthesized hour labels for dateless (hand-built/preview) points: the
-/// first reads Now and the rest count forward from it. Stamped points format
-/// their own date instead — see the curve's hourLabel(at:from:).
-private func hourLabel(_ index: Int, from now: Date) -> String {
-    index == 0 ? "Now" : now.addingTimeInterval(Double(index) * secondsPerHour).formatted(.dateTime.hour())
+/// A label on the hour strip: stamped points format their own date, dateless
+/// (hand-built/preview) points count forward from now starting at +1h — the
+/// strip skips the current-hour point so it never reads Now.
+private func stripHourLabel(_ hour: WeatherHourPoint, at index: Int, from now: Date) -> String {
+    if let date = hour.date { return date.formatted(.dateTime.hour()) }
+    return now.addingTimeInterval(Double(index + 1) * secondsPerHour).formatted(.dateTime.hour())
 }
 
-/// The slice of the past+future timeline the UV graph draws: 12 points
-/// centered on the now boundary, or everything when shorter — plus where now
-/// sits inside the slice. One computation shared by the call-site gate and
-/// the curve's window var, so both read the same points.
-func uvDayWindow(pastHours: [WeatherHourPoint], hours: [WeatherHourPoint]) -> (points: [WeatherHourPoint], nowPosition: Int) {
+/// The slice of the past+future timeline the UV graph draws: points stamped
+/// in today's 9AM–6PM hours (device zone, like the formatted labels), plus
+/// where now sits inside the slice. With fewer than two dated points
+/// (dateless previews) it falls back to a 12-point window centered on the
+/// now boundary, or everything when shorter. One computation shared by the
+/// call-site gate and the curve's window var, so both read the same points —
+/// callers pass the same now they label with.
+func uvDayWindow(pastHours: [WeatherHourPoint], hours: [WeatherHourPoint], now: Date) -> (points: [WeatherHourPoint], nowPosition: Int) {
     // No future data means no window: past alone would clamp "Now" onto a
     // stale point.
     guard !hours.isEmpty else { return ([], 0) }
     let combined = pastHours + hours
     let boundary = min(pastHours.count, combined.count)
+    if combined.filter({ $0.date != nil }).count >= 2 {
+        let calendar = Calendar.current
+        let dayPoints = combined.filter {
+            guard let date = $0.date else { return false }
+            guard calendar.isDate(date, inSameDayAs: now) else { return false }
+            return (9...18).contains(calendar.component(.hour, from: date))
+        }
+        if dayPoints.count >= 2 {
+            let position = dayPoints.firstIndex(where: { ($0.date ?? .distantPast) >= now })
+                ?? (dayPoints.count - 1)
+            return (dayPoints, position)
+        }
+    }
     let span = WeatherLayout.uvDayCount
     let start = min(max(boundary - (span / 2), 0), max(0, combined.count - span))
     let end = min(start + span, combined.count)

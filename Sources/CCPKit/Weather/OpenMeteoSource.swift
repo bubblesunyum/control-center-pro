@@ -27,7 +27,7 @@ public final class LiveOpenMeteoSource: WeatherSource {
     /// How many past hourly points a snapshot carries.
     public static let pastHoursPoints = 6
     /// How many daily points a snapshot carries.
-    public static let dailyPoints = 3
+    public static let dailyPoints = 5
 
     private let session: URLSession
 
@@ -55,7 +55,8 @@ public final class LiveOpenMeteoSource: WeatherSource {
             .init(name: "hourly", value: "temperature_2m,weather_code,uv_index"),
             .init(name: "daily", value: "weather_code,temperature_2m_max,temperature_2m_min,uv_index_max"),
             .init(name: "timezone", value: "auto"),
-            .init(name: "forecast_days", value: "4"),
+            // Over-fetch one extra day so the daily window still covers today plus the next days.
+            .init(name: "forecast_days", value: String(dailyPoints + 1)),
         ]
         // Static shape with numeric input — URLComponents only fails on a
         // broken host/path, which this one is not.
