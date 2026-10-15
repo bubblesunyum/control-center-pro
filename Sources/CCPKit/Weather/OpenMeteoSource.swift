@@ -25,9 +25,9 @@ public final class LiveOpenMeteoSource: WeatherSource {
     /// How many hourly points a snapshot carries.
     public static let hourlyPoints = 24
     /// How many past hourly points a snapshot carries.
-    public static let pastHoursPoints = 6
+    public static let pastHoursPoints = 16
     /// How many daily points a snapshot carries.
-    public static let dailyPoints = 5
+    public static let dailyPoints = 6
 
     private let session: URLSession
 

@@ -26,7 +26,7 @@ final class WeatherAdapterTests: XCTestCase {
         XCTAssertEqual(snapshot.highC, 24.1)
         XCTAssertEqual(snapshot.lowC, 14.8)
         XCTAssertEqual(snapshot.hourly.count, 24)
-        XCTAssertEqual(snapshot.daily.count, 5)
+        XCTAssertEqual(snapshot.daily.count, 6)
     }
 
     func testHourlyPointsCarryPerHourUV() throws {
@@ -100,7 +100,7 @@ final class WeatherAdapterTests: XCTestCase {
             weather_code: [1, 2, 2],
             uv_index: [2.1, 3.8, 5.4]
         )
-        let points = morning.prior(hours: 6, from: Self.sampleNow, offsetSeconds: -25200)
+        let points = morning.prior(hours: 16, from: Self.sampleNow, offsetSeconds: -25200)
         XCTAssertEqual(points.map(\.tempC), [18.6, 20.1])
         XCTAssertEqual(points.compactMap(\.date), [
             Date(timeIntervalSince1970: 1_791_306_000),
@@ -118,7 +118,7 @@ final class WeatherAdapterTests: XCTestCase {
         // sampleNow sits hours after the last entry: everything is past, so
         // next() is empty instead of a stale head and prior() holds the tail.
         XCTAssertEqual(stale.next(hours: 24, from: Self.sampleNow, offsetSeconds: -25200).count, 0)
-        let tail = stale.prior(hours: 6, from: Self.sampleNow, offsetSeconds: -25200)
+        let tail = stale.prior(hours: 16, from: Self.sampleNow, offsetSeconds: -25200)
         XCTAssertEqual(tail.map(\.tempC), [15.2, 15.0, 15.8])
         XCTAssertEqual(tail.compactMap(\.date).count, 3)
     }
@@ -335,11 +335,11 @@ final class WeatherAdapterTests: XCTestCase {
             ]
           },
           "daily": {
-            "time": ["2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09", "2026-10-10", "2026-10-11"],
-            "weather_code": [2, 3, 61, 0, 1, 2],
-            "temperature_2m_max": [24.1, 22.8, 19.4, 23.0, 21.5, 20.0],
-            "temperature_2m_min": [14.8, 14.1, 13.2, 13.9, 13.5, 12.8],
-            "uv_index_max": [5.4, 4.8, 2.1, 5.9, 3.3, 4.1]
+            "time": ["2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09", "2026-10-10", "2026-10-11", "2026-10-12"],
+            "weather_code": [2, 3, 61, 0, 1, 2, 1],
+            "temperature_2m_max": [24.1, 22.8, 19.4, 23.0, 21.5, 20.0, 22.3],
+            "temperature_2m_min": [14.8, 14.1, 13.2, 13.9, 13.5, 12.8, 13.1],
+            "uv_index_max": [5.4, 4.8, 2.1, 5.9, 3.3, 4.1, 3.9]
           }
         }
         """
