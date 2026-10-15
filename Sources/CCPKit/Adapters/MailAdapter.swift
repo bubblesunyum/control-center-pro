@@ -29,6 +29,15 @@ public final class MailAdapter {
     /// and bundles, its message detail, search and compose.
     public var screen: some View { PsymailScreen(psymail) }
 
+    /// The mail screen with the host's visibility applied to psymail's scroll
+    /// restoration. The panel hides with `orderOut` and keeps the graph
+    /// standing, so psymail never sees the hide — the host says it here, at
+    /// the one seam that already names PsymailKit, instead of the widget
+    /// importing it.
+    public func screen(scrollRestorationEnabled: Bool) -> some View {
+        screen.environment(\.scrollRestorationEnabled, scrollRestorationEnabled)
+    }
+
     // MARK: - Lifecycle
 
     /// Fetch anything that has gone stale while the panel was down. The screen

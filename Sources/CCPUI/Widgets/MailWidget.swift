@@ -44,10 +44,11 @@ public final class MailWidget: CCPWidget {
 /// second set of both — the glass and the corner are all this has to add.
 private struct MailContent: View {
     let adapter: MailAdapter
+    @Environment(\.panelVisibility) private var visibility
 
     var body: some View {
         GlassCard {
-            adapter.screen
+            adapter.screen(scrollRestorationEnabled: visibility?.isVisible ?? true)
                 // Exactly the declared height, where every other widget treats
                 // it as a floor: psymail's screen has no height of its own —
                 // it fills what it is given, and a scroll view of mail asked
