@@ -337,21 +337,27 @@ private struct WeatherLoadedView: View {
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("High \(snapshot.highC.map { unit.format(celsius: $0) } ?? "unknown"), low \(snapshot.lowC.map { unit.format(celsius: $0) } ?? "unknown")")
             }
-            if let humidity = snapshot.humidity {
-                detailRow("Humidity", value: "\(humidity)%")
-                    .accessibilityLabel("Humidity \(humidity) percent")
+            if snapshot.humidity != nil || snapshot.windKph != nil {
+                HStack(spacing: Space.one) {
+                    if let humidity = snapshot.humidity {
+                        WeatherStatItem(
+                            icon: "droplet",
+                            text: "\(humidity)%",
+                            label: "Humidity \(humidity) percent",
+                            alignment: .leading
+                        )
+                    }
+                    if let windKph = snapshot.windKph {
+                        WeatherStatItem(
+                            icon: "wind",
+                            text: displayWind(windKph),
+                            label: "Wind \(displayWind(windKph))",
+                            alignment: snapshot.humidity != nil ? .trailing : .leading
+                        )
+                    }
+                }
             }
-            if let windKph = snapshot.windKph {
-                detailRow("Wind", value: displayWind(windKph))
-            }
-            if let uvIndex = snapshot.uvIndex {
-                Divider()
-                WeatherUVRow(uvIndex: uvIndex)
-            }
-            if uvDayWindow(pastHours: snapshot.pastHours, hours: snapshot.hourly).points.filter({ $0.uvIndex != nil }).count >= 2 {
-                Divider()
-                WeatherUVDayCurve(pastHours: snapshot.pastHours, hours: snapshot.hourly)
-            }
+            WeatherUVSection(uvIndex: snapshot.uvIndex, pastHours: snapshot.pastHours, hours: snapshot.hourly)
             if !snapshot.hourly.isEmpty {
                 Divider()
                 WeatherHourStrip(hours: snapshot.hourly, unit: unit)
@@ -362,22 +368,34 @@ private struct WeatherLoadedView: View {
             }
         }
     }
+}
 
-    private func detailRow(_ title: String, value: String) -> some View {
+private struct WeatherStatItem: View {
+    let icon: String
+    let text: String
+    let label: String
+    let alignment: Alignment
+
+    var body: some View {
         HStack(spacing: Space.half) {
-            Text(title)
+            Image(systemName: icon)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Spacer(minLength: Space.half)
-            Text(value)
+                .accessibilityHidden(true)
+            Text(text)
                 .font(.caption.weight(.medium))
                 .monospacedDigit()
+                .lineLimit(1)
         }
+        .frame(maxWidth: .infinity, alignment: alignment)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(label)
     }
 }
 
 private struct WeatherUVRow: View {
     let uvIndex: Double
+    let peakText: String?
 
     private var band: UVBand { UVBand(uvIndex: uvIndex) }
 
@@ -393,9 +411,108 @@ private struct WeatherUVRow: View {
             Text(band.label)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            Spacer(minLength: Space.half)
+            if let peakText {
+                Text(peakText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("UV index \(Int(uvIndex.rounded())), \(band.label)")
+        .accessibilityLabel([
+            "UV index \(Int(uvIndex.rounded())), \(band.label)",
+            peakText
+        ].compactMap { $0 }.joined(separator: ", "))
+    }
+}
+
+/// Today's UV peak over the combined past+future timeline: when any point
+/// carries a date, the max over points stamped today; otherwise the max over
+/// everything (dateless preview points). The hour comes from the stamp when
+/// present, else the synthesized offset from now, matching the curve ticks.
+/// A stamped peak at or before now (or a dateless peak sitting before the
+/// now boundary) reads "Peak was N at H"; an upcoming one "Peak N at H". The same-day filter is what rolls the callout over at
+/// midnight, with the 15-minute refetch supplying the new day's hours.
+private struct UVPeak {
+    let value: Double
+    let hourLabel: String
+    let isPast: Bool
+
+    var display: String {
+        isPast
+            ? "Peak was \(Int(value.rounded())) at \(hourLabel)"
+            : "Peak \(Int(value.rounded())) at \(hourLabel)"
+    }
+}
+
+private func uvSameDayPeak(
+    pastHours: [WeatherHourPoint],
+    hours: [WeatherHourPoint],
+    now: Date
+) -> UVPeak? {
+    let combined = pastHours + hours
+    guard !combined.isEmpty else { return nil }
+    let boundary = min(pastHours.count, combined.count)
+    var candidates = combined.enumerated().map { (index: $0.offset, point: $0.element) }
+    if combined.contains(where: { $0.date != nil }) {
+        let today = candidates.filter {
+            guard let date = $0.point.date else { return false }
+            return Calendar.current.isDate(date, inSameDayAs: now)
+        }
+        guard !today.isEmpty else { return nil }
+        candidates = today
+    }
+    guard let best = candidates.max(by: { a, b in
+        switch (a.point.uvIndex, b.point.uvIndex) {
+        case (nil, nil): return false
+        case (nil, _): return true
+        case (_, nil): return false
+        case (let x?, let y?): return x < y
+        }
+    }) else { return nil }
+    guard let uvValue = best.point.uvIndex else { return nil }
+    if let date = best.point.date {
+        return UVPeak(
+            value: uvValue,
+            hourLabel: date.formatted(.dateTime.hour()),
+            isPast: date <= now
+        )
+    }
+    return UVPeak(
+        value: uvValue,
+        hourLabel: now.addingTimeInterval(Double(best.index - boundary) * secondsPerHour).formatted(.dateTime.hour()),
+        isPast: best.index < boundary
+    )
+}
+
+/// UV as one section: the row carries the same-day peak on its trailing edge
+/// and the curve follows with no divider between them.
+private struct WeatherUVSection: View {
+    let uvIndex: Double?
+    let pastHours: [WeatherHourPoint]
+    let hours: [WeatherHourPoint]
+
+    private var hasCurve: Bool {
+        uvDayWindow(pastHours: pastHours, hours: hours).points.filter { $0.uvIndex != nil }.count >= 2
+    }
+
+    var body: some View {
+        let now = Date()
+        let peak = uvSameDayPeak(pastHours: pastHours, hours: hours, now: now)
+        if uvIndex != nil || hasCurve {
+            Divider()
+        }
+        if let uvIndex, hasCurve {
+            VStack(alignment: .leading, spacing: Space.quarter) {
+                WeatherUVRow(uvIndex: uvIndex, peakText: peak?.display)
+                WeatherUVDayCurve(pastHours: pastHours, hours: hours, peak: peak, now: now)
+            }
+        } else if let uvIndex {
+            WeatherUVRow(uvIndex: uvIndex, peakText: peak?.display)
+        } else if hasCurve {
+            WeatherUVDayCurve(pastHours: pastHours, hours: hours, peak: peak, now: now)
+        }
     }
 }
 
@@ -426,11 +543,14 @@ private enum WeatherUVStyle {
 
 /// UV through the day in the Mac Weather manner: a 12-point window straddling
 /// now, drawn as a curve over the hourly uvIndex values with a gradient
-/// fill, a now-marker dot, and a forward-looking peak callout. The call site hides it unless
-/// the window holds at least two UV values, leaving the legacy UV row alone.
+/// fill, a now-marker dot, and edge ticks. The same-day peak callout lives in
+/// the UV row above the graph. The section hides the curve unless the window
+/// holds at least two UV values.
 private struct WeatherUVDayCurve: View {
     let pastHours: [WeatherHourPoint]
     let hours: [WeatherHourPoint]
+    let peak: UVPeak?
+    let now: Date
 
     /// Pointer position over the graph, fed by the hover tracker; nil when
     /// the pointer is off the graph. The hovered hour derives from it.
@@ -443,16 +563,11 @@ private struct WeatherUVDayCurve: View {
     }
 
     private var values: [Double] { window.points.map { $0.uvIndex ?? 0 } }
-    /// The next peak, even past the drawn edge: the max over every future
-    /// hour, so evenings report tomorrow's high rather than the window tail.
-    private var futurePeak: (value: Double, offsetHours: Int, point: WeatherHourPoint)? {
-        let uvs = hours.map { $0.uvIndex ?? 0 }
-        guard let value = uvs.max(), let offset = uvs.firstIndex(of: value) else { return nil }
-        return (value, offset, hours[offset])
-    }
-    private var peak: Double { futurePeak?.value ?? 0 }
-    private var ceiling: Double { max(peak, 1) }
-    private var curveColor: Color { UVBand(uvIndex: peak).dotColor }
+    /// The same-day peak, shared with the row callout above the graph: the
+    /// ceiling and stroke colour follow today's high, not the window tail.
+    private var peakValue: Double { peak?.value ?? 0 }
+    private var ceiling: Double { max(peakValue, 1) }
+    private var curveColor: Color { UVBand(uvIndex: peakValue).dotColor }
 
     /// Sparse x ticks over the window: edges, thirds, and always now. Thirds
     /// adjacent to Now are dropped so tick labels never collide with the Now
@@ -467,11 +582,7 @@ private struct WeatherUVDayCurve: View {
     }
 
     var body: some View {
-        let now = Date()
         VStack(alignment: .leading, spacing: Space.quarter) {
-            Text("Peak \(Int(peak.rounded())) at \(peakLabel(from: now))")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
             GeometryReader { proxy in
                 let plot = uvDayPlot(values: values, ceiling: ceiling, size: proxy.size)
                 let hoverIndex = hoverLocation.flatMap { uvHoverIndex(x: $0.x, width: proxy.size.width, count: window.points.count) }
@@ -526,10 +637,17 @@ private struct WeatherUVDayCurve: View {
             .frame(height: Space.two)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("UV through the day, peak \(Int(peak.rounded())) at \(peakLabel(from: now))")
+        .accessibilityLabel(uvCurveLabel)
         // The window goes down with the graph intact, so mouseExited never
         // fires on hide — without this a reopen shows a phantom readout.
         .onPanelHidden { hoverLocation = nil }
+    }
+
+    /// VoiceOver mirrors the row's peak wording, so the graph never
+    /// disagrees with the callout above it.
+    private var uvCurveLabel: String {
+        guard let peak else { return "UV through the day" }
+        return "UV through the day, \(peak.display)"
     }
 
     /// An x label inside the window: the now position reads Now, stamped
@@ -540,16 +658,6 @@ private struct WeatherUVDayCurve: View {
         if let date = window.points[windowIndex].date { return date.formatted(.dateTime.hour()) }
         let offset = windowIndex - window.nowPosition
         return now.addingTimeInterval(Double(offset) * secondsPerHour).formatted(.dateTime.hour())
-    }
-
-    /// The peak's hour, which may lie past the drawn edge: the stamped date
-    /// when the point has one, else the synthesized offset from now.
-    private func peakLabel(from now: Date) -> String {
-        guard let future = futurePeak else { return "Now" }
-        if let date = future.point.date { return date.formatted(.dateTime.hour()) }
-        // The file-scope hourLabel(_:from:) is shadowed by the method below,
-        // so the fallback inlines its one-line formula.
-        return now.addingTimeInterval(Double(future.offsetHours) * secondsPerHour).formatted(.dateTime.hour())
     }
 }
 
