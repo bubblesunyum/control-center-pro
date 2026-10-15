@@ -174,8 +174,17 @@ private struct WeatherContent: View {
 
     var body: some View {
         WidgetCard(WeatherWidget.descriptor, accessory: {
-            HeaderIconButton(systemImage: "arrow.clockwise", label: "Refresh weather") {
-                model.refresh()
+            HStack(spacing: Space.half) {
+                if let placeName {
+                    Text(placeName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                HeaderIconButton(systemImage: "arrow.clockwise", label: "Refresh weather") {
+                    model.refresh()
+                }
             }
         }) {
             // A snapshot on screen stays on screen: background refreshes must
@@ -183,7 +192,7 @@ private struct WeatherContent: View {
             if let snapshot = model.adapter.snapshot {
                 if model.place == .needsCity {
                     VStack(alignment: .leading, spacing: Space.one) {
-                        WeatherLoadedView(snapshot: snapshot, unit: weatherDisplayUnit, placeName: placeName)
+                        WeatherLoadedView(snapshot: snapshot, unit: weatherDisplayUnit)
                         Divider()
                         Button {
                             model.useCurrentLocation()
@@ -198,7 +207,7 @@ private struct WeatherContent: View {
                         }
                     }
                 } else {
-                    WeatherLoadedView(snapshot: snapshot, unit: weatherDisplayUnit, placeName: placeName)
+                    WeatherLoadedView(snapshot: snapshot, unit: weatherDisplayUnit)
                 }
             } else if model.place == .needsCity {
                 WeatherManualEntryView(cityDraft: $cityDraft, error: model.cityError) {
@@ -288,15 +297,9 @@ private struct WeatherFailedView: View {
 private struct WeatherLoadedView: View {
     let snapshot: WeatherSnapshot
     let unit: WeatherUnit
-    let placeName: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.one) {
-            if let placeName {
-                Text(placeName)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
             // One VoiceOver label for action plus readout: a bare action
             // label would shadow the temperature inside the button.
             let heroLabel = [
@@ -312,7 +315,7 @@ private struct WeatherLoadedView: View {
                 HStack(alignment: .top, spacing: Space.one) {
                     VStack(alignment: .leading, spacing: Space.quarter) {
                         if let tempC = snapshot.tempC {
-                            Text(unit.format(celsius: tempC))
+                            Text(degreeOnly(tempC, in: unit))
                                 .font(.largeTitle.weight(.semibold))
                         }
                         if let condition = snapshot.condition {
@@ -331,29 +334,64 @@ private struct WeatherLoadedView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(heroLabel)
             .help("Open in Weather")
-            if snapshot.highC != nil || snapshot.lowC != nil {
-                Text("H:\(snapshot.highC.map { unit.format(celsius: $0) } ?? "–")  L:\(snapshot.lowC.map { unit.format(celsius: $0) } ?? "–")")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("High \(snapshot.highC.map { unit.format(celsius: $0) } ?? "unknown"), low \(snapshot.lowC.map { unit.format(celsius: $0) } ?? "unknown")")
-            }
-            if snapshot.humidity != nil || snapshot.windKph != nil {
-                HStack(spacing: Space.one) {
-                    if let humidity = snapshot.humidity {
-                        WeatherStatItem(
-                            icon: "droplet",
-                            text: "\(humidity)%",
-                            label: "Humidity \(humidity) percent",
-                            alignment: .leading
-                        )
+            if snapshot.highC != nil || snapshot.lowC != nil || snapshot.humidity != nil || snapshot.windKph != nil {
+                HStack(alignment: .firstTextBaseline, spacing: Space.half) {
+                    if snapshot.highC != nil || snapshot.lowC != nil {
+                        HStack(spacing: Space.half) {
+                            HStack(spacing: Space.quarter) {
+                                Text("H:")
+                                    .foregroundStyle(.secondary)
+                                if let highC = snapshot.highC {
+                                    Text(degreeNumber(highC, in: unit))
+                                        .foregroundStyle(.primary)
+                                        .monospacedDigit()
+                                    Text("°")
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    Text("–")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            HStack(spacing: Space.quarter) {
+                                Text("L:")
+                                    .foregroundStyle(.secondary)
+                                if let lowC = snapshot.lowC {
+                                    Text(degreeNumber(lowC, in: unit))
+                                        .foregroundStyle(.primary)
+                                        .monospacedDigit()
+                                    Text("°")
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    Text("–")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .font(.subheadline)
+                        .lineLimit(1)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("High \(snapshot.highC.map { unit.format(celsius: $0) } ?? "unknown"), low \(snapshot.lowC.map { unit.format(celsius: $0) } ?? "unknown")")
                     }
-                    if let windKph = snapshot.windKph {
-                        WeatherStatItem(
-                            icon: "wind",
-                            text: displayWind(windKph),
-                            label: "Wind \(displayWind(windKph))",
-                            alignment: snapshot.humidity != nil ? .trailing : .leading
-                        )
+                    if snapshot.humidity != nil || snapshot.windKph != nil {
+                        if snapshot.highC != nil || snapshot.lowC != nil {
+                            Spacer()
+                        }
+                        HStack(spacing: Space.one) {
+                            if let humidity = snapshot.humidity {
+                                WeatherStatItem(
+                                    icon: "droplet",
+                                    text: "\(humidity)%",
+                                    label: "Humidity \(humidity) percent"
+                                )
+                            }
+                            if let windKph = snapshot.windKph {
+                                WeatherStatItem(
+                                    icon: "wind",
+                                    text: displayWind(windKph),
+                                    label: "Wind \(displayWind(windKph))"
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -374,7 +412,6 @@ private struct WeatherStatItem: View {
     let icon: String
     let text: String
     let label: String
-    let alignment: Alignment
 
     var body: some View {
         HStack(spacing: Space.half) {
@@ -387,7 +424,6 @@ private struct WeatherStatItem: View {
                 .monospacedDigit()
                 .lineLimit(1)
         }
-        .frame(maxWidth: .infinity, alignment: alignment)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(label)
     }
@@ -504,7 +540,7 @@ private struct WeatherUVSection: View {
             Divider()
         }
         if let uvIndex, hasCurve {
-            VStack(alignment: .leading, spacing: Space.quarter) {
+            VStack(alignment: .leading, spacing: Space.one) {
                 WeatherUVRow(uvIndex: uvIndex, peakText: peak?.display)
                 WeatherUVDayCurve(pastHours: pastHours, hours: hours, peak: peak, now: now)
             }
@@ -722,7 +758,7 @@ private struct WeatherHourStrip: View {
                         .foregroundStyle(.secondary)
                     Image(systemName: hour.condition.symbolName)
                         .font(.caption)
-                    Text(unit.format(celsius: hour.tempC))
+                    Text(degreeOnly(hour.tempC, in: unit))
                         .font(.caption.weight(.medium))
                         .monospacedDigit()
                 }
@@ -757,10 +793,10 @@ private struct WeatherDayRows: View {
                             .foregroundStyle(.tertiary)
                             .monospacedDigit()
                     }
-                    Text(unit.format(celsius: day.highC))
+                    Text(degreeOnly(day.highC, in: unit))
                         .font(.caption.weight(.medium))
                         .monospacedDigit()
-                    Text(unit.format(celsius: day.lowC))
+                    Text(degreeOnly(day.lowC, in: unit))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
@@ -786,6 +822,17 @@ private let milesPerKilometer = 0.621371
 private func displayWind(_ kph: Double) -> String {
     Locale.current.measurementSystem == .metric
         ? "\(Int(kph.rounded())) km/h" : "\(Int((kph * milesPerKilometer).rounded())) mph"
+}
+
+/// Visible temperatures read in whole degrees with no unit letter; VoiceOver
+/// keeps the full `WeatherUnit.format` strings. Kit's formatter is untouched.
+private func degreeNumber(_ celsius: Double, in unit: WeatherUnit) -> String {
+    let shown = unit == .celsius ? celsius : celsius * 9 / 5 + 32
+    return "\(Int(shown.rounded()))"
+}
+
+private func degreeOnly(_ celsius: Double, in unit: WeatherUnit) -> String {
+    "\(degreeNumber(celsius, in: unit))°"
 }
 
 /// Fahrenheit-only while the unit switch is parked (ccp-ywe9); revert to
