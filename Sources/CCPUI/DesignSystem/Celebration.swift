@@ -20,6 +20,7 @@ private struct CelebrationGlow: ViewModifier {
     let isActive: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.panelVisibility) private var visibility
     @State private var lit = false
 
     func body(content: Content) -> some View {
@@ -43,5 +44,5 @@ private struct CelebrationGlow: ViewModifier {
             }
     }
 
-    private var glowNow: Bool { isActive && !reduceMotion }
+    private var glowNow: Bool { isActive && !reduceMotion && (visibility?.isVisible ?? true) }
 }
