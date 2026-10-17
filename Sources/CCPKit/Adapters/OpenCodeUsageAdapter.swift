@@ -48,55 +48,11 @@ public struct OpenCodeUsageSnapshot: Sendable, Equatable {
 // MARK: - Error
 
 public enum OpenCodeUsageError: Sendable, Equatable, Error {
-    /// No `opencode-go` key in auth.json — the user hasn't connected Go.
+    /// No `opencode-go` credential in the database or the legacy file —
+    /// the user hasn't connected Go.
     case missingCredentials
     /// The endpoint was unreachable or answered something unusable.
     case unavailable
-}
-
-// MARK: - Credentials
-
-/// Where the Go API key comes from.
-///
-/// The key is OpenCode's own, saved by `/connect` in
-/// `~/.local/share/opencode/auth.json` — CCP reads it, never asks for it,
-/// and never writes it anywhere.
-public protocol OpenCodeCredentialStore: Sendable {
-    func loadAPIKey() throws -> String?
-}
-
-/// Reads the key OpenCode saved. Throws nothing on a missing or unparsable
-/// file — that is just "not connected", which the widget shows inline.
-public struct FileOpenCodeCredentialStore: OpenCodeCredentialStore {
-    private let authFile: URL
-
-    public init(
-        authFile: URL = FileManager.default.homeDirectoryForCurrentUser
-            .appending(path: ".local/share/opencode/auth.json")
-    ) {
-        self.authFile = authFile
-    }
-
-    public func loadAPIKey() throws -> String? {
-        guard let data = try? Data(contentsOf: authFile),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let entry = json["opencode-go"] as? [String: Any],
-              let key = entry["key"] as? String,
-              !key.isEmpty
-        else { return nil }
-        return key
-    }
-}
-
-/// In-memory stand-in for tests and previews. Never ships in the app.
-public final class InMemoryOpenCodeCredentialStore: OpenCodeCredentialStore, @unchecked Sendable {
-    private var key: String?
-
-    public init(key: String? = nil) {
-        self.key = key
-    }
-
-    public func loadAPIKey() throws -> String? { key }
 }
 
 // MARK: - Source
@@ -117,7 +73,7 @@ public final class LiveOpenCodeUsageSource: OpenCodeUsageSource {
     private let session: URLSession
 
     public init(
-        credentials: OpenCodeCredentialStore = FileOpenCodeCredentialStore(),
+        credentials: OpenCodeCredentialStore = FallbackOpenCodeCredentialStore(),
         session: URLSession = .shared
     ) {
         self.credentials = credentials
@@ -125,7 +81,16 @@ public final class LiveOpenCodeUsageSource: OpenCodeUsageSource {
     }
 
     public func fetch() async throws -> OpenCodeUsageSnapshot {
-        guard let key = try credentials.loadAPIKey() else {
+        // The database read spawns `sqlite3` — keep it off the caller
+        // (usually the main actor) so a panel open never waits on a fork.
+        // Detached severs cancellation, so re-check before touching the
+        // network: a close mid-query must not fire a request after shut.
+        let credentials = self.credentials
+        let key = try await Task.detached(priority: .utility) {
+            try credentials.loadAPIKey()
+        }.value
+        try Task.checkCancellation()
+        guard let key else {
             throw OpenCodeUsageError.missingCredentials
         }
         var request = URLRequest(

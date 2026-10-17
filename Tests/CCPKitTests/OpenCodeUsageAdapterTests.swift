@@ -205,6 +205,60 @@ final class OpenCodeUsageAdapterTests: XCTestCase {
         XCTAssertNil(try store.loadAPIKey())
     }
 
+    func testDatabaseStoreReturnsKeyFromCredentialRow() throws {
+        let store = DatabaseOpenCodeCredentialStore(
+            dbFile: URL(fileURLWithPath: "/nonexistent/opencode.db"),
+            readCredentialRow: { _ in #"{"type":"api","key":"fresh-key"}"# })
+
+        XCTAssertEqual(try store.loadAPIKey(), "fresh-key")
+    }
+
+    func testDatabaseStoreReturnsNilOnGarbageRow() throws {
+        for garbage in ["", "not json", #"{"type":"api"}"#, #"{"key":""}"#] {
+            let store = DatabaseOpenCodeCredentialStore(
+                dbFile: URL(fileURLWithPath: "/nonexistent/opencode.db"),
+                readCredentialRow: { _ in garbage })
+
+            XCTAssertNil(try store.loadAPIKey(), "row: \(garbage)")
+        }
+    }
+
+    func testFallbackStorePrefersDatabaseOverStaleFile() throws {
+        let staleFile = try makeAuthFile(containing: #"{"opencode-go":{"type":"api","key":"stale-key"}}"#)
+        defer { try? FileManager.default.removeItem(at: staleFile) }
+        let store = FallbackOpenCodeCredentialStore(
+            primary: DatabaseOpenCodeCredentialStore(readCredentialRow: { _ in #"{"type":"oauth","key":"live-key"}"# }),
+            fallback: FileOpenCodeCredentialStore(authFile: staleFile))
+
+        XCTAssertEqual(try store.loadAPIKey(), "live-key")
+    }
+
+    func testFallbackStoreFallsBackToFileWhenDatabaseEmpty() throws {
+        let file = try makeAuthFile(containing: #"{"opencode-go":{"type":"api","key":"file-key"}}"#)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let store = FallbackOpenCodeCredentialStore(
+            primary: DatabaseOpenCodeCredentialStore(readCredentialRow: { _ in nil }),
+            fallback: FileOpenCodeCredentialStore(authFile: file))
+
+        XCTAssertEqual(try store.loadAPIKey(), "file-key")
+    }
+
+    func testDatabasePathRespectsOpenCodeDBOverride() {
+        let custom = URL(fileURLWithPath: "/custom/opencode.db")
+        XCTAssertEqual(
+            DatabaseOpenCodeCredentialStore.resolveDatabaseURL(
+                environment: ["OPENCODE_DB": custom.path],
+                home: URL(fileURLWithPath: "/Users/someone")),
+            custom)
+    }
+
+    private func makeAuthFile(containing json: String) throws -> URL {
+        let file = FileManager.default.temporaryDirectory
+            .appending(path: "auth-\(UUID().uuidString).json")
+        try Data(json.utf8).write(to: file)
+        return file
+    }
+
     // MARK: - Live source HTTP mapping
 
     func testExpiredKeyReadsAsMissingCredentials() async {
