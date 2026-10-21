@@ -457,9 +457,6 @@ private struct WeatherUVRow: View {
             Text("UV \(Int(uvIndex.rounded()))")
                 .font(.system(size: captionPt, weight: .semibold))
                 .monospacedDigit()
-            Text(band.label)
-                .font(.system(size: captionPt))
-                .foregroundStyle(.secondary)
             Spacer(minLength: Space.one)
             if let peakText {
                 Text(peakText)
@@ -476,22 +473,24 @@ private struct WeatherUVRow: View {
     }
 }
 
-/// Today's UV peak over the combined past+future timeline: when any point
-/// carries a date, the max over points stamped today; otherwise the max over
-/// everything (dateless preview points). The hour comes from the stamp when
-/// present, else the synthesized offset from now, matching the curve ticks.
-/// A stamped peak at or before now (or a dateless peak sitting before the
-/// now boundary) reads "Peak was N at H"; an upcoming one "Peak N at H". The same-day filter is what rolls the callout over at
-/// midnight, with the 15-minute refetch supplying the new day's hours.
+/// Today's UV peak, scoped to the drawn 9AM–7PM window: the max over the
+/// window's points, ties reading the first high. A stamped peak at or before
+/// now (or a dateless peak sitting before the now boundary) reads "Peak was
+/// N"; an upcoming one "Peak N". The window's day filter is what rolls the
+/// callout over at midnight, with the 15-minute refetch supplying the new
+/// day's hours. The hour lives on the graph — a subtle marker at the peak's
+/// window index — so the row carries only the value.
 private struct UVPeak {
     let value: Double
-    let hourLabel: String
     let isPast: Bool
+    /// The peak's position in the drawn window, so the graph marks the same
+    /// high the row names even when the value repeats across hours.
+    let windowIndex: Int
 
     var display: String {
         isPast
-            ? "Peak was \(Int(value.rounded())) at \(hourLabel)"
-            : "Peak \(Int(value.rounded())) at \(hourLabel)"
+            ? "Peak was \(Int(value.rounded()))"
+            : "Peak \(Int(value.rounded()))"
     }
 }
 
@@ -500,38 +499,28 @@ private func uvSameDayPeak(
     hours: [WeatherHourPoint],
     now: Date
 ) -> UVPeak? {
-    let combined = pastHours + hours
-    guard !combined.isEmpty else { return nil }
-    let boundary = min(pastHours.count, combined.count)
-    var candidates = combined.enumerated().map { (index: $0.offset, point: $0.element) }
-    if combined.contains(where: { $0.date != nil }) {
-        let today = candidates.filter {
-            guard let date = $0.point.date else { return false }
-            return Calendar.current.isDate(date, inSameDayAs: now)
-        }
-        guard !today.isEmpty else { return nil }
-        candidates = today
-    }
-    guard let best = candidates.max(by: { a, b in
-        switch (a.point.uvIndex, b.point.uvIndex) {
+    let window = uvDayWindow(pastHours: pastHours, hours: hours, now: now)
+    guard !window.points.isEmpty else { return nil }
+    guard let best = window.points.enumerated().max(by: { a, b in
+        switch (a.element.uvIndex, b.element.uvIndex) {
         case (nil, nil): return false
         case (nil, _): return true
         case (_, nil): return false
         case (let x?, let y?): return x < y
         }
     }) else { return nil }
-    guard let uvValue = best.point.uvIndex else { return nil }
-    if let date = best.point.date {
+    guard let uvValue = best.element.uvIndex else { return nil }
+    if let date = best.element.date {
         return UVPeak(
             value: uvValue,
-            hourLabel: date.formatted(.dateTime.hour()),
-            isPast: date <= now
+            isPast: date <= now,
+            windowIndex: best.offset
         )
     }
     return UVPeak(
         value: uvValue,
-        hourLabel: now.addingTimeInterval(Double(best.index - boundary) * secondsPerHour).formatted(.dateTime.hour()),
-        isPast: best.index < boundary
+        isPast: best.offset < window.nowPosition,
+        windowIndex: best.offset
     )
 }
 
@@ -644,9 +633,9 @@ private enum WeatherUVStyle {
 
 /// UV through the day in the Mac Weather manner: today's 9AM–7PM points
 /// drawn as a curve over the hourly uvIndex values with a gradient
-/// fill, a now-marker dot, and fixed 9/12/3/7 ticks. The same-day peak
-/// callout lives in the UV row above the graph. The section hides the curve
-/// unless the window holds at least two UV values.
+/// fill, a now-marker dot, a subtle peak marker, and fixed 9/12/3/7 ticks.
+/// The same-day peak callout lives in the UV row above the graph. The section
+/// hides the curve unless the window holds at least two UV values.
 private struct WeatherUVDayCurve: View {
     @ScaledMetric(relativeTo: .caption2) private var caption2Pt: CGFloat = 12
     let pastHours: [WeatherHourPoint]
@@ -699,6 +688,13 @@ private struct WeatherUVDayCurve: View {
         return window.nowPosition < window.points.count
     }
 
+    /// The peak's seat on the drawn window, straight from the row's peak so
+    /// text and marker can never name different highs.
+    private var peakIndex: Int? {
+        guard let peak, peak.windowIndex < window.points.count else { return nil }
+        return peak.windowIndex
+    }
+
     /// Fixed x ticks at 9AM/12PM/3PM/7PM wherever the window holds them.
     /// Dateless fallback windows (previews) keep the old edges-plus-now
     /// ticks so they still label something.
@@ -741,6 +737,13 @@ private struct WeatherUVDayCurve: View {
                         )
                     uvDayPath(plot: plot, bottomY: proxy.size.height, closed: false)
                         .stroke(strokeGradient, style: StrokeStyle(lineWidth: WeatherUVStyle.lineWidth, lineCap: .round, lineJoin: .round))
+                    if let peakIndex, peakIndex < plot.count, !(showsNowDot && peakIndex == window.nowPosition) {
+                        Circle()
+                            .fill(Color.secondary)
+                            .frame(width: Space.one, height: Space.one)
+                            .position(plot[peakIndex])
+                            .accessibilityHidden(true)
+                    }
                     if showsNowDot, window.nowPosition < plot.count {
                         Circle()
                             .fill(Color.primary)
