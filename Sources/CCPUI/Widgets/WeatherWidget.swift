@@ -478,8 +478,8 @@ private struct WeatherUVRow: View {
 /// now (or a dateless peak sitting before the now boundary) reads "Peak was
 /// N"; an upcoming one "Peak N". The window's day filter is what rolls the
 /// callout over at midnight, with the 15-minute refetch supplying the new
-/// day's hours. The hour lives on the graph — a subtle marker at the peak's
-/// window index — so the row carries only the value.
+/// day's hours. The peak lives on the graph — a dot on the line with its
+/// value labeled above — so the row carries only the now.
 private struct UVPeak {
     let value: Double
     let isPast: Bool
@@ -524,8 +524,9 @@ private func uvSameDayPeak(
     )
 }
 
-/// UV as one section: the row carries the same-day peak on its trailing edge
-/// and the curve follows with no divider between them.
+/// UV as one section: the row names the now, the curve names the peak with
+/// a dot and label on the line — no divider between them. Without the curve
+/// the row keeps the peak text, so the high is never lost.
 private struct WeatherUVSection: View {
     let uvIndex: Double?
     let pastHours: [WeatherHourPoint]
@@ -544,7 +545,7 @@ private struct WeatherUVSection: View {
         }
         if let uvIndex, showsCurve {
             VStack(alignment: .leading, spacing: Space.two) {
-                WeatherUVRow(uvIndex: uvIndex, peakText: peak?.display)
+                WeatherUVRow(uvIndex: uvIndex, peakText: nil)
                 WeatherUVDayCurve(pastHours: pastHours, hours: hours, peak: peak, now: now)
             }
         } else if let uvIndex {
@@ -633,9 +634,9 @@ private enum WeatherUVStyle {
 
 /// UV through the day in the Mac Weather manner: today's 9AM–7PM points
 /// drawn as a curve over the hourly uvIndex values with a gradient
-/// fill, a now-marker dot, a subtle peak marker, and fixed 9/12/3/7 ticks.
-/// The same-day peak callout lives in the UV row above the graph. The section
-/// hides the curve unless the window holds at least two UV values.
+/// fill, a now-marker dot, a peak dot with its value labeled above it, and
+/// fixed 9/12/3/7 ticks. The section hides the curve unless the window holds
+/// at least two UV values; without the curve the row keeps the peak text.
 private struct WeatherUVDayCurve: View {
     @ScaledMetric(relativeTo: .caption2) private var caption2Pt: CGFloat = 12
     let pastHours: [WeatherHourPoint]
@@ -688,11 +689,25 @@ private struct WeatherUVDayCurve: View {
         return window.nowPosition < window.points.count
     }
 
-    /// The peak's seat on the drawn window, straight from the row's peak so
-    /// text and marker can never name different highs.
+    /// The peak's seat on the drawn window, straight from the section's peak
+    /// so label, marker, and VoiceOver can never name different highs.
     private var peakIndex: Int? {
         guard let peak, peak.windowIndex < window.points.count else { return nil }
         return peak.windowIndex
+    }
+
+    /// Headroom above the line for the peak label: the label's line plus air.
+    /// Zero when no peak draws, so a peakless graph keeps the full Sparkline
+    /// height for data.
+    private var peakBand: CGFloat {
+        peakIndex == nil ? 0 : caption2Pt + Space.two
+    }
+
+    /// The peak label centers on its dot like the tick labels, clamped by
+    /// half its estimated width so edge highs stay on the graph.
+    private func peakLabelX(_ x: CGFloat, width: CGFloat) -> CGFloat {
+        let halfLabel = (CGFloat(peak?.display.count ?? 0) * caption2Pt * CGFloat(WeatherUVStyle.hoverCharAdvance) + Space.one * 2) / 2
+        return min(max(x, halfLabel), max(width - halfLabel, halfLabel))
     }
 
     /// Fixed x ticks at 9AM/12PM/3PM/7PM wherever the window holds them.
@@ -721,7 +736,7 @@ private struct WeatherUVDayCurve: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Space.half) {
             GeometryReader { proxy in
-                let plot = uvDayPlot(values: values, ceiling: ceiling, size: proxy.size)
+                let plot = uvDayPlot(values: values, ceiling: ceiling, size: proxy.size, topInset: Space.half + peakBand)
                 let hoverIndex = hoverLocation.flatMap { uvHoverIndex(x: $0.x, width: proxy.size.width, count: window.points.count) }
                 ZStack {
                     // Sizes the stack to the graph so the hover tracker
@@ -737,6 +752,15 @@ private struct WeatherUVDayCurve: View {
                         )
                     uvDayPath(plot: plot, bottomY: proxy.size.height, closed: false)
                         .stroke(strokeGradient, style: StrokeStyle(lineWidth: WeatherUVStyle.lineWidth, lineCap: .round, lineJoin: .round))
+                    if let peak, let peakIndex, peakIndex < plot.count, hoverIndex != peakIndex {
+                        // The hover readout carries this hour's value while
+                        // the pointer is on it, so the label stands down
+                        // rather than printing under the chip.
+                        Text(peak.display)
+                            .font(.system(size: caption2Pt, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .position(x: peakLabelX(plot[peakIndex].x, width: proxy.size.width), y: Space.half + peakBand / 2)
+                    }
                     if let peakIndex, peakIndex < plot.count, !(showsNowDot && peakIndex == window.nowPosition) {
                         Circle()
                             .fill(Color.secondary)
@@ -764,7 +788,7 @@ private struct WeatherUVDayCurve: View {
                 }
                 .background(WeatherUVHoverViewRepresentable(location: $hoverLocation))
             }
-            .frame(height: Layout.sparklineHeight)
+            .frame(height: Layout.sparklineHeight + peakBand)
             GeometryReader { proxy in
                 // The y mapping is height-independent, so only x is read here.
                 let plot = uvDayPlot(values: values, ceiling: ceiling, size: proxy.size)
@@ -787,8 +811,8 @@ private struct WeatherUVDayCurve: View {
         .onPanelHidden { hoverLocation = nil }
     }
 
-    /// VoiceOver mirrors the row's peak wording, so the graph never
-    /// disagrees with the callout above it.
+    /// VoiceOver names the peak the label shows, so the marker's meaning
+    /// survives without sight.
     private var uvCurveLabel: String {
         guard let peak else { return "UV through the day" }
         return "UV through the day, \(peak.display)"
@@ -1025,13 +1049,14 @@ func uvDayWindow(pastHours: [WeatherHourPoint], hours: [WeatherHourPoint], now: 
 
 /// Plot points for the UV day curve: x is hour index across the width with
 /// the shared dot-radius inset so end markers never clip; y is UV over
-/// 0...ceiling inside Sparkline-style top and baseline insets, clamped to
-/// 0...1 so peaks and zeros never push the stroke off the frame.
-private func uvDayPlot(values: [Double], ceiling: Double, size: CGSize) -> [CGPoint] {
+/// 0...ceiling inside the top and baseline insets, clamped to
+/// 0...1 so peaks and zeros never push the stroke off the frame. The curve
+/// passes a taller top inset when the peak label sits above the line.
+private func uvDayPlot(values: [Double], ceiling: Double, size: CGSize, topInset: CGFloat = 0.5) -> [CGPoint] {
     guard values.count >= 2, ceiling > 0, size.width > 0, size.height > 0 else { return [] }
     let inset = WeatherUVStyle.xInset
     let span = max(size.width - (inset * 2), 0)
-    let topY: CGFloat = 0.5
+    let topY: CGFloat = topInset
     let baselineY = max(topY, size.height - 0.5)
     let plotHeight = max(1, baselineY - topY)
     return values.enumerated().map { index, value in
