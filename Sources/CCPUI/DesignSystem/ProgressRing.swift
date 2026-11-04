@@ -14,7 +14,8 @@ public struct ProgressRing: View {
     public let isBreathing: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var breath = false
+    @Environment(\.panelVisibility) private var visibility
+    @State private var loopPhase: LoopPhase = .rest
 
     private static let lineWidth: CGFloat = 6
 
@@ -36,18 +37,24 @@ public struct ProgressRing: View {
                 )
                 .rotationEffect(.degrees(-90))
         }
-        .scaleEffect(breathingNow ? (breath ? 1.05 : 1.0) : 1.0)
-        .animation(
-            breathingNow
-                ? .easeInOut(duration: 2.2).repeatForever(autoreverses: true)
-                : .easeOut(duration: 0.3),
-            value: breath
-        )
-        .task(id: breathingNow) {
-            breath = breathingNow
+        .scaleEffect(loopScale)
+        .task(id: shouldBreathe) {
+            if shouldBreathe {
+                await LoopPhase.runLoop(
+                    $loopPhase,
+                    entry: .easeOut(duration: 0.25),
+                    looping: .easeInOut(duration: 2.2).repeatForever(autoreverses: true)
+                )
+            } else {
+                LoopPhase.settleLoop($loopPhase, animation: .easeOut(duration: 0.3))
+            }
         }
         .accessibilityHidden(true)
     }
 
-    private var breathingNow: Bool { isBreathing && !reduceMotion }
+    private var loopScale: CGFloat { loopPhase == .high ? 1.05 : 1.0 }
+
+    private var shouldBreathe: Bool {
+        isBreathing && !reduceMotion && (visibility?.isVisible ?? true)
+    }
 }

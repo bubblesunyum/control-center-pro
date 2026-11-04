@@ -21,28 +21,46 @@ private struct CelebrationGlow: ViewModifier {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.panelVisibility) private var visibility
-    @State private var lit = false
+    @State private var loopPhase: LoopPhase = .rest
 
     func body(content: Content) -> some View {
         content
             .background(
                 RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
-                    .fill(Color.widgetAccent.opacity(glowNow ? (lit ? 0.30 : 0.12) : 0))
+                    .fill(Color.widgetAccent.opacity(fillOpacity))
             )
             .shadow(
-                color: .widgetAccent.opacity(glowNow ? (lit ? 0.5 : 0.18) : 0),
-                radius: glowNow ? 14 : 0
+                color: .widgetAccent.opacity(shadowOpacity),
+                radius: loopPhase == .rest ? 0 : 14
             )
-            .animation(
-                glowNow
-                    ? .easeInOut(duration: 1.1).repeatForever(autoreverses: true)
-                    : .easeOut(duration: 0.3),
-                value: lit
-            )
-            .task(id: glowNow) {
-                lit = glowNow
+            .task(id: shouldGlow) {
+                if shouldGlow {
+                    await LoopPhase.runLoop(
+                        $loopPhase,
+                        entry: .easeOut(duration: 0.25),
+                        looping: .easeInOut(duration: 1.1).repeatForever(autoreverses: true)
+                    )
+                } else {
+                    LoopPhase.settleLoop($loopPhase, animation: .easeOut(duration: 0.3))
+                }
             }
     }
 
-    private var glowNow: Bool { isActive && !reduceMotion && (visibility?.isVisible ?? true) }
+    private var shouldGlow: Bool { isActive && !reduceMotion && (visibility?.isVisible ?? true) }
+
+    private var fillOpacity: Double {
+        switch loopPhase {
+        case .rest: 0
+        case .low: 0.12
+        case .high: 0.30
+        }
+    }
+
+    private var shadowOpacity: Double {
+        switch loopPhase {
+        case .rest: 0
+        case .low: 0.18
+        case .high: 0.5
+        }
+    }
 }
