@@ -102,12 +102,29 @@ public enum Layout {
     /// — see `WidgetSize.width` — but this is the width of every other one,
     /// and of a lane that does not exist yet.
     public static let laneWidth: CGFloat = 300
-    /// How wide an embedded app screen is. psymail's mail screen is laid out
-    /// for this, and a card of controls' 300pt crowds its header and tab bar.
-    /// psymail's inner views pin this width themselves (its tab bar, feed,
-    /// search and compose all frame themselves to it), so widening the lane
-    /// here without a psymail-side change only adds dead glass.
+    /// How wide an embedded app screen is at its narrowest. Mail's screen
+    /// stretches past this to fill leftover display width (see
+    /// `screenLaneWidth`) — its inner views fill what they are given rather
+    /// than pinning this width — but a card of controls' 300pt crowds its
+    /// header and tab bar, so a screen lane never draws narrower than this.
     static let screenWidth: CGFloat = 432
+    /// How wide an embedded app screen may grow to fill leftover display
+    /// width. Past this the mail screen's lines run too long to read, so the
+    /// lane caps here and leaves the rest as desktop.
+    static let screenMaxWidth: CGFloat = 540
+
+    /// How wide a lane holding an app screen draws on a display this wide,
+    /// given the widths of the other lanes. Fills the leftover usable width
+    /// — the same accounting as `fits(widths:inWidth:)` — clamped to the
+    /// screen floor and cap, so a narrow display holds the floor and a wide
+    /// one never runs past readability. Computed in the view layer so the
+    /// model stays display-ignorant; the grown width still fits by
+    /// construction.
+    static func screenLaneWidth(beside otherLanes: [CGFloat], displayWidth: CGFloat) -> CGFloat {
+        let usable = displayWidth - panelInset * 2 - Space.oneHalf * 2
+        let grown = usable - otherLanes.reduce(0, +) - Space.oneHalf * CGFloat(otherLanes.count)
+        return min(max(grown, screenWidth), screenMaxWidth)
+    }
     /// How far the panel sits from the screen's top-right corner.
     public static let panelInset: CGFloat = Space.one
 

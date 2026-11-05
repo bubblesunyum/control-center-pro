@@ -409,7 +409,18 @@ private struct WidgetLane: View {
         // While a grip is dragged the lane draws the preview span instead of
         // the stored one; the commit lands on release. Cards keep their
         // stored slots — identity and removal are not preview state.
-        let shownWidth = slots.map(editor.previewing).width
+        // A lane holding an app screen also grows into leftover display
+        // width (clamped to the screen floor/cap), while card lanes stay at
+        // their grid width. The wider wins when both apply — a screen beside
+        // widened cards takes whichever is wider.
+        let previewed = slots.map(editor.previewing)
+        let shownWidth: CGFloat = {
+            let base = previewed.width
+            guard previewed.contains(where: { $0.fixedWidth != nil }) else { return base }
+            var others = arrangement.laneWidths
+            if others.indices.contains(lane) { others.remove(at: lane) }
+            return max(base, Layout.screenLaneWidth(beside: others, displayWidth: editor.displayWidth))
+        }()
         // Leading-aligned: a row narrower than the lane — two 1x cards in a
         // 3-wide grid — starts at the lane's edge rather than centering.
         VStack(alignment: .leading, spacing: Space.oneHalf) {
