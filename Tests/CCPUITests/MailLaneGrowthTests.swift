@@ -25,7 +25,7 @@ final class MailLaneGrowthTests: XCTestCase {
     }
 
     func testWideDisplayTakesTheLeftover() {
-        let display: CGFloat = 900
+        let display: CGFloat = 860
         let grown = Layout.screenLaneWidth(beside: [Layout.laneWidth], displayWidth: display)
         XCTAssertEqual(grown, usable(display) - Layout.laneWidth - Space.oneHalf)
         XCTAssertGreaterThan(grown, Layout.screenWidth)
