@@ -86,7 +86,7 @@ final class ProjectsWidgetTests: XCTestCase {
         XCTAssertFalse(model.isBusy(row))
         XCTAssertNil(model.busyMessage(for: row))
         let task = Task { await model.run(row) }
-        while !model.busyIDs.contains(row.id) { await Task.yield() }
+        await waitForBusy(model, row: row)
         XCTAssertTrue(model.isBusy(row))
         XCTAssertEqual(model.busyMessage(for: row), "Deploying…")
         gated.finish()
@@ -101,7 +101,7 @@ final class ProjectsWidgetTests: XCTestCase {
         await model.refresh()
         let row = model.sections[0].rows[0]
         let task = Task { await model.run(row) }
-        while !model.busyIDs.contains(row.id) { await Task.yield() }
+        await waitForBusy(model, row: row)
         XCTAssertTrue(model.isBusy(row))
         XCTAssertNil(model.busyMessage(for: row))
         gated.finish()
@@ -389,6 +389,22 @@ final class ProjectsWidgetTests: XCTestCase {
         let sections = await source.fetchSections()
         return sections.flatMap(\.rows).first(where: { $0.opensURL })!.id
     }
+
+    /// Bounded wait for the child Task's busy mark. Fails loud instead of
+    /// spinning the runner forever when the mark never lands.
+    private func waitForBusy(
+        _ model: ProjectsModel, row: ProjectRowViewModel,
+        file: StaticString = #filePath, line: UInt = #line
+    ) async {
+        let deadline = Date().addingTimeInterval(5)
+        while !model.busyIDs.contains(row.id) {
+            guard Date() < deadline else {
+                XCTFail("timed out waiting for busy on \(row.id)", file: file, line: line)
+                return
+            }
+            await Task.yield()
+        }
+    }
 }
 
 /// Stand-in for the not-yet-landed adapter: an in-memory section list whose
@@ -467,9 +483,17 @@ final class FakeProjectsSource: ProjectsSource, @unchecked Sendable {
 
 /// A source whose run blocks until the test releases it, so the test can
 /// observe the model's in-flight overlay mid-tap.
+///
+/// The release is a flag, not just a stored continuation: `model.run`
+/// marks busy on the MainActor, then hops off it to call `run` here, so
+/// the test can observe busy and call `finish()` before this `run` body
+/// ever executes. A bare stored-continuation release would no-op in that
+/// window and wedge `await task.value` forever.
 final class GatedProjectsSource: ProjectsSource, @unchecked Sendable {
     private let row: ProjectRowViewModel
+    private let lock = NSLock()
     private var continuation: CheckedContinuation<Void, Never>?
+    private var finished = false
 
     init(busyText: String?) {
         self.row = ProjectRowViewModel(id: "api/serve", label: "Serve", isRunning: false, busyText: busyText)
@@ -480,8 +504,16 @@ final class GatedProjectsSource: ProjectsSource, @unchecked Sendable {
     }
 
     func run(rowID: String) async -> ProjectActionOutcome {
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            continuation = cont
+        let gated = lock.withLock { finished }
+        if !gated {
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                let releaseNow = lock.withLock { () -> Bool in
+                    if finished { return true }
+                    continuation = cont
+                    return false
+                }
+                if releaseNow { cont.resume() }
+            }
         }
         return .started(nil)
     }
@@ -491,8 +523,13 @@ final class GatedProjectsSource: ProjectsSource, @unchecked Sendable {
     func open(_ url: URL) async {}
 
     func finish() {
-        continuation?.resume()
-        continuation = nil
+        let cont = lock.withLock { () -> CheckedContinuation<Void, Never>? in
+            finished = true
+            let cont = continuation
+            continuation = nil
+            return cont
+        }
+        cont?.resume()
     }
 }
 
