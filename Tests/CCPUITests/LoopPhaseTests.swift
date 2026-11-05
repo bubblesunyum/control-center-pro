@@ -74,4 +74,31 @@ final class LoopPhaseTests: XCTestCase {
 
         XCTAssertEqual(phase, .rest)
     }
+
+    /// ccp-955m: this path wedged the full suite as a bare `await`
+    /// of runLoop's 50ms entry-hop sleep — the sleep never resumed there
+    /// while passing alone. It runs in a child task under a clock
+    /// deadline, so a recurrence fails by timeout instead of wedging.
+    func testRunLoopEndsAtHighFromRest() async throws {
+        var phase = LoopPhase.rest
+        let runner = Task { @MainActor in
+            await LoopPhase.runLoop(
+                Binding(get: { phase }, set: { phase = $0 }),
+                entry: .linear, looping: .linear)
+        }
+        defer { runner.cancel() }
+        let deadline = ContinuousClock.now + .seconds(5)
+        while phase != .high {
+            guard ContinuousClock.now < deadline else {
+                return XCTFail("timed out waiting for runLoop to reach high")
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        await runner.value
+        XCTAssertEqual(phase, .high)
+
+        LoopPhase.settleLoop(
+            Binding(get: { phase }, set: { phase = $0 }), animation: .linear)
+        XCTAssertEqual(phase, .rest)
+    }
 }
