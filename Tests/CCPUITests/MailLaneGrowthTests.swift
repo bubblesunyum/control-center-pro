@@ -6,16 +6,16 @@ import XCTest
 
 /// The mail lane takes the width the display leaves it: the 432 floor on a
 /// narrow screen, the leftover beside its neighbours on a wide one, and never
-/// past 540 no matter how wide the glass gets.
+/// past 486 no matter how wide the glass gets.
 @MainActor
 final class MailLaneGrowthTests: XCTestCase {
     private func usable(_ display: CGFloat) -> CGFloat {
         display - Layout.panelInset * 2 - Space.oneHalf * 2
     }
 
-    func testScreenBoundsAre432To540() {
+    func testScreenBoundsAre432To486() {
         XCTAssertEqual(Layout.screenWidth, 432)
-        XCTAssertEqual(Layout.screenMaxWidth, 540)
+        XCTAssertEqual(Layout.screenMaxWidth, 486)
     }
 
     func testNarrowDisplayHoldsTheFloor() {
@@ -25,18 +25,18 @@ final class MailLaneGrowthTests: XCTestCase {
     }
 
     func testWideDisplayTakesTheLeftover() {
-        let display: CGFloat = 860
+        let display: CGFloat = 810
         let grown = Layout.screenLaneWidth(beside: [Layout.laneWidth], displayWidth: display)
         XCTAssertEqual(grown, usable(display) - Layout.laneWidth - Space.oneHalf)
         XCTAssertGreaterThan(grown, Layout.screenWidth)
     }
 
     func testVeryWideDisplayCapsAtTheCeiling() {
-        XCTAssertEqual(Layout.screenLaneWidth(beside: [Layout.laneWidth], displayWidth: 2000), 540)
+        XCTAssertEqual(Layout.screenLaneWidth(beside: [Layout.laneWidth], displayWidth: 2000), 486)
     }
 
     func testNoNeighboursOnAWideDisplayCapsToo() {
-        XCTAssertEqual(Layout.screenLaneWidth(beside: [], displayWidth: 1200), 540)
+        XCTAssertEqual(Layout.screenLaneWidth(beside: [], displayWidth: 1200), 486)
     }
 
     func testGrownLaneStillFitsBesideItsNeighbour() {

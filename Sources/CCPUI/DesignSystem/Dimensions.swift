@@ -111,7 +111,7 @@ public enum Layout {
     /// How wide an embedded app screen may grow to fill leftover display
     /// width. Past this the mail screen's lines run too long to read, so the
     /// lane caps here and leaves the rest as desktop.
-    static let screenMaxWidth: CGFloat = 540
+    static let screenMaxWidth: CGFloat = 486
 
     /// How wide a lane holding an app screen draws on a display this wide,
     /// given the widths of the other lanes. Fills the leftover usable width
