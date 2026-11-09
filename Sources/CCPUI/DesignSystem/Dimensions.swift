@@ -225,6 +225,10 @@ public extension Layout {
     /// The Settings window's content width — wide enough that a label and its
     /// shortcut field sit on one line without crowding.
     static let settingsWidth: CGFloat = 420
+    /// The minimum size of a website login popup sheet. A login page narrower
+    /// than this crowds its own form; the sheet grows with its content past it.
+    static let websitePopupMinWidth: CGFloat = 480
+    static let websitePopupMinHeight: CGFloat = 360
     /// A HUD toast: how wide its message may grow before truncating, how long
     /// it lingers, and how fast it fades in and out. One set so every
     /// widget's toast reads as one — the Tools and Projects copies drifted

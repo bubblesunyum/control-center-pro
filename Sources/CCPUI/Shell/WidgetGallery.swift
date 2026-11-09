@@ -109,9 +109,9 @@ private struct GalleryRow: View {
     }
 }
 
-/// The address a new website card opens. The store's own normalization is the
-/// single rule for what counts as an address — the sheet only refuses a blank
-/// or hostless one.
+/// The address a new website card opens. The store's own normalization plus the
+/// navigation policy's allow-list is the single rule for what counts as an
+/// address — the sheet only refuses what the policy would refuse to load.
 private struct WebsiteURLSheet: View {
     @Binding var draftURL: String
     let add: (String) -> Void
@@ -122,10 +122,7 @@ private struct WebsiteURLSheet: View {
     }
 
     private var isValid: Bool {
-        guard let url = URL(string: normalized),
-              let host = url.host, !host.isEmpty
-        else { return false }
-        return true
+        WebsitePolicy.isAllowed(URL(string: normalized))
     }
 
     var body: some View {
