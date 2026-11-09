@@ -39,6 +39,10 @@ public final class PanelEditor {
     /// (ShelfWindowController, QuickTogglesWidget); the first show still
     /// re-seats onto the real display.
     public var displayWidth: CGFloat = NSScreen.main?.visibleFrame.width ?? 1440
+    /// The seat's visible height, same source and seeding. What the website
+    /// bar reads to flip above a card near the display's bottom — the view
+    /// layer must not go hunting screens itself.
+    public var displayHeight: CGFloat = NSScreen.main?.visibleFrame.height ?? 900
 
     /// Where every slot currently sits, in panel coordinates. Reported by the
     /// lanes themselves as they lay out, because their real frames are the only
@@ -210,13 +214,13 @@ public final class PanelEditor {
         var customStart: CGSize?
     }
 
-    /// The floor and ceiling for a free rect. The width floor is one lane
-    /// unit: narrower would still draw the lane's own width, so it could
-    /// never commit what it previewed. Height has no grid floor, only a
-    /// hittable one. The ceiling keeps a typo from parking the panel off
-    /// screen; width past the display still refuses at commit — this only
-    /// stops the live draw from going somewhere absurd.
-    static let customMinSize = CGSize(width: Layout.laneWidth, height: 160)
+    /// The floor and ceiling for a free rect. There is no width policy: a web
+    /// page has no base size, so the only width floor is the grip's own touch
+    /// target — narrower would leave nothing to grab the card back by.
+    /// Height keeps a hittable floor. The ceiling keeps a typo from parking
+    /// the panel off screen; width past the display still refuses at commit —
+    /// this only stops the live draw from going somewhere absurd.
+    static let customMinSize = CGSize(width: Layout.resizeTouchTarget, height: 160)
     static let customMaxSize = CGSize(width: 2400, height: 1600)
 
     /// One VoiceOver step on a free rect: visible, but fine enough to land

@@ -115,10 +115,12 @@ private struct ToolsContent: View {
     @State private var isCapturing = false
     @State private var isOpeningRocket = false
 
-    private static let columns = Array(
-        repeating: GridItem(.fixed(Layout.toolCellWidth), spacing: Space.one),
-        count: 4
-    )
+    private static let columns = [
+        // Adaptive, not four-fixed: a lane exactly four cells wide still reads
+        // four across, but a widened Tools card flows every item into one row
+        // instead of wrapping at an arbitrary four.
+        GridItem(.adaptive(minimum: Layout.toolCellWidth), spacing: Space.one),
+    ]
 
     var body: some View {
         WidgetCard(QuickTogglesWidget.descriptor) {

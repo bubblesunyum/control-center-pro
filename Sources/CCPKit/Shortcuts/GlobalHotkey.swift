@@ -18,6 +18,10 @@ import VorssaintEngines
 public final class GlobalHotkey {
     /// Fired on the main actor when the combination is pressed.
     @ObservationIgnored public var onPress: (() -> Void)?
+    /// Fired on the main actor when the combination is released — when any
+    /// part of it lets go. Absent before hold-to-peek; a tap-only consumer
+    /// leaves this nil and never hears it.
+    @ObservationIgnored public var onRelease: (() -> Void)?
 
     /// True when the system refused the combination — almost always because
     /// something else already holds it.
@@ -84,10 +88,16 @@ public final class GlobalHotkey {
 
     private func installHandlerIfNeeded() {
         guard handler == nil else { return }
-        var spec = EventTypeSpec(
-            eventClass: OSType(kEventClassKeyboard),
-            eventKind: UInt32(kEventHotKeyPressed)
-        )
+        var specs = [
+            EventTypeSpec(
+                eventClass: OSType(kEventClassKeyboard),
+                eventKind: UInt32(kEventHotKeyPressed)
+            ),
+            EventTypeSpec(
+                eventClass: OSType(kEventClassKeyboard),
+                eventKind: UInt32(kEventHotKeyReleased)
+            ),
+        ]
         InstallEventHandler(GetEventDispatcherTarget(), { _, event, context -> OSStatus in
             guard let context, let event else { return OSStatus(eventNotHandledErr) }
             var pressed = EventHotKeyID()
@@ -106,8 +116,15 @@ public final class GlobalHotkey {
                   pressed.id == GlobalHotkey.identifier
             else { return OSStatus(eventNotHandledErr) }
             let hotkey = Unmanaged<GlobalHotkey>.fromOpaque(context).takeUnretainedValue()
-            Task { @MainActor in hotkey.onPress?() }
+            let kind = GetEventKind(event)
+            Task { @MainActor in
+                if kind == UInt32(kEventHotKeyReleased) {
+                    hotkey.onRelease?()
+                } else {
+                    hotkey.onPress?()
+                }
+            }
             return noErr
-        }, 1, &spec, Unmanaged.passUnretained(self).toOpaque(), &handler)
+        }, specs.count, &specs, Unmanaged.passUnretained(self).toOpaque(), &handler)
     }
 }

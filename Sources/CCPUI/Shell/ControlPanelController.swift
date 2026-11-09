@@ -325,6 +325,7 @@ public final class ControlPanelController {
         // here rather than working it out from a screen it has no business
         // knowing about.
         editor.displayWidth = visible.width
+        editor.displayHeight = visible.height
 
         // Full height below the menu bar. The visible frame stops at the
         // Dock, but a click down there is still a dismiss click and must be

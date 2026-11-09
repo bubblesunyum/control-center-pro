@@ -76,6 +76,17 @@ public struct ControlPanel: View {
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
         }
+        // The desktop frost behind everything. Each card already blurs for
+        // itself; this is the whole-window backdrop blur underneath the dim.
+        // A real behind-window blur — SwiftUI materials only blur what is
+        // already inside the window and read as a tint over a transparent
+        // panel. AppKit exposes no radius, so this is the system frost rather
+        // than a measured 3px; it sits behind the dim above, never in front.
+        .background {
+            VisualEffectViewRepresentable(material: .hudWindow)
+                .ignoresSafeArea()
+                .accessibilityHidden(true)
+        }
         .environment(\.isPanelEditing, editor.isEditing)
         .environment(\.panelEditor, editor)
         .environment(\.panelArrangement, arrangement)
@@ -468,7 +479,9 @@ private struct WidgetLane: View {
     /// width, as it always has; cells sharing a row split the grid by their
     /// spans, gutters carried by the widths so a 1x card is one lane unit
     /// wherever it sits. Drawn spans, not stored ones — while a grip previews
-    /// a new width the row already shows what the commit would pack.
+    /// a new width the row already shows what the commit would pack. A free
+    /// card draws its own rect, committed or in flight — falling back to the
+    /// lane width would snap a narrow drag back to the grid on release.
     private func cellWidth(_ cell: LaneCell, laneWidth: CGFloat) -> CGFloat {
         switch cell {
         case .slot(let slot):
@@ -476,6 +489,7 @@ private struct WidgetLane: View {
             // packing (and the lane around it) still counts the span, so only
             // this frame follows the finger per pixel.
             if let drawn = editor.drawSize(for: slot.id) { return drawn.width }
+            if let custom = editor.previewing(slot).customSize { return CGFloat(custom.width) }
             return editor.previewing(slot).gridColumns.map { Layout.gridWidth(units: $0) } ?? laneWidth
         case .gap(let columns):
             return columns.map { Layout.gridWidth(units: $0) } ?? laneWidth
@@ -551,12 +565,17 @@ struct LaneSlotCard: View {
 extension [LaneSlot] {
     /// How wide a lane holding these has to be: the grid its countable spans
     /// make, or the widest uncountable thing in it — whichever is wider. A
-    /// lane of cards is the default width; a widened card widens its grid and
+    /// lane of cards is the default width; a widened card widens its grid, a
+    /// free card sizes its lane to its own rect (no grid floor, so a narrow
+    /// web view draws narrow rather than snapping back to a lane unit), and
     /// an app screen widens its lane to fit rather than cropping, and the
     /// panel grows by that much. An empty lane is a lane of cards until
     /// something says otherwise.
     var width: CGFloat {
-        Swift.max(Layout.gridWidth(units: gridUnits), compactMap(\.fixedWidth).max() ?? 0)
+        let grid = countedGridUnits.map { Layout.gridWidth(units: $0) } ?? 0
+        let fixed = compactMap(\.fixedWidth).max() ?? 0
+        let widest = Swift.max(grid, fixed)
+        return widest > 0 ? widest : Layout.gridWidth(units: 1)
     }
 }
 

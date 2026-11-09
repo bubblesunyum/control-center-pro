@@ -40,10 +40,19 @@ extension LaneSlot {
 }
 
 extension [LaneSlot] {
+    /// The lane's grid width in columns, counted off what is drawn — or nil
+    /// when nothing in the lane is countable (all free-sized or app screens).
+    /// Nil is not zero: an empty lane is still one column until something
+    /// says otherwise, while a lane of only free cards sizes to the widest
+    /// rect with no grid floor at all.
+    var countedGridUnits: Int? {
+        compactMap(\.gridColumns).max()
+    }
+
     /// The lane's grid width in columns: the widest countable span. An empty
     /// lane is one column until something says otherwise.
     var gridUnits: Int {
-        compactMap(\.gridColumns).max() ?? 1
+        countedGridUnits ?? 1
     }
 }
 

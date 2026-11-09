@@ -80,6 +80,13 @@ private final class WebsiteViewPool {
         views[id.rawValue]
     }
 
+    /// The live page's URL — where the user actually is after in-page
+    /// navigation — as opposed to the entry URL the pool last loaded. Back,
+    /// forward, and Replace-with-current all read this.
+    func currentURL(for id: WidgetID) -> URL? {
+        views[id.rawValue]?.url
+    }
+
     /// The last entry URL this pool loaded for the site — entry changes only,
     /// never in-page navigation, which the pool must not undo.
     func loadedURLString(for id: WidgetID) -> String? {
@@ -88,6 +95,14 @@ private final class WebsiteViewPool {
 
     func load(_ id: WidgetID, url: URL) {
         view(for: id).load(URLRequest(url: url))
+        loadedEntryURLs[id.rawValue] = url.absoluteString
+    }
+
+    /// Adopt a URL the view already shows as the entry's loaded address —
+    /// what Replace-with-current uses to pin the live page without reloading
+    /// it. A plain `load` of the identical URL would white-flash, reset the
+    /// scroll, and restart media for no navigation at all.
+    func noteLoaded(_ id: WidgetID, url: URL) {
         loadedEntryURLs[id.rawValue] = url.absoluteString
     }
 
@@ -277,8 +292,16 @@ private struct WebsiteWebView: NSViewRepresentable {
             // It derives from the opener's, so the shared pool and persistent
             // store (and the login session in them) carry over, and the opener
             // link survives because WebKit loads the request into the view
-            // returned here.
-            let popup = WKWebView(frame: .zero, configuration: configuration)
+            // returned here. The preferences are re-pinned — a derived config
+            // must never silently lose the opener's window-open grant, which
+            // is exactly what a site reports as "blocking popups" — and the
+            // view gets a real size: some login flows measure their window on
+            // open and bail on a zero rect.
+            configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+            let popup = WKWebView(
+                frame: CGRect(origin: .zero, size: Layout.websitePopupInitialSize),
+                configuration: configuration
+            )
             WebsiteConfiguration.applyDesktopAgent(to: popup)
             popup.navigationDelegate = self
             popup.uiDelegate = self
@@ -321,6 +344,7 @@ private enum WebsiteReloadStyle {
 private struct WebsiteContent: View {
     @State private var store = WebsiteStore.shared
     @Environment(\.panelArrangement) private var arrangement
+    @Environment(\.panelEditor) private var editor
     @Environment(\.currentWidgetID) private var currentWidgetID
 
     @State private var snapshot: NSImage?
@@ -333,7 +357,14 @@ private struct WebsiteContent: View {
     /// A URL-change load (not a reload) waiting for its finish to stamp the hour.
     @State private var awaitingFreshLoad = false
     @State private var reloadTask: Task<Void, Never>?
-    @State private var isHovering = false
+    /// The pointer in the corner zone straddling the card's outer bottom-left
+    /// edge, or on the bar itself. The whole-card hover is gone on purpose:
+    /// WebKit owns the page, so the bar must not answer the entire card.
+    @State private var isHoveringPill = false
+    /// A pending bar hide, cancelled when the pointer re-enters. Without the
+    /// grace the zone-to-bar handoff (adjacent views, unordered events)
+    /// flickers the bar on every crossing.
+    @State private var hideTask: Task<Void, Never>?
     @FocusState private var focusedControl: PillControl?
 
     /// One focus identity per pill control: the pill reveals while any of
@@ -368,12 +399,25 @@ private struct WebsiteContent: View {
         slot?.span.height ?? 1
     }
 
-    /// This card's free rect, when the user dragged it off the grid. Width
-    /// comes from the lane itself, which sizes to the rect — only height is
-    /// read here.
-    private var customHeight: CGFloat? {
-        guard let custom = slot?.customSize else { return nil }
-        return CGFloat(custom.height)
+    /// The card's drawn height: the live drag size while a grip is held, the
+    /// stored rect otherwise. Reading the preview (not just the placement) is
+    /// what makes a vertical drag track the finger instead of jumping on
+    /// release — the outer lane frame alone cannot stretch this inner frame.
+    /// The previewed slot carries both, so there is one height rule with the
+    /// shell's rather than a second copy of it here.
+    private var drawnHeight: CGFloat {
+        guard let id = currentWidgetID else { return WidgetSize.tall.height }
+        if let drawn = editor?.drawSize(for: id)?.height { return drawn }
+        if let slot, let editor { return editor.previewing(slot).height }
+        return CGFloat(heightSpan) * WidgetSize.tall.height
+    }
+
+    /// The card's drawn width, for placing the bar: a bar wider than its card
+    /// must hang toward the safe side (see `pillPlacement`).
+    private var drawnWidth: CGFloat {
+        guard let id = currentWidgetID else { return Layout.laneWidth }
+        if let drawn = editor?.drawSize(for: id)?.width { return drawn }
+        return slot?.width ?? Layout.laneWidth
     }
 
     /// The slot this card draws, looked up once: span and free rect derive
@@ -444,10 +488,13 @@ private struct WebsiteContent: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .frame(height: customHeight ?? CGFloat(heightSpan) * WidgetSize.tall.height)
-            .overlay(alignment: .bottomTrailing) { hoverPill }
-            .onHover { hovering in isHovering = hovering }
+            .frame(height: drawnHeight)
         }
+        // The bar floats outside the glass, so it sits above the neighbour
+        // below while visible rather than sliding under it.
+        .zIndex(pillVisible ? 10 : 0)
+        .overlay(alignment: .bottomLeading) { hoverPill }
+        .overlay(alignment: pillPlacement.alignment) { pillBar }
         .opacity(isReloading ? WebsiteReloadStyle.dimmedOpacity : 1)
         .sheet(isPresented: $showURLSheet) {
             urlSheet
@@ -466,6 +513,8 @@ private struct WebsiteContent: View {
         }
         .onDisappear {
             reloadTask?.cancel()
+            hideTask?.cancel()
+            hideTask = nil
         }
         .onChange(of: finishedCount) { _, _ in
             finishReload()
@@ -484,52 +533,188 @@ private struct WebsiteContent: View {
         }
     }
 
-    /// WebKit owns right-click inside the page, so the card's controls live
-    /// in a floating pill that reveals on hover or keyboard focus.
+    /// WebKit owns right-click inside the page, so the card's controls live in
+    /// a bar pinned to the card's outer bottom-left edge — outside the glass,
+    /// straddling the edge, never covering the page. It answers only the
+    /// corner zone (an invisible strip at the card's bottom-left edge) and
+    /// the keyboard: hovering the rest of the page leaves it hidden. The zone
+    /// stays at the bottom-left in every placement, so the learned hover
+    /// never goes dead; a short hide grace covers the handoff from zone to
+    /// bar. When the bar would hang off screen it flips to another side.
     @ViewBuilder
     private var hoverPill: some View {
         if currentWidgetID != nil {
-            HStack(spacing: Space.half) {
-                pillButton(systemImage: "chevron.backward", label: "Go back", disabled: !(pooledView?.canGoBack ?? false), focus: .back) { pooledView?.goBack() }
-                pillButton(systemImage: "chevron.forward", label: "Go forward", disabled: !(pooledView?.canGoForward ?? false), focus: .forward) { pooledView?.goForward() }
-                pillButton(systemImage: "arrow.clockwise", label: "Reload website", focus: .reload) { runReloadSequence() }
-                Menu {
-                    Button("Change URL…") {
-                        draftURL = entry?.url ?? ""
-                        showURLSheet = true
-                    }
-                    .accessibilityLabel("Change website URL")
-                    Button("Reset to Original URL") { resetToOriginal() }
-                        .disabled(isOriginal)
-                        .accessibilityLabel("Reset to original URL")
-                    Button(importLabel) { runZenImport() }
-                        .disabled(isImporting)
-                        .accessibilityLabel("Import cookies from Zen browser")
-                    Divider()
-                    Button("Remove", role: .destructive) { removeSite() }
-                        .accessibilityLabel("Remove website")
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.caption.weight(.semibold))
-                        .frame(width: Layout.headerAccessorySize, height: Layout.headerAccessorySize)
-                        .contentShape(Rectangle())
+            cornerZone
+        }
+    }
+
+    /// The invisible proximity zone: a strip overlapping the card's
+    /// bottom-left edge. Cheap by construction — no mouse-location math, and
+    /// the bar stays reachable because it touches the zone. It does swallow
+    /// page clicks in its strip; 120x28 at the card's edge is the price of a
+    /// bar that doesn't cover the page.
+    private var cornerZone: some View {
+        Color.clear
+            .frame(width: Self.cornerZoneWidth, height: Self.cornerZoneHeight)
+            .contentShape(Rectangle())
+            .accessibilityHidden(true)
+            .offset(x: Space.one)
+            .onHover(perform: noteHover)
+    }
+
+    /// The bar itself, hung off the card per `pillPlacement` — outside the
+    /// glass, either below the edge it is triggered from or above the card
+    /// when below would leave the display.
+    @ViewBuilder
+    private var pillBar: some View {
+        if currentWidgetID != nil {
+            pillContent
+                .offset(x: pillPlacement.xOffset, y: pillPlacement.yOffset)
+                .onHover(perform: noteHover)
+        }
+    }
+
+    /// A hover handoff with a grace: leaving the zone hides the bar a beat
+    /// later rather than at once, so the pointer crossing from zone to bar
+    /// (adjacent views, unordered events) never flickers it. Entering cancels
+    /// a pending hide.
+    private func noteHover(_ hovering: Bool) {
+        if hovering {
+            hideTask?.cancel()
+            hideTask = nil
+            isHoveringPill = true
+        } else {
+            hideTask?.cancel()
+            hideTask = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(Self.hoverGraceSeconds))
+                guard !Task.isCancelled else { return }
+                isHoveringPill = false
+            }
+        }
+    }
+
+    /// The bar's size as drawn: buttons plus capsule padding, estimated for
+    /// placement — the bar never reports its own size (it is hidden until
+    /// the pointer is already in the zone).
+    private static let pillEstimate = CGSize(width: 200, height: 44)
+    /// The corner zone: wide enough to land, short enough to leave the page
+    /// clickable.
+    private static let cornerZoneWidth: CGFloat = 120
+    private static let cornerZoneHeight: CGFloat = 28
+    /// How long the bar lingers after the pointer leaves its zone and bar.
+    private static let hoverGraceSeconds: Double = 0.6
+    /// How close to the display's bottom the card sits before the bar flips
+    /// above it instead of hanging below.
+    private static let pillFlipMargin: CGFloat = 60
+
+    /// One of the bar's four hangs: below or above, off the leading or
+    /// trailing edge. Default bottom-leading. A bar wider than its card flips
+    /// to the trailing edge — hanging left is safe except at the display's
+    /// left edge, while hanging right past a right-seated panel is off screen
+    /// by construction (the panel sits 8pt from it). A bar below a card near
+    /// the display's bottom flips above. The bar is narrower than any grid
+    /// card, so the common case never flips at all.
+    private enum PillPlacement {
+        case belowLeading, belowTrailing, aboveLeading, aboveTrailing
+
+        var alignment: Alignment {
+            switch self {
+            case .belowLeading: return .bottomLeading
+            case .belowTrailing: return .bottomTrailing
+            case .aboveLeading: return .topLeading
+            case .aboveTrailing: return .topTrailing
+            }
+        }
+
+        var xOffset: CGFloat {
+            switch self {
+            case .belowLeading, .aboveLeading: return Space.one
+            case .belowTrailing, .aboveTrailing: return -Space.one
+            }
+        }
+
+        var yOffset: CGFloat {
+            switch self {
+            case .belowLeading, .belowTrailing: return WebsiteContent.pillEstimate.height
+            case .aboveLeading, .aboveTrailing: return -WebsiteContent.pillEstimate.height
+            }
+        }
+    }
+
+    private var pillPlacement: PillPlacement {
+        let trailing = drawnWidth < Self.pillEstimate.width + Space.two
+        if pillShowsAbove {
+            return trailing ? .aboveTrailing : .aboveLeading
+        }
+        return trailing ? .belowTrailing : .belowLeading
+    }
+
+    private var pillShowsAbove: Bool {
+        guard let maxY = cardPanelMaxY else { return false }
+        // Panel space runs down from the window's top, and the window's top
+        // is the visible area's top — so the card's distance from the
+        // display's bottom is the visible height minus its panel depth. The
+        // height rides on the editor (set by the controller per seat) rather
+        // than a screen lookup here, so the view stays pure.
+        let screenH = editor?.displayHeight ?? 900
+        return screenH - maxY < Self.pillFlipMargin
+    }
+
+    /// The card's depth in panel space, for the above/below choice. Nil
+    /// before the first layout report — below until known. Zones don't
+    /// invalidate (deliberately untracked), but the side is read when hover
+    /// or layout state re-evaluates the body — exactly when it matters — so
+    /// a settled layout always places correctly.
+    private var cardPanelMaxY: CGFloat? {
+        guard let id = currentWidgetID else { return nil }
+        return editor?.zones.first(where: { $0.id == id })?.frame.maxY
+    }
+
+    /// The bar itself: back, forward, reload, and the card's menu.
+    @ViewBuilder
+    private var pillContent: some View {
+        HStack(spacing: Space.half) {
+            pillButton(systemImage: "chevron.backward", label: "Go back", disabled: !(pooledView?.canGoBack ?? false), focus: .back) { pooledView?.goBack() }
+            pillButton(systemImage: "chevron.forward", label: "Go forward", disabled: !(pooledView?.canGoForward ?? false), focus: .forward) { pooledView?.goForward() }
+            pillButton(systemImage: "arrow.clockwise", label: "Reload website", focus: .reload) { runReloadSequence() }
+            Menu {
+                Button("Change URL…") {
+                    draftURL = entry?.url ?? ""
+                    showURLSheet = true
                 }
-                .buttonStyle(.plain)
-                .hoverChip()
-                .accessibilityLabel("Website options")
-                .focused($focusedControl, equals: .menu)
+                .accessibilityLabel("Change website URL")
+                Button("Replace with Current URL") { replaceWithCurrentURL() }
+                    .disabled(!canReplaceWithCurrent)
+                    .accessibilityLabel("Replace with current URL")
+                Button("Reset to Original URL") { resetToOriginal() }
+                    .disabled(isOriginal)
+                    .accessibilityLabel("Reset to original URL")
+                Button(importLabel) { runZenImport() }
+                    .disabled(isImporting)
+                    .accessibilityLabel("Import cookies from Zen browser")
+                Divider()
+                Button("Remove", role: .destructive) { removeSite() }
+                    .accessibilityLabel("Remove website")
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.caption.weight(.semibold))
+                    .frame(width: Layout.headerAccessorySize, height: Layout.headerAccessorySize)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .padding(.horizontal, Space.half)
-            .padding(.vertical, Space.half)
-            .background { GlassFill(Capsule(), cornerRadius: Radius.card) }
-            .clipShape(Capsule())
-            .overlay { Capsule().strokeBorder(Color.cardStroke, lineWidth: Stroke.hairline) }
-            .padding([.trailing, .bottom], Space.oneHalf)
-            .opacity(pillVisible ? 1 : 0)
-            .allowsHitTesting(pillVisible)
-            .animation(.easeInOut(duration: Layout.hudFadeInDuration), value: pillVisible)
+            .hoverChip()
+            .accessibilityLabel("Website options")
+            .focused($focusedControl, equals: .menu)
         }
+        .buttonStyle(.plain)
+        .padding(.horizontal, Space.half)
+        .padding(.vertical, Space.half)
+        .background { GlassFill(Capsule(), cornerRadius: Radius.card) }
+        .clipShape(Capsule())
+        .overlay { Capsule().strokeBorder(Color.cardStroke, lineWidth: Stroke.hairline) }
+        .opacity(pillVisible ? 1 : 0)
+        .allowsHitTesting(pillVisible)
+        .animation(.easeInOut(duration: Layout.hudFadeInDuration), value: pillVisible)
     }
 
     /// One pill control: the header icon-button size with the shared hover chip.
@@ -547,10 +732,47 @@ private struct WebsiteContent: View {
         .focused($focusedControl, equals: focus)
     }
 
-    /// The pill answers hover and keyboard focus alike: opacity-0 views stay
-    /// in the accessibility tree, so a sighted keyboard user needs the focus
-    /// path to see what VoiceOver already sees.
-    private var pillVisible: Bool { isHovering || focusedControl != nil }
+    /// The bar answers the corner zone and keyboard focus alike: opacity-0
+    /// views stay in the accessibility tree, so a sighted keyboard user needs
+    /// the focus path to see what VoiceOver already sees.
+    private var pillVisible: Bool { isHoveringPill || focusedControl != nil }
+
+    /// The live page's URL — where the user is after following links — for
+    /// pinning the card to it. Nil before the first commit.
+    private var liveURL: URL? {
+        guard let id = currentWidgetID else { return nil }
+        return WebsiteViewPool.shared.currentURL(for: id)
+    }
+
+    /// Pinning is offered only when the page moved somewhere the card doesn't
+    /// already name. Compared canonically: WebKit reports `https://x/` for an
+    /// entry typed `https://x`, and a fragment scroll is not a new page — both
+    /// must not offer a pin that goes nowhere.
+    private var canReplaceWithCurrent: Bool {
+        guard let live = liveURL, let stored = entry?.url else { return false }
+        return Self.canonicalForCompare(live.absoluteString) != Self.canonicalForCompare(stored)
+    }
+
+    private static func canonicalForCompare(_ raw: String) -> String {
+        var text = raw
+        if let hash = text.firstIndex(of: "#") { text = String(text[..<hash]) }
+        while text.hasSuffix("/") && text.count > 1 { text.removeLast() }
+        return text
+    }
+
+    /// Point the card at the live page, keeping its original as the reset
+    /// target — the same shape as Change URL, with the address filled in from
+    /// where the user already is rather than typed. No navigation: the view
+    /// already shows this page, so only the pool's loaded address and the
+    /// store move — reloading would flash and restart the page for nothing.
+    private func replaceWithCurrentURL() {
+        guard let id = currentWidgetID, let live = liveURL else { return }
+        takeOverFromReload()
+        WebsiteViewPool.shared.noteLoaded(id, url: live)
+        store.updateURL(id, to: live.absoluteString)
+        store.markReloaded(id, at: Date())
+        awaitingFreshLoad = false
+    }
 
     private func popupSheet(popup: LoginPopup) -> some View {
         VStack(alignment: .leading, spacing: Space.one) {
@@ -721,7 +943,6 @@ private struct WebsiteContent: View {
         snapshot = nil
         reloadOpacity = 1
         isReloading = false
-        loadFailed = false
         loadFailed = false
     }
 }

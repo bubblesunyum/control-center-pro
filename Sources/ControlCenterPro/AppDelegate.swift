@@ -21,6 +21,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var settings: SettingsStore?
     private var craft: CraftConnectionModel?
     private var hotkey: GlobalHotkey?
+    /// When the hotkey press landed and whether the panel was up then. The
+    /// release reads both to tell a quick toggle from a hold-to-peek. Nil
+    /// while no press is in flight — a release without one is ignored.
+    private var hotkeyPressDate: Date?
+    private var hotkeyWasVisibleAtPress = false
     private var settingsWindow: SettingsWindowController?
     private var dropOverlay: DropOverlayController?
     private var notesBackupTimer: Timer?
@@ -49,8 +54,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
         let hotkey = GlobalHotkey()
         self.hotkey = hotkey
+        // Hold-to-peek: a press shows at once so a hold reads as a peek, and
+        // the release decides. Quick tap toggles and stays; a hold past the
+        // threshold hides on release. Releasing either key ends the hold, so a
+        // peek that ends with one key down re-shows when that key re-presses —
+        // that press lands while hidden, which is just another show.
         hotkey.onPress = { [weak self] in
-            panel.toggle(from: self?.statusItem?.button)
+            guard let self else { return }
+            hotkeyPressDate = Date()
+            hotkeyWasVisibleAtPress = panel.isVisible
+            if HotkeyHoldPolicy.shouldShowOnPress(isVisible: panel.isVisible) {
+                panel.show(from: self.statusItem?.button)
+            }
+        }
+        hotkey.onRelease = { [weak self] in
+            guard let self, let pressDate = hotkeyPressDate else { return }
+            hotkeyPressDate = nil
+            let duration = Date().timeIntervalSince(pressDate)
+            if HotkeyHoldPolicy.shouldHideOnRelease(
+                wasVisibleAtPress: hotkeyWasVisibleAtPress,
+                pressDuration: duration
+            ) {
+                panel.hide()
+            }
         }
         hotkey.use(settings.panelShortcut)
         trackShortcutChanges()

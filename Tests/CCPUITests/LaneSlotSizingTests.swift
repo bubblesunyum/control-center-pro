@@ -104,6 +104,24 @@ final class LaneSlotSizingTests: XCTestCase {
         XCTAssertEqual(lane.width, 347)
     }
 
+    func testANarrowCustomCardDrawsNarrow() {
+        // No grid floor for free cards: a lane holding only a narrow web view
+        // is the rect, not a lane unit — what the drag previews is what the
+        // commit draws.
+        let lane = slots([
+            Placement(
+                id: SizingStubWidget.descriptor.id,
+                customSize: CustomWidgetSize(width: 200, height: 400)
+            ),
+        ])
+
+        XCTAssertEqual(lane.width, 200)
+    }
+
+    func testAnEmptyLaneIsStillOneUnit() {
+        XCTAssertEqual([LaneSlot]().width, Layout.gridWidth(units: 1))
+    }
+
     func testACustomCardBesideGridCardsWidensTheLaneToItself() {
         let lane = slots([
             Placement(id: SizingStubWidget.descriptor.id),
