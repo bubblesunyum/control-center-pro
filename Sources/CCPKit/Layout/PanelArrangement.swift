@@ -94,6 +94,12 @@ public final class PanelArrangement {
         apply(layout.resizing(id, to: span))
     }
 
+    /// Set `id`'s free size in points. Same commit shape as a span resize —
+    /// one write on release, previewed live until then.
+    public func resizeCustom(_ id: WidgetID, to size: CustomWidgetSize) {
+        apply(layout.resizingCustom(id, to: size))
+    }
+
     /// Set `id`'s minimized state. The widget stays the same live object — a
     /// minimize is not a replacement, so whatever it was showing survives it —
     /// and the write goes out like any other edit.
@@ -133,13 +139,13 @@ public final class PanelArrangement {
 
     private func resolvedSlot(for placement: Placement) -> LaneSlot {
         let id = placement.id
-        if let placed = instances[id] { return .widget(placed, placement.span) }
+        if let placed = instances[id] { return .widget(placed, placement) }
         guard let made = registry.makeInstance(of: id) else { return .unavailable(id) }
         instances[id] = made
         // A widget that arrives while the panel is open starts now; one placed
         // before it opened is started by `activate()` along with the rest.
         if isActive { made.activate() }
-        return .widget(made, placement.span)
+        return .widget(made, placement)
     }
 
     /// Start sampling. The panel is on screen.

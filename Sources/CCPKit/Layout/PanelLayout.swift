@@ -128,10 +128,20 @@ public struct PanelLayout: Codable, Hashable, Sendable {
 
     /// The layout with `id` resized to `span`. Naming a widget this layout
     /// doesn't place changes nothing — a resize grip only exists on a card
-    /// that is already on the panel.
+    /// that is already on the panel. A span resize returns the widget to the
+    /// grid, clearing any free rect it had.
     public func resizing(_ id: WidgetID, to span: WidgetSpan) -> PanelLayout {
         guard position(of: id) != nil else { return self }
         return PanelLayout(lanes.map { $0.map { $0.id == id ? Placement(id: id, span: span, isMinimized: $0.isMinimized) : $0 } })
+    }
+
+    /// The layout with `id` at a free `size` in points. Naming a widget this
+    /// layout doesn't place changes nothing. The span is kept but ignored
+    /// while the custom size is present, so clearing it later restores the
+    /// grid size the card had.
+    public func resizingCustom(_ id: WidgetID, to size: CustomWidgetSize) -> PanelLayout {
+        guard position(of: id) != nil else { return self }
+        return PanelLayout(lanes.map { $0.map { $0.id == id ? Placement(id: id, span: $0.span, isMinimized: $0.isMinimized, customSize: size) : $0 } })
     }
 
     /// The layout with `id` minimized or expanded. Naming a widget this layout

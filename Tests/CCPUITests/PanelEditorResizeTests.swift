@@ -225,6 +225,52 @@ final class PanelEditorResizeTests: XCTestCase {
         // A dead zone pulls nothing.
         XCTAssertEqual(magnetized(195, toward: 200, within: 0), 195)
     }
+
+    func testACustomDragFollowsTheFingerToThePixel() {
+        let editor = PanelEditor()
+        editor.beginCustomResize(a, from: CGSize(width: 300, height: 232))
+
+        // An odd drag lands odd — no rounding to steps.
+        editor.updateResize(translation: CGSize(width: 47, height: 279))
+
+        XCTAssertEqual(editor.resizePreview?.custom, CGSize(width: 347, height: 511))
+        XCTAssertEqual(editor.drawSize(for: a), CGSize(width: 347, height: 511))
+    }
+
+    func testACustomDragNeverMagnetizes() {
+        let editor = PanelEditor()
+        editor.beginCustomResize(a, from: CGSize(width: 300, height: 232))
+
+        // Five points short of a grid width: grid would pull, custom does not.
+        editor.updateResize(translation: CGSize(width: 307, height: 0))
+
+        XCTAssertEqual(editor.drawSize(for: a), CGSize(width: 607, height: 232))
+    }
+
+    func testACustomDragClampsToTheFloorAndCeiling() {
+        let editor = PanelEditor()
+        editor.beginCustomResize(a, from: CGSize(width: 300, height: 232))
+
+        editor.updateResize(translation: CGSize(width: -5000, height: 5000))
+
+        XCTAssertEqual(
+            editor.resizePreview?.custom,
+            CGSize(width: PanelEditor.customMinSize.width, height: PanelEditor.customMaxSize.height)
+        )
+    }
+
+    func testCustomPreviewingWearsTheFreeRect() {
+        let editor = PanelEditor()
+        let registry = WidgetRegistry()
+        registry.register(ResizeStubWidget.self)
+        let slots = registry.resolve(PanelLayout([[ResizeStubWidget.descriptor.id]]))[0]
+
+        // This file intentionally leaves the assertion to the lane tests:
+        // previewing a custom drag returns the slot resized to the rect.
+        editor.beginCustomResize("elsewhere", from: CGSize(width: 300, height: 232))
+        XCTAssertNil(editor.previewing(slots[0]).customSize)
+    }
+
 }
 
 @MainActor

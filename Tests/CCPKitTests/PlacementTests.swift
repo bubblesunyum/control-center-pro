@@ -239,4 +239,59 @@ final class PlacementTests: XCTestCase {
             XCTAssertEqual(size.isResizable, size != .screen, "\(size)")
         }
     }
+
+    func testACustomSizeRoundTrips() throws {
+        let layout = PanelLayout([[Placement(
+            id: a, customSize: CustomWidgetSize(width: 347, height: 511)
+        )]])
+        let decoded = try JSONDecoder().decode(
+            PanelLayout.self,
+            from: JSONEncoder().encode(layout)
+        )
+
+        XCTAssertEqual(decoded, layout)
+    }
+
+    func testACustomPlacementWithoutASpanDecodes() throws {
+        let file = Data(#"{"lanes":[[{"id":"a","customSize":{"width":347,"height":511}}]]}"#.utf8)
+        let layout = try JSONDecoder().decode(PanelLayout.self, from: file)
+
+        XCTAssertEqual(
+            layout.lanes,
+            [[Placement(id: a, customSize: CustomWidgetSize(width: 347, height: 511))]]
+        )
+    }
+
+    func testOldFilesDecodeWithNilCustomSize() throws {
+        let file = Data(#"{"lanes":[[{"id":"a","span":{"width":2,"height":2}}]]}"#.utf8)
+        let layout = try JSONDecoder().decode(PanelLayout.self, from: file)
+
+        XCTAssertNil(layout.lanes[0][0].customSize)
+    }
+
+    func testResizingCustomKeepsTheSpanAndSetsTheRect() {
+        let layout = PanelLayout([[Placement(id: a, span: WidgetSpan(width: 2, height: 1))]])
+
+        let resized = layout.resizingCustom(a, to: CustomWidgetSize(width: 347, height: 511))
+
+        XCTAssertEqual(resized.lanes[0][0].customSize, CustomWidgetSize(width: 347, height: 511))
+        XCTAssertEqual(resized.lanes[0][0].span, WidgetSpan(width: 2, height: 1))
+    }
+
+    func testResizingToASpanClearsTheCustomSize() {
+        let layout = PanelLayout([[Placement(id: a, customSize: CustomWidgetSize(width: 347, height: 511))]])
+
+        let resized = layout.resizing(a, to: WidgetSpan(width: 2, height: 2))
+
+        XCTAssertNil(resized.lanes[0][0].customSize)
+        XCTAssertEqual(resized.lanes[0][0].span, WidgetSpan(width: 2, height: 2))
+    }
+
+    func testResolveAttachesEachPlacementCustomSize() {
+        let slots = stubRegistry().resolve(PanelLayout([[
+            Placement(id: StubWidget.descriptor.id, customSize: CustomWidgetSize(width: 347, height: 511)),
+        ]]))
+
+        XCTAssertEqual(slots[0][0].customSize, CustomWidgetSize(width: 347, height: 511))
+    }
 }

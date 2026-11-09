@@ -17,17 +17,22 @@ public struct Placement: Codable, Hashable, Sendable {
     public var id: WidgetID
     public var span: WidgetSpan
     public var isMinimized: Bool
+    /// A free rect that overrides the span when present. Websites use this;
+    /// every other widget leaves it nil and stays on the grid.
+    public var customSize: CustomWidgetSize?
 
-    public init(id: WidgetID, span: WidgetSpan = .unit, isMinimized: Bool = false) {
+    public init(id: WidgetID, span: WidgetSpan = .unit, isMinimized: Bool = false, customSize: CustomWidgetSize? = nil) {
         self.id = id
         self.span = span
         self.isMinimized = isMinimized
+        self.customSize = customSize
     }
 
     private enum CodingKeys: String, CodingKey {
         case id
         case span
         case isMinimized
+        case customSize
     }
 
     public init(from decoder: any Decoder) throws {
@@ -40,12 +45,13 @@ public struct Placement: Codable, Hashable, Sendable {
         self = Placement(
             id: try container.decode(WidgetID.self, forKey: .id),
             span: try container.decodeIfPresent(WidgetSpan.self, forKey: .span) ?? .unit,
-            isMinimized: try container.decodeIfPresent(Bool.self, forKey: .isMinimized) ?? false
+            isMinimized: try container.decodeIfPresent(Bool.self, forKey: .isMinimized) ?? false,
+            customSize: try container.decodeIfPresent(CustomWidgetSize.self, forKey: .customSize)
         )
     }
 
     public func encode(to encoder: any Encoder) throws {
-        if span == .unit, !isMinimized {
+        if span == .unit, !isMinimized, customSize == nil {
             var container = encoder.singleValueContainer()
             try container.encode(id)
         } else {
@@ -55,6 +61,7 @@ public struct Placement: Codable, Hashable, Sendable {
             if isMinimized {
                 try container.encode(isMinimized, forKey: .isMinimized)
             }
+            try container.encodeIfPresent(customSize, forKey: .customSize)
         }
     }
 }

@@ -40,16 +40,37 @@ struct ResizeGrip: View {
             .background { gripReporter }
             .help("Drag to resize")
             .accessibilityLabel("Resize \(slot.title)")
-            .accessibilityValue("\(slot.span.width) by \(slot.span.height)")
+            .accessibilityValue(accessibilitySize)
             .accessibilityAction(named: "Make wider") { step(by: CGSize(width: 1, height: 0)) }
             .accessibilityAction(named: "Make narrower") { step(by: CGSize(width: -1, height: 0)) }
             .accessibilityAction(named: "Make taller") { step(by: CGSize(width: 0, height: 1)) }
             .accessibilityAction(named: "Make shorter") { step(by: CGSize(width: 0, height: -1)) }
     }
 
-    /// One step from the stored span, through the commit path — so the
+    /// What VoiceOver announces: exact pixels for a free card, spans for grid.
+    private var accessibilitySize: String {
+        if let custom = slot.customSize {
+            return "\(Int(custom.width)) by \(Int(custom.height)) pixels"
+        }
+        return "\(slot.span.width) by \(slot.span.height)"
+    }
+
+    /// One step from the stored size, through the commit path — so the
     /// keyboard and VoiceOver actions meet the same refusal rule as the drag.
+    /// Websites step 40pt per action; grid cards step one span.
     private func step(by delta: CGSize) {
+        if slot.isFreeSized {
+            let current = slot.customSize.map { CGSize(width: $0.width, height: $0.height) }
+                ?? CGSize(width: slot.width, height: slot.height)
+            commitCustomResize(
+                PanelEditor.clampedCustom(CGSize(
+                    width: current.width + delta.width * PanelEditor.freeStepSize,
+                    height: current.height + delta.height * PanelEditor.freeStepSize
+                )),
+                of: slot, in: lane, arrangement: arrangement, editor: editor
+            )
+            return
+        }
         commitResize(
             WidgetSpan(
                 width: slot.span.width + Int(delta.width),
@@ -101,6 +122,35 @@ func commitResize(
         }
     }
     arrangement.resize(slot.id, to: span)
+    return true
+}
+
+/// The one free-resize commit: the drag's release and the VoiceOver step both
+/// go through here, so the refusal rule lives in exactly one place with the
+/// grid commit above.
+///
+/// A wider lane that would hang off the screen is refused rather than
+/// written, and the preview snaps back instead. Height is not guarded —
+/// the panel grows down, not off the edge — only clamped to the drag's own
+/// floor and ceiling. Returns whether the rect landed.
+@discardableResult
+@MainActor
+func commitCustomResize(
+    _ size: CGSize, of slot: LaneSlot, in lane: Int,
+    arrangement: PanelArrangement, editor: PanelEditor
+) -> Bool {
+    let clamped = PanelEditor.clampedCustom(size)
+    // Measure the lane as it would be, like the grid commit — the slot alone
+    // is narrower than the lane by the shell's gutters.
+    guard arrangement.lanes.indices.contains(lane) else { return false }
+    let offered = arrangement.lanes[lane].map { $0.id == slot.id ? $0.resized(to: clamped) : $0 }.width
+    guard editor.canResizeLane(lane, to: offered, laneWidths: arrangement.laneWidths) else {
+        return false
+    }
+    arrangement.resizeCustom(
+        slot.id,
+        to: CustomWidgetSize(width: Double(clamped.width), height: Double(clamped.height))
+    )
     return true
 }
 

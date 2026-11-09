@@ -65,6 +65,7 @@ private final class WebsiteViewPool {
     func view(for id: WidgetID) -> WKWebView {
         if let existing = views[id.rawValue] { return existing }
         let webView = WKWebView(frame: .zero, configuration: WebsiteConfiguration.makeConfiguration())
+        WebsiteConfiguration.applyDesktopAgent(to: webView)
         views[id.rawValue] = webView
         if let url = entryAddress(for: id) {
             webView.load(URLRequest(url: url))
@@ -278,6 +279,7 @@ private struct WebsiteWebView: NSViewRepresentable {
             // link survives because WebKit loads the request into the view
             // returned here.
             let popup = WKWebView(frame: .zero, configuration: configuration)
+            WebsiteConfiguration.applyDesktopAgent(to: popup)
             popup.navigationDelegate = self
             popup.uiDelegate = self
             Task { @MainActor in
@@ -343,6 +345,8 @@ private struct WebsiteContent: View {
     @State private var loadFailed = false
     @State private var popupHost: LoginPopup?
     @State private var hasLoaded = false
+    @State private var isImporting = false
+    @State private var importedCount: Int?
 
     private var entry: WebsiteEntry? {
         guard let id = currentWidgetID else { return nil }
@@ -361,8 +365,22 @@ private struct WebsiteContent: View {
 
     /// This card's height span, 1 where the environment is absent (previews).
     private var heightSpan: Int {
-        guard let id = currentWidgetID else { return 1 }
-        return arrangement?.lanes.joined().first { $0.id == id }?.span.height ?? 1
+        slot?.span.height ?? 1
+    }
+
+    /// This card's free rect, when the user dragged it off the grid. Width
+    /// comes from the lane itself, which sizes to the rect — only height is
+    /// read here.
+    private var customHeight: CGFloat? {
+        guard let custom = slot?.customSize else { return nil }
+        return CGFloat(custom.height)
+    }
+
+    /// The slot this card draws, looked up once: span and free rect derive
+    /// from the same placement so they can never disagree.
+    private var slot: LaneSlot? {
+        guard let id = currentWidgetID else { return nil }
+        return arrangement?.lanes.joined().first { $0.id == id }
     }
 
     /// The pooled view without creating one, for the hover pill: controls
@@ -426,7 +444,7 @@ private struct WebsiteContent: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .frame(height: CGFloat(heightSpan) * WidgetSize.tall.height)
+            .frame(height: customHeight ?? CGFloat(heightSpan) * WidgetSize.tall.height)
             .overlay(alignment: .bottomTrailing) { hoverPill }
             .onHover { hovering in isHovering = hovering }
         }
@@ -484,6 +502,9 @@ private struct WebsiteContent: View {
                     Button("Reset to Original URL") { resetToOriginal() }
                         .disabled(isOriginal)
                         .accessibilityLabel("Reset to original URL")
+                    Button(importLabel) { runZenImport() }
+                        .disabled(isImporting)
+                        .accessibilityLabel("Import cookies from Zen browser")
                     Divider()
                     Button("Remove", role: .destructive) { removeSite() }
                         .accessibilityLabel("Remove website")
@@ -625,6 +646,29 @@ private struct WebsiteContent: View {
         arrangement?.remove(id)
         WebsiteViewPool.shared.forget(id)
         store.remove(id)
+    }
+
+    /// What the Zen import row says: idle, working, or the count landed.
+    private var importLabel: String {
+        if isImporting { return "Importing Zen Cookies…" }
+        if let count = importedCount {
+            return count == 0 ? "Import Zen Cookies (none found)" : "Import Zen Cookies (\(count) added)"
+        }
+        return "Import Zen Cookies"
+    }
+
+    /// Copy Zen's jar into the shared session, then reload so the signed-in
+    /// page replaces whatever the anonymous one drew.
+    private func runZenImport() {
+        guard !isImporting else { return }
+        isImporting = true
+        importedCount = nil
+        Task { @MainActor in
+            let count = await ZenCookieImport.importFromZen()
+            isImporting = false
+            importedCount = count
+            if count > 0 { runReloadSequence() }
+        }
     }
 
     private static func normalizedAddress(_ raw: String) -> String {

@@ -90,6 +90,23 @@ public struct WidgetSpan: Codable, Hashable, Sendable {
     }
 }
 
+/// A widget's size in points, free of the grid.
+///
+/// Spans keep every other widget countable — a 2x card is twice its base —
+/// which is what lets a lane pack cards into rows. A website card opts out:
+/// a web page has no base size, so its card is whatever rect the user dragged,
+/// in any axis, with no step. Only websites use this today; the storage
+/// travels on the placement like a span so any widget could later.
+public struct CustomWidgetSize: Codable, Hashable, Sendable {
+    public var width: Double
+    public var height: Double
+
+    public init(width: Double, height: Double) {
+        self.width = width
+        self.height = height
+    }
+}
+
 /// A system permission a widget cannot work without.
 ///
 /// A widget missing one degrades to an inline grant prompt; it never keeps the

@@ -86,6 +86,36 @@ final class LaneSlotSizingTests: XCTestCase {
 
         XCTAssertEqual(lane.width, Layout.gridWidth(units: 2))
     }
+
+    func testACustomCardStandsAloneAtItsExactRect() {
+        let lane = slots([
+            Placement(
+                id: SizingStubWidget.descriptor.id,
+                span: WidgetSpan(width: 3, height: 3),
+                customSize: CustomWidgetSize(width: 347, height: 511)
+            ),
+        ])
+
+        // The span is ignored while the rect is present: exact points, not a
+        // multiple of anything, and uncountable so it never shares a row.
+        XCTAssertEqual(lane[0].width, 347)
+        XCTAssertEqual(lane[0].height, 511)
+        XCTAssertNil(lane[0].gridColumns)
+        XCTAssertEqual(lane.width, 347)
+    }
+
+    func testACustomCardBesideGridCardsWidensTheLaneToItself() {
+        let lane = slots([
+            Placement(id: SizingStubWidget.descriptor.id),
+            Placement(
+                id: SizingStubWidget.descriptor.id,
+                span: WidgetSpan(width: 1, height: 1),
+                customSize: CustomWidgetSize(width: 500, height: 400)
+            ),
+        ])
+
+        XCTAssertEqual(lane.width, 500)
+    }
 }
 
 @MainActor

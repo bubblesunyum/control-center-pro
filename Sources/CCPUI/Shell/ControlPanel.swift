@@ -200,7 +200,14 @@ public struct ControlPanel: View {
                     }
                     if let grip = gripFrames.first(where: { $0.frame.contains(value.startLocation) }),
                        let slot = arrangement.slot(for: grip.id) {
-                        editor.beginResize(grip.id, from: slot.span, baseSize: slot.resizeStep)
+                        // Free cards drag rects; everything else drags grid
+                        // steps. The update and commit paths branch the same
+                        // way, off the preview the begin call leaves behind.
+                        if slot.isFreeSized {
+                            editor.beginCustomResize(grip.id, from: CGSize(width: slot.width, height: slot.height))
+                        } else {
+                            editor.beginResize(grip.id, from: slot.span, baseSize: slot.resizeStep)
+                        }
                         resizeAnchor.engage()
                         return
                     }
@@ -253,15 +260,23 @@ public struct ControlPanel: View {
                 holdWidgetID = nil
                 resizeAnchor.reset()
                 // A resize commits once, on release — or snaps back when a
-                // wider lane would hang off the screen.
+                // wider lane would hang off the screen. Grid drags commit a
+                // span; free drags commit their rect.
                 if let preview = editor.resizePreview {
                     editor.endResize()
                     if let slot = arrangement.slot(for: preview.id),
                        let lane = arrangement.layout.position(of: preview.id)?.lane {
-                        commitResize(
-                            preview.span, of: slot, in: lane,
-                            arrangement: arrangement, editor: editor
-                        )
+                        if let custom = preview.custom {
+                            commitCustomResize(
+                                custom, of: slot, in: lane,
+                                arrangement: arrangement, editor: editor
+                            )
+                        } else {
+                            commitResize(
+                                preview.span, of: slot, in: lane,
+                                arrangement: arrangement, editor: editor
+                            )
+                        }
                     }
                 }
                 guard let lifted = editor.lifted else { return }
@@ -553,11 +568,29 @@ extension PanelArrangement {
 
 extension LaneSlot {
     /// The slot with its span replaced — what a resize previews and commits,
-    /// and what the width guard measures the offer with. An absent widget has
+    /// and what the width guard measures the offer with. A span resize returns
+    /// the card to the grid, clearing any free rect. An absent widget has
     /// nothing to resize, so its slot comes back unchanged.
     func resized(to span: WidgetSpan) -> LaneSlot {
         switch self {
-        case .widget(let widget, _): return .widget(widget, span)
+        case .widget(let widget, let placement):
+            return .widget(widget, Placement(
+                id: placement.id, span: span,
+                isMinimized: placement.isMinimized))
+        case .unavailable: return self
+        }
+    }
+
+    /// The slot with a free rect — what a website drag previews and commits.
+    /// The span is kept but ignored while the custom size is present, so
+    /// clearing it later restores the grid size the card had.
+    func resized(to size: CGSize) -> LaneSlot {
+        switch self {
+        case .widget(let widget, let placement):
+            return .widget(widget, Placement(
+                id: placement.id, span: placement.span,
+                isMinimized: placement.isMinimized,
+                customSize: CustomWidgetSize(width: Double(size.width), height: Double(size.height))))
         case .unavailable: return self
         }
     }
@@ -578,11 +611,12 @@ extension LaneSlot {
     /// can be wrong by.
     var height: CGFloat {
         switch self {
-        case .widget(let widget, let span):
+        case .widget(let widget, let placement):
+            if let custom = placement.customSize { return CGFloat(custom.height) }
             let base = widget.descriptor.size.height
             // A resized card asks for multiples of its base height; an app
             // screen keeps its own, which its view already draws.
-            return widget.descriptor.size.isResizable ? base * CGFloat(span.height) : base
+            return widget.descriptor.size.isResizable ? base * CGFloat(placement.span.height) : base
         case .unavailable: return WidgetSize.compact.height
         }
     }
@@ -595,9 +629,10 @@ extension LaneSlot {
     /// keeps its own width either way.
     var width: CGFloat {
         switch self {
-        case .widget(let widget, let span):
+        case .widget(let widget, let placement):
+            if let custom = placement.customSize { return CGFloat(custom.width) }
             guard widget.descriptor.size.isResizable else { return widget.descriptor.size.width }
-            return Layout.laneWidth * CGFloat(span.width)
+            return Layout.laneWidth * CGFloat(placement.span.width)
         case .unavailable: return Layout.laneWidth
         }
     }

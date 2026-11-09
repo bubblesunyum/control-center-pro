@@ -15,11 +15,17 @@ import SwiftUI
 /// the lane's full width.
 extension LaneSlot {
     /// The grid columns this slot occupies, or `nil` when it is not countable
-    /// in lane units and stands alone. An absent widget holds a 1x place.
+    /// in lane units and stands alone. A free-sized card stands alone like an
+    /// app screen: its rect is exact, so packing must not split or stretch it
+    /// into a shared row. An absent widget holds a 1x place.
     var gridColumns: Int? {
         switch self {
-        case .widget(let widget, let span):
-            widget.descriptor.size.isResizable ? span.width : nil
+        case .widget(let widget, let placement):
+            if placement.customSize != nil {
+                nil
+            } else {
+                widget.descriptor.size.isResizable ? placement.span.width : nil
+            }
         case .unavailable:
             1
         }
