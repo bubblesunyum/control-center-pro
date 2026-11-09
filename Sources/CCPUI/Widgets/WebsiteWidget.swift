@@ -65,7 +65,7 @@ private final class WebsiteViewPool {
     func view(for id: WidgetID) -> WKWebView {
         if let existing = views[id.rawValue] { return existing }
         let webView = WKWebView(frame: .zero, configuration: WebsiteConfiguration.makeConfiguration())
-        WebsiteConfiguration.applyDesktopAgent(to: webView)
+        WebsiteConfiguration.applyStoredAgent(for: id, to: webView)
         views[id.rawValue] = webView
         if let url = entryAddress(for: id) {
             webView.load(URLRequest(url: url))
@@ -185,6 +185,15 @@ private struct WebsiteWebView: NSViewRepresentable {
         if webView.uiDelegate !== context.coordinator {
             webView.uiDelegate = context.coordinator
         }
+        // The toggle path applies the new agent and reloads live, so this
+        // only fires when a pooled view somehow outlived its entry's flag —
+        // an agent change without a reload would never take.
+        let wantTablet = WebsiteStore.shared.entry(for: id)?.requestsTabletSite ?? false
+        if WebsiteConfiguration.isTablet(webView) != wantTablet, let url {
+            WebsiteConfiguration.applyAgent(isTablet: wantTablet, to: webView)
+            WebsiteViewPool.shared.load(id, url: url)
+            return
+        }
         if let url, WebsiteViewPool.shared.loadedURLString(for: id) != url.absoluteString {
             WebsiteViewPool.shared.load(id, url: url)
         }
@@ -302,7 +311,7 @@ private struct WebsiteWebView: NSViewRepresentable {
                 frame: CGRect(origin: .zero, size: Layout.websitePopupInitialSize),
                 configuration: configuration
             )
-            WebsiteConfiguration.applyDesktopAgent(to: popup)
+            WebsiteConfiguration.applyStoredAgent(for: id, to: popup)
             popup.navigationDelegate = self
             popup.uiDelegate = self
             Task { @MainActor in
@@ -490,12 +499,13 @@ private struct WebsiteContent: View {
             .frame(maxWidth: .infinity)
             .frame(height: drawnHeight)
         }
-        // The bar floats outside the glass, so it sits above the neighbour
-        // below while visible rather than sliding under it. Its frame joins
-        // the backdrop hit-test (see WebsiteBarFramePreference) so a click on
-        // it never reads as backdrop.
-        .zIndex(pillVisible ? 10 : 0)
-        .overlay(alignment: pillPlacement.alignment) { pillBar }
+        // The bar floats over the page while visible, above the web view it
+        // controls; a card too narrow to hold it hangs it outside instead
+        // (see `pillInside`). An outside bar still joins the backdrop
+        // hit-test (see PanelOverflowFramePreference) so a click on it never
+        // reads as backdrop.
+        .zIndex(pillVisible && !isPillInside ? 10 : 0)
+        .overlay(alignment: pillBarAlignment) { pillBar }
         .onContinuousHover { phase in
             switch phase {
             case .active(let location):
@@ -549,42 +559,72 @@ private struct WebsiteContent: View {
     }
 
     /// WebKit owns right-click inside the page, so the card's controls live in
-    /// a bar pinned to the card's outer bottom-left edge — outside the glass,
-    /// straddling the edge, never covering the page. It answers pointer
-    /// proximity to that corner (no invisible strip over the page: hover
-    /// tracking never swallows a click) and the keyboard: hovering the rest
-    /// of the page leaves it hidden. The trigger stays at the bottom-left in
-    /// every placement, so the learned hover never goes dead; a short hide
-    /// grace covers the handoff from card to bar. When the bar would hang off
-    /// screen it flips to another side.
+    /// a bar over the page's bottom-left corner — inside the glass, never
+    /// covering it with anything invisible. It answers pointer proximity to
+    /// that corner (no invisible strip over the page: hover tracking never
+    /// swallows a click) and the keyboard: hovering the rest of the page
+    /// leaves it hidden. The trigger stays at the bottom-left in every
+    /// placement, so the learned hover never goes dead; a short hide grace
+    /// covers the handoff from card to bar. The bar is hidden in edit mode:
+    /// the resize grip now lives on the same bottom-leading corner, and a
+    /// press there must begin a resize rather than answer a button.
     ///
-    /// The bar also reports its frame to the backdrop hit-test while visible
-    /// (see PanelOverflowFramePreference): it hangs outside every card frame,
-    /// where a click would otherwise read as backdrop and dismiss the panel
-    /// under the finger.
+    /// Inside the card the bar needs nothing from the backdrop hit-test — it
+    /// sits within the card's own frame, where clicks already count as the
+    /// panel's — and the pointer stays inside the card's hover region while
+    /// crossing onto it, so the handoff cannot flicker. A card narrower than
+    /// the bar itself (a free drag can go that far) hangs it outside like
+    /// before, with the above/below flip and the overflow-frame reporting.
     @ViewBuilder
     private var pillBar: some View {
-        if currentWidgetID != nil {
+        if currentWidgetID != nil, !isEditingForBar {
             pillContent
-                .offset(x: pillPlacement.xOffset, y: pillPlacement.yOffset)
+                .padding([.leading, .bottom], isPillInside ? Space.one : 0)
+                .offset(
+                    x: isPillInside ? 0 : pillPlacement.xOffset,
+                    y: isPillInside ? 0 : pillPlacement.yOffset
+                )
                 .onHover(perform: noteHover)
                 .background {
-                    GeometryReader { proxy in
-                        // `offset` shifts drawing post-layout, so the measured
-                        // layout frame needs the same shift to match the drawn
-                        // bar — a background sits at the pre-offset box.
-                        Color.clear.preference(
-                            key: PanelOverflowFramePreference.self,
-                            value: pillVisible
-                                ? [proxy.frame(in: .panel).offsetBy(
-                                    dx: pillPlacement.xOffset,
-                                    dy: pillPlacement.yOffset
-                                )]
-                                : []
-                        )
+                    // Only the outside hang leaves the card: an inside bar
+                    // sits within the card's own frame, where clicks already
+                    // count as the panel's.
+                    if !isPillInside {
+                        GeometryReader { proxy in
+                            // `offset` shifts drawing post-layout, so the measured
+                            // layout frame needs the same shift to match the drawn
+                            // bar — a background sits at the pre-offset box.
+                            Color.clear.preference(
+                                key: PanelOverflowFramePreference.self,
+                                value: pillVisible
+                                    ? [proxy.frame(in: .panel).offsetBy(
+                                        dx: pillPlacement.xOffset,
+                                        dy: pillPlacement.yOffset
+                                    )]
+                                    : []
+                            )
+                        }
                     }
                 }
         }
+    }
+
+    /// Whether the bar fits inside the card: a bar wider than its card hangs
+    /// toward the safe side (see `pillPlacement`).
+    private var isPillInside: Bool {
+        drawnWidth >= Self.pillEstimate.width + Space.two
+    }
+
+    /// The bar's overlay anchor: the card's own corner when the bar is
+    /// inside, the outside hang's alignment when it is not.
+    private var pillBarAlignment: Alignment {
+        isPillInside ? .bottomLeading : pillPlacement.alignment
+    }
+
+    /// Edit mode owns the corner the bar is summoned from — the grip lives
+    /// there now — so the bar stands down while resizing is possible.
+    private var isEditingForBar: Bool {
+        editor?.isEditing ?? false
     }
 
     /// A hover handoff with a grace: leaving the card's corner or the bar
@@ -622,13 +662,13 @@ private struct WebsiteContent: View {
     /// above it instead of hanging below.
     private static let pillFlipMargin: CGFloat = 60
 
-    /// One of the bar's four hangs: below or above, off the leading or
-    /// trailing edge. Default bottom-leading. A bar wider than its card flips
-    /// to the trailing edge — hanging left is safe except at the display's
-    /// left edge, while hanging right past a right-seated panel is off screen
-    /// by construction (the panel sits 8pt from it). A bar below a card near
-    /// the display's bottom flips above. The bar is narrower than any grid
-    /// card, so the common case never flips at all.
+    /// One of the outside bar's four hangs: below or above, off the leading or
+    /// trailing edge. Only used when the card is narrower than the bar
+    /// itself — the common case sits inside. Default bottom-leading. A bar
+    /// wider than its card flips to the trailing edge — hanging left is safe
+    /// except at the display's left edge, while hanging right past a
+    /// right-seated panel is off screen by construction (the panel sits 8pt
+    /// from it). A bar below a card near the display's bottom flips above.
     private enum PillPlacement {
         case belowLeading, belowTrailing, aboveLeading, aboveTrailing
 
@@ -704,6 +744,8 @@ private struct WebsiteContent: View {
                 Button("Reset to Original URL") { resetToOriginal() }
                     .disabled(isOriginal)
                     .accessibilityLabel("Reset to original URL")
+                Toggle("Request Tablet Site", isOn: tabletSiteBinding)
+                .accessibilityLabel("Request tablet site")
                 Button(importLabel) { runZenImport() }
                     .disabled(isImporting)
                     .accessibilityLabel("Import cookies from Zen browser")
@@ -883,6 +925,32 @@ private struct WebsiteContent: View {
         arrangement?.remove(id)
         WebsiteViewPool.shared.forget(id)
         store.remove(id)
+    }
+
+    /// The menu's tablet toggle: reads the entry, writes through the reload.
+    private var tabletSiteBinding: Binding<Bool> {
+        Binding(
+            get: {
+                guard let id = currentWidgetID else { return false }
+                return store.entry(for: id)?.requestsTabletSite ?? false
+            },
+            set: { setTabletSite($0) }
+        )
+    }
+
+    /// Flip this site between desktop and tablet layouts. The agent only
+    /// changes what the server sends down — a site that syncs view settings
+    /// through the account shows the same views either way. Takes a reload:
+    /// WebKit reads the agent per navigation.
+    private func setTabletSite(_ tablet: Bool) {
+        guard let id = currentWidgetID else { return }
+        takeOverFromReload()
+        store.setTabletSite(id, tablet: tablet)
+        if let view = WebsiteViewPool.shared.existingView(for: id) {
+            WebsiteConfiguration.applyAgent(isTablet: tablet, to: view)
+            view.reload()
+            awaitingFreshLoad = true
+        }
     }
 
     /// What the Zen import row says: idle, working, or the count landed.

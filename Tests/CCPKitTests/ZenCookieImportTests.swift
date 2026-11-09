@@ -71,4 +71,9 @@ final class ZenCookieImportTests: XCTestCase {
         XCTAssertTrue(WebsiteConfiguration.desktopUserAgent.contains("Macintosh"))
         XCTAssertFalse(WebsiteConfiguration.desktopUserAgent.contains("iPhone"))
     }
+
+    func testTabletAgentIsAnIPad() {
+        XCTAssertTrue(WebsiteConfiguration.tabletUserAgent.contains("iPad"))
+        XCTAssertFalse(WebsiteConfiguration.tabletUserAgent.contains("Macintosh"))
+    }
 }

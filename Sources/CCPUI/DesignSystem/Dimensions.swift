@@ -127,6 +127,18 @@ public enum Layout {
     }
     /// How far the panel sits from the screen's top-right corner.
     public static let panelInset: CGFloat = Space.one
+    /// The whole-window frost behind the lanes: how present it reads. AppKit
+    /// exposes no blur radius, so intensity is opacity — the blurred result
+    /// blended back toward the raw desktop. Below 1 so the wallpaper stays
+    /// legible through it; the cards carry their own stronger glass.
+    public static let backdropBlurOpacity: Double = 0.55
+    /// The dim over the frost. A whisper: it must read as depth behind the
+    /// panel, not as the display going dark.
+    public static let backdropDimOpacity: Double = 0.10
+    /// How tall the fade at the window's top edge stands. The seat starts
+    /// right under the menu bar, and an unfaded frost would draw a hard line
+    /// across the wallpaper there.
+    public static let backdropFeatherHeight: CGFloat = 40
 
     /// Whether lanes these wide fit on a display this wide.
     ///
@@ -152,6 +164,18 @@ public enum Layout {
     public static func fitsAnotherLane(beside laneWidths: [CGFloat], inWidth width: CGFloat) -> Bool {
         guard !laneWidths.isEmpty else { return true }
         return fits(widths: laneWidths + [laneWidth], inWidth: width)
+    }
+
+    /// The widest one lane may draw while the other lanes stay put: the
+    /// usable width minus the other lanes and the gutters between all of
+    /// them. Same accounting as `fits(widths:inWidth:)`, solved for the one
+    /// lane — the lane itself accounts for the last gutter. The live drag
+    /// and the commit both clamp to this rather than refusing past it, so a
+    /// drag past the edge parks at the edge instead of snapping back on
+    /// release.
+    public static func maxLaneWidth(beside others: [CGFloat], inWidth width: CGFloat) -> CGFloat {
+        let usable = width - panelInset * 2 - Space.oneHalf * 2
+        return usable - others.reduce(0, +) - Space.oneHalf * CGFloat(others.count)
     }
 }
 

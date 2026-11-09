@@ -4,10 +4,13 @@
 import CCPKit
 import SwiftUI
 
-/// The handle a card is resized by: bottom-trailing corner, edit mode only.
+/// The handle a card is resized by: bottom-leading corner, edit mode only.
 ///
 /// It is a mark rather than a button — the iPadOS windowing resize tick, a
-/// short rounded corner hugging the card's own. The drag itself belongs to
+/// short rounded corner hugging the card's own. Leading, because the panel
+/// is pinned top-right: the trailing edge never moves in screen space, so a
+/// grip there would separate from the finger as the card widens (see
+/// `EditableCard`). The drag itself belongs to
 /// the panel-level gesture, which hit-tests the press against the frames this
 /// reports: a per-card gesture never reliably saw the touch, and the panel's
 /// already gets every one. VoiceOver users get the same steps as actions.
@@ -22,6 +25,10 @@ struct ResizeGrip: View {
     var body: some View {
         CornerTick()
             .stroke(.white, style: StrokeStyle(lineWidth: Stroke.resizeTick, lineCap: .round))
+            // Mirrored to the leading corner: the panel is pinned top-right,
+            // so the trailing edge never moves in screen space and a grip
+            // there would separate from the finger as the card widens.
+            .scaleEffect(x: -1, y: 1)
             // The mark is small and the target is not: a full 44pt box in the
             // corner, so the finger can land anywhere near the edge. Its outer
             // corner sits exactly on the card's, which is what lets the arc
@@ -34,7 +41,7 @@ struct ResizeGrip: View {
             // on hover, on a spring with a little give that still settles
             // fast. Anchored to the corner so the growth never leaves the
             // edge it hugs.
-            .scaleEffect(isHovered ? Layout.resizeGripHoverScale : 1, anchor: .bottomTrailing)
+            .scaleEffect(isHovered ? Layout.resizeGripHoverScale : 1, anchor: .bottomLeading)
             .animation(.spring(response: 0.32, dampingFraction: 0.55), value: isHovered)
             .onHover { isHovered = $0 }
             .background { gripReporter }
@@ -56,7 +63,7 @@ struct ResizeGrip: View {
     }
 
     /// One step from the stored size, through the commit path — so the
-    /// keyboard and VoiceOver actions meet the same refusal rule as the drag.
+    /// keyboard and VoiceOver actions meet the same clamp as the drag.
     /// Websites step 40pt per action; grid cards step one span.
     private func step(by delta: CGSize) {
         if slot.isFreeSized {
@@ -101,55 +108,62 @@ struct ResizeGrip: View {
 }
 
 /// The one resize commit: the drag's release and the VoiceOver step both go
-/// through here, so the refusal rule lives in exactly one place.
+/// through here, so the clamp lives in exactly one place.
 ///
-/// A wider lane that would hang off the screen is refused rather than
-/// written, and the preview snaps back instead. Returns whether the span
-/// landed.
+/// A widening past the display clamps to the widest span that fits rather
+/// than refusing — a drag past the edge parks at the edge instead of
+/// snapping back. Height is untouched by the clamp: the panel grows down,
+/// never off an edge. Only a stale lane index refuses. Returns whether the
+/// span landed.
 @discardableResult
 @MainActor
 func commitResize(
     _ span: WidgetSpan, of slot: LaneSlot, in lane: Int,
     arrangement: PanelArrangement, editor: PanelEditor
 ) -> Bool {
+    var clamped = span
     if span.width != slot.span.width {
         // Measure the lane as it would be — gutters and all — not the slot
         // alone, which is narrower than the lane by the shell's gutters.
-        guard arrangement.lanes.indices.contains(lane) else { return false }
-        let offered = arrangement.lanes[lane].map { $0.id == slot.id ? $0.resized(to: span) : $0 }.width
-        guard editor.canResizeLane(lane, to: offered, laneWidths: arrangement.laneWidths) else {
-            return false
+        guard arrangement.lanes.indices.contains(lane),
+              let maxW = editor.maxLaneWidth(for: lane, laneWidths: arrangement.laneWidths)
+        else { return false }
+        while clamped.width > 1 && Layout.gridWidth(units: clamped.width) > maxW {
+            clamped.width -= 1
         }
+        guard Layout.gridWidth(units: clamped.width) <= maxW else { return false }
     }
-    arrangement.resize(slot.id, to: span)
+    arrangement.resize(slot.id, to: clamped)
     return true
 }
 
 /// The one free-resize commit: the drag's release and the VoiceOver step both
-/// go through here, so the refusal rule lives in exactly one place with the
-/// grid commit above.
+/// go through here, so the clamp lives in exactly one place with the grid
+/// commit above.
 ///
-/// A wider lane that would hang off the screen is refused rather than
-/// written, and the preview snaps back instead. Height is not guarded —
-/// the panel grows down, not off the edge — only clamped to the drag's own
-/// floor and ceiling. Returns whether the rect landed.
+/// A width past the display clamps to the lane's max rather than refusing,
+/// like the grid commit — the release parks at the edge. Height is not
+/// guarded — the panel grows down, not off the edge — only clamped to the
+/// drag's own floor and ceiling. Returns whether the rect landed.
 @discardableResult
 @MainActor
 func commitCustomResize(
     _ size: CGSize, of slot: LaneSlot, in lane: Int,
     arrangement: PanelArrangement, editor: PanelEditor
 ) -> Bool {
-    let clamped = PanelEditor.clampedCustom(size)
+    guard arrangement.lanes.indices.contains(lane),
+          let maxW = editor.maxLaneWidth(for: lane, laneWidths: arrangement.laneWidths)
+    else { return false }
     // Measure the lane as it would be, like the grid commit — the slot alone
-    // is narrower than the lane by the shell's gutters.
-    guard arrangement.lanes.indices.contains(lane) else { return false }
-    let offered = arrangement.lanes[lane].map { $0.id == slot.id ? $0.resized(to: clamped) : $0 }.width
-    guard editor.canResizeLane(lane, to: offered, laneWidths: arrangement.laneWidths) else {
-        return false
-    }
+    // is narrower than the lane by the shell's gutters. The floor below
+    // re-asserts the grab target when the display is narrower than it.
+    let fit = PanelEditor.clampedCustom(CGSize(
+        width: min(size.width, maxW),
+        height: size.height
+    ))
     arrangement.resizeCustom(
         slot.id,
-        to: CustomWidgetSize(width: Double(clamped.width), height: Double(clamped.height))
+        to: CustomWidgetSize(width: Double(fit.width), height: Double(fit.height))
     )
     return true
 }

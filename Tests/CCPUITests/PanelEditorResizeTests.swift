@@ -99,20 +99,24 @@ final class PanelEditorResizeTests: XCTestCase {
         XCTAssertNil(editor.resizePreview)
     }
 
-    func testAWideningThatFitsIsAllowedAndOneThatDoesNotIsNot() {
+    func testMaxLaneWidthSolvesFitsForOneLane() {
         let editor = PanelEditor()
         // A display exactly wide enough for two lanes of cards.
         editor.displayWidth = 2 * Layout.laneWidth + Space.oneHalf
             + Layout.panelInset * 2 + Space.oneHalf * 2
 
-        XCTAssertTrue(editor.canResizeLane(0, to: Layout.laneWidth, laneWidths: [300, 300]))
-        XCTAssertFalse(editor.canResizeLane(0, to: Layout.laneWidth * 2, laneWidths: [300, 300]))
-        XCTAssertFalse(editor.canResizeLane(7, to: Layout.laneWidth, laneWidths: [300, 300]))
+        // The other lane plus the one gutter between them come off the usable
+        // width; nil for a stale lane index.
+        XCTAssertEqual(editor.maxLaneWidth(for: 0, laneWidths: [300, 300]), 300)
+        XCTAssertEqual(editor.maxLaneWidth(for: 1, laneWidths: [300, 300]), 300)
+        XCTAssertNil(editor.maxLaneWidth(for: 7, laneWidths: [300, 300]))
     }
 
     /// The one commit both the drag release and the VoiceOver step go
-    /// through: a widening past the display is refused, anything else lands.
-    func testCommitRefusesOnlyTheWideningThatLeavesTheDisplay() {
+    /// through: a widening past the display clamps to what fits — here a
+    /// single lane unit — and a height-only change always lands. A stale lane
+    /// index still refuses.
+    func testCommitClampsTheWideningThatLeavesTheDisplay() {
         let editor = PanelEditor()
         editor.displayWidth = Layout.laneWidth + Layout.panelInset * 2 + Space.oneHalf * 2
         let registry = WidgetRegistry()
@@ -123,7 +127,7 @@ final class PanelEditorResizeTests: XCTestCase {
         )
         let slot = arrangement.slot(for: ResizeStubWidget.descriptor.id)!
 
-        XCTAssertFalse(commitResize(
+        XCTAssertTrue(commitResize(
             WidgetSpan(width: 2, height: 1), of: slot, in: 0,
             arrangement: arrangement, editor: editor
         ))
@@ -137,11 +141,17 @@ final class PanelEditorResizeTests: XCTestCase {
             arrangement.slot(for: ResizeStubWidget.descriptor.id)?.span,
             WidgetSpan(width: 1, height: 2)
         )
+
+        XCTAssertFalse(commitResize(
+            WidgetSpan(width: 2, height: 1), of: slot, in: 7,
+            arrangement: arrangement, editor: editor
+        ))
     }
 
-    /// The refusal measures the lane as it would be — units plus the shell's
+    /// The clamp measures the lane as it would be — units plus the shell's
     /// gutter — not the slot alone. A display fitting 600pt of cards still
-    /// refuses the 612pt a 2-wide lane actually takes.
+    /// clamps the 612pt a 2-wide lane actually takes; one gutter wider and
+    /// the full width lands.
     func testCommitCountsTheGutterBetweenColumns() {
         let editor = PanelEditor()
         editor.displayWidth = Layout.laneWidth * 2 + Layout.panelInset * 2 + Space.oneHalf * 2
@@ -153,15 +163,46 @@ final class PanelEditorResizeTests: XCTestCase {
         )
         let slot = arrangement.slot(for: ResizeStubWidget.descriptor.id)!
 
-        XCTAssertFalse(commitResize(
+        XCTAssertTrue(commitResize(
             WidgetSpan(width: 2, height: 1), of: slot, in: 0,
             arrangement: arrangement, editor: editor
         ))
+        XCTAssertEqual(arrangement.slot(for: ResizeStubWidget.descriptor.id)?.span, .unit)
 
         editor.displayWidth += Space.oneHalf
 
         XCTAssertTrue(commitResize(
             WidgetSpan(width: 2, height: 1), of: slot, in: 0,
+            arrangement: arrangement, editor: editor
+        ))
+        XCTAssertEqual(
+            arrangement.slot(for: ResizeStubWidget.descriptor.id)?.span,
+            WidgetSpan(width: 2, height: 1)
+        )
+    }
+
+    /// A free rect past the display clamps to the lane's max, not past it —
+    /// and a stale lane index refuses like the grid commit.
+    func testCustomCommitClampsWidthToTheDisplay() {
+        let editor = PanelEditor()
+        editor.displayWidth = Layout.laneWidth + Layout.panelInset * 2 + Space.oneHalf * 2
+        let registry = WidgetRegistry()
+        registry.register(ResizeStubWidget.self)
+        let arrangement = PanelArrangement(
+            PanelLayout([[ResizeStubWidget.descriptor.id]]),
+            registry: registry
+        )
+        let slot = arrangement.slot(for: ResizeStubWidget.descriptor.id)!
+
+        XCTAssertTrue(commitCustomResize(
+            CGSize(width: 600, height: 400), of: slot, in: 0,
+            arrangement: arrangement, editor: editor
+        ))
+        XCTAssertEqual(arrangement.slot(for: ResizeStubWidget.descriptor.id)?.customSize?.width, 300)
+        XCTAssertEqual(arrangement.slot(for: ResizeStubWidget.descriptor.id)?.customSize?.height, 400)
+
+        XCTAssertFalse(commitCustomResize(
+            CGSize(width: 200, height: 200), of: slot, in: 7,
             arrangement: arrangement, editor: editor
         ))
     }

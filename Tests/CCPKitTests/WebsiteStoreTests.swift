@@ -79,7 +79,32 @@ final class WebsiteStoreTests: XCTestCase {
 
         let data = try JSONEncoder().encode(decoded)
         let keyed = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        XCTAssertEqual(keyed.keys.sorted(), ["id", "lastReloadedAt", "originalURL", "url"])
+        XCTAssertEqual(keyed.keys.sorted(), ["id", "lastReloadedAt", "originalURL", "requestsTabletSite", "url"])
+        XCTAssertEqual(decoded.requestsTabletSite, false)
+    }
+
+    /// Files written before the tablet toggle carry no flag: they decode as
+    /// desktop sites rather than dropping the entry.
+    func testOldFileWithoutTabletFlagDecodesAsDesktop() throws {
+        let literal = """
+        {"id":"website-abcdef12","url":"https://example.com/","originalURL":"https://example.com/","lastReloadedAt":1234567890}
+        """
+        let decoded = try JSONDecoder().decode(WebsiteEntry.self, from: Data(literal.utf8))
+
+        XCTAssertEqual(decoded.requestsTabletSite, false)
+    }
+
+    func testTabletFlagRoundTrips() {
+        let directory = freshDirectory()
+        let store = makeStore(in: directory)
+        let id = store.add(url: "example.com")
+
+        store.setTabletSite(id, tablet: true)
+        XCTAssertEqual(store.entry(for: id)?.requestsTabletSite, true)
+        XCTAssertEqual(makeStore(in: directory).entry(for: id)?.requestsTabletSite, true)
+
+        store.setTabletSite(id, tablet: false)
+        XCTAssertEqual(makeStore(in: directory).entry(for: id)?.requestsTabletSite, false)
     }
 
     func testTolerantLoadSkipsABadEntry() throws {

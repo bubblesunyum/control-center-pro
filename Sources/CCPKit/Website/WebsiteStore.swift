@@ -9,12 +9,17 @@ public struct WebsiteEntry: Codable, Hashable, Sendable {
     public var url: String
     public var originalURL: String
     public var lastReloadedAt: Date
+    /// Whether this site asks for the tablet layout instead of desktop.
+    /// Per-site chrome preference only — view settings still sync through
+    /// the account, never through the agent.
+    public var requestsTabletSite: Bool
 
-    public init(id: WidgetID, url: String, originalURL: String, lastReloadedAt: Date) {
+    public init(id: WidgetID, url: String, originalURL: String, lastReloadedAt: Date, requestsTabletSite: Bool = false) {
         self.id = id
         self.url = url
         self.originalURL = originalURL
         self.lastReloadedAt = lastReloadedAt
+        self.requestsTabletSite = requestsTabletSite
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -22,6 +27,18 @@ public struct WebsiteEntry: Codable, Hashable, Sendable {
         case url
         case originalURL
         case lastReloadedAt
+        case requestsTabletSite
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(WidgetID.self, forKey: .id)
+        url = try container.decode(String.self, forKey: .url)
+        originalURL = try container.decode(String.self, forKey: .originalURL)
+        lastReloadedAt = try container.decode(Date.self, forKey: .lastReloadedAt)
+        // Absent in files written before the toggle existed: a missing key
+        // is a desktop site, never a reason to drop the entry.
+        requestsTabletSite = try container.decodeIfPresent(Bool.self, forKey: .requestsTabletSite) ?? false
     }
 }
 
@@ -71,6 +88,14 @@ public final class WebsiteStore {
         guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
         var entry = entries[index]
         entry.url = entry.originalURL
+        entries[index] = entry
+        persist()
+    }
+
+    public func setTabletSite(_ id: WidgetID, tablet: Bool) {
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
+        var entry = entries[index]
+        entry.requestsTabletSite = tablet
         entries[index] = entry
         persist()
     }

@@ -69,24 +69,29 @@ public struct ControlPanel: View {
         // fully-transparent window pixels are never delivered to the app at
         // all — they fall to whatever is below no matter what
         // ignoresMouseEvents says (ccp-ecye) — so the backdrop needs a
-        // whisper of alpha to be hittable. 18% black dims the desktop behind
-        // the panel while staying hittable. It has no gesture of its own: the
+        // whisper of alpha to be hittable. The dim reads as depth behind the
+        // panel while staying hittable. It has no gesture of its own: the
         // dismissal monitor decides backdrop-vs-content and swallows.
         .background {
-            Color.black.opacity(0.18)
+            Color.black.opacity(Layout.backdropDimOpacity)
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
+                .mask { backdropFeather }
         }
         // The desktop frost behind everything. Each card already blurs for
         // itself; this is the whole-window backdrop blur underneath the dim.
         // A real behind-window blur — SwiftUI materials only blur what is
         // already inside the window and read as a tint over a transparent
-        // panel. AppKit exposes no radius, so this is the system frost rather
-        // than a measured 3px; it sits behind the dim above, never in front.
+        // panel. AppKit exposes no radius, so this is the system frost at a
+        // reduced opacity rather than a heavier full-strength one; it sits
+        // behind the dim above, never in front. Both layers feather at the
+        // top edge so no hard line crosses the wallpaper under the menu bar.
         .background {
-            VisualEffectViewRepresentable(material: .hudWindow)
+            VisualEffectViewRepresentable(material: .popover)
+                .opacity(Layout.backdropBlurOpacity)
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
+                .mask { backdropFeather }
         }
         .environment(\.isPanelEditing, editor.isEditing)
         .environment(\.panelEditor, editor)
@@ -165,6 +170,17 @@ public struct ControlPanel: View {
     /// re-lays-out, layout never flips bar visibility).
     private func reportContentFrames() {
         onCardFrames(editor.zones.map(\.frame) + overflowFrames)
+    }
+
+    /// The top edge fades to nothing instead of drawing a line. A mask, not
+    /// a second background: it shapes the dim and the frost into the same
+    /// soft edge, and the lanes above it are untouched.
+    private var backdropFeather: some View {
+        VStack(spacing: 0) {
+            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                .frame(height: Layout.backdropFeatherHeight)
+            Color.black
+        }
     }
 
     private var galleryOverlay: some View {
@@ -445,6 +461,17 @@ private struct WidgetLane: View {
         return packRowIndexes(previewed, columns: units).map { $0.map { cells[$0] } }
     }
 
+    /// The widest this lane may draw while its neighbours stay put. The commit
+    /// clamps to the same number, so what the finger parks at is what the
+    /// release lands — a drag past the edge never paints off screen and never
+    /// snaps back.
+    private var maxFitWidth: CGFloat {
+        var others = arrangement.laneWidths
+        guard others.indices.contains(lane) else { return .infinity }
+        others.remove(at: lane)
+        return Layout.maxLaneWidth(beside: others, inWidth: editor.displayWidth)
+    }
+
     var body: some View {
         // While a grip is dragged the lane draws the preview span instead of
         // the stored one; the commit lands on release. Cards keep their
@@ -456,10 +483,15 @@ private struct WidgetLane: View {
         let previewed = slots.map(editor.previewing)
         let shownWidth: CGFloat = {
             let base = previewed.width
-            guard previewed.contains(where: { $0.fixedWidth != nil }) else { return base }
-            var others = arrangement.laneWidths
-            if others.indices.contains(lane) { others.remove(at: lane) }
-            return max(base, Layout.screenLaneWidth(beside: others, displayWidth: editor.displayWidth))
+            let screened: CGFloat
+            if previewed.contains(where: { $0.fixedWidth != nil }) {
+                var others = arrangement.laneWidths
+                if others.indices.contains(lane) { others.remove(at: lane) }
+                screened = max(base, Layout.screenLaneWidth(beside: others, displayWidth: editor.displayWidth))
+            } else {
+                screened = base
+            }
+            return min(screened, maxFitWidth)
         }()
         // Leading-aligned: a row narrower than the lane — two 1x cards in a
         // 3-wide grid — starts at the lane's edge rather than centering.
@@ -496,18 +528,22 @@ private struct WidgetLane: View {
     /// a new width the row already shows what the commit would pack. A free
     /// card draws its own rect, committed or in flight — falling back to the
     /// lane width would snap a narrow drag back to the grid on release.
+    /// Everything clamps to the lane's max fit: the commit lands the same
+    /// number, so the live draw never exceeds what the release keeps.
     private func cellWidth(_ cell: LaneCell, laneWidth: CGFloat) -> CGFloat {
+        let raw: CGFloat
         switch cell {
         case .slot(let slot):
             // The card under the grip draws its dragged size, not its step:
             // packing (and the lane around it) still counts the span, so only
             // this frame follows the finger per pixel.
-            if let drawn = editor.drawSize(for: slot.id) { return drawn.width }
-            if let custom = editor.previewing(slot).customSize { return CGFloat(custom.width) }
-            return editor.previewing(slot).gridColumns.map { Layout.gridWidth(units: $0) } ?? laneWidth
+            if let drawn = editor.drawSize(for: slot.id) { raw = drawn.width }
+            else if let custom = editor.previewing(slot).customSize { raw = CGFloat(custom.width) }
+            else { raw = editor.previewing(slot).gridColumns.map { Layout.gridWidth(units: $0) } ?? laneWidth }
         case .gap(let columns):
-            return columns.map { Layout.gridWidth(units: $0) } ?? laneWidth
+            raw = columns.map { Layout.gridWidth(units: $0) } ?? laneWidth
         }
+        return min(raw, maxFitWidth)
     }
 
     /// How tall a slot draws: the dragged size while its grip is held, its

@@ -270,11 +270,12 @@ public final class PanelEditor {
     /// a changed preview lands — the window tracker re-fits on every one,
     /// and identical ticks must not re-place the panel.
     ///
-    /// Width runs mirrored: the panel is pinned top-right, so the free edge
-    /// is the left one and the trailing grip sits ~20pt from the screen's
-    /// edge. Dragging right to widen would run out of desktop almost at once;
-    /// dragging left widens instead, the way a left-edge handle behaves.
-    /// Height is unmirrored — down is down, with open desktop below.
+    /// Width runs mirrored: the grip sits on the card's leading (left) edge
+    /// — the panel is pinned top-right, so the trailing edge never moves in
+    /// screen space and only the free edge can follow the finger. Dragging
+    /// left widens, the way a left-edge handle behaves; a positive translation
+    /// (right) narrows. Height is unmirrored — down is down, with open
+    /// desktop below.
     public func updateResize(translation: CGSize) {
         guard let preview = resizePreview else { return }
         if let customStart = preview.customStart {
@@ -335,13 +336,13 @@ public final class PanelEditor {
         return slot.resized(to: preview.span)
     }
 
-    /// Whether widening `lane` to `width` still fits the display — the commit
-    /// guard for a width grip, and the resize half of `fits(widths:)`.
-    public func canResizeLane(_ lane: Int, to width: CGFloat, laneWidths: [CGFloat]) -> Bool {
-        guard laneWidths.indices.contains(lane) else { return false }
-        var widths = laneWidths
-        widths[lane] = width
-        return Layout.fits(widths: widths, inWidth: displayWidth)
+    /// The widest `lane` may draw while the other lanes stay put — the commit
+    /// and the live draw clamp to this. Nil when the lane index is stale.
+    public func maxLaneWidth(for lane: Int, laneWidths: [CGFloat]) -> CGFloat? {
+        guard laneWidths.indices.contains(lane) else { return nil }
+        var others = laneWidths
+        others.remove(at: lane)
+        return Layout.maxLaneWidth(beside: others, inWidth: displayWidth)
     }
 
     /// The lane a drop would open, if the ghost is hovering a gap and the
