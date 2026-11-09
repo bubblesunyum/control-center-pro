@@ -270,17 +270,21 @@ public final class PanelEditor {
     /// a changed preview lands — the window tracker re-fits on every one,
     /// and identical ticks must not re-place the panel.
     ///
-    /// Width runs mirrored: the grip sits on the card's leading (left) edge
-    /// — the panel is pinned top-right, so the trailing edge never moves in
-    /// screen space and only the free edge can follow the finger. Dragging
-    /// left widens, the way a left-edge handle behaves; a positive translation
-    /// (right) narrows. Height is unmirrored — down is down, with open
-    /// desktop below.
+    /// Width is unmirrored: outward grows, like any window handle — dragging
+    /// right widens, dragging left narrows. The panel is pinned top-right,
+    /// so the card's trailing edge never moves in screen space and rightward
+    /// travel ends at the screen edge; the lane grows left instead. A drag
+    /// past the display parks at the widest span that fits rather than
+    /// snapping back. Grid cards still count whole steps, so a nudge that
+    /// never reaches the next step lands back where it started — and a step
+    /// needs more rightward room than the screen edge allows, which is why
+    /// big widenings repeat the drag or use the keyboard stepper.
+    /// Height is unmirrored — down is down, with open desktop below.
     public func updateResize(translation: CGSize) {
         guard let preview = resizePreview else { return }
         if let customStart = preview.customStart {
             let custom = PanelEditor.clampedCustom(CGSize(
-                width: customStart.width - translation.width,
+                width: customStart.width + translation.width,
                 height: customStart.height + translation.height
             ))
             guard custom != preview.custom else { return }
@@ -288,7 +292,7 @@ public final class PanelEditor {
             return
         }
         let fraction = CGSize(
-            width: min(max(CGFloat(preview.start.width) - translation.width / preview.baseSize.width, 1),
+            width: min(max(CGFloat(preview.start.width) + translation.width / preview.baseSize.width, 1),
                        CGFloat(WidgetSpan.maximum)),
             height: min(max(CGFloat(preview.start.height) + translation.height / preview.baseSize.height, 1),
                         CGFloat(WidgetSpan.maximum))

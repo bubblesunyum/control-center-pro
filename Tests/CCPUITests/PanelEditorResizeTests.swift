@@ -20,9 +20,8 @@ final class PanelEditorResizeTests: XCTestCase {
         let editor = PanelEditor()
         editor.beginResize(a, from: .unit, baseSize: baseSize)
 
-        // One lane-unit left and two base-heights down: width is mirrored
-        // (left widens on a right-pinned panel), height is not.
-        editor.updateResize(translation: CGSize(width: -310, height: 270))
+        // One lane-unit right and two base-heights down.
+        editor.updateResize(translation: CGSize(width: 310, height: 270))
 
         XCTAssertEqual(editor.resizePreview?.span, WidgetSpan(width: 2, height: 3))
     }
@@ -31,7 +30,7 @@ final class PanelEditorResizeTests: XCTestCase {
         let editor = PanelEditor()
         editor.beginResize(a, from: .unit, baseSize: baseSize)
 
-        editor.updateResize(translation: CGSize(width: -160, height: -70))
+        editor.updateResize(translation: CGSize(width: 160, height: -70))
 
         XCTAssertEqual(editor.resizePreview?.span, WidgetSpan(width: 2, height: 1))
     }
@@ -40,7 +39,7 @@ final class PanelEditorResizeTests: XCTestCase {
         let editor = PanelEditor()
         editor.beginResize(a, from: .unit, baseSize: baseSize)
 
-        editor.updateResize(translation: CGSize(width: -5000, height: -5000))
+        editor.updateResize(translation: CGSize(width: 5000, height: -5000))
 
         XCTAssertEqual(editor.resizePreview?.span, WidgetSpan(width: 3, height: 1))
         XCTAssertEqual(editor.resizePreview?.fraction, CGSize(width: 3, height: 1))
@@ -211,8 +210,8 @@ final class PanelEditorResizeTests: XCTestCase {
         let editor = PanelEditor()
         editor.beginResize(a, from: .unit, baseSize: baseSize)
 
-        // Half a lane-unit left, half a base-height down: between steps.
-        editor.updateResize(translation: CGSize(width: -150, height: 66))
+        // Half a lane-unit right, half a base-height down: between steps.
+        editor.updateResize(translation: CGSize(width: 150, height: 66))
 
         XCTAssertEqual(editor.resizePreview?.fraction, CGSize(width: 1.5, height: 1.5))
         // Packing still counts the rounded step, not the finger.
@@ -242,7 +241,7 @@ final class PanelEditorResizeTests: XCTestCase {
         XCTAssertEqual(editor.drawSize(for: a), CGSize(width: 300, height: 132))
 
         // Midway to 2x2: linear between the grid widths, magnet out of reach.
-        editor.updateResize(translation: CGSize(width: -150, height: 66))
+        editor.updateResize(translation: CGSize(width: 150, height: 66))
         XCTAssertEqual(editor.drawSize(for: a), CGSize(width: 456, height: 198))
     }
 
@@ -251,7 +250,7 @@ final class PanelEditorResizeTests: XCTestCase {
         editor.beginResize(a, from: .unit, baseSize: baseSize)
 
         // Five points short of the 2x width, two short of the 2x height.
-        editor.updateResize(translation: CGSize(width: -295, height: 130))
+        editor.updateResize(translation: CGSize(width: 295, height: 130))
 
         XCTAssertEqual(editor.drawSize(for: a)?.width ?? -1, 609.296, accuracy: 0.001)
         XCTAssertEqual(editor.drawSize(for: a)?.height ?? -1, 263.6, accuracy: 0.001)
@@ -272,8 +271,8 @@ final class PanelEditorResizeTests: XCTestCase {
         let editor = PanelEditor()
         editor.beginCustomResize(a, from: CGSize(width: 300, height: 232))
 
-        // An odd drag lands odd — no rounding to steps. Left widens.
-        editor.updateResize(translation: CGSize(width: -47, height: 279))
+        // An odd drag lands odd — no rounding to steps.
+        editor.updateResize(translation: CGSize(width: 47, height: 279))
 
         XCTAssertEqual(editor.resizePreview?.custom, CGSize(width: 347, height: 511))
         XCTAssertEqual(editor.drawSize(for: a), CGSize(width: 347, height: 511))
@@ -284,7 +283,7 @@ final class PanelEditorResizeTests: XCTestCase {
         editor.beginCustomResize(a, from: CGSize(width: 300, height: 232))
 
         // Five points short of a grid width: grid would pull, custom does not.
-        editor.updateResize(translation: CGSize(width: -307, height: 0))
+        editor.updateResize(translation: CGSize(width: 307, height: 0))
 
         XCTAssertEqual(editor.drawSize(for: a), CGSize(width: 607, height: 232))
     }
@@ -293,8 +292,8 @@ final class PanelEditorResizeTests: XCTestCase {
         let editor = PanelEditor()
         editor.beginCustomResize(a, from: CGSize(width: 300, height: 232))
 
-        // Drag right to narrow past the floor, down past the ceiling.
-        editor.updateResize(translation: CGSize(width: 5000, height: 5000))
+        // Drag left to narrow past the floor, down past the ceiling.
+        editor.updateResize(translation: CGSize(width: -5000, height: 5000))
 
         XCTAssertEqual(
             editor.resizePreview?.custom,

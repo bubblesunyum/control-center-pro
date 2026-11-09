@@ -4,13 +4,10 @@
 import CCPKit
 import SwiftUI
 
-/// The handle a card is resized by: bottom-leading corner, edit mode only.
+/// The handle a card is resized by: bottom-trailing corner, edit mode only.
 ///
 /// It is a mark rather than a button — the iPadOS windowing resize tick, a
-/// short rounded corner hugging the card's own. Leading, because the panel
-/// is pinned top-right: the trailing edge never moves in screen space, so a
-/// grip there would separate from the finger as the card widens (see
-/// `EditableCard`). The drag itself belongs to
+/// short rounded corner hugging the card's own. The drag itself belongs to
 /// the panel-level gesture, which hit-tests the press against the frames this
 /// reports: a per-card gesture never reliably saw the touch, and the panel's
 /// already gets every one. VoiceOver users get the same steps as actions.
@@ -25,10 +22,6 @@ struct ResizeGrip: View {
     var body: some View {
         CornerTick()
             .stroke(.white, style: StrokeStyle(lineWidth: Stroke.resizeTick, lineCap: .round))
-            // Mirrored to the leading corner: the panel is pinned top-right,
-            // so the trailing edge never moves in screen space and a grip
-            // there would separate from the finger as the card widens.
-            .scaleEffect(x: -1, y: 1)
             // The mark is small and the target is not: a full 44pt box in the
             // corner, so the finger can land anywhere near the edge. Its outer
             // corner sits exactly on the card's, which is what lets the arc
@@ -41,7 +34,7 @@ struct ResizeGrip: View {
             // on hover, on a spring with a little give that still settles
             // fast. Anchored to the corner so the growth never leaves the
             // edge it hugs.
-            .scaleEffect(isHovered ? Layout.resizeGripHoverScale : 1, anchor: .bottomLeading)
+            .scaleEffect(isHovered ? Layout.resizeGripHoverScale : 1, anchor: .bottomTrailing)
             .animation(.spring(response: 0.32, dampingFraction: 0.55), value: isHovered)
             .onHover { isHovered = $0 }
             .background { gripReporter }

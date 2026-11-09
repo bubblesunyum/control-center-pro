@@ -28,7 +28,7 @@ struct EditableCard: View {
             // `editor.isEditing && !isInTheAir`.
             .wiggling(false)
             .overlay(alignment: .topLeading) { removeBadge }
-            .overlay(alignment: .bottomLeading) { resizeGrip }
+            .overlay(alignment: .bottomTrailing) { resizeGrip }
             // The whole card, badge included: what a lifted card leaves in its
             // lane is a gap, and a gap with a remove button floating in it is
             // a control belonging to nothing. Hit-testing is handled by the
@@ -74,13 +74,8 @@ struct EditableCard: View {
         }
     }
 
-    /// The resize grip: a handle on the card's bottom-leading corner, in edit
-    /// mode only, on cards that take part in resizing. Leading, not trailing:
-    /// the panel is pinned top-right, so the trailing edge sits a fixed few
-    /// points from the screen edge and never moves in screen space — a grip
-    /// there separates from the finger the moment the card widens. The
-    /// leading edge is the free one: it follows the pointer exactly, the way
-    /// a left-edge handle behaves. The panel-level gesture
+    /// The resize grip: a handle on the card's bottom-trailing corner, in edit
+    /// mode only, on cards that take part in resizing. The panel-level gesture
     /// leaves presses that start on the grip alone (see `GripFramePreference`
     /// in ResizeGrip.swift), so the two never fight over one touch.
     @ViewBuilder private var resizeGrip: some View {

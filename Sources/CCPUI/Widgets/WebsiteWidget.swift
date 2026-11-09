@@ -366,10 +366,14 @@ private struct WebsiteContent: View {
     /// A URL-change load (not a reload) waiting for its finish to stamp the hour.
     @State private var awaitingFreshLoad = false
     @State private var reloadTask: Task<Void, Never>?
-    /// The pointer in the corner zone straddling the card's outer bottom-left
-    /// edge, or on the bar itself. The whole-card hover is gone on purpose:
-    /// WebKit owns the page, so the bar must not answer the entire card.
+    /// The pointer in a corner zone straddling the card's outer edge, or on
+    /// the bar itself. The whole-card hover is gone on purpose: WebKit owns
+    /// the page, so the bar must not answer the entire card.
     @State private var isHoveringPill = false
+    /// Which corner summoned the bar — placement hangs off it, flipped
+    /// toward room when that side would leave the display. Retained through
+    /// the hide grace so the bar never jumps sides on the way out.
+    @State private var hoverCorner: WebsitePill.Corner?
     /// A pending bar hide, cancelled when the pointer re-enters. Without the
     /// grace the zone-to-bar handoff (adjacent views, unordered events)
     /// flickers the bar on every crossing.
@@ -499,25 +503,26 @@ private struct WebsiteContent: View {
             .frame(maxWidth: .infinity)
             .frame(height: drawnHeight)
         }
-        // The bar floats over the page while visible, above the web view it
-        // controls; a card too narrow to hold it hangs it outside instead
-        // (see `pillInside`). An outside bar still joins the backdrop
+        // The bar hangs off the card's edge — outside the glass, never
+        // covering the page — so it sits above the neighbour below while
+        // visible rather than sliding under it. Its frame joins the backdrop
         // hit-test (see PanelOverflowFramePreference) so a click on it never
         // reads as backdrop.
-        .zIndex(pillVisible && !isPillInside ? 10 : 0)
-        .overlay(alignment: pillBarAlignment) { pillBar }
+        .zIndex(pillVisible ? 10 : 0)
+        .overlay(alignment: pillPlacement.alignment) { pillBar }
         .onContinuousHover { phase in
             switch phase {
             case .active(let location):
                 // Proximity, not coverage: nothing invisible sits over the
                 // page swallowing clicks — the bar answers the pointer being
-                // near the card's outer bottom-left corner and the keyboard.
-                // Generous by a few points so landing it never needs care.
-                let nearCorner = location.x < Self.cornerProximityWidth + Space.two
-                    && location.y > drawnHeight - Self.cornerProximityHeight - Space.two
-                noteHover(nearCorner)
+                // near any of the card's corners and the keyboard. Generous
+                // by a few points so landing it never needs care.
+                noteCorner(WebsitePill.corner(
+                    at: location,
+                    in: CGSize(width: drawnWidth, height: drawnHeight)
+                ))
             case .ended:
-                noteHover(false)
+                noteCorner(nil)
             }
         }
         .opacity(isReloading ? WebsiteReloadStyle.dimmedOpacity : 1)
@@ -559,66 +564,45 @@ private struct WebsiteContent: View {
     }
 
     /// WebKit owns right-click inside the page, so the card's controls live in
-    /// a bar over the page's bottom-left corner — inside the glass, never
-    /// covering it with anything invisible. It answers pointer proximity to
-    /// that corner (no invisible strip over the page: hover tracking never
-    /// swallows a click) and the keyboard: hovering the rest of the page
-    /// leaves it hidden. The trigger stays at the bottom-left in every
-    /// placement, so the learned hover never goes dead; a short hide grace
-    /// covers the handoff from card to bar. The bar is hidden in edit mode:
-    /// the resize grip now lives on the same bottom-leading corner, and a
-    /// press there must begin a resize rather than answer a button.
+    /// a bar hung off the card's edge — outside the glass, straddling the
+    /// edge, never covering the page. It answers pointer proximity to any of
+    /// the card's corners (no invisible strip over the page: hover tracking
+    /// never swallows a click) and the keyboard: hovering the middle of the
+    /// page leaves it hidden. The hang goes off the summoned corner, flipped
+    /// toward room when that side would leave the display; a short hide grace
+    /// covers the handoff from card to bar, and the corner is retained
+    /// through the grace so the bar never jumps sides on the way out. The
+    /// bar is hidden in edit mode: the resize grip lives on the bottom
+    /// corner, and a press there must begin a resize rather than answer a
+    /// button.
     ///
-    /// Inside the card the bar needs nothing from the backdrop hit-test — it
-    /// sits within the card's own frame, where clicks already count as the
-    /// panel's — and the pointer stays inside the card's hover region while
-    /// crossing onto it, so the handoff cannot flicker. A card narrower than
-    /// the bar itself (a free drag can go that far) hangs it outside like
-    /// before, with the above/below flip and the overflow-frame reporting.
+    /// The bar always hangs outside every card frame, so it always reports
+    /// its frame to the backdrop hit-test (see PanelOverflowFramePreference):
+    /// a click on the bar never reads as backdrop and dismisses under the
+    /// finger.
     @ViewBuilder
     private var pillBar: some View {
         if currentWidgetID != nil, !isEditingForBar {
             pillContent
-                .padding([.leading, .bottom], isPillInside ? Space.one : 0)
-                .offset(
-                    x: isPillInside ? 0 : pillPlacement.xOffset,
-                    y: isPillInside ? 0 : pillPlacement.yOffset
-                )
+                .offset(x: pillPlacement.xOffset, y: pillPlacement.yOffset)
                 .onHover(perform: noteHover)
                 .background {
-                    // Only the outside hang leaves the card: an inside bar
-                    // sits within the card's own frame, where clicks already
-                    // count as the panel's.
-                    if !isPillInside {
-                        GeometryReader { proxy in
-                            // `offset` shifts drawing post-layout, so the measured
-                            // layout frame needs the same shift to match the drawn
-                            // bar — a background sits at the pre-offset box.
-                            Color.clear.preference(
-                                key: PanelOverflowFramePreference.self,
-                                value: pillVisible
-                                    ? [proxy.frame(in: .panel).offsetBy(
-                                        dx: pillPlacement.xOffset,
-                                        dy: pillPlacement.yOffset
-                                    )]
-                                    : []
-                            )
-                        }
+                    GeometryReader { proxy in
+                        // `offset` shifts drawing post-layout, so the measured
+                        // layout frame needs the same shift to match the drawn
+                        // bar — a background sits at the pre-offset box.
+                        Color.clear.preference(
+                            key: PanelOverflowFramePreference.self,
+                            value: pillVisible
+                                ? [proxy.frame(in: .panel).offsetBy(
+                                    dx: pillPlacement.xOffset,
+                                    dy: pillPlacement.yOffset
+                                )]
+                                : []
+                        )
                     }
                 }
         }
-    }
-
-    /// Whether the bar fits inside the card: a bar wider than its card hangs
-    /// toward the safe side (see `pillPlacement`).
-    private var isPillInside: Bool {
-        drawnWidth >= Self.pillEstimate.width + Space.two
-    }
-
-    /// The bar's overlay anchor: the card's own corner when the bar is
-    /// inside, the outside hang's alignment when it is not.
-    private var pillBarAlignment: Alignment {
-        isPillInside ? .bottomLeading : pillPlacement.alignment
     }
 
     /// Edit mode owns the corner the bar is summoned from — the grip lives
@@ -630,11 +614,26 @@ private struct WebsiteContent: View {
     /// A hover handoff with a grace: leaving the card's corner or the bar
     /// hides the bar a beat later rather than at once, so the pointer
     /// crossing from card to bar (adjacent views, unordered events) never
-    /// flickers it. Entering cancels a pending hide.
+    /// flickers it. Entering cancels a pending hide. Both hovers share the
+    /// one grace — and the hide always clears the summoning corner with the
+    /// bar, so a later keyboard summon never inherits a stale side.
+    private func noteCorner(_ corner: WebsitePill.Corner?) {
+        if let corner {
+            setPillHover(visible: true, corner: corner)
+        } else {
+            setPillHover(visible: false)
+        }
+    }
+
     private func noteHover(_ hovering: Bool) {
-        if hovering {
+        setPillHover(visible: hovering)
+    }
+
+    private func setPillHover(visible: Bool, corner: WebsitePill.Corner? = nil) {
+        if visible {
             hideTask?.cancel()
             hideTask = nil
+            if let corner { hoverCorner = corner }
             isHoveringPill = true
         } else {
             hideTask?.cancel()
@@ -642,77 +641,48 @@ private struct WebsiteContent: View {
                 try? await Task.sleep(for: .seconds(Self.hoverGraceSeconds))
                 guard !Task.isCancelled else { return }
                 isHoveringPill = false
+                hoverCorner = nil
             }
         }
     }
 
-    /// The bar's size as drawn: buttons plus capsule padding, estimated for
-    /// placement — the bar is hidden until the pointer is already near the
-    /// corner, so it never reports its own size for where to hang.
-    private static let pillEstimate = CGSize(width: 200, height: 44)
-    /// The corner proximity: how near the pointer must be to the card's
-    /// bottom-left corner to raise the bar. Wide enough to land, short enough
-    /// that the rest of the page never triggers it. A hover threshold, not a
-    /// view — nothing covers the page.
-    private static let cornerProximityWidth: CGFloat = 120
-    private static let cornerProximityHeight: CGFloat = 28
     /// How long the bar lingers after the pointer leaves its corner and bar.
     private static let hoverGraceSeconds: Double = 0.6
-    /// How close to the display's bottom the card sits before the bar flips
-    /// above it instead of hanging below.
+    /// How close to the display's bottom the card sits before a bottom hang
+    /// flips above it instead — and, mirrored, how close to the window's top
+    /// before a top hang flips below. The window starts right under the menu
+    /// bar, so a top hang needs the bar's own height plus a little air.
     private static let pillFlipMargin: CGFloat = 60
 
-    /// One of the outside bar's four hangs: below or above, off the leading or
-    /// trailing edge. Only used when the card is narrower than the bar
-    /// itself — the common case sits inside. Default bottom-leading. A bar
-    /// wider than its card flips to the trailing edge — hanging left is safe
-    /// except at the display's left edge, while hanging right past a
-    /// right-seated panel is off screen by construction (the panel sits 8pt
-    /// from it). A bar below a card near the display's bottom flips above.
-    private enum PillPlacement {
-        case belowLeading, belowTrailing, aboveLeading, aboveTrailing
-
-        var alignment: Alignment {
-            switch self {
-            case .belowLeading: return .bottomLeading
-            case .belowTrailing: return .bottomTrailing
-            case .aboveLeading: return .topLeading
-            case .aboveTrailing: return .topTrailing
-            }
-        }
-
-        var xOffset: CGFloat {
-            switch self {
-            case .belowLeading, .aboveLeading: return Space.one
-            case .belowTrailing, .aboveTrailing: return -Space.one
-            }
-        }
-
-        var yOffset: CGFloat {
-            switch self {
-            case .belowLeading, .belowTrailing: return WebsiteContent.pillEstimate.height
-            case .aboveLeading, .aboveTrailing: return -WebsiteContent.pillEstimate.height
-            }
-        }
+    private var pillPlacement: WebsitePill.Placement {
+        WebsitePill.placement(
+            for: hoverCorner,
+            drawnWidth: drawnWidth,
+            roomAbove: hasRoomAbove,
+            roomBelow: hasRoomBelow
+        )
     }
 
-    private var pillPlacement: PillPlacement {
-        let trailing = drawnWidth < Self.pillEstimate.width + Space.two
-        if pillShowsAbove {
-            return trailing ? .aboveTrailing : .aboveLeading
-        }
-        return trailing ? .belowTrailing : .belowLeading
-    }
-
-    private var pillShowsAbove: Bool {
-        guard let maxY = cardPanelMaxY else { return false }
+    /// Whether a bottom hang fits under the card: the card's distance from
+    /// the display's bottom. Nil before the first layout report — below
+    /// until known.
+    private var hasRoomBelow: Bool {
+        guard let maxY = cardPanelMaxY else { return true }
         // Panel space runs down from the window's top, and the window's top
         // is the visible area's top — so the card's distance from the
         // display's bottom is the visible height minus its panel depth. The
         // height rides on the editor (set by the controller per seat) rather
         // than a screen lookup here, so the view stays pure.
         let screenH = editor?.displayHeight ?? 900
-        return screenH - maxY < Self.pillFlipMargin
+        return screenH - maxY >= Self.pillFlipMargin
+    }
+
+    /// Whether a top hang fits over the card: the card's distance from the
+    /// window's top. Nil before the first layout report — below until
+    /// known, like the bottom hang.
+    private var hasRoomAbove: Bool {
+        guard let minY = cardPanelMinY else { return false }
+        return minY >= WebsitePill.barHeight + Space.two
     }
 
     /// The card's depth in panel space, for the above/below choice. Nil
@@ -723,6 +693,13 @@ private struct WebsiteContent: View {
     private var cardPanelMaxY: CGFloat? {
         guard let id = currentWidgetID else { return nil }
         return editor?.zones.first(where: { $0.id == id })?.frame.maxY
+    }
+
+    /// The card's top edge in panel space, for the top hang's room check.
+    /// Same deliberately-untracked read as `cardPanelMaxY`.
+    private var cardPanelMinY: CGFloat? {
+        guard let id = currentWidgetID else { return nil }
+        return editor?.zones.first(where: { $0.id == id })?.frame.minY
     }
 
     /// The bar itself: back, forward, reload, and the card's menu.
