@@ -44,6 +44,10 @@ struct EditableCard: View {
         if editor.isEditing {
             Button {
                 withAnimation(.snappy) { arrangement.remove(slot.id) }
+                if slot.id.isWebsite {
+                    WebsiteStore.shared.remove(slot.id)
+                    WebsiteWidget.discard(slot.id)
+                }
             } label: {
                 // A dark glyph on a light disc, not the other way round: the
                 // badge sits on a card that is already dark, and a dimmed

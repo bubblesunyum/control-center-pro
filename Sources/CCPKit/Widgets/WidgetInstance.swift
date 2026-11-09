@@ -19,7 +19,14 @@ public final class WidgetInstance: Identifiable {
     private let stop: () -> Void
 
     init<W: CCPWidget>(_ widget: W) {
-        descriptor = W.descriptor
+        self.descriptor = W.descriptor
+        content = { AnyView(widget.makeView()) }
+        start = { widget.activate() }
+        stop = { widget.deactivate() }
+    }
+
+    init<W: CCPWidget>(_ widget: W, descriptor: WidgetDescriptor) {
+        self.descriptor = descriptor
         content = { AnyView(widget.makeView()) }
         start = { widget.activate() }
         stop = { widget.deactivate() }

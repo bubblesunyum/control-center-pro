@@ -12,6 +12,8 @@ import SwiftUI
 struct WidgetGallery: View {
     let arrangement: PanelArrangement
     let onAdd: () -> Void
+    @State private var showWebsiteSheet = false
+    @State private var draftURL = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -26,8 +28,16 @@ struct WidgetGallery: View {
                 VStack(spacing: 0) {
                     ForEach(arrangement.gallery) { entry in
                         GalleryRow(entry: entry) {
-                            withAnimation(.snappy) { arrangement.add(entry.id) }
-                            onAdd()
+                            // The website template mints a fresh website-xxx
+                            // id on every tap, so it opens the address sheet
+                            // instead of placing anything directly.
+                            if entry.id.isWebsiteTemplate {
+                                draftURL = ""
+                                showWebsiteSheet = true
+                            } else {
+                                withAnimation(.snappy) { arrangement.add(entry.id) }
+                                onAdd()
+                            }
                         }
                     }
                 }
@@ -36,12 +46,27 @@ struct WidgetGallery: View {
         }
         .frame(width: Layout.laneWidth)
         .padding(.bottom, Space.half)
+        .sheet(isPresented: $showWebsiteSheet) {
+            WebsiteURLSheet(draftURL: $draftURL) { normalized in
+                let newID = WebsiteStore.shared.add(url: normalized)
+                withAnimation(.snappy) { arrangement.add(newID) }
+                showWebsiteSheet = false
+                onAdd()
+            }
+        }
     }
 }
 
 private struct GalleryRow: View {
     let entry: GalleryEntry
     let add: () -> Void
+
+    /// The website template is never "already on the panel": tapping it mints
+    /// a new website-xxx id, so it stays addable no matter how many website
+    /// cards exist.
+    private var isWebsiteTemplate: Bool { entry.id.isWebsiteTemplate }
+
+    private var isPlaced: Bool { entry.isPlaced && !isWebsiteTemplate }
 
     var body: some View {
         Button(action: add) {
@@ -63,7 +88,7 @@ private struct GalleryRow: View {
 
                 Spacer(minLength: Space.one)
 
-                if entry.isPlaced {
+                if isPlaced {
                     Image(systemName: "checkmark")
                         .foregroundStyle(Color.labelMuted)
                 }
@@ -73,8 +98,59 @@ private struct GalleryRow: View {
             .padding(.vertical, Space.one)
         }
         .buttonStyle(.plain)
-        .disabled(entry.isPlaced)
-        .accessibilityLabel(entry.isPlaced ? "\(entry.descriptor.title), already on the panel" : "Add \(entry.descriptor.title)")
+        .disabled(isPlaced)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var accessibilityLabel: String {
+        if isWebsiteTemplate { return "Add website" }
+        if isPlaced { return "\(entry.descriptor.title), already on the panel" }
+        return "Add \(entry.descriptor.title)"
+    }
+}
+
+/// The address a new website card opens. The store's own normalization is the
+/// single rule for what counts as an address — the sheet only refuses a blank
+/// or hostless one.
+private struct WebsiteURLSheet: View {
+    @Binding var draftURL: String
+    let add: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    private var normalized: String {
+        WebsiteStore.normalizedURL(draftURL)
+    }
+
+    private var isValid: Bool {
+        guard let url = URL(string: normalized),
+              let host = url.host, !host.isEmpty
+        else { return false }
+        return true
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.two) {
+            Text("Add website")
+                .font(.headline)
+            TextField("Website URL", text: $draftURL)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityLabel("Website address")
+                .onSubmit(submit)
+            HStack(spacing: Space.one) {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                    .accessibilityLabel("Cancel adding website")
+                Button("Add") { submit() }
+                    .accessibilityLabel("Add website")
+                    .disabled(!isValid)
+            }
+        }
+        .padding(Space.two)
+    }
+
+    private func submit() {
+        guard isValid else { return }
+        add(normalized)
     }
 }
 

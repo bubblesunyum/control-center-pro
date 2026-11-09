@@ -59,5 +59,33 @@ public func makeStandardRegistry() -> WidgetRegistry {
     registry.register(ShelfWidget.self)
     registry.register(NotesWidget.self)
     registry.register(PasswordsWidget.self)
+    registry.register(WebsiteWidget.self)
+    // Dynamic website-xxx ids resolve through the template: the registry
+    // cannot name per-site ids, so the fallback mints them. The descriptor
+    // carries the site's id and host; the instance carries that same
+    // descriptor so LaneSlot.id (and currentWidgetID) is the site's id.
+    let websiteDescriptor: @MainActor (WidgetID) -> WidgetDescriptor? = { id in
+        guard id.isWebsiteInstance else { return nil }
+        let template = WebsiteWidget.descriptor
+        var title = template.title
+        if let raw = WebsiteStore.shared.entry(for: id)?.url,
+           let host = URL(string: raw)?.host, !host.isEmpty
+        {
+            title = host
+        }
+        return WidgetDescriptor(
+            id: id,
+            title: title,
+            symbolName: template.symbolName,
+            size: template.size,
+            permissions: template.permissions,
+            isMinimizable: template.isMinimizable
+        )
+    }
+    registry.fallbackDescriptor = websiteDescriptor
+    registry.fallback = { id in
+        guard let d = websiteDescriptor(id) else { return nil }
+        return WidgetInstance.erasing(WebsiteWidget(), descriptor: d)
+    }
     return registry
 }
