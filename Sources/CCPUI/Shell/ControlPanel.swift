@@ -33,6 +33,7 @@ public struct ControlPanel: View {
     @GestureState private var isGestureActive = false
     @State private var headerFrames: [HeaderFrame] = []
     @State private var gripFrames: [GripFrame] = []
+    @State private var overflowFrames: [CGRect] = []
     @State private var holdTask: Task<Void, Never>?
     @State private var holdWidgetID: WidgetID?
     /// Where the press that began the resize landed. The resize drag is
@@ -92,7 +93,11 @@ public struct ControlPanel: View {
         .environment(\.panelArrangement, arrangement)
         .onPreferenceChange(DropZonePreference.self) { zones in
             editor.zones = zones
-            onCardFrames(zones.map(\.frame))
+            reportContentFrames()
+        }
+        .onPreferenceChange(PanelOverflowFramePreference.self) { bars in
+            overflowFrames = bars
+            reportContentFrames()
         }
         .onPreferenceChange(HeaderFramePreference.self) { frames in
             headerFrames = frames
@@ -151,6 +156,15 @@ public struct ControlPanel: View {
         // first reorder drag land. Use simultaneous so a header hold (panel
         // drag when not editing) doesn't block the Files row's onDrag.
         .simultaneousGesture(panelDrag)
+    }
+
+    /// Every rect the backdrop hit-test counts as the panel's: the cards plus
+    /// any floating overflow hung outside them. Each preference handler
+    /// refreshes the same union from one fresh value and one settled state —
+    /// zones and overflow never change in the same pass (hover never
+    /// re-lays-out, layout never flips bar visibility).
+    private func reportContentFrames() {
+        onCardFrames(editor.zones.map(\.frame) + overflowFrames)
     }
 
     private var galleryOverlay: some View {

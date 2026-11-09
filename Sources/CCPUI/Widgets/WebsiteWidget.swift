@@ -491,10 +491,25 @@ private struct WebsiteContent: View {
             .frame(height: drawnHeight)
         }
         // The bar floats outside the glass, so it sits above the neighbour
-        // below while visible rather than sliding under it.
+        // below while visible rather than sliding under it. Its frame joins
+        // the backdrop hit-test (see WebsiteBarFramePreference) so a click on
+        // it never reads as backdrop.
         .zIndex(pillVisible ? 10 : 0)
-        .overlay(alignment: .bottomLeading) { hoverPill }
         .overlay(alignment: pillPlacement.alignment) { pillBar }
+        .onContinuousHover { phase in
+            switch phase {
+            case .active(let location):
+                // Proximity, not coverage: nothing invisible sits over the
+                // page swallowing clicks — the bar answers the pointer being
+                // near the card's outer bottom-left corner and the keyboard.
+                // Generous by a few points so landing it never needs care.
+                let nearCorner = location.x < Self.cornerProximityWidth + Space.two
+                    && location.y > drawnHeight - Self.cornerProximityHeight - Space.two
+                noteHover(nearCorner)
+            case .ended:
+                noteHover(false)
+            }
+        }
         .opacity(isReloading ? WebsiteReloadStyle.dimmedOpacity : 1)
         .sheet(isPresented: $showURLSheet) {
             urlSheet
@@ -535,49 +550,47 @@ private struct WebsiteContent: View {
 
     /// WebKit owns right-click inside the page, so the card's controls live in
     /// a bar pinned to the card's outer bottom-left edge — outside the glass,
-    /// straddling the edge, never covering the page. It answers only the
-    /// corner zone (an invisible strip at the card's bottom-left edge) and
-    /// the keyboard: hovering the rest of the page leaves it hidden. The zone
-    /// stays at the bottom-left in every placement, so the learned hover
-    /// never goes dead; a short hide grace covers the handoff from zone to
-    /// bar. When the bar would hang off screen it flips to another side.
-    @ViewBuilder
-    private var hoverPill: some View {
-        if currentWidgetID != nil {
-            cornerZone
-        }
-    }
-
-    /// The invisible proximity zone: a strip overlapping the card's
-    /// bottom-left edge. Cheap by construction — no mouse-location math, and
-    /// the bar stays reachable because it touches the zone. It does swallow
-    /// page clicks in its strip; 120x28 at the card's edge is the price of a
-    /// bar that doesn't cover the page.
-    private var cornerZone: some View {
-        Color.clear
-            .frame(width: Self.cornerZoneWidth, height: Self.cornerZoneHeight)
-            .contentShape(Rectangle())
-            .accessibilityHidden(true)
-            .offset(x: Space.one)
-            .onHover(perform: noteHover)
-    }
-
-    /// The bar itself, hung off the card per `pillPlacement` — outside the
-    /// glass, either below the edge it is triggered from or above the card
-    /// when below would leave the display.
+    /// straddling the edge, never covering the page. It answers pointer
+    /// proximity to that corner (no invisible strip over the page: hover
+    /// tracking never swallows a click) and the keyboard: hovering the rest
+    /// of the page leaves it hidden. The trigger stays at the bottom-left in
+    /// every placement, so the learned hover never goes dead; a short hide
+    /// grace covers the handoff from card to bar. When the bar would hang off
+    /// screen it flips to another side.
+    ///
+    /// The bar also reports its frame to the backdrop hit-test while visible
+    /// (see PanelOverflowFramePreference): it hangs outside every card frame,
+    /// where a click would otherwise read as backdrop and dismiss the panel
+    /// under the finger.
     @ViewBuilder
     private var pillBar: some View {
         if currentWidgetID != nil {
             pillContent
                 .offset(x: pillPlacement.xOffset, y: pillPlacement.yOffset)
                 .onHover(perform: noteHover)
+                .background {
+                    GeometryReader { proxy in
+                        // `offset` shifts drawing post-layout, so the measured
+                        // layout frame needs the same shift to match the drawn
+                        // bar — a background sits at the pre-offset box.
+                        Color.clear.preference(
+                            key: PanelOverflowFramePreference.self,
+                            value: pillVisible
+                                ? [proxy.frame(in: .panel).offsetBy(
+                                    dx: pillPlacement.xOffset,
+                                    dy: pillPlacement.yOffset
+                                )]
+                                : []
+                        )
+                    }
+                }
         }
     }
 
-    /// A hover handoff with a grace: leaving the zone hides the bar a beat
-    /// later rather than at once, so the pointer crossing from zone to bar
-    /// (adjacent views, unordered events) never flickers it. Entering cancels
-    /// a pending hide.
+    /// A hover handoff with a grace: leaving the card's corner or the bar
+    /// hides the bar a beat later rather than at once, so the pointer
+    /// crossing from card to bar (adjacent views, unordered events) never
+    /// flickers it. Entering cancels a pending hide.
     private func noteHover(_ hovering: Bool) {
         if hovering {
             hideTask?.cancel()
@@ -594,14 +607,16 @@ private struct WebsiteContent: View {
     }
 
     /// The bar's size as drawn: buttons plus capsule padding, estimated for
-    /// placement — the bar never reports its own size (it is hidden until
-    /// the pointer is already in the zone).
+    /// placement — the bar is hidden until the pointer is already near the
+    /// corner, so it never reports its own size for where to hang.
     private static let pillEstimate = CGSize(width: 200, height: 44)
-    /// The corner zone: wide enough to land, short enough to leave the page
-    /// clickable.
-    private static let cornerZoneWidth: CGFloat = 120
-    private static let cornerZoneHeight: CGFloat = 28
-    /// How long the bar lingers after the pointer leaves its zone and bar.
+    /// The corner proximity: how near the pointer must be to the card's
+    /// bottom-left corner to raise the bar. Wide enough to land, short enough
+    /// that the rest of the page never triggers it. A hover threshold, not a
+    /// view — nothing covers the page.
+    private static let cornerProximityWidth: CGFloat = 120
+    private static let cornerProximityHeight: CGFloat = 28
+    /// How long the bar lingers after the pointer leaves its corner and bar.
     private static let hoverGraceSeconds: Double = 0.6
     /// How close to the display's bottom the card sits before the bar flips
     /// above it instead of hanging below.

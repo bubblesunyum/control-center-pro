@@ -269,11 +269,17 @@ public final class PanelEditor {
     /// straight off its start rect — no steps, no rounding, no magnet. Only
     /// a changed preview lands — the window tracker re-fits on every one,
     /// and identical ticks must not re-place the panel.
+    ///
+    /// Width runs mirrored: the panel is pinned top-right, so the free edge
+    /// is the left one and the trailing grip sits ~20pt from the screen's
+    /// edge. Dragging right to widen would run out of desktop almost at once;
+    /// dragging left widens instead, the way a left-edge handle behaves.
+    /// Height is unmirrored — down is down, with open desktop below.
     public func updateResize(translation: CGSize) {
         guard let preview = resizePreview else { return }
         if let customStart = preview.customStart {
             let custom = PanelEditor.clampedCustom(CGSize(
-                width: customStart.width + translation.width,
+                width: customStart.width - translation.width,
                 height: customStart.height + translation.height
             ))
             guard custom != preview.custom else { return }
@@ -281,7 +287,7 @@ public final class PanelEditor {
             return
         }
         let fraction = CGSize(
-            width: min(max(CGFloat(preview.start.width) + translation.width / preview.baseSize.width, 1),
+            width: min(max(CGFloat(preview.start.width) - translation.width / preview.baseSize.width, 1),
                        CGFloat(WidgetSpan.maximum)),
             height: min(max(CGFloat(preview.start.height) + translation.height / preview.baseSize.height, 1),
                         CGFloat(WidgetSpan.maximum))
@@ -515,6 +521,21 @@ struct DropZonePreference: PreferenceKey {
     static var defaultValue: [PanelEditor.DropZone] = []
 
     static func reduce(value: inout [PanelEditor.DropZone], nextValue: () -> [PanelEditor.DropZone]) {
+        value += nextValue()
+    }
+}
+
+/// Frames of floating UI hung outside card frames, in panel coordinates.
+/// A website nav bar hangs off its card's outer edge — outside every card
+/// frame — so the backdrop hit-test must count it as the panel's, otherwise a
+/// click on the bar reads as backdrop and dismisses under the finger.
+/// Reported only while visible; hidden overflow hit-tests nothing. Named for
+/// the relationship, not the widget: the next floating control reuses this
+/// rather than growing its own preference.
+struct PanelOverflowFramePreference: PreferenceKey {
+    static var defaultValue: [CGRect] = []
+
+    static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) {
         value += nextValue()
     }
 }
