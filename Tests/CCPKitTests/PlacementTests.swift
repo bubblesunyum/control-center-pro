@@ -59,19 +59,19 @@ final class PlacementTests: XCTestCase {
         XCTAssertEqual(decoded, layout)
     }
 
-    func testResizingSetsTheSpanAndNothingElse() {
+    func testResizingSetsTheSizeAndNothingElse() {
         let layout = PanelLayout([[a, b]])
 
         XCTAssertEqual(
-            layout.resizing(a, to: WidgetSpan(width: 2, height: 2)).lanes,
-            [[Placement(id: a, span: WidgetSpan(width: 2, height: 2)), Placement(id: b)]]
+            layout.resizing(a, to: CustomWidgetSize(width: 347, height: 511)).lanes,
+            [[Placement(id: a, customSize: CustomWidgetSize(width: 347, height: 511)), Placement(id: b)]]
         )
     }
 
     func testResizingAWidgetTheLayoutDoesNotPlaceChangesNothing() {
         let layout = PanelLayout([[a]])
 
-        XCTAssertEqual(layout.resizing(b, to: WidgetSpan(width: 2, height: 2)), layout)
+        XCTAssertEqual(layout.resizing(b, to: CustomWidgetSize(width: 347, height: 511)), layout)
     }
 
     func testMovingCarriesTheSpanAlong() {
@@ -180,8 +180,19 @@ final class PlacementTests: XCTestCase {
         let layout = PanelLayout([[Placement(id: a, isMinimized: true)]])
 
         XCTAssertEqual(
-            layout.resizing(a, to: WidgetSpan(width: 2, height: 2)).lanes,
-            [[Placement(id: a, span: WidgetSpan(width: 2, height: 2), isMinimized: true)]]
+            layout.resizing(a, to: CustomWidgetSize(width: 347, height: 511)).lanes,
+            [[Placement(id: a, isMinimized: true, customSize: CustomWidgetSize(width: 347, height: 511))]]
+        )
+    }
+
+    func testSettingMinimizedKeepsTheSize() {
+        let size = CustomWidgetSize(width: 347, height: 511)
+        let layout = PanelLayout([[Placement(id: a, customSize: size)]])
+
+        XCTAssertEqual(
+            layout.settingMinimized(a, to: true).lanes,
+            [[Placement(id: a, isMinimized: true, customSize: size)]],
+            "a minimize once rebuilt the placement and dropped its size"
         )
     }
 
@@ -215,31 +226,6 @@ final class PlacementTests: XCTestCase {
         )
     }
 
-    func testResolveAttachesEachPlacementSpan() {
-        let slots = stubRegistry().resolve(PanelLayout([[
-            Placement(id: StubWidget.descriptor.id, span: WidgetSpan(width: 2, height: 3)),
-            Placement(id: OtherStubWidget.descriptor.id),
-        ]]))
-
-        XCTAssertEqual(slots[0][0].span, WidgetSpan(width: 2, height: 3))
-        XCTAssertEqual(slots[0][1].span, .unit)
-    }
-
-    func testAnUnavailableSlotsSpanIsUnit() {
-        let slots = stubRegistry().resolve(PanelLayout([[Placement(
-            id: "widget-from-a-newer-build",
-            span: WidgetSpan(width: 3, height: 3)
-        )]]))
-
-        XCTAssertEqual(slots[0][0].span, .unit, "there is no widget to resize")
-    }
-
-    func testOnlyScreensAreUnresizable() {
-        for size in WidgetSize.allCases {
-            XCTAssertEqual(size.isResizable, size != .screen, "\(size)")
-        }
-    }
-
     func testACustomSizeRoundTrips() throws {
         let layout = PanelLayout([[Placement(
             id: a, customSize: CustomWidgetSize(width: 347, height: 511)
@@ -269,22 +255,13 @@ final class PlacementTests: XCTestCase {
         XCTAssertNil(layout.lanes[0][0].customSize)
     }
 
-    func testResizingCustomKeepsTheSpanAndSetsTheRect() {
+    func testResizingKeepsALegacySpanOnDisk() {
         let layout = PanelLayout([[Placement(id: a, span: WidgetSpan(width: 2, height: 1))]])
 
-        let resized = layout.resizingCustom(a, to: CustomWidgetSize(width: 347, height: 511))
+        let resized = layout.resizing(a, to: CustomWidgetSize(width: 347, height: 511))
 
         XCTAssertEqual(resized.lanes[0][0].customSize, CustomWidgetSize(width: 347, height: 511))
         XCTAssertEqual(resized.lanes[0][0].span, WidgetSpan(width: 2, height: 1))
-    }
-
-    func testResizingToASpanClearsTheCustomSize() {
-        let layout = PanelLayout([[Placement(id: a, customSize: CustomWidgetSize(width: 347, height: 511))]])
-
-        let resized = layout.resizing(a, to: WidgetSpan(width: 2, height: 2))
-
-        XCTAssertNil(resized.lanes[0][0].customSize)
-        XCTAssertEqual(resized.lanes[0][0].span, WidgetSpan(width: 2, height: 2))
     }
 
     func testResolveAttachesEachPlacementCustomSize() {

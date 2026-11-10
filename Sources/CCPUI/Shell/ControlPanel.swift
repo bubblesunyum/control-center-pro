@@ -235,20 +235,17 @@ public struct ControlPanel: View {
                     // failure these guards exist to prevent. A stale grip
                     // frame with no slot behind it falls through to reorder,
                     // which is what a press on a card means.
-                    if editor.resizePreview != nil {
+                    if editor.resize != nil {
                         editor.updateResize(translation: resizeAnchor.translation())
                         return
                     }
+                    // The drag starts from the card as drawn — its zone —
+                    // so the first frame is exactly what was grabbed.
                     if let grip = gripFrames.first(where: { $0.frame.contains(value.startLocation) }),
-                       let slot = arrangement.slot(for: grip.id) {
-                        // Free cards drag rects; everything else drags grid
-                        // steps. The update and commit paths branch the same
-                        // way, off the preview the begin call leaves behind.
-                        if slot.isFreeSized {
-                            editor.beginCustomResize(grip.id, from: CGSize(width: slot.width, height: slot.height))
-                        } else {
-                            editor.beginResize(grip.id, from: slot.span, baseSize: slot.resizeStep)
-                        }
+                       let lane = arrangement.layout.position(of: grip.id)?.lane,
+                       let zone = editor.zones.first(where: { $0.id == grip.id }),
+                       let maxWidth = editor.maxLaneWidth(for: lane, laneWidths: arrangement.laneWidths) {
+                        editor.beginResize(grip.id, from: zone.frame.size, maxWidth: maxWidth)
                         resizeAnchor.engage()
                         return
                     }
@@ -300,24 +297,23 @@ public struct ControlPanel: View {
                 holdTask = nil
                 holdWidgetID = nil
                 resizeAnchor.reset()
-                // A resize commits once, on release — or snaps back when a
-                // wider lane would hang off the screen. Grid drags commit a
-                // span; free drags commit their rect.
-                if let preview = editor.resizePreview {
-                    editor.endResize()
-                    if let slot = arrangement.slot(for: preview.id),
-                       let lane = arrangement.layout.position(of: preview.id)?.lane {
-                        if let custom = preview.custom {
-                            commitCustomResize(
-                                custom, of: slot, in: lane,
-                                arrangement: arrangement, editor: editor
-                            )
-                        } else {
-                            commitResize(
-                                preview.span, of: slot, in: lane,
-                                arrangement: arrangement, editor: editor
-                            )
-                        }
+                // A resize commits once, on release, at exactly the size the
+                // finger left it at. No animation: the card is already drawn
+                // at that size, and animating the stored value toward itself
+                // would only let the lane flicker through its old one.
+                // A click on the grip that never moved stores nothing: an
+                // untouched card keeps growing with its content, and a card
+                // drawn fitted to a smaller display keeps its real size.
+                if let resize = editor.resize {
+                    guard resize.size != resize.start else {
+                        editor.endResize()
+                        return
+                    }
+                    var settle = Transaction()
+                    settle.disablesAnimations = true
+                    withTransaction(settle) {
+                        commitResize(resize.size, of: resize.id, arrangement: arrangement, editor: editor)
+                        editor.endResize()
                     }
                 }
                 guard let lifted = editor.lifted else { return }
@@ -348,8 +344,12 @@ public struct ControlPanel: View {
             // window grows left, pinned right); the leading edge stays put.
             newLaneTarget(at: 0)
 
+            let widths = drawnLaneWidths
             ForEach(arrangement.lanes.indices, id: \.self) { index in
-                WidgetLane(lane: index, slots: arrangement.lanes[index], arrangement: arrangement, editor: editor)
+                WidgetLane(
+                    lane: index, slots: arrangement.lanes[index], width: widths[index],
+                    arrangement: arrangement, editor: editor
+                )
                 newLaneTarget(at: index + 1)
             }
         }
@@ -365,6 +365,16 @@ public struct ControlPanel: View {
                 )
             }
         }
+    }
+
+    /// Every lane's width as drawn: its widest card — the one under a held
+    /// grip at its live size — fitted to the display, so the panel never
+    /// runs past either edge.
+    private var drawnLaneWidths: [CGFloat] {
+        let widths = arrangement.lanes.map { slots in
+            slots.map { editor.drawSize(for: $0.id)?.width ?? $0.width }.max() ?? Layout.laneWidth
+        }
+        return Layout.fittedLaneWidths(widths, inWidth: editor.displayWidth)
     }
 
     @ViewBuilder
@@ -395,16 +405,13 @@ public struct ControlPanel: View {
     }
 }
 
-/// One item in a lane's flow: a slot, or the gap where the lifted card would
-/// land. Keyed by the slot so a card keeps its identity — and its wiggle
-/// phase — while the gap moves around it.
+/// One item in a lane: a slot, or the gap where the lifted card would land.
+/// Keyed by the slot so a card keeps its identity while the gap moves
+/// around it.
 @MainActor
 private enum LaneCell {
     case slot(LaneSlot)
-    /// The gap counts what the lifted card counts: its span's columns, or
-    /// nothing when the card is not countable in columns — an app screen
-    /// always stands alone, in the preview as in the commit.
-    case gap(columns: Int?)
+    case gap
 
     var key: String {
         switch self {
@@ -414,9 +421,17 @@ private enum LaneCell {
     }
 }
 
+/// One column of cards, top to bottom, one card to a row.
+///
+/// The lane is as wide as its widest card and each card is its own width
+/// inside it, flush with the lane's trailing edge — the panel is pinned
+/// right, so that edge is the one that never moves and the leading corner
+/// is free to follow a resize. A lane taller than the display scrolls.
 private struct WidgetLane: View {
     let lane: Int
     let slots: [LaneSlot]
+    /// How wide the lane draws, already fitted to the display.
+    let width: CGFloat
     let arrangement: PanelArrangement
     let editor: PanelEditor
 
@@ -437,135 +452,59 @@ private struct WidgetLane: View {
         return nil
     }
 
-    /// The lane's grid width in columns, counted off what is drawn — while a
-    /// grip is dragged the preview span is what the lane draws, so widening
-    /// past a column opens the row the commit would pack into.
-    private var units: Int {
-        slots.map(editor.previewing).gridUnits
-    }
-
-    /// The lane's cells — its visible slots with the drop gap inserted where
-    /// the landing says it goes — packed into rows by the lane's grid.
-    private var rows: [[LaneCell]] {
+    private var cells: [LaneCell] {
         var cells = visibleSlots.map(LaneCell.slot)
-        if let gapIndex, let lifted = editor.lifted {
-            let counted: Int? = arrangement.slot(for: lifted.id)?.gridColumns ?? nil
-            cells.insert(.gap(columns: counted.map { min(max($0, 1), units) }), at: min(gapIndex, cells.count))
+        if let gapIndex, editor.lifted != nil {
+            cells.insert(.gap, at: min(gapIndex, cells.count))
         }
-        let previewed = cells.map { cell -> Int? in
-            switch cell {
-            case .slot(let slot): editor.previewing(slot).gridColumns
-            case .gap(let columns): columns
-            }
-        }
-        return packRowIndexes(previewed, columns: units).map { $0.map { cells[$0] } }
-    }
-
-    /// The widest this lane may draw while its neighbours stay put. The commit
-    /// clamps to the same number, so what the finger parks at is what the
-    /// release lands — a drag past the edge never paints off screen and never
-    /// snaps back.
-    private var maxFitWidth: CGFloat {
-        var others = arrangement.laneWidths
-        guard others.indices.contains(lane) else { return .infinity }
-        others.remove(at: lane)
-        return Layout.maxLaneWidth(beside: others, inWidth: editor.displayWidth)
+        return cells
     }
 
     var body: some View {
-        // While a grip is dragged the lane draws the preview span instead of
-        // the stored one; the commit lands on release. Cards keep their
-        // stored slots — identity and removal are not preview state.
-        // A lane holding an app screen also grows into leftover display
-        // width (clamped to the screen floor/cap), while card lanes stay at
-        // their grid width. The wider wins when both apply — a screen beside
-        // widened cards takes whichever is wider.
-        let previewed = slots.map(editor.previewing)
-        let shownWidth: CGFloat = {
-            let base = previewed.width
-            let screened: CGFloat
-            if previewed.contains(where: { $0.fixedWidth != nil }) {
-                var others = arrangement.laneWidths
-                if others.indices.contains(lane) { others.remove(at: lane) }
-                screened = max(base, Layout.screenLaneWidth(beside: others, displayWidth: editor.displayWidth))
-            } else {
-                screened = base
-            }
-            return min(screened, maxFitWidth)
-        }()
-        // Leading-aligned: a row narrower than the lane — two 1x cards in a
-        // 3-wide grid — starts at the lane's edge rather than centering.
-        VStack(alignment: .leading, spacing: Space.oneHalf) {
-            ForEach(rows.indices, id: \.self) { index in
-                let row = rows[index]
-                if row.count == 1, let cell = row.first {
-                    cellView(cell, width: shownWidth)
-                } else {
-                    HStack(alignment: .top, spacing: Space.oneHalf) {
-                        ForEach(row, id: \.key) { cell in
-                            cellView(cell, width: cellWidth(cell, laneWidth: shownWidth))
-                        }
+        // Always a scroll view, never one swapped in when the lane grows
+        // tall: a conditionally remounted scroll view comes back blank, and
+        // with it every web view inside. Bounce follows size, so a lane that
+        // fits sits still under the wheel.
+        ScrollView(.vertical) {
+            VStack(alignment: .trailing, spacing: Space.oneHalf) {
+                ForEach(cells, id: \.key) { cell in
+                    switch cell {
+                    case .slot(let slot): card(slot)
+                    case .gap: dropGap
                     }
                 }
-            }
-            // When the lane is empty and the gap is the only thing in it,
-            // the ForEach above renders nothing — still show the gap.
-            if visibleSlots.isEmpty, gapIndex == nil, editor.isDragging,
-               editor.previewLanding == nil, slots.contains(where: { $0.id == editor.lifted?.id }) {
                 // The lifted card came from this lane and the finger is not
                 // over a valid lane — keep the lane's height stable rather
                 // than collapsing it mid-drag.
-                Color.clear.frame(height: editor.lifted?.size.height ?? 0)
+                if visibleSlots.isEmpty, gapIndex == nil, editor.isDragging,
+                   editor.previewLanding == nil, slots.contains(where: { $0.id == editor.lifted?.id }) {
+                    Color.clear.frame(width: width, height: editor.lifted?.size.height ?? 0)
+                }
             }
-            Spacer(minLength: 0)
+            .frame(width: width, alignment: .trailing)
+            // Room for what hangs off a card's corners — the remove badge,
+            // the grip's overshoot — which the scroll view would otherwise
+            // clip. Given back outside, so the lane's footprint is unchanged.
+            .padding(Space.half)
         }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(width: width + Space.one)
+        .padding(-Space.half)
     }
 
-    /// How wide one cell draws: a lone cell stretches to the lane's full
-    /// width, as it always has; cells sharing a row split the grid by their
-    /// spans, gutters carried by the widths so a 1x card is one lane unit
-    /// wherever it sits. Drawn spans, not stored ones — while a grip previews
-    /// a new width the row already shows what the commit would pack. A free
-    /// card draws its own rect, committed or in flight — falling back to the
-    /// lane width would snap a narrow drag back to the grid on release.
-    /// Everything clamps to the lane's max fit: the commit lands the same
-    /// number, so the live draw never exceeds what the release keeps.
-    private func cellWidth(_ cell: LaneCell, laneWidth: CGFloat) -> CGFloat {
-        let raw: CGFloat
-        switch cell {
-        case .slot(let slot):
-            // The card under the grip draws its dragged size, not its step:
-            // packing (and the lane around it) still counts the span, so only
-            // this frame follows the finger per pixel.
-            if let drawn = editor.drawSize(for: slot.id) { raw = drawn.width }
-            else if let custom = editor.previewing(slot).customSize { raw = CGFloat(custom.width) }
-            else { raw = editor.previewing(slot).gridColumns.map { Layout.gridWidth(units: $0) } ?? laneWidth }
-        case .gap(let columns):
-            raw = columns.map { Layout.gridWidth(units: $0) } ?? laneWidth
-        }
-        return min(raw, maxFitWidth)
+    /// A card at its own size: the live size under a held grip, the stored
+    /// size once resized, the lane's width at natural height otherwise. Never
+    /// wider than the lane, which the display may have narrowed.
+    private func card(_ slot: LaneSlot) -> some View {
+        let size = editor.drawSize(for: slot.id) ?? slot.storedSize
+        return EditableCard(
+            slot: slot, lane: lane, arrangement: arrangement, editor: editor,
+            width: min(size?.width ?? width, width),
+            height: size?.height
+        )
     }
 
-    /// How tall a slot draws: the dragged size while its grip is held, its
-    /// (possibly previewed) span height otherwise.
-    private func cellHeight(_ slot: LaneSlot) -> CGFloat {
-        editor.drawSize(for: slot.id)?.height ?? editor.previewing(slot).height
-    }
-
-    @ViewBuilder
-    private func cellView(_ cell: LaneCell, width: CGFloat) -> some View {
-        switch cell {
-        case .slot(let slot):
-            EditableCard(slot: slot, lane: lane, arrangement: arrangement, editor: editor)
-                .frame(width: width)
-                .frame(minHeight: cellHeight(slot))
-                .fixedSize(horizontal: false, vertical: true)
-        case .gap:
-            dropGap(width: width)
-        }
-    }
-
-    private func dropGap(width: CGFloat) -> some View {
+    private var dropGap: some View {
         RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
             .strokeBorder(
                 Color.dropGapStroke,
@@ -575,7 +514,10 @@ private struct WidgetLane: View {
                 RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
                     .fill(Color.dropGapFill)
             )
-            .frame(width: width, height: editor.lifted?.size.height ?? WidgetSize.compact.height)
+            .frame(
+                width: min(editor.lifted?.size.width ?? width, width),
+                height: editor.lifted?.size.height ?? WidgetSize.compact.height
+            )
             .transition(.opacity.combined(with: .scale(scale: 0.98)))
     }
 }
@@ -608,110 +550,6 @@ struct LaneSlotCard: View {
         switch slot {
         case .widget(let widget, _): widget.view
         case .unavailable(let id): UnavailableWidgetCard(id: id)
-        }
-    }
-}
-
-extension [LaneSlot] {
-    /// How wide a lane holding these has to be: the grid its countable spans
-    /// make, or the widest uncountable thing in it — whichever is wider. A
-    /// lane of cards is the default width; a widened card widens its grid, a
-    /// free card sizes its lane to its own rect (no grid floor, so a narrow
-    /// web view draws narrow rather than snapping back to a lane unit), and
-    /// an app screen widens its lane to fit rather than cropping, and the
-    /// panel grows by that much. An empty lane is a lane of cards until
-    /// something says otherwise.
-    var width: CGFloat {
-        let grid = countedGridUnits.map { Layout.gridWidth(units: $0) } ?? 0
-        let fixed = compactMap(\.fixedWidth).max() ?? 0
-        let widest = Swift.max(grid, fixed)
-        return widest > 0 ? widest : Layout.gridWidth(units: 1)
-    }
-}
-
-extension PanelArrangement {
-    /// Every lane's width, in order — what edit mode measures the room for one
-    /// more column against.
-    var laneWidths: [CGFloat] { lanes.map(\.width) }
-}
-
-extension LaneSlot {
-    /// The slot with its span replaced — what a resize previews and commits,
-    /// and what the width guard measures the offer with. A span resize returns
-    /// the card to the grid, clearing any free rect. An absent widget has
-    /// nothing to resize, so its slot comes back unchanged.
-    func resized(to span: WidgetSpan) -> LaneSlot {
-        switch self {
-        case .widget(let widget, let placement):
-            return .widget(widget, Placement(
-                id: placement.id, span: span,
-                isMinimized: placement.isMinimized))
-        case .unavailable: return self
-        }
-    }
-
-    /// The slot with a free rect — what a website drag previews and commits.
-    /// The span is kept but ignored while the custom size is present, so
-    /// clearing it later restores the grid size the card had.
-    func resized(to size: CGSize) -> LaneSlot {
-        switch self {
-        case .widget(let widget, let placement):
-            return .widget(widget, Placement(
-                id: placement.id, span: placement.span,
-                isMinimized: placement.isMinimized,
-                customSize: CustomWidgetSize(width: Double(size.width), height: Double(size.height))))
-        case .unavailable: return self
-        }
-    }
-
-    /// The step a resize drag counts in: the widget's own base size, not its
-    /// current span, so steps stay the same width wherever the drag starts.
-    var resizeStep: CGSize {
-        switch self {
-        case .widget(let widget, _):
-            return CGSize(width: Layout.laneWidth, height: widget.descriptor.size.height)
-        case .unavailable:
-            return CGSize(width: Layout.laneWidth, height: WidgetSize.compact.height)
-        }
-    }
-
-    /// A slot standing in for a widget this build doesn't have has no
-    /// descriptor to ask, and the smallest card is the least the lane's shape
-    /// can be wrong by.
-    var height: CGFloat {
-        switch self {
-        case .widget(let widget, let placement):
-            if let custom = placement.customSize { return CGFloat(custom.height) }
-            let base = widget.descriptor.size.height
-            // A resized card asks for multiples of its base height; an app
-            // screen keeps its own, which its view already draws.
-            return widget.descriptor.size.isResizable ? base * CGFloat(placement.span.height) : base
-        case .unavailable: return WidgetSize.compact.height
-        }
-    }
-
-    /// How wide a lane this slot needs on its own: the lane unit times the
-    /// width span, without the shell's inter-column gutters — those belong to
-    /// the lane's grid, not the card. A slot standing in for a widget this
-    /// build doesn't have takes the default width — the id is all it has, and
-    /// nothing in it says the absent widget was ever wider. An app screen
-    /// keeps its own width either way.
-    var width: CGFloat {
-        switch self {
-        case .widget(let widget, let placement):
-            if let custom = placement.customSize { return CGFloat(custom.width) }
-            guard widget.descriptor.size.isResizable else { return widget.descriptor.size.width }
-            return Layout.laneWidth * CGFloat(placement.span.width)
-        case .unavailable: return Layout.laneWidth
-        }
-    }
-
-    /// What to call this in a label — the widget's own name, or the id, which
-    /// is all a slot standing in for an absent widget has.
-    var title: String {
-        switch self {
-        case .widget(let widget, _): widget.descriptor.title
-        case .unavailable(let id): id.rawValue
         }
     }
 }

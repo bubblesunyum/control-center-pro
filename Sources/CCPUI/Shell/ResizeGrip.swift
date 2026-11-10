@@ -4,16 +4,18 @@
 import CCPKit
 import SwiftUI
 
-/// The handle a card is resized by: bottom-trailing corner, edit mode only.
+/// The handle a card is resized by: bottom-leading corner, edit mode only.
 ///
-/// It is a mark rather than a button — the iPadOS windowing resize tick, a
-/// short rounded corner hugging the card's own. The drag itself belongs to
-/// the panel-level gesture, which hit-tests the press against the frames this
-/// reports: a per-card gesture never reliably saw the touch, and the panel's
-/// already gets every one. VoiceOver users get the same steps as actions.
+/// Leading, because the panel is pinned to the screen's right edge: a card's
+/// trailing edge never moves, so the corner that can follow the pointer is
+/// the leading one — drag left to widen, down to grow. It is a mark rather
+/// than a button — the iPadOS windowing resize tick, a short rounded corner
+/// hugging the card's own. The drag itself belongs to the panel-level
+/// gesture, which hit-tests the press against the frames this reports: a
+/// per-card gesture never reliably saw the touch, and the panel's already
+/// gets every one. VoiceOver users get the same sizes as actions.
 struct ResizeGrip: View {
     let slot: LaneSlot
-    let lane: Int
     let arrangement: PanelArrangement
     let editor: PanelEditor
 
@@ -22,10 +24,13 @@ struct ResizeGrip: View {
     var body: some View {
         CornerTick()
             .stroke(.white, style: StrokeStyle(lineWidth: Stroke.resizeTick, lineCap: .round))
+            // The tick is drawn for a bottom-trailing corner; mirrored, it
+            // hugs the bottom-leading one.
+            .scaleEffect(x: -1, y: 1)
             // The mark is small and the target is not: a full 44pt box in the
             // corner, so the finger can land anywhere near the edge. Its outer
             // corner sits exactly on the card's, which is what lets the arc
-            // below hug the card's own rounding.
+            // hug the card's own rounding.
             .frame(width: Layout.resizeTouchTarget, height: Layout.resizeTouchTarget)
             .contentShape(Rectangle())
             // White on glass needs a shadow to read over a light wallpaper.
@@ -34,7 +39,7 @@ struct ResizeGrip: View {
             // on hover, on a spring with a little give that still settles
             // fast. Anchored to the corner so the growth never leaves the
             // edge it hugs.
-            .scaleEffect(isHovered ? Layout.resizeGripHoverScale : 1, anchor: .bottomTrailing)
+            .scaleEffect(isHovered ? Layout.resizeGripHoverScale : 1, anchor: .bottomLeading)
             .animation(.spring(response: 0.32, dampingFraction: 0.55), value: isHovered)
             .onHover { isHovered = $0 }
             .background { gripReporter }
@@ -47,36 +52,28 @@ struct ResizeGrip: View {
             .accessibilityAction(named: "Make shorter") { step(by: CGSize(width: 0, height: -1)) }
     }
 
-    /// What VoiceOver announces: exact pixels for a free card, spans for grid.
-    private var accessibilitySize: String {
-        if let custom = slot.customSize {
-            return "\(Int(custom.width)) by \(Int(custom.height)) pixels"
-        }
-        return "\(slot.span.width) by \(slot.span.height)"
+    /// What VoiceOver steps from: the stored size — never the drawn one, which
+    /// a smaller display may have fitted narrower — or, for a card never
+    /// resized, the size it is showing.
+    private var drawnSize: CGSize? {
+        slot.storedSize ?? editor.zones.first { $0.id == slot.id }?.frame.size
     }
 
-    /// One step from the stored size, through the commit path — so the
+    private var accessibilitySize: String {
+        guard let size = drawnSize else { return "" }
+        return "\(Int(size.width)) by \(Int(size.height)) points"
+    }
+
+    /// One step from the drawn size, through the commit path — so the
     /// keyboard and VoiceOver actions meet the same clamp as the drag.
-    /// Websites step 40pt per action; grid cards step one span.
     private func step(by delta: CGSize) {
-        if slot.isFreeSized {
-            let current = slot.customSize.map { CGSize(width: $0.width, height: $0.height) }
-                ?? CGSize(width: slot.width, height: slot.height)
-            commitCustomResize(
-                PanelEditor.clampedCustom(CGSize(
-                    width: current.width + delta.width * PanelEditor.freeStepSize,
-                    height: current.height + delta.height * PanelEditor.freeStepSize
-                )),
-                of: slot, in: lane, arrangement: arrangement, editor: editor
-            )
-            return
-        }
+        guard let size = drawnSize else { return }
         commitResize(
-            WidgetSpan(
-                width: slot.span.width + Int(delta.width),
-                height: slot.span.height + Int(delta.height)
+            CGSize(
+                width: size.width + delta.width * PanelEditor.accessibilityStep,
+                height: size.height + delta.height * PanelEditor.accessibilityStep
             ),
-            of: slot, in: lane, arrangement: arrangement, editor: editor
+            of: slot.id, arrangement: arrangement, editor: editor
         )
     }
 
@@ -101,63 +98,21 @@ struct ResizeGrip: View {
 }
 
 /// The one resize commit: the drag's release and the VoiceOver step both go
-/// through here, so the clamp lives in exactly one place.
-///
-/// A widening past the display clamps to the widest span that fits rather
-/// than refusing — a drag past the edge parks at the edge instead of
-/// snapping back. Height is untouched by the clamp: the panel grows down,
-/// never off an edge. Only a stale lane index refuses. Returns whether the
-/// span landed.
+/// through here, so the clamp lives in exactly one place — the same one the
+/// live drag draws through, so what the finger parked at is what lands.
+/// Returns whether the size landed; only a card no longer on the panel
+/// refuses.
 @discardableResult
 @MainActor
 func commitResize(
-    _ span: WidgetSpan, of slot: LaneSlot, in lane: Int,
+    _ size: CGSize, of id: WidgetID,
     arrangement: PanelArrangement, editor: PanelEditor
 ) -> Bool {
-    var clamped = span
-    if span.width != slot.span.width {
-        // Measure the lane as it would be — gutters and all — not the slot
-        // alone, which is narrower than the lane by the shell's gutters.
-        guard arrangement.lanes.indices.contains(lane),
-              let maxW = editor.maxLaneWidth(for: lane, laneWidths: arrangement.laneWidths)
-        else { return false }
-        while clamped.width > 1 && Layout.gridWidth(units: clamped.width) > maxW {
-            clamped.width -= 1
-        }
-        guard Layout.gridWidth(units: clamped.width) <= maxW else { return false }
-    }
-    arrangement.resize(slot.id, to: clamped)
-    return true
-}
-
-/// The one free-resize commit: the drag's release and the VoiceOver step both
-/// go through here, so the clamp lives in exactly one place with the grid
-/// commit above.
-///
-/// A width past the display clamps to the lane's max rather than refusing,
-/// like the grid commit — the release parks at the edge. Height is not
-/// guarded — the panel grows down, not off the edge — only clamped to the
-/// drag's own floor and ceiling. Returns whether the rect landed.
-@discardableResult
-@MainActor
-func commitCustomResize(
-    _ size: CGSize, of slot: LaneSlot, in lane: Int,
-    arrangement: PanelArrangement, editor: PanelEditor
-) -> Bool {
-    guard arrangement.lanes.indices.contains(lane),
-          let maxW = editor.maxLaneWidth(for: lane, laneWidths: arrangement.laneWidths)
+    guard let lane = arrangement.layout.position(of: id)?.lane,
+          let maxWidth = editor.maxLaneWidth(for: lane, laneWidths: arrangement.laneWidths)
     else { return false }
-    // Measure the lane as it would be, like the grid commit — the slot alone
-    // is narrower than the lane by the shell's gutters. The floor below
-    // re-asserts the grab target when the display is narrower than it.
-    let fit = PanelEditor.clampedCustom(CGSize(
-        width: min(size.width, maxW),
-        height: size.height
-    ))
-    arrangement.resizeCustom(
-        slot.id,
-        to: CustomWidgetSize(width: Double(fit.width), height: Double(fit.height))
-    )
+    let fit = PanelEditor.clampedSize(size, maxWidth: maxWidth)
+    arrangement.resize(id, to: CustomWidgetSize(width: Double(fit.width), height: Double(fit.height)))
     return true
 }
 

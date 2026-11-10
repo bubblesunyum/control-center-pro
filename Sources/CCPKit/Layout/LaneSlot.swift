@@ -20,29 +20,14 @@ public enum LaneSlot: Identifiable {
         }
     }
 
-    /// The placement's size override. An absent widget has nothing to resize,
-    /// so its slot is always the base size.
-    public var span: WidgetSpan {
-        switch self {
-        case .widget(_, let placement): placement.span
-        case .unavailable: .unit
-        }
-    }
-
-    /// The placement's free rect, when the card opted out of the grid.
-    /// Websites use this; every other widget leaves it nil.
+    /// The size the user dragged this card to, or `nil` when it has never
+    /// been resized. An absent widget has nothing to resize.
     public var customSize: CustomWidgetSize? {
         switch self {
         case .widget(_, let placement): placement.customSize
         case .unavailable: nil
         }
     }
-
-    /// Whether this card drags a free rect rather than grid steps. Websites
-    /// opt out of the grid: a web page has no base size, so its card is
-    /// whatever rect the user dragged. The one predicate, so the begin and
-    /// step sites never disagree about which path a card is on.
-    public var isFreeSized: Bool { id.isWebsite }
 
     /// The live widget here, or `nil` where the slot is only holding a name's
     /// place. Anything done to the widgets on the panel — starting them,

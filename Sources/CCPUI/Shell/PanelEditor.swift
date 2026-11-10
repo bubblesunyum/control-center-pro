@@ -182,169 +182,90 @@ public final class PanelEditor {
     // one-mutation shape as a drag. Mutating the layout per pixel would
     // re-resolve the arrangement and re-schedule the autosave every frame; a
     // preview is just a size the lane draws instead of the stored one until
-    // the finger comes up. Row packing still counts whole steps (a grid that
-    // reflows per pixel thrashes), so the card under the grip glides while
-    // its neighbours move only when it crosses a step.
+    // the finger comes up. What the finger shows is what the release stores:
+    // both go through `clampedSize`, and nothing rounds, steps, or snaps.
 
-    /// The card under the grip and the span it would land at, or `nil` when
-    /// no grip is being dragged.
-    public private(set) var resizePreview: ResizePreview?
+    /// The card under the grip and the size it is being dragged to, or `nil`
+    /// when no grip is held.
+    public private(set) var resize: Resize?
 
-    public struct ResizePreview: Equatable {
+    public struct Resize: Equatable {
         let id: WidgetID
-        var span: WidgetSpan
-        /// The span the drag started from. The preview never touches the
-        /// layout mid-gesture, but the gesture may outlive the view that
-        /// started it — so the origin travels with the preview rather than
-        /// being re-read off a slot.
-        let start: WidgetSpan
-        /// The step the drag counts in: the widget's base size, so steps stay
-        /// the same width wherever the drag starts.
-        let baseSize: CGSize
-        /// Where the finger is in step-space: whole steps at the integers, the
-        /// drag's exact position between them. The lane draws this; packing
-        /// and the release commit read `span`.
-        var fraction: CGSize
-        /// The free rect in flight, when the card opted out of the grid.
-        /// Non-nil means this preview is a custom drag: translation counts in
-        /// points rather than steps, and nothing snaps or rounds.
-        var custom: CGSize?
-        /// The rect the custom drag started from. Like `start`, it travels
-        /// with the preview so the drag never re-reads the slot mid-gesture.
-        var customStart: CGSize?
+        /// The size the card was drawn at when the press landed — measured,
+        /// not stored, so the first frame of a drag is exactly the card the
+        /// user grabbed and never a jump to some other idea of its size.
+        let start: CGSize
+        /// The widest the card may draw: the room its lane has beside the
+        /// others, taken at the press. The other lanes cannot change while
+        /// the grip is held, so neither can this.
+        let maxWidth: CGFloat
+        /// The size the card draws at now, and lands at on release.
+        var size: CGSize
     }
 
-    /// The floor and ceiling for a free rect. There is no width policy: a web
-    /// page has no base size, so the only width floor is the grip's own touch
-    /// target — narrower would leave nothing to grab the card back by.
-    /// Height keeps a hittable floor. The ceiling keeps a typo from parking
-    /// the panel off screen; width past the display still refuses at commit —
-    /// this only stops the live draw from going somewhere absurd.
-    static let customMinSize = CGSize(width: Layout.resizeTouchTarget, height: 160)
-    static let customMaxSize = CGSize(width: 2400, height: 1600)
+    /// The smallest a card can be dragged to, in either axis: the grip's own
+    /// touch target. Not a widget's opinion of its size — any card can go
+    /// this small — only the point below which there would be nothing left
+    /// to grab it back by.
+    static let minimumCardSize: CGFloat = Layout.resizeTouchTarget
 
-    /// One VoiceOver step on a free rect: visible, but fine enough to land
-    /// near a breakpoint.
-    static let freeStepSize: CGFloat = 40
+    /// One VoiceOver step: visible, but fine enough to land where meant.
+    static let accessibilityStep: CGFloat = 40
 
-    public func beginResize(_ id: WidgetID, from start: WidgetSpan, baseSize: CGSize) {
+    /// `size` held to what the panel can draw: never wider than `maxWidth`,
+    /// never under the grab floor. Height has no ceiling — a lane taller than
+    /// the display scrolls.
+    static func clampedSize(_ size: CGSize, maxWidth: CGFloat) -> CGSize {
+        CGSize(
+            width: max(min(size.width, maxWidth), minimumCardSize),
+            height: max(size.height, minimumCardSize)
+        )
+    }
+
+    public func beginResize(_ id: WidgetID, from start: CGSize, maxWidth: CGFloat) {
         // One grip at a time: a second finger never preempts the drag already
         // in flight, or the two releases wipe each other's preview out.
-        guard resizePreview == nil else { return }
-        resizePreview = ResizePreview(
-            id: id, span: start, start: start, baseSize: baseSize,
-            fraction: CGSize(width: start.width, height: start.height),
-            custom: nil, customStart: nil
-        )
+        guard resize == nil else { return }
+        resize = Resize(id: id, start: start, maxWidth: maxWidth, size: start)
     }
 
-    /// Begin a free drag: the card follows the finger per pixel, no steps.
-    public func beginCustomResize(_ id: WidgetID, from start: CGSize) {
-        guard resizePreview == nil else { return }
-        let clamped = PanelEditor.clampedCustom(start)
-        resizePreview = ResizePreview(
-            id: id, span: .unit, start: .unit, baseSize: CGSize(width: 1, height: 1),
-            fraction: CGSize(width: 1, height: 1),
-            custom: clamped, customStart: clamped
-        )
-    }
-
-    static func clampedCustom(_ size: CGSize) -> CGSize {
-        CGSize(
-            width: min(max(size.width, customMinSize.width), customMaxSize.width),
-            height: min(max(size.height, customMinSize.height), customMaxSize.height)
-        )
-    }
-
-    /// How close (in points) the dragged size must be to a step before the
-    /// magnet reaches for it. Small on purpose: the pull ramps to nothing at
-    /// the edge of the zone, so a wider net would only widen the already
-    /// exact middle, never grab harder. Custom drags never magnetize.
-    static let magneticSnapThreshold: CGFloat = 10
-
-    /// The drag's translation in screen points. A grid drag tracks from the
-    /// span it started at: the fraction follows the finger per pixel (clamped
-    /// to 1x–3x, like the span), while the span stays the rounded step for
-    /// packing and the release commit. A custom drag tracks in points
-    /// straight off its start rect — no steps, no rounding, no magnet. Only
-    /// a changed preview lands — the window tracker re-fits on every one,
-    /// and identical ticks must not re-place the panel.
+    /// The drag's translation in screen points since the press.
     ///
-    /// Width is unmirrored: outward grows, like any window handle — dragging
-    /// right widens, dragging left narrows. The panel is pinned top-right,
-    /// so the card's trailing edge never moves in screen space and rightward
-    /// travel ends at the screen edge; the lane grows left instead. A drag
-    /// past the display parks at the widest span that fits rather than
-    /// snapping back. Grid cards still count whole steps, so a nudge that
-    /// never reaches the next step lands back where it started — and a step
-    /// needs more rightward room than the screen edge allows, which is why
-    /// big widenings repeat the drag or use the keyboard stepper.
-    /// Height is unmirrored — down is down, with open desktop below.
+    /// The grip sits on the card's bottom-leading corner and the panel is
+    /// pinned top-right, so dragging left widens and dragging down grows:
+    /// the card's trailing edge stays where it is and its leading edge — the
+    /// corner under the finger — moves with the pointer, point for point.
+    /// Only a changed size lands: identical ticks must not re-draw the lane.
     public func updateResize(translation: CGSize) {
-        guard let preview = resizePreview else { return }
-        if let customStart = preview.customStart {
-            let custom = PanelEditor.clampedCustom(CGSize(
-                width: customStart.width + translation.width,
-                height: customStart.height + translation.height
-            ))
-            guard custom != preview.custom else { return }
-            resizePreview?.custom = custom
-            return
-        }
-        let fraction = CGSize(
-            width: min(max(CGFloat(preview.start.width) + translation.width / preview.baseSize.width, 1),
-                       CGFloat(WidgetSpan.maximum)),
-            height: min(max(CGFloat(preview.start.height) + translation.height / preview.baseSize.height, 1),
-                        CGFloat(WidgetSpan.maximum))
+        guard let resize else { return }
+        let size = Self.clampedSize(
+            CGSize(
+                width: resize.start.width - translation.width,
+                height: resize.start.height + translation.height
+            ),
+            maxWidth: resize.maxWidth
         )
-        guard fraction != preview.fraction else { return }
-        resizePreview?.fraction = fraction
-        resizePreview?.span = WidgetSpan(
-            width: Int(fraction.width.rounded()),
-            height: Int(fraction.height.rounded())
-        )
+        guard size != resize.size else { return }
+        self.resize?.size = size
     }
 
-    public func endResize() { resizePreview = nil }
+    public func endResize() { resize = nil }
 
-    /// The size to draw the card under the grip at, or `nil` for every other
-    /// card. A grid drag draws its continuous size with the magnet's pull
-    /// applied — width interpolates between the grid widths the span would
-    /// draw, height scales the base size. A custom drag draws its rect raw:
-    /// the finger is the size, with no step to pull toward.
+    /// The size to draw `id` at while its grip is held, or `nil` for every
+    /// other card and whenever no grip is held.
     public func drawSize(for id: WidgetID) -> CGSize? {
-        guard let preview = resizePreview, preview.id == id else { return nil }
-        if let custom = preview.custom { return custom }
-        let raw = CGSize(
-            width: preview.fraction.width * Layout.laneWidth
-                + (preview.fraction.width - 1) * Space.oneHalf,
-            height: preview.fraction.height * preview.baseSize.height
-        )
-        let step = CGSize(
-            width: CGFloat(preview.span.width) * Layout.laneWidth
-                + CGFloat(preview.span.width - 1) * Space.oneHalf,
-            height: CGFloat(preview.span.height) * preview.baseSize.height
-        )
-        return CGSize(
-            width: magnetized(raw.width, toward: step.width, within: Self.magneticSnapThreshold),
-            height: magnetized(raw.height, toward: step.height, within: Self.magneticSnapThreshold)
-        )
-    }
-
-    /// The slot as drawn while a resize is in flight: the card under the grip
-    /// wears its preview size — span or free rect — everything else its
-    /// stored one.
-    public func previewing(_ slot: LaneSlot) -> LaneSlot {
-        guard let preview = resizePreview, preview.id == slot.id else { return slot }
-        if let custom = preview.custom { return slot.resized(to: custom) }
-        return slot.resized(to: preview.span)
+        guard let resize, resize.id == id else { return nil }
+        return resize.size
     }
 
     /// The widest `lane` may draw while the other lanes stay put — the commit
-    /// and the live draw clamp to this. Nil when the lane index is stale.
+    /// and the live draw clamp to this. Measured against the other lanes as
+    /// drawn, fitted to this display, so a layout from a wider one still
+    /// leaves the lane its own drawn width to start from. Nil when the lane
+    /// index is stale.
     public func maxLaneWidth(for lane: Int, laneWidths: [CGFloat]) -> CGFloat? {
         guard laneWidths.indices.contains(lane) else { return nil }
-        var others = laneWidths
+        var others = Layout.fittedLaneWidths(laneWidths, inWidth: displayWidth)
         others.remove(at: lane)
         return Layout.maxLaneWidth(beside: others, inWidth: displayWidth)
     }
@@ -448,15 +369,6 @@ public final class PanelEditor {
     public func canAddLane(beside laneWidths: [CGFloat]) -> Bool {
         Layout.fitsAnotherLane(beside: laneWidths, inWidth: displayWidth)
     }
-}
-
-/// Eases `value` toward `step` when it is within `threshold` of it: no pull
-/// at the edge of the zone, resting exactly on the step at its center, so
-/// the magnet never pops — the finger can always pull straight through.
-func magnetized(_ value: CGFloat, toward step: CGFloat, within threshold: CGFloat) -> CGFloat {
-    let distance = abs(value - step)
-    guard threshold > 0, distance < threshold else { return value }
-    return value + (step - value) * (1 - distance / threshold)
 }
 
 /// The panel's own coordinate space. Every frame edit mode reasons about — the

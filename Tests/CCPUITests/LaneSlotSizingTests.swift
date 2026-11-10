@@ -6,10 +6,14 @@ import SwiftUI
 import XCTest
 @testable import CCPUI
 
-/// The shell draws what the span says: a widened card widens its lane, a
-/// tallened one raises its floor, and an app screen keeps its own dimensions.
+/// What a card and its lane measure: a resized card is the size it was
+/// dragged to, an untouched one its widget's default, a lane its widest
+/// card — and the lanes together never more than the display.
 @MainActor
 final class LaneSlotSizingTests: XCTestCase {
+    private let stub = SizingStubWidget.descriptor.id
+    private let screen = SizingScreenWidget.descriptor.id
+
     private func slots(_ placements: [Placement]) -> [LaneSlot] {
         let registry = WidgetRegistry()
         registry.register(SizingStubWidget.self)
@@ -17,122 +21,99 @@ final class LaneSlotSizingTests: XCTestCase {
         return registry.resolve(PanelLayout([placements]))[0]
     }
 
-    func testALaneIsAsWideAsItsWidestMember() {
-        let lane = slots([
-            Placement(id: SizingStubWidget.descriptor.id),
-            Placement(id: SizingStubWidget.descriptor.id, span: WidgetSpan(width: 2, height: 1)),
-        ])
-
-        // Two units plus the shell's gutter between the columns — a 1x card
-        // is one lane unit wherever it sits, and the lane carries the 12pt.
-        XCTAssertEqual(lane.width, Layout.laneWidth * 2 + Space.oneHalf)
-        XCTAssertEqual(lane.width, Layout.gridWidth(units: 2))
+    private func sized(_ width: Double, _ height: Double) -> CustomWidgetSize {
+        CustomWidgetSize(width: width, height: height)
     }
 
-    func testAUnitLaneIsOneUnitWide() {
-        XCTAssertEqual(slots([Placement(id: SizingStubWidget.descriptor.id)]).width, Layout.laneWidth)
+    func testAnUntouchedCardHasNoStoredSizeAndItsDefaultWidth() {
+        let lane = slots([Placement(id: stub), Placement(id: screen)])
+
+        XCTAssertNil(lane[0].storedSize)
+        XCTAssertEqual(lane[0].width, Layout.laneWidth)
+        XCTAssertEqual(lane[1].width, Layout.screenWidth)
     }
 
-    func testHeightSpanMultipliesTheBaseHeight() {
-        let lane = slots([Placement(
-            id: SizingStubWidget.descriptor.id,
-            span: WidgetSpan(width: 1, height: 2)
-        )])
+    func testAResizedCardIsExactlyItsSize() {
+        let lane = slots([Placement(id: stub, customSize: sized(173.5, 61))])
 
-        XCTAssertEqual(lane[0].height, WidgetSize.regular.height * 2)
+        XCTAssertEqual(lane[0].storedSize, CGSize(width: 173.5, height: 61))
+        XCTAssertEqual(lane[0].width, 173.5)
     }
 
-    func testAScreenKeepsItsOwnSizeAtAnySpan() {
-        let lane = slots([Placement(
-            id: SizingScreenWidget.descriptor.id,
-            span: WidgetSpan(width: 3, height: 3)
-        )])
+    func testTheSizeWinsOverALegacySpan() {
+        let lane = slots([Placement(id: stub, span: WidgetSpan(width: 3, height: 3), customSize: sized(200, 90))])
 
-        XCTAssertEqual(lane[0].width, Layout.screenWidth)
-        XCTAssertEqual(lane[0].height, WidgetSize.screen.height)
-        XCTAssertEqual(lane.width, Layout.screenWidth)
+        XCTAssertEqual(lane[0].storedSize, CGSize(width: 200, height: 90))
     }
 
-    func testAnUnavailableSlotTakesTheSmallestCard() {
-        let lane = slots([Placement(id: "widget-from-a-newer-build")])
+    /// A file from before free resizing opens looking the way it was left:
+    /// the points its span drew, gutter included.
+    func testALegacySpanDrawsThePointsItUsedTo() {
+        let lane = slots([Placement(id: stub, span: WidgetSpan(width: 2, height: 3))])
 
-        XCTAssertEqual(lane[0].height, WidgetSize.compact.height)
-        XCTAssertEqual(lane.width, Layout.laneWidth)
+        XCTAssertEqual(lane[0].storedSize, CGSize(
+            width: Layout.laneWidth * 2 + Space.oneHalf,
+            height: WidgetSize.regular.height * 3
+        ))
     }
 
-    func testAGridUnitIsOneLaneAndGuttersSitBetween() {
-        XCTAssertEqual(Layout.gridWidth(units: 1), Layout.laneWidth)
-        XCTAssertEqual(Layout.gridWidth(units: 2), Layout.laneWidth * 2 + Space.oneHalf)
-        XCTAssertEqual(Layout.gridWidth(units: 3), Layout.laneWidth * 3 + Space.oneHalf * 2)
+    func testAScreenIgnoresALegacySpan() {
+        XCTAssertNil(slots([Placement(id: screen, span: WidgetSpan(width: 2, height: 2))])[0].storedSize)
     }
 
-    func testGridUnitsCountsTheWidestCountableSpan() {
-        XCTAssertEqual(
-            slots([
-                Placement(id: SizingStubWidget.descriptor.id),
-                Placement(id: SizingStubWidget.descriptor.id, span: WidgetSpan(width: 2, height: 1)),
-            ]).gridUnits,
-            2
-        )
-        XCTAssertEqual(slots([Placement(id: SizingScreenWidget.descriptor.id)]).gridUnits, 1)
+    func testALaneIsAsWideAsItsWidestCard() {
+        let narrow = slots([Placement(id: stub, customSize: sized(120, 80)), Placement(id: screen)])
+        let wide = slots([Placement(id: stub, customSize: sized(640, 80)), Placement(id: screen)])
+
+        XCTAssertEqual(narrow.width, Layout.screenWidth)
+        XCTAssertEqual(wide.width, 640)
     }
 
-    func testAScreenBesideWidenedCardsTakesTheWider() {
-        // A 2-wide grid (612) outgrows the screen's own 432.
-        let lane = slots([
-            Placement(id: SizingScreenWidget.descriptor.id),
-            Placement(id: SizingStubWidget.descriptor.id, span: WidgetSpan(width: 2, height: 1)),
-        ])
-
-        XCTAssertEqual(lane.width, Layout.gridWidth(units: 2))
+    func testALaneOfOneNarrowCardIsThatNarrow() {
+        XCTAssertEqual(slots([Placement(id: stub, customSize: sized(90, 80))]).width, 90)
     }
 
-    func testACustomCardStandsAloneAtItsExactRect() {
-        let lane = slots([
-            Placement(
-                id: SizingStubWidget.descriptor.id,
-                span: WidgetSpan(width: 3, height: 3),
-                customSize: CustomWidgetSize(width: 347, height: 511)
-            ),
-        ])
-
-        // The span is ignored while the rect is present: exact points, not a
-        // multiple of anything, and uncountable so it never shares a row.
-        XCTAssertEqual(lane[0].width, 347)
-        XCTAssertEqual(lane[0].height, 511)
-        XCTAssertNil(lane[0].gridColumns)
-        XCTAssertEqual(lane.width, 347)
+    func testAnEmptyLaneIsALaneOfCards() {
+        XCTAssertEqual([LaneSlot]().width, Layout.laneWidth)
     }
 
-    func testANarrowCustomCardDrawsNarrow() {
-        // No grid floor for free cards: a lane holding only a narrow web view
-        // is the rect, not a lane unit — what the drag previews is what the
-        // commit draws.
-        let lane = slots([
-            Placement(
-                id: SizingStubWidget.descriptor.id,
-                customSize: CustomWidgetSize(width: 200, height: 400)
-            ),
-        ])
+    func testAnUnavailableSlotTakesTheDefaultCard() {
+        let lane = slots([Placement(id: "widget-from-a-newer-build", customSize: sized(500, 500))])
 
-        XCTAssertEqual(lane.width, 200)
+        XCTAssertNil(lane[0].storedSize, "there is no widget to resize")
+        XCTAssertEqual(lane[0].width, Layout.laneWidth)
     }
 
-    func testAnEmptyLaneIsStillOneUnit() {
-        XCTAssertEqual([LaneSlot]().width, Layout.gridWidth(units: 1))
+    // MARK: - Fitting the display
+
+    private func display(fitting room: CGFloat, lanes: Int) -> CGFloat {
+        room + Space.oneHalf * CGFloat(lanes - 1) + Layout.panelInset * 2 + Space.oneHalf * 2
     }
 
-    func testACustomCardBesideGridCardsWidensTheLaneToItself() {
-        let lane = slots([
-            Placement(id: SizingStubWidget.descriptor.id),
-            Placement(
-                id: SizingStubWidget.descriptor.id,
-                span: WidgetSpan(width: 1, height: 1),
-                customSize: CustomWidgetSize(width: 500, height: 400)
-            ),
-        ])
+    func testLanesThatFitDrawAsStored() {
+        let width = display(fitting: 1000, lanes: 2)
 
-        XCTAssertEqual(lane.width, 500)
+        XCTAssertEqual(Layout.fittedLaneWidths([600, 400], inWidth: width), [600, 400])
+    }
+
+    func testLanesThatOverflowShrinkInProportionToExactlyTheRoom() {
+        let width = display(fitting: 1000, lanes: 2)
+        let fitted = Layout.fittedLaneWidths([1200, 800], inWidth: width)
+
+        XCTAssertEqual(fitted[0], 600, accuracy: 0.001)
+        XCTAssertEqual(fitted[1], 400, accuracy: 0.001)
+        XCTAssertTrue(Layout.fits(widths: fitted, inWidth: width))
+    }
+
+    func testAlwaysAMarginOnBothSides() {
+        let width: CGFloat = 1800
+        let fitted = Layout.fittedLaneWidths([5000], inWidth: width)
+
+        XCTAssertEqual(fitted[0], width - Layout.panelInset * 2 - Space.oneHalf * 2, accuracy: 0.001)
+    }
+
+    func testNoLanesFitNothing() {
+        XCTAssertEqual(Layout.fittedLaneWidths([], inWidth: 1800), [])
     }
 }
 

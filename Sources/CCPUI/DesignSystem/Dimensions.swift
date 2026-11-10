@@ -98,33 +98,13 @@ public enum Layout {
     /// mark hugging the card's edge, not a button — just enough to answer the
     /// pointer before the press.
     static let resizeGripHoverScale: CGFloat = 1.2
-    /// How wide a lane of cards is. A lane holding a `.screen` widget is wider
-    /// — see `WidgetSize.width` — but this is the width of every other one,
+    /// How wide a card that was never resized is, and so a lane of them —
     /// and of a lane that does not exist yet.
     public static let laneWidth: CGFloat = 300
-    /// How wide an embedded app screen is at its narrowest. Mail's screen
-    /// stretches past this to fill leftover display width (see
-    /// `screenLaneWidth`) — its inner views fill what they are given rather
-    /// than pinning this width — but a card of controls' 300pt crowds its
-    /// header and tab bar, so a screen lane never draws narrower than this.
-    static let screenWidth: CGFloat = 432
-    /// How wide an embedded app screen may grow to fill leftover display
-    /// width. Past this the mail screen's lines run too long to read, so the
-    /// lane caps here and leaves the rest as desktop.
-    static let screenMaxWidth: CGFloat = 486
-
-    /// How wide a lane holding an app screen draws on a display this wide,
-    /// given the widths of the other lanes. Fills the leftover usable width
-    /// — the same accounting as `fits(widths:inWidth:)` — clamped to the
-    /// screen floor and cap, so a narrow display holds the floor and a wide
-    /// one never runs past readability. Computed in the view layer so the
-    /// model stays display-ignorant; the grown width still fits by
-    /// construction.
-    static func screenLaneWidth(beside otherLanes: [CGFloat], displayWidth: CGFloat) -> CGFloat {
-        let usable = displayWidth - panelInset * 2 - Space.oneHalf * 2
-        let grown = usable - otherLanes.reduce(0, +) - Space.oneHalf * CGFloat(otherLanes.count)
-        return min(max(grown, screenWidth), screenMaxWidth)
-    }
+    /// How wide an embedded app screen is until it is resized. A card of
+    /// controls' 300pt crowds a screen's header and tab bar; this is the
+    /// width mail's lines read best at.
+    static let screenWidth: CGFloat = 486
     /// How far the panel sits from the screen's top-right corner.
     public static let panelInset: CGFloat = Space.one
     /// The whole-window frost behind the lanes: how present it reads. AppKit
@@ -140,18 +120,43 @@ public enum Layout {
     /// across the wallpaper there.
     public static let backdropFeatherHeight: CGFloat = 40
 
+    /// The width the lanes may share on a display this wide: the display
+    /// minus the panel's inset and content padding on both sides, so there
+    /// is always a margin left and right.
+    static func usableWidth(inWidth width: CGFloat) -> CGFloat {
+        width - panelInset * 2 - Space.oneHalf * 2
+    }
+
+    /// The lanes as they draw on a display this wide: as stored when they
+    /// fit, shrunk in proportion when they don't.
+    ///
+    /// A resize can never make the lanes overflow — it clamps to the room
+    /// beside the other lanes — so the shrink only runs when the room itself
+    /// changed: a smaller display, a layout from a bigger one. Drawing
+    /// anyway would hang a column off an edge with nothing to say it is
+    /// there, and the panel window is cut to the display, so whatever does
+    /// not fit is simply gone. Nothing is written back; on the display the
+    /// layout came from it draws at its real size again.
+    static func fittedLaneWidths(_ widths: [CGFloat], inWidth width: CGFloat) -> [CGFloat] {
+        guard !widths.isEmpty else { return [] }
+        let room = usableWidth(inWidth: width) - Space.oneHalf * CGFloat(widths.count - 1)
+        let needed = widths.reduce(0, +)
+        guard needed > room, needed > 0 else { return widths }
+        let scale = max(room, 0) / needed
+        return widths.map { $0 * scale }
+    }
+
     /// Whether lanes these wide fit on a display this wide.
     ///
-    /// The panel is anchored top-right and does not scroll, so widths past
-    /// this are columns hanging off the left edge of the screen with nothing
-    /// to say they are there. Edit mode refuses the drop that would make one
-    /// rather than letting the arrangement grow somewhere the user can't see
-    /// it (ccp-p6g). Measured against the lanes' real widths rather than a
-    /// count, because a lane holding an app screen is wider than the rest —
-    /// two of those fill a display a count of four would have called roomy.
+    /// The panel is anchored top-right and never scrolls sideways, so widths
+    /// past this are columns with nowhere to draw. Edit mode refuses the
+    /// drop that would make one rather than letting the arrangement grow
+    /// somewhere the user can't see it (ccp-p6g). Measured against the
+    /// lanes' real widths rather than a count, because lanes are as wide as
+    /// their widest card.
     public static func fits(widths: [CGFloat], inWidth width: CGFloat) -> Bool {
         guard !widths.isEmpty else { return true }
-        let usable = width - panelInset * 2 - Space.oneHalf * 2
+        let usable = usableWidth(inWidth: width)
         let needed = widths.reduce(0, +) + Space.oneHalf * CGFloat(widths.count - 1)
         return needed <= usable
     }
@@ -169,20 +174,18 @@ public enum Layout {
     /// The widest one lane may draw while the other lanes stay put: the
     /// usable width minus the other lanes and the gutters between all of
     /// them. Same accounting as `fits(widths:inWidth:)`, solved for the one
-    /// lane — the lane itself accounts for the last gutter. The live drag
-    /// and the commit both clamp to this rather than refusing past it, so a
-    /// drag past the edge parks at the edge instead of snapping back on
-    /// release.
+    /// lane. The live drag and the commit both clamp to this, so a drag past
+    /// the edge parks at the edge instead of snapping back on release.
     public static func maxLaneWidth(beside others: [CGFloat], inWidth width: CGFloat) -> CGFloat {
-        let usable = width - panelInset * 2 - Space.oneHalf * 2
-        return usable - others.reduce(0, +) - Space.oneHalf * CGFloat(others.count)
+        usableWidth(inWidth: width) - others.reduce(0, +) - Space.oneHalf * CGFloat(others.count)
     }
 }
 
 public extension WidgetSize {
-    /// The height a widget of this size asks for. A widget whose content needs
-    /// more gets it — the panel is sized from what it actually holds — so this
-    /// is the floor that keeps a lane of small widgets from looking ragged.
+    /// The height a widget of this size stands at least until it is resized.
+    /// A widget whose content needs more gets it, so this is the floor that
+    /// keeps a lane of small widgets from looking ragged — not a limit on
+    /// what a resize may do.
     var height: CGFloat {
         switch self {
         case .compact: 64
@@ -192,8 +195,7 @@ public extension WidgetSize {
         }
     }
 
-    /// How wide a lane must be to hold this widget. A card takes the lane it
-    /// is given; an app screen brings its own width and the lane widens to it.
+    /// How wide a widget of this size is until it is resized.
     var width: CGFloat {
         switch self {
         case .compact, .regular, .tall: Layout.laneWidth

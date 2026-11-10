@@ -56,24 +56,10 @@ public enum WidgetSize: String, Codable, Sendable, CaseIterable {
     case screen
 }
 
-public extension WidgetSize {
-    /// Whether a resize grip may change this widget's size. An app screen
-    /// brings its own dimensions — multiplying them would only add dead glass
-    /// around a fixed-size view — so only cards take part in resizing.
-    var isResizable: Bool {
-        self != .screen
-    }
-}
-
-/// A widget's size as multiples of its base size: 1x, 2x, 3x, never anything
-/// in between.
-///
-/// The base is the widget's own — height multiplies its descriptor's base
-/// height, width multiplies the lane's unit width — so a 2x widget is twice
-/// its base rather than an arbitrary rect. Countable by construction, which is
-/// what keeps the lane grid a grid once widgets can be resized. Only the
-/// override is stored, on the layout's placement; the intrinsic size stays
-/// here on the descriptor.
+/// How resizes were stored before they were free: multiples of the widget's
+/// base size, 1x to 3x per axis. Nothing writes one any more; a layout file
+/// from then still carries them, and the shell draws such a card at the
+/// points its span used to mean until it is resized again.
 public struct WidgetSpan: Codable, Hashable, Sendable {
     /// The largest multiple a resize can reach, per axis.
     public static let maximum = 3
@@ -90,13 +76,9 @@ public struct WidgetSpan: Codable, Hashable, Sendable {
     }
 }
 
-/// A widget's size in points, free of the grid.
-///
-/// Spans keep every other widget countable — a 2x card is twice its base —
-/// which is what lets a lane pack cards into rows. A website card opts out:
-/// a web page has no base size, so its card is whatever rect the user dragged,
-/// in any axis, with no step. Only websites use this today; the storage
-/// travels on the placement like a span so any widget could later.
+/// A widget's size in points: whatever rect the user dragged it to, in any
+/// axis, with no step and no per-widget floor or ceiling. Named for the
+/// on-disk key it has always had.
 public struct CustomWidgetSize: Codable, Hashable, Sendable {
     public var width: Double
     public var height: Double

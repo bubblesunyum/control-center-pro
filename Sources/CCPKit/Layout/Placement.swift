@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Control Center Pro contributors
 
-/// One widget's place in a lane: which widget, plus its size override and
-/// whether it is minimized.
+/// One widget's place in a lane: which widget, plus its size and whether it
+/// is minimized.
 ///
-/// The span is the only thing a resize stores, and it travels with the widget
-/// — dragging a 2x note to another lane lands a 2x note, because the override
-/// describes the widget rather than the slot it sat in. Minimized travels the
-/// same way. A placement without either is just the id, on disk as well as in
+/// `customSize` is the only thing a resize stores, and it travels with the
+/// widget — dragging a resized note to another lane lands it at its size,
+/// because the size describes the widget rather than the slot it sat in.
+/// Minimized travels the same way. `span` is what resizes stored before they
+/// were free; it is still read (a file from then keeps its look) and kept on
+/// disk, but nothing writes a new one. A placement without either is just the id, on disk as well as in
 /// memory: it encodes as the bare string a build from before resizes existed
 /// wrote, so an old build reads a file back as long as nothing in it was ever
 /// resized or minimized. A file containing either is a file with a shape the
@@ -17,8 +19,8 @@ public struct Placement: Codable, Hashable, Sendable {
     public var id: WidgetID
     public var span: WidgetSpan
     public var isMinimized: Bool
-    /// A free rect that overrides the span when present. Websites use this;
-    /// every other widget leaves it nil and stays on the grid.
+    /// The size in points the user dragged this card to; `nil` until the
+    /// first resize. Wins over `span` whenever both are present.
     public var customSize: CustomWidgetSize?
 
     public init(id: WidgetID, span: WidgetSpan = .unit, isMinimized: Bool = false, customSize: CustomWidgetSize? = nil) {

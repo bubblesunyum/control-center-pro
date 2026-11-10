@@ -331,13 +331,13 @@ final class PanelEditorTests: XCTestCase {
                 x: center.x + 8 * scale - zone.frame.width * scale / 2,
                 y: center.y + 8 * scale - zone.frame.height * scale / 2
             ),
-            laneWidths: [Layout.gridWidth(units: 2), Layout.laneWidth]
+            laneWidths: [(Layout.laneWidth * 2 + Space.oneHalf), Layout.laneWidth]
         )
         return editor
     }
 
     private func rowLanding(at center: CGPoint) -> PanelEditor.Landing? {
-        draggingD(toCenter: center).landing(laneWidths: [Layout.gridWidth(units: 2), Layout.laneWidth])
+        draggingD(toCenter: center).landing(laneWidths: [(Layout.laneWidth * 2 + Space.oneHalf), Layout.laneWidth])
     }
 
     func testLeftOfARowLandsFirst() {
@@ -380,8 +380,8 @@ final class PanelEditorTests: XCTestCase {
         let zone = zones.first(where: { $0.id == id })!
         let at = CGPoint(x: zone.frame.minX + 8, y: zone.frame.minY + 8)
         editor.lift(id, at: at)
-        editor.drag(to: at, laneWidths: [Layout.gridWidth(units: 2)])
-        return editor.landing(laneWidths: [Layout.gridWidth(units: 2)])
+        editor.drag(to: at, laneWidths: [(Layout.laneWidth * 2 + Space.oneHalf)])
+        return editor.landing(laneWidths: [(Layout.laneWidth * 2 + Space.oneHalf)])
     }
 
     func testLiftingTheShortHalfOfARowKeepsItsSeat() {

@@ -166,15 +166,15 @@ final class PanelArrangementRearrangingTests: XCTestCase {
     }
 
     /// A resize is not a replacement: the widget keeps its live object, and
-    /// only its span changes.
+    /// only its size changes.
     func testAResizedWidgetIsTheSameLiveWidget() {
         let panel = arrangement(PanelLayout([[stub], [other]]))
         let before = panel.slot(for: stub)?.instance
 
-        panel.resize(stub, to: WidgetSpan(width: 1, height: 2))
+        panel.resize(stub, to: CustomWidgetSize(width: 347, height: 511))
 
         XCTAssertIdentical(before, panel.slot(for: stub)?.instance)
-        XCTAssertEqual(panel.slot(for: stub)?.span, WidgetSpan(width: 1, height: 2))
+        XCTAssertEqual(panel.slot(for: stub)?.customSize, CustomWidgetSize(width: 347, height: 511))
         XCTAssertEqual(panel.layout.ids, [[stub], [other]])
     }
 
@@ -186,10 +186,13 @@ final class PanelArrangementRearrangingTests: XCTestCase {
             autosave: LayoutAutosave(store: store)
         )
 
-        panel.resize(stub, to: WidgetSpan(width: 2, height: 1))
+        panel.resize(stub, to: CustomWidgetSize(width: 347, height: 511))
         panel.flush()
 
-        XCTAssertEqual(store.load().lanes, [[Placement(id: stub, span: WidgetSpan(width: 2, height: 1))]])
+        XCTAssertEqual(
+            store.load().lanes,
+            [[Placement(id: stub, customSize: CustomWidgetSize(width: 347, height: 511))]]
+        )
     }
 
     /// A minimize is not a replacement either: the widget keeps its live

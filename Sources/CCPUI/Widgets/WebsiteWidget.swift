@@ -397,6 +397,9 @@ private struct WebsiteContent: View {
     @State private var hasLoaded = false
     @State private var isImporting = false
     @State private var importedCount: Int?
+    /// The card's measured size, for placing the hover bar: a bar wider
+    /// than its card must hang toward the safe side (see `pillPlacement`).
+    @State private var cardSize = CGSize(width: Layout.laneWidth, height: WidgetSize.tall.height)
 
     private var entry: WebsiteEntry? {
         guard let id = currentWidgetID else { return nil }
@@ -411,39 +414,6 @@ private struct WebsiteContent: View {
     private var host: String? {
         guard let id = currentWidgetID, let entry = store.entry(for: id) else { return nil }
         return WebsitePolicy.host(of: entry.url)
-    }
-
-    /// This card's height span, 1 where the environment is absent (previews).
-    private var heightSpan: Int {
-        slot?.span.height ?? 1
-    }
-
-    /// The card's drawn height: the live drag size while a grip is held, the
-    /// stored rect otherwise. Reading the preview (not just the placement) is
-    /// what makes a vertical drag track the finger instead of jumping on
-    /// release — the outer lane frame alone cannot stretch this inner frame.
-    /// The previewed slot carries both, so there is one height rule with the
-    /// shell's rather than a second copy of it here.
-    private var drawnHeight: CGFloat {
-        guard let id = currentWidgetID else { return WidgetSize.tall.height }
-        if let drawn = editor?.drawSize(for: id)?.height { return drawn }
-        if let slot, let editor { return editor.previewing(slot).height }
-        return CGFloat(heightSpan) * WidgetSize.tall.height
-    }
-
-    /// The card's drawn width, for placing the bar: a bar wider than its card
-    /// must hang toward the safe side (see `pillPlacement`).
-    private var drawnWidth: CGFloat {
-        guard let id = currentWidgetID else { return Layout.laneWidth }
-        if let drawn = editor?.drawSize(for: id)?.width { return drawn }
-        return slot?.width ?? Layout.laneWidth
-    }
-
-    /// The slot this card draws, looked up once: span and free rect derive
-    /// from the same placement so they can never disagree.
-    private var slot: LaneSlot? {
-        guard let id = currentWidgetID else { return nil }
-        return arrangement?.lanes.joined().first { $0.id == id }
     }
 
     /// The pooled view without creating one, for the hover pill: controls
@@ -507,7 +477,8 @@ private struct WebsiteContent: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .frame(height: drawnHeight)
+            .frame(minHeight: 0, idealHeight: WidgetSize.tall.height, maxHeight: .infinity)
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { cardSize = $0 }
         }
         // The bar hangs off the card's edge — outside the glass, never
         // covering the page — so it sits above the neighbour below while
@@ -525,7 +496,7 @@ private struct WebsiteContent: View {
                 // by a few points so landing it never needs care.
                 noteCorner(WebsitePill.corner(
                     at: location,
-                    in: CGSize(width: drawnWidth, height: drawnHeight)
+                    in: cardSize
                 ))
             case .ended:
                 noteCorner(nil)
@@ -701,7 +672,7 @@ private struct WebsiteContent: View {
     private var pillPlacement: WebsitePill.Placement {
         WebsitePill.placement(
             for: hoverCorner,
-            drawnWidth: drawnWidth,
+            cardWidth: cardSize.width,
             roomAbove: hasRoomAbove,
             roomBelow: hasRoomBelow
         )

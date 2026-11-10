@@ -76,13 +76,13 @@ struct WebsitePill {
     /// summon (nil) hangs below until the display says otherwise.
     static func placement(
         for corner: Corner?,
-        drawnWidth: CGFloat,
+        cardWidth: CGFloat,
         barWidth: CGFloat = WebsitePill.barWidth,
         roomAbove: Bool,
         roomBelow: Bool
     ) -> Placement {
         let trailing: Bool
-        if drawnWidth < barWidth + Space.two {
+        if cardWidth < barWidth + Space.two {
             trailing = true
         } else {
             switch corner {

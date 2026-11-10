@@ -15,6 +15,12 @@ struct EditableCard: View {
     let lane: Int
     let arrangement: PanelArrangement
     let editor: PanelEditor
+    /// How wide the card draws: the lane decides, from the card's size and
+    /// its own.
+    let width: CGFloat
+    /// How tall the card draws, or `nil` for a card never resized, which
+    /// stands at its content's height with its widget's floor under it.
+    let height: CGFloat?
 
     /// The card is drawn at the finger while it is in the air, so its lane
     /// holds an empty space of the same size instead — the gap the other
@@ -24,11 +30,12 @@ struct EditableCard: View {
     var body: some View {
         LaneSlotCard(slot: slot)
             .environment(\.currentWidgetID, slot.id)
+            .modifier(CardFrame(width: width, height: height, floor: slot.defaultHeight))
             // The wiggle is off for now — re-enable with
             // `editor.isEditing && !isInTheAir`.
             .wiggling(false)
             .overlay(alignment: .topLeading) { removeBadge }
-            .overlay(alignment: .bottomTrailing) { resizeGrip }
+            .overlay(alignment: .bottomLeading) { resizeGrip }
             // The whole card, badge included: what a lifted card leaves in its
             // lane is a gap, and a gap with a remove button floating in it is
             // a control belonging to nothing. Hit-testing is handled by the
@@ -74,14 +81,34 @@ struct EditableCard: View {
         }
     }
 
-    /// The resize grip: a handle on the card's bottom-trailing corner, in edit
-    /// mode only, on cards that take part in resizing. The panel-level gesture
-    /// leaves presses that start on the grip alone (see `GripFramePreference`
-    /// in ResizeGrip.swift), so the two never fight over one touch.
+    /// The resize grip: a handle on the card's bottom-leading corner, in
+    /// edit mode only, on every card with a widget behind it — a stand-in for
+    /// one this build doesn't have has nothing to resize. The panel-level gesture leaves presses
+    /// that start on the grip alone (see `GripFramePreference` in
+    /// ResizeGrip.swift), so the two never fight over one touch.
     @ViewBuilder private var resizeGrip: some View {
-        if editor.isEditing, !isInTheAir,
-           let widget = slot.instance, widget.descriptor.size.isResizable {
-            ResizeGrip(slot: slot, lane: lane, arrangement: arrangement, editor: editor)
+        if editor.isEditing, !isInTheAir, slot.instance != nil {
+            ResizeGrip(slot: slot, arrangement: arrangement, editor: editor)
+        }
+    }
+}
+
+/// A card's frame in its lane. Applied inside the card, under its overlays
+/// and its frame report, so the zone edit mode hit-tests — and a resize
+/// starts from — is exactly the rect drawn.
+private struct CardFrame: ViewModifier {
+    let width: CGFloat
+    let height: CGFloat?
+    let floor: CGFloat
+
+    func body(content: Content) -> some View {
+        if let height {
+            content.frame(width: width, height: height)
+        } else {
+            content
+                .frame(width: width)
+                .frame(minHeight: floor)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

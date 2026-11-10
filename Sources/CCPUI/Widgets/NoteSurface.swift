@@ -45,7 +45,7 @@ struct NoteSurface: View {
             // takes all of that: pinned to its floor instead, the note grows a
             // strip of container below the text that looks editable and
             // swallows the click.
-            .frame(minHeight: Layout.noteEditorHeight, maxHeight: .infinity)
+            .frame(minHeight: 0, idealHeight: Layout.noteEditorHeight, maxHeight: .infinity)
             .accessibilityHint("Editable Markdown")
             // The toolbar's fade: the last lines dissolve into the toolbar
             // instead of clipping hard. A mask on the content, not a scrim

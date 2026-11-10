@@ -47,7 +47,7 @@ public struct PanelLayout: Codable, Hashable, Sendable {
     /// a file that was hand-edited or half-written, not an arrangement anyone
     /// asked for — and the shell keys its lanes on the widget id, so the
     /// duplicate would render undefined. The first placement is the one kept,
-    /// span and all.
+    /// size and all.
     public func normalized() -> PanelLayout {
         var placed: Set<WidgetID> = []
         let occupied = lanes
@@ -72,7 +72,7 @@ public struct PanelLayout: Codable, Hashable, Sendable {
     /// that ended somewhere meaningless should leave the panel as it was.
     ///
     /// The placement moves whole: a resized widget lands at its size, because
-    /// the span belongs to the widget rather than the slot it left.
+    /// the size belongs to the widget rather than the slot it left.
     public func moving(_ id: WidgetID, toLane lane: Int, at index: Int) -> PanelLayout {
         guard let from = position(of: id), lane >= 0, lane <= lanes.count else { return self }
 
@@ -126,30 +126,32 @@ public struct PanelLayout: Codable, Hashable, Sendable {
         PanelLayout(lanes.map { $0.filter { $0.id != id } }).normalized()
     }
 
-    /// The layout with `id` resized to `span`. Naming a widget this layout
-    /// doesn't place changes nothing — a resize grip only exists on a card
-    /// that is already on the panel. A span resize returns the widget to the
-    /// grid, clearing any free rect it had.
-    public func resizing(_ id: WidgetID, to span: WidgetSpan) -> PanelLayout {
-        guard position(of: id) != nil else { return self }
-        return PanelLayout(lanes.map { $0.map { $0.id == id ? Placement(id: id, span: span, isMinimized: $0.isMinimized) : $0 } })
-    }
-
-    /// The layout with `id` at a free `size` in points. Naming a widget this
-    /// layout doesn't place changes nothing. The span is kept but ignored
-    /// while the custom size is present, so clearing it later restores the
-    /// grid size the card had.
-    public func resizingCustom(_ id: WidgetID, to size: CustomWidgetSize) -> PanelLayout {
-        guard position(of: id) != nil else { return self }
-        return PanelLayout(lanes.map { $0.map { $0.id == id ? Placement(id: id, span: $0.span, isMinimized: $0.isMinimized, customSize: size) : $0 } })
+    /// The layout with `id` at `size` in points — the one size a resize
+    /// stores, for every widget. Naming a widget this layout doesn't place
+    /// changes nothing: a resize grip only exists on a card that is already
+    /// on the panel. Everything else about the placement travels unchanged.
+    public func resizing(_ id: WidgetID, to size: CustomWidgetSize) -> PanelLayout {
+        updating(id) { $0.customSize = size }
     }
 
     /// The layout with `id` minimized or expanded. Naming a widget this layout
     /// doesn't place changes nothing — a caret only exists on a card that is
     /// already on the panel.
     public func settingMinimized(_ id: WidgetID, to isMinimized: Bool) -> PanelLayout {
+        updating(id) { $0.isMinimized = isMinimized }
+    }
+
+    /// The layout with `id`'s placement changed in place, every other field
+    /// of it kept — rebuilding a placement field by field is how a minimize
+    /// once dropped the size it sat next to.
+    private func updating(_ id: WidgetID, _ change: (inout Placement) -> Void) -> PanelLayout {
         guard position(of: id) != nil else { return self }
-        return PanelLayout(lanes.map { $0.map { $0.id == id ? Placement(id: id, span: $0.span, isMinimized: isMinimized) : $0 } })
+        return PanelLayout(lanes.map { $0.map { placement in
+            guard placement.id == id else { return placement }
+            var changed = placement
+            change(&changed)
+            return changed
+        } })
     }
 
     /// Where a widget currently sits, or `nil` if this layout doesn't place it.

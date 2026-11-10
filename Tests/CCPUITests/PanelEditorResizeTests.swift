@@ -6,313 +6,146 @@ import SwiftUI
 import XCTest
 @testable import CCPUI
 
-/// The resize grip's arithmetic: the finger tracked continuously in
-/// step-space (clamped to 1x–3x), the lane drawing the dragged size with a
-/// gentle magnetic pull near steps, the span staying whole for packing and
-/// the one commit on release.
+/// The resize grip's arithmetic: the card follows the finger point for point
+/// from the size it was drawn at, held only to the display's width and the
+/// grab floor, and the release stores exactly what the finger showed.
 @MainActor
 final class PanelEditorResizeTests: XCTestCase {
     private let a: WidgetID = "a"
+    private let start = CGSize(width: 300, height: 232)
 
-    private var baseSize: CGSize { CGSize(width: Layout.laneWidth, height: WidgetSize.regular.height) }
-
-    func testADragCountsWholeStepsFromTheStartSpan() {
+    private func editor(resizing maxWidth: CGFloat = 2000) -> PanelEditor {
         let editor = PanelEditor()
-        editor.beginResize(a, from: .unit, baseSize: baseSize)
-
-        // One lane-unit right and two base-heights down.
-        editor.updateResize(translation: CGSize(width: 310, height: 270))
-
-        XCTAssertEqual(editor.resizePreview?.span, WidgetSpan(width: 2, height: 3))
+        editor.beginResize(a, from: start, maxWidth: maxWidth)
+        return editor
     }
 
-    func testStepsRoundRatherThanTruncate() {
-        let editor = PanelEditor()
-        editor.beginResize(a, from: .unit, baseSize: baseSize)
-
-        editor.updateResize(translation: CGSize(width: 160, height: -70))
-
-        XCTAssertEqual(editor.resizePreview?.span, WidgetSpan(width: 2, height: 1))
+    func testTheFirstFrameIsTheCardAsGrabbed() {
+        XCTAssertEqual(editor().drawSize(for: a), start)
     }
 
-    func testAWildDragParksAtTheEnds() {
-        let editor = PanelEditor()
-        editor.beginResize(a, from: .unit, baseSize: baseSize)
+    /// The grip is on the leading corner of a right-pinned card: left widens,
+    /// down grows, every point of travel one point of size.
+    func testTheCardFollowsTheFingerToThePixel() {
+        let editor = editor()
 
-        editor.updateResize(translation: CGSize(width: 5000, height: -5000))
+        editor.updateResize(translation: CGSize(width: -37.5, height: 11.25))
+        XCTAssertEqual(editor.drawSize(for: a), CGSize(width: 337.5, height: 243.25))
 
-        XCTAssertEqual(editor.resizePreview?.span, WidgetSpan(width: 3, height: 1))
-        XCTAssertEqual(editor.resizePreview?.fraction, CGSize(width: 3, height: 1))
+        editor.updateResize(translation: CGSize(width: 61, height: -100))
+        XCTAssertEqual(editor.drawSize(for: a), CGSize(width: 239, height: 132))
     }
 
-    func testAnUpdateWithNoPreviewIsIgnored() {
-        let editor = PanelEditor()
+    func testWidthParksAtTheRoomBesideTheOtherLanes() {
+        let editor = editor(resizing: 420)
 
-        editor.updateResize(translation: CGSize(width: 300, height: 132))
-
-        XCTAssertNil(editor.resizePreview)
+        editor.updateResize(translation: CGSize(width: -900, height: 0))
+        XCTAssertEqual(editor.drawSize(for: a)?.width, 420)
     }
 
-    func testStepsCountFromTheStoredStart() {
+    func testHeightHasNoCeiling() {
+        let editor = editor()
+
+        editor.updateResize(translation: CGSize(width: 0, height: 4000))
+        XCTAssertEqual(editor.drawSize(for: a)?.height, 4232)
+    }
+
+    func testOnlyTheGrabFloorStopsAShrink() {
+        let editor = editor()
+
+        editor.updateResize(translation: CGSize(width: 900, height: -900))
+        XCTAssertEqual(
+            editor.drawSize(for: a),
+            CGSize(width: PanelEditor.minimumCardSize, height: PanelEditor.minimumCardSize)
+        )
+    }
+
+    func testAnUpdateWithNoGripHeldIsIgnored() {
         let editor = PanelEditor()
-        editor.beginResize(a, from: WidgetSpan(width: 2, height: 2), baseSize: baseSize)
 
-        // A nudge, not a step: the drag counts from where it started.
-        editor.updateResize(translation: CGSize(width: 10, height: 10))
-
-        XCTAssertEqual(editor.resizePreview?.span, WidgetSpan(width: 2, height: 2))
+        editor.updateResize(translation: CGSize(width: -50, height: 50))
+        XCTAssertNil(editor.resize)
     }
 
     func testASecondGripNeverPreemptsTheFlight() {
-        let editor = PanelEditor()
-        editor.beginResize(a, from: .unit, baseSize: baseSize)
+        let editor = editor()
 
-        editor.beginResize("b", from: WidgetSpan(width: 3, height: 3), baseSize: baseSize)
-
-        XCTAssertEqual(editor.resizePreview?.id, a)
-        XCTAssertEqual(editor.resizePreview?.span, .unit)
+        editor.beginResize("b", from: CGSize(width: 10, height: 10), maxWidth: 2000)
+        XCTAssertEqual(editor.resize?.id, a)
+        XCTAssertNil(editor.drawSize(for: "b"))
     }
 
-    func testPreviewingSwapsOnlyTheCardUnderTheGrip() {
+    func testEndResizeAndStopEditingClearTheDrag() {
+        let ended = editor()
+        ended.endResize()
+        XCTAssertNil(ended.resize)
+
+        let stopped = editor()
+        stopped.startEditing()
+        stopped.stopEditing()
+        XCTAssertNil(stopped.resize)
+    }
+
+    // MARK: - Room and commit
+
+    private func display(fitting room: CGFloat, lanes: Int) -> CGFloat {
+        room + Space.oneHalf * CGFloat(lanes - 1) + Layout.panelInset * 2 + Space.oneHalf * 2
+    }
+
+    func testMaxLaneWidthIsTheRoomBesideTheOthers() {
         let editor = PanelEditor()
+        editor.displayWidth = display(fitting: 1000, lanes: 2)
+
+        XCTAssertEqual(editor.maxLaneWidth(for: 0, laneWidths: [300, 400]), 600)
+        XCTAssertEqual(editor.maxLaneWidth(for: 1, laneWidths: [300, 400]), 700)
+        XCTAssertNil(editor.maxLaneWidth(for: 7, laneWidths: [300, 400]))
+    }
+
+    /// A layout from a wider display draws fitted; the room is measured
+    /// against the lanes as drawn, so the grabbed lane always has at least
+    /// its own drawn width to start from.
+    func testMaxLaneWidthMeasuresAnOverflowingLayoutAsDrawn() {
+        let editor = PanelEditor()
+        editor.displayWidth = display(fitting: 1000, lanes: 2)
+
+        XCTAssertEqual(editor.maxLaneWidth(for: 0, laneWidths: [1200, 800])!, 600, accuracy: 0.001)
+    }
+
+    private func arrangement(_ layout: PanelLayout) -> PanelArrangement {
         let registry = WidgetRegistry()
         registry.register(ResizeStubWidget.self)
-        let slots = registry.resolve(PanelLayout([[ResizeStubWidget.descriptor.id]]))[0]
-
-        editor.beginResize("elsewhere", from: WidgetSpan(width: 2, height: 2), baseSize: baseSize)
-        XCTAssertEqual(editor.previewing(slots[0]).span, .unit)
-
-        editor.endResize()
-        editor.beginResize(ResizeStubWidget.descriptor.id, from: WidgetSpan(width: 2, height: 2), baseSize: baseSize)
-        XCTAssertEqual(editor.previewing(slots[0]).span, WidgetSpan(width: 2, height: 2))
+        return PanelArrangement(layout, registry: registry)
     }
 
-    func testEndResizeAndStopEditingClearThePreview() {
+    func testTheReleaseStoresExactlyTheDraggedSize() {
         let editor = PanelEditor()
-        editor.beginResize(a, from: .unit, baseSize: baseSize)
-        editor.endResize()
-        XCTAssertNil(editor.resizePreview)
+        editor.displayWidth = 1800
+        let id = ResizeStubWidget.descriptor.id
+        let arrangement = arrangement(PanelLayout([[id]]))
 
-        editor.beginResize(a, from: .unit, baseSize: baseSize)
-        editor.stopEditing()
-        XCTAssertNil(editor.resizePreview)
+        XCTAssertTrue(commitResize(CGSize(width: 333.25, height: 87.5), of: id, arrangement: arrangement, editor: editor))
+        XCTAssertEqual(arrangement.slot(for: id)?.customSize, CustomWidgetSize(width: 333.25, height: 87.5))
     }
 
-    func testMaxLaneWidthSolvesFitsForOneLane() {
+    func testTheCommitClampsLikeTheDrag() {
         let editor = PanelEditor()
-        // A display exactly wide enough for two lanes of cards.
-        editor.displayWidth = 2 * Layout.laneWidth + Space.oneHalf
-            + Layout.panelInset * 2 + Space.oneHalf * 2
+        editor.displayWidth = display(fitting: 500, lanes: 1)
+        let id = ResizeStubWidget.descriptor.id
+        let arrangement = arrangement(PanelLayout([[id]]))
 
-        // The other lane plus the one gutter between them come off the usable
-        // width; nil for a stale lane index.
-        XCTAssertEqual(editor.maxLaneWidth(for: 0, laneWidths: [300, 300]), 300)
-        XCTAssertEqual(editor.maxLaneWidth(for: 1, laneWidths: [300, 300]), 300)
-        XCTAssertNil(editor.maxLaneWidth(for: 7, laneWidths: [300, 300]))
-    }
-
-    /// The one commit both the drag release and the VoiceOver step go
-    /// through: a widening past the display clamps to what fits — here a
-    /// single lane unit — and a height-only change always lands. A stale lane
-    /// index still refuses.
-    func testCommitClampsTheWideningThatLeavesTheDisplay() {
-        let editor = PanelEditor()
-        editor.displayWidth = Layout.laneWidth + Layout.panelInset * 2 + Space.oneHalf * 2
-        let registry = WidgetRegistry()
-        registry.register(ResizeStubWidget.self)
-        let arrangement = PanelArrangement(
-            PanelLayout([[ResizeStubWidget.descriptor.id]]),
-            registry: registry
-        )
-        let slot = arrangement.slot(for: ResizeStubWidget.descriptor.id)!
-
-        XCTAssertTrue(commitResize(
-            WidgetSpan(width: 2, height: 1), of: slot, in: 0,
-            arrangement: arrangement, editor: editor
-        ))
-        XCTAssertEqual(arrangement.slot(for: ResizeStubWidget.descriptor.id)?.span, .unit)
-
-        XCTAssertTrue(commitResize(
-            WidgetSpan(width: 1, height: 2), of: slot, in: 0,
-            arrangement: arrangement, editor: editor
-        ))
+        commitResize(CGSize(width: 9000, height: 1), of: id, arrangement: arrangement, editor: editor)
         XCTAssertEqual(
-            arrangement.slot(for: ResizeStubWidget.descriptor.id)?.span,
-            WidgetSpan(width: 1, height: 2)
-        )
-
-        XCTAssertFalse(commitResize(
-            WidgetSpan(width: 2, height: 1), of: slot, in: 7,
-            arrangement: arrangement, editor: editor
-        ))
-    }
-
-    /// The clamp measures the lane as it would be — units plus the shell's
-    /// gutter — not the slot alone. A display fitting 600pt of cards still
-    /// clamps the 612pt a 2-wide lane actually takes; one gutter wider and
-    /// the full width lands.
-    func testCommitCountsTheGutterBetweenColumns() {
-        let editor = PanelEditor()
-        editor.displayWidth = Layout.laneWidth * 2 + Layout.panelInset * 2 + Space.oneHalf * 2
-        let registry = WidgetRegistry()
-        registry.register(ResizeStubWidget.self)
-        let arrangement = PanelArrangement(
-            PanelLayout([[ResizeStubWidget.descriptor.id]]),
-            registry: registry
-        )
-        let slot = arrangement.slot(for: ResizeStubWidget.descriptor.id)!
-
-        XCTAssertTrue(commitResize(
-            WidgetSpan(width: 2, height: 1), of: slot, in: 0,
-            arrangement: arrangement, editor: editor
-        ))
-        XCTAssertEqual(arrangement.slot(for: ResizeStubWidget.descriptor.id)?.span, .unit)
-
-        editor.displayWidth += Space.oneHalf
-
-        XCTAssertTrue(commitResize(
-            WidgetSpan(width: 2, height: 1), of: slot, in: 0,
-            arrangement: arrangement, editor: editor
-        ))
-        XCTAssertEqual(
-            arrangement.slot(for: ResizeStubWidget.descriptor.id)?.span,
-            WidgetSpan(width: 2, height: 1)
+            arrangement.slot(for: id)?.customSize,
+            CustomWidgetSize(width: 500, height: Double(PanelEditor.minimumCardSize))
         )
     }
 
-    /// A free rect past the display clamps to the lane's max, not past it —
-    /// and a stale lane index refuses like the grid commit.
-    func testCustomCommitClampsWidthToTheDisplay() {
+    func testACardNoLongerPlacedRefuses() {
         let editor = PanelEditor()
-        editor.displayWidth = Layout.laneWidth + Layout.panelInset * 2 + Space.oneHalf * 2
-        let registry = WidgetRegistry()
-        registry.register(ResizeStubWidget.self)
-        let arrangement = PanelArrangement(
-            PanelLayout([[ResizeStubWidget.descriptor.id]]),
-            registry: registry
-        )
-        let slot = arrangement.slot(for: ResizeStubWidget.descriptor.id)!
+        let arrangement = arrangement(PanelLayout([[ResizeStubWidget.descriptor.id]]))
 
-        XCTAssertTrue(commitCustomResize(
-            CGSize(width: 600, height: 400), of: slot, in: 0,
-            arrangement: arrangement, editor: editor
-        ))
-        XCTAssertEqual(arrangement.slot(for: ResizeStubWidget.descriptor.id)?.customSize?.width, 300)
-        XCTAssertEqual(arrangement.slot(for: ResizeStubWidget.descriptor.id)?.customSize?.height, 400)
-
-        XCTAssertFalse(commitCustomResize(
-            CGSize(width: 200, height: 200), of: slot, in: 7,
-            arrangement: arrangement, editor: editor
-        ))
+        XCTAssertFalse(commitResize(CGSize(width: 300, height: 300), of: "gone", arrangement: arrangement, editor: editor))
     }
-
-    func testTheFractionFollowsTheFingerBetweenSteps() {
-        let editor = PanelEditor()
-        editor.beginResize(a, from: .unit, baseSize: baseSize)
-
-        // Half a lane-unit right, half a base-height down: between steps.
-        editor.updateResize(translation: CGSize(width: 150, height: 66))
-
-        XCTAssertEqual(editor.resizePreview?.fraction, CGSize(width: 1.5, height: 1.5))
-        // Packing still counts the rounded step, not the finger.
-        XCTAssertEqual(editor.resizePreview?.span, WidgetSpan(width: 2, height: 2))
-    }
-
-    func testBeginResizeSeedsTheFractionAtTheStartSpan() {
-        let editor = PanelEditor()
-        editor.beginResize(a, from: WidgetSpan(width: 2, height: 2), baseSize: baseSize)
-
-        XCTAssertEqual(editor.resizePreview?.fraction, CGSize(width: 2, height: 2))
-    }
-
-    func testDrawSizeIsNilOffTheGrip() {
-        let editor = PanelEditor()
-        XCTAssertNil(editor.drawSize(for: a))
-
-        editor.beginResize(a, from: .unit, baseSize: baseSize)
-        XCTAssertNil(editor.drawSize(for: "elsewhere"))
-    }
-
-    func testDrawSizeMapsStepsToPoints() {
-        let editor = PanelEditor()
-        editor.beginResize(a, from: .unit, baseSize: baseSize)
-
-        // At rest on the step: one lane unit wide, one base height tall.
-        XCTAssertEqual(editor.drawSize(for: a), CGSize(width: 300, height: 132))
-
-        // Midway to 2x2: linear between the grid widths, magnet out of reach.
-        editor.updateResize(translation: CGSize(width: 150, height: 66))
-        XCTAssertEqual(editor.drawSize(for: a), CGSize(width: 456, height: 198))
-    }
-
-    func testDrawSizeRestsOnAStepWhenClose() {
-        let editor = PanelEditor()
-        editor.beginResize(a, from: .unit, baseSize: baseSize)
-
-        // Five points short of the 2x width, two short of the 2x height.
-        editor.updateResize(translation: CGSize(width: 295, height: 130))
-
-        XCTAssertEqual(editor.drawSize(for: a)?.width ?? -1, 609.296, accuracy: 0.001)
-        XCTAssertEqual(editor.drawSize(for: a)?.height ?? -1, 263.6, accuracy: 0.001)
-    }
-
-    func testTheMagnetNeverPops() {
-        // At the edge of the zone and beyond: untouched.
-        XCTAssertEqual(magnetized(190, toward: 200, within: 10), 190)
-        XCTAssertEqual(magnetized(100, toward: 200, within: 10), 100)
-        // Halfway in: halfway pulled. On the step: exact.
-        XCTAssertEqual(magnetized(195, toward: 200, within: 10), 197.5)
-        XCTAssertEqual(magnetized(200, toward: 200, within: 10), 200)
-        // A dead zone pulls nothing.
-        XCTAssertEqual(magnetized(195, toward: 200, within: 0), 195)
-    }
-
-    func testACustomDragFollowsTheFingerToThePixel() {
-        let editor = PanelEditor()
-        editor.beginCustomResize(a, from: CGSize(width: 300, height: 232))
-
-        // An odd drag lands odd — no rounding to steps.
-        editor.updateResize(translation: CGSize(width: 47, height: 279))
-
-        XCTAssertEqual(editor.resizePreview?.custom, CGSize(width: 347, height: 511))
-        XCTAssertEqual(editor.drawSize(for: a), CGSize(width: 347, height: 511))
-    }
-
-    func testACustomDragNeverMagnetizes() {
-        let editor = PanelEditor()
-        editor.beginCustomResize(a, from: CGSize(width: 300, height: 232))
-
-        // Five points short of a grid width: grid would pull, custom does not.
-        editor.updateResize(translation: CGSize(width: 307, height: 0))
-
-        XCTAssertEqual(editor.drawSize(for: a), CGSize(width: 607, height: 232))
-    }
-
-    func testACustomDragClampsToTheFloorAndCeiling() {
-        let editor = PanelEditor()
-        editor.beginCustomResize(a, from: CGSize(width: 300, height: 232))
-
-        // Drag left to narrow past the floor, down past the ceiling.
-        editor.updateResize(translation: CGSize(width: -5000, height: 5000))
-
-        XCTAssertEqual(
-            editor.resizePreview?.custom,
-            CGSize(width: PanelEditor.customMinSize.width, height: PanelEditor.customMaxSize.height)
-        )
-    }
-
-    func testCustomPreviewingWearsTheFreeRect() {
-        let editor = PanelEditor()
-        let registry = WidgetRegistry()
-        registry.register(ResizeStubWidget.self)
-        let slots = registry.resolve(PanelLayout([[ResizeStubWidget.descriptor.id]]))[0]
-
-        // This file intentionally leaves the assertion to the lane tests:
-        // previewing a custom drag returns the slot resized to the rect.
-        editor.beginCustomResize("elsewhere", from: CGSize(width: 300, height: 232))
-        XCTAssertNil(editor.previewing(slots[0]).customSize)
-    }
-
 }
 
 @MainActor

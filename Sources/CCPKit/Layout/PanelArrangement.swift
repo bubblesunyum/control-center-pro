@@ -87,17 +87,11 @@ public final class PanelArrangement {
         apply(layout.removing(id))
     }
 
-    /// Set `id`'s size override. The widget stays the same live object — a
+    /// Set `id`'s size in points. The widget stays the same live object — a
     /// resize is not a replacement, so whatever it was showing survives it —
-    /// and the write goes out like any other edit.
-    public func resize(_ id: WidgetID, to span: WidgetSpan) {
-        apply(layout.resizing(id, to: span))
-    }
-
-    /// Set `id`'s free size in points. Same commit shape as a span resize —
-    /// one write on release, previewed live until then.
-    public func resizeCustom(_ id: WidgetID, to size: CustomWidgetSize) {
-        apply(layout.resizingCustom(id, to: size))
+    /// and the write goes out like any other edit: once, on release.
+    public func resize(_ id: WidgetID, to size: CustomWidgetSize) {
+        apply(layout.resizing(id, to: size))
     }
 
     /// Set `id`'s minimized state. The widget stays the same live object — a
