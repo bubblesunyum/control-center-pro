@@ -44,7 +44,10 @@ struct EditableCard: View {
             // drag in the air.
             .opacity(isInTheAir ? 0 : 1)
             .background { frameReporter }
-            .contentShape(Rectangle())
+            // No content shape here: one confines hit-testing to the card's
+            // rect, and the website bar hangs outside it — every click on
+            // the bar fell through. The panel's own shape already catches
+            // presses for the panel-level gesture.
             .modifier(RaisedWhileOverflowing())
     }
 
