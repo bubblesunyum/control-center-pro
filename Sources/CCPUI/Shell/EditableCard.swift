@@ -45,6 +45,7 @@ struct EditableCard: View {
             .opacity(isInTheAir ? 0 : 1)
             .background { frameReporter }
             .contentShape(Rectangle())
+            .modifier(RaisedWhileOverflowing())
     }
 
     @ViewBuilder private var removeBadge: some View {
@@ -105,10 +106,27 @@ private struct CardFrame: ViewModifier {
         if let height {
             content.frame(width: width, height: height)
         } else {
-            content
-                .frame(width: width)
-                .frame(minHeight: floor)
-                .fixedSize(horizontal: false, vertical: true)
+            FloorHeight(floor: floor) { content.frame(width: width) }
         }
+    }
+}
+
+/// Its content's natural height, or `floor` when that is less — and the
+/// content is then *given* the floor, so a card's glass fills it rather than
+/// sitting centred in empty space a min-height frame would reserve around it.
+private struct FloorHeight: SwiftUI.Layout {
+    let floor: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let content = subviews.first else { return .zero }
+        let natural = content.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
+        return CGSize(width: natural.width, height: max(natural.height, floor))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(
+            at: bounds.origin,
+            proposal: ProposedViewSize(width: bounds.width, height: bounds.height)
+        )
     }
 }

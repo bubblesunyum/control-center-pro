@@ -25,6 +25,12 @@ public struct GlassCard<Content: View>: View {
 
     public var body: some View {
         content
+            // Never larger than the room it is given. A min-only frame sizes
+            // to the lesser of its content and its proposal, so content that
+            // asks for more is cut at the glass's edge, top kept, instead of
+            // the card reporting its content's size and spilling onto its
+            // neighbour — while a card given more room still sizes to fit.
+            .frame(minWidth: 0, minHeight: 0, alignment: .topLeading)
             .background { GlassFill(shape, cornerRadius: Radius.card) }
             .clipShape(shape)
             .overlay(shape.strokeBorder(isRaised ? Color.cardStrokeStrong : Color.cardStroke, lineWidth: Stroke.hairline))

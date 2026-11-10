@@ -490,6 +490,7 @@ private struct WidgetLane: View {
         .scrollBounceBehavior(.basedOnSize)
         .frame(width: width + Space.one)
         .padding(-Space.half)
+        .modifier(RaisedWhileOverflowing())
     }
 
     /// A card at its own size: the live size under a held grip, the stored

@@ -12,30 +12,33 @@ import SwiftUI
 /// no per-widget floor or ceiling — the only limit is the display, which
 /// `Layout.fittedLaneWidths` enforces for the panel as a whole.
 extension LaneSlot {
-    /// The size the user gave this card, or `nil` when it was never resized.
-    ///
-    /// A layout from before free resizing stored a span instead, and such a
-    /// card keeps the points that span used to draw until it is dragged
-    /// again — the file is the user's, and their arrangement should open
-    /// looking the way they left it.
+    /// The size the user dragged this card to, or `nil` when they never did.
     var storedSize: CGSize? {
-        guard case .widget(let widget, let placement) = self else { return nil }
-        if let size = placement.customSize {
-            return CGSize(width: size.width, height: size.height)
-        }
-        guard placement.span != .unit, widget.descriptor.size != .screen else { return nil }
-        let columns = CGFloat(placement.span.width)
-        return CGSize(
-            width: columns * Layout.laneWidth + (columns - 1) * Space.oneHalf,
-            height: CGFloat(placement.span.height) * widget.descriptor.size.height
-        )
+        guard case .widget(_, let placement) = self, let size = placement.customSize else { return nil }
+        return CGSize(width: size.width, height: size.height)
+    }
+
+    /// A layout from before free resizing stored a span instead. Such a card
+    /// keeps the width that span drew and stands at least as tall, until it
+    /// is dragged again — the file is the user's, and their arrangement
+    /// should open looking the way they left it. Only a floor on height:
+    /// spans never capped a card, and a card given less than its content
+    /// spills onto its neighbour.
+    private var legacySpan: WidgetSpan? {
+        guard case .widget(let widget, let placement) = self, placement.customSize == nil,
+              placement.span != .unit, widget.descriptor.size != .screen else { return nil }
+        return placement.span
     }
 
     /// How wide a card that was never resized asks its lane to be.
     var defaultWidth: CGFloat {
+        if let span = legacySpan {
+            let columns = CGFloat(span.width)
+            return columns * Layout.laneWidth + (columns - 1) * Space.oneHalf
+        }
         switch self {
-        case .widget(let widget, _): widget.descriptor.size.width
-        case .unavailable: Layout.laneWidth
+        case .widget(let widget, _): return widget.descriptor.size.width
+        case .unavailable: return Layout.laneWidth
         }
     }
 
@@ -43,7 +46,8 @@ extension LaneSlot {
     /// may ask for more and gets it.
     var defaultHeight: CGFloat {
         switch self {
-        case .widget(let widget, _): widget.descriptor.size.height
+        case .widget(let widget, _):
+            CGFloat(legacySpan?.height ?? 1) * widget.descriptor.size.height
         case .unavailable: WidgetSize.compact.height
         }
     }

@@ -481,11 +481,11 @@ private struct WebsiteContent: View {
             .onGeometryChange(for: CGSize.self) { $0.size } action: { cardSize = $0 }
         }
         // The bar hangs off the card's edge — outside the glass, never
-        // covering the page — so it sits above the neighbour below while
-        // visible rather than sliding under it. Its frame joins the backdrop
-        // hit-test (see PanelOverflowFramePreference) so a click on it never
-        // reads as backdrop.
-        .zIndex(pillVisible ? 10 : 0)
+        // covering the page. Its frame joins the backdrop hit-test (see
+        // PanelOverflowFramePreference), which is also what raises the card
+        // above its neighbours in the lane while the bar is up: a zIndex
+        // here would order nothing, since the card's siblings are the
+        // lane's, not this view's.
         .overlay(alignment: pillPlacement.alignment) { pillBar }
         .onContinuousHover { phase in
             switch phase {

@@ -457,6 +457,20 @@ struct PanelOverflowFramePreference: PreferenceKey {
     }
 }
 
+/// Raises a view above its siblings while anything inside it reports an
+/// overflow frame. `zIndex` orders only siblings, so the card raises itself in
+/// its lane and the lane in the panel: otherwise a bar hung past the card's
+/// edge draws under the next card or lane, which then takes its clicks.
+struct RaisedWhileOverflowing: ViewModifier {
+    @State private var isOverflowing = false
+
+    func body(content: Content) -> some View {
+        content
+            .onPreferenceChange(PanelOverflowFramePreference.self) { isOverflowing = !$0.isEmpty }
+            .zIndex(isOverflowing ? 1 : 0)
+    }
+}
+
 /// Header frames — what the long-press to edit hit-tests against.
 struct HeaderFrame: Equatable {
     let id: WidgetID

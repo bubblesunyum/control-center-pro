@@ -47,18 +47,21 @@ final class LaneSlotSizingTests: XCTestCase {
     }
 
     /// A file from before free resizing opens looking the way it was left:
-    /// the points its span drew, gutter included.
-    func testALegacySpanDrawsThePointsItUsedTo() {
+    /// the width its span drew, gutter included, and at least its height —
+    /// a floor, never a fixed size its content could spill out of.
+    func testALegacySpanKeepsItsWidthAndFloorsItsHeight() {
         let lane = slots([Placement(id: stub, span: WidgetSpan(width: 2, height: 3))])
 
-        XCTAssertEqual(lane[0].storedSize, CGSize(
-            width: Layout.laneWidth * 2 + Space.oneHalf,
-            height: WidgetSize.regular.height * 3
-        ))
+        XCTAssertNil(lane[0].storedSize)
+        XCTAssertEqual(lane[0].width, Layout.laneWidth * 2 + Space.oneHalf)
+        XCTAssertEqual(lane[0].defaultHeight, WidgetSize.regular.height * 3)
     }
 
     func testAScreenIgnoresALegacySpan() {
-        XCTAssertNil(slots([Placement(id: screen, span: WidgetSpan(width: 2, height: 2))])[0].storedSize)
+        let lane = slots([Placement(id: screen, span: WidgetSpan(width: 2, height: 2))])
+
+        XCTAssertNil(lane[0].storedSize)
+        XCTAssertEqual(lane[0].width, Layout.screenWidth)
     }
 
     func testALaneIsAsWideAsItsWidestCard() {
