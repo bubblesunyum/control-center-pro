@@ -8,26 +8,24 @@ import CoreGraphics
 /// backdrop. Split out from the controller so the hit-test policy stays
 /// provable without ordering windows: every member is pure.
 enum PanelBackdrop {
-    /// Outward slack on the edit-mode hit box. The resize target overshoots
-    /// its card and the remove badge caps past it, and on an edge card that
-    /// overhang sits past the lanes' outer boundary where the box doesn't
-    /// reach — without slack a press there dismisses and exits edit mode
-    /// instead of resizing or removing.
+    /// Outward slack on each card in edit mode. The resize target overshoots
+    /// its card and the remove badge caps past it — without slack a press
+    /// there would dismiss edit mode instead of resizing or removing.
     static let editHitTestOutset: CGFloat = 12
 
-    /// Which rects count as the panel's. At rest the cards' union is exact,
-    /// so gutter clicks are backdrop; editing keeps the lanes' box (with
-    /// slack) because the union would punch holes mid-gesture — the lifted
-    /// card leaves its lane as a frameless gap, and backdrop under a held
-    /// drag would dismiss from under it. Nil frames mean the first
-    /// report hasn't arrived, so the box stands in; an empty panel reports
-    /// nothing to click and is all backdrop. Pure so the mode rule is provable
+    /// Which rects count as the panel's: the cards, each with slack in edit
+    /// mode for the controls hanging off its corners. Never the lanes' box —
+    /// lanes run the height of the display, so their box covers glass the
+    /// user sees as empty, and a click there must dismiss (or leave edit
+    /// mode). A press mid-gesture never reaches this: the controller treats
+    /// any drag in flight as the panel's. Nil frames mean the first report
+    /// hasn't arrived, so the box stands in; an empty panel reports nothing
+    /// to click and is all backdrop. Pure so the mode rule is provable
     /// without ordering windows.
     static func hitRects(lanesFrame: CGRect, cardFrames: [CGRect]?, isEditing: Bool) -> [CGRect] {
-        if isEditing {
-            return [lanesFrame.insetBy(dx: -editHitTestOutset, dy: -editHitTestOutset)]
-        }
-        return cardFrames ?? [lanesFrame]
+        guard let cardFrames else { return [lanesFrame] }
+        guard isEditing else { return cardFrames }
+        return cardFrames.map { $0.insetBy(dx: -editHitTestOutset, dy: -editHitTestOutset) }
     }
 
     /// Whether the screen point is the panel's own content. Pure so the

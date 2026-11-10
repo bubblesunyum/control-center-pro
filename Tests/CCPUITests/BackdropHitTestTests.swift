@@ -80,10 +80,21 @@ final class BackdropHitTestTests: XCTestCase {
         XCTAssertTrue(check(CGPoint(x: 835, y: 700)))
     }
 
-    func testGutterStaysInteractiveWhileEditing() {
-        // The union would punch holes mid-gesture (the lifted card's gap,
-        // the grip and badge overshoots), so edit mode keeps the box.
+    func testANarrowGutterIsCoveredByEditSlack() {
+        // Each card's slack reaches across a 10pt gutter, so a press aimed
+        // at a grip or badge there stays on the panel.
         XCTAssertTrue(check(CGPoint(x: 835, y: 700), cards: twoCards, isEditing: true))
+    }
+
+    /// Lanes run the display's height, so their box covers glass the user
+    /// sees as empty. Edit mode tests the cards, not the box: a click on
+    /// empty glass leaves edit mode instead of doing nothing (ccp-kt7k).
+    func testEmptyGlassIsBackdropWhileEditing() {
+        // One short card in the corner of the lanes' box: panel (900, 300)
+        // is inside the box, well clear of the card and its slack.
+        let corner = [CGRect(x: 700, y: 20, width: 130, height: 200)]
+        XCTAssertFalse(check(CGPoint(x: 900, y: 500), cards: corner, isEditing: true))
+        XCTAssertTrue(check(CGPoint(x: 760, y: 700), cards: corner, isEditing: true))
     }
 
     func testEditModeSlackCoversOuterOverhang() {

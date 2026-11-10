@@ -92,6 +92,13 @@ public final class ControlPanelController {
         // Seeded empty: the real root reports the lanes' frame back through
         // `self`, which doesn't exist until `content` does.
         content = NSHostingView(rootView: AnyView(EmptyView()))
+        // The window is the seat `place()` cuts, never what the content asks
+        // for. Left to its default, the hosting view grows the window to the
+        // content's minimum size — past the display's edge, where a lane is
+        // cut off — and the reopen that resets it then waits forever for a
+        // frame report that never changes, leaving every click "the
+        // panel's" and the backdrop dead (ccp-kt7k).
+        content.sizingOptions = []
         window.contentView = content
         let reportFrame: (CGRect) -> Void = { [weak self] frame in
             Task { @MainActor in self?.lanesFrameDidChange(frame) }
