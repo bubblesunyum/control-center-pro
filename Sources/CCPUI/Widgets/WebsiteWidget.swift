@@ -366,9 +366,15 @@ private struct WebsiteContent: View {
     /// A URL-change load (not a reload) waiting for its finish to stamp the hour.
     @State private var awaitingFreshLoad = false
     @State private var reloadTask: Task<Void, Never>?
-    /// The pointer in a corner zone straddling the card's outer edge, or on
-    /// the bar itself. The whole-card hover is gone on purpose: WebKit owns
-    /// the page, so the bar must not answer the entire card.
+    /// Raw hovers, set immediately: the corner zone and the bar itself are
+    /// adjacent views with unordered events, so sharing one flag lets a
+    /// stale card-leave arriving after a bar-enter schedule a hide from
+    /// under the pointer. Two sources, one visible gate below.
+    @State private var cornerHover = false
+    @State private var barHover = false
+    /// The sticky visible flag — the single interaction gate with
+    /// `focusedControl`. Set at once on any enter, cleared only after the
+    /// grace when neither raw hover remains.
     @State private var isHoveringPill = false
     /// Which corner summoned the bar — placement hangs off it, flipped
     /// toward room when that side would leave the display. Retained through
@@ -561,6 +567,16 @@ private struct WebsiteContent: View {
             failReload()
             if !isReloading { awaitingFreshLoad = false }
         }
+        // Focus leaving releases the bar exactly like a pointer leave: with
+        // no hover held, the grace hides it and clears the summoning corner.
+        .onChange(of: focusedControl) { _, focused in
+            if focused == nil { maybeSchedulePillHide() }
+        }
+        // Edit mode removes the bar's view without a hover exit — reset the
+        // flags at once rather than stranding them set with no hide pending.
+        .onChange(of: isEditingForBar) { _, editing in
+            if editing { standDownPillForEdit() }
+        }
     }
 
     /// WebKit owns right-click inside the page, so the card's controls live in
@@ -613,37 +629,65 @@ private struct WebsiteContent: View {
 
     /// A hover handoff with a grace: leaving the card's corner or the bar
     /// hides the bar a beat later rather than at once, so the pointer
-    /// crossing from card to bar (adjacent views, unordered events) never
-    /// flickers it. Entering cancels a pending hide. Both hovers share the
-    /// one grace — and the hide always clears the summoning corner with the
-    /// bar, so a later keyboard summon never inherits a stale side.
+    /// crossing from card to bar never flickers it. Either enter cancels a
+    /// pending hide; a leave schedules one only when the other side isn't
+    /// already held — unordered leave-after-enter arrivals must not hide
+    /// from under the pointer. The hide always clears the summoning corner
+    /// with the bar, so a later keyboard summon never inherits a stale side.
     private func noteCorner(_ corner: WebsitePill.Corner?) {
         if let corner {
-            setPillHover(visible: true, corner: corner)
+            hoverCorner = corner
+            cornerHover = true
+            showPill()
         } else {
-            setPillHover(visible: false)
+            cornerHover = false
+            maybeSchedulePillHide()
         }
     }
 
     private func noteHover(_ hovering: Bool) {
-        setPillHover(visible: hovering)
+        barHover = hovering
+        if hovering {
+            showPill()
+        } else {
+            maybeSchedulePillHide()
+        }
     }
 
-    private func setPillHover(visible: Bool, corner: WebsitePill.Corner? = nil) {
-        if visible {
-            hideTask?.cancel()
-            hideTask = nil
-            if let corner { hoverCorner = corner }
-            isHoveringPill = true
-        } else {
-            hideTask?.cancel()
-            hideTask = Task { @MainActor in
-                try? await Task.sleep(for: .seconds(Self.hoverGraceSeconds))
-                guard !Task.isCancelled else { return }
-                isHoveringPill = false
-                hoverCorner = nil
-            }
+    private func showPill() {
+        hideTask?.cancel()
+        hideTask = nil
+        isHoveringPill = true
+    }
+
+    private func maybeSchedulePillHide() {
+        // Still held on the other side, or held by keyboard focus: no hide
+        // at all. Focus never schedules — clearing hoverCorner under a
+        // focus-held bar would teleport its placement to the nil branch.
+        guard !cornerHover, !barHover, focusedControl == nil else { return }
+        hideTask?.cancel()
+        hideTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(Self.hoverGraceSeconds))
+            guard !Task.isCancelled else { return }
+            // Re-check: a re-enter during the grace cancels above, but a
+            // leave-after-enter that arrived mid-grace must not win either —
+            // and focus may have arrived while the grace slept.
+            guard !cornerHover, !barHover, focusedControl == nil else { return }
+            isHoveringPill = false
+            hoverCorner = nil
         }
+    }
+
+    /// Edit mode owns the bar's corner (the grip lives there), so the bar
+    /// stands down at once: removing its view delivers no hover exit, and a
+    /// stale flag would pin it visible with no hide pending after edit ends.
+    private func standDownPillForEdit() {
+        hideTask?.cancel()
+        hideTask = nil
+        cornerHover = false
+        barHover = false
+        isHoveringPill = false
+        hoverCorner = nil
     }
 
     /// How long the bar lingers after the pointer leaves its corner and bar.
@@ -740,7 +784,6 @@ private struct WebsiteContent: View {
             .accessibilityLabel("Website options")
             .focused($focusedControl, equals: .menu)
         }
-        .buttonStyle(.plain)
         .padding(.horizontal, Space.half)
         .padding(.vertical, Space.half)
         .background { GlassFill(Capsule(), cornerRadius: Radius.card) }

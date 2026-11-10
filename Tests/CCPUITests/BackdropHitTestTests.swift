@@ -139,4 +139,89 @@ final class BackdropHitTestTests: XCTestCase {
         // fixed and both are the panel's.
         XCTAssertTrue(check(CGPoint(x: 800, y: 700), stickies: [sticky(200, 100)]))
     }
+
+    // MARK: - Website bar overflow
+
+    /// The website card the bar hangs off: 280×232 at the lanes' top.
+    private var websiteCard: CGRect {
+        CGRect(x: 700, y: 20, width: 280, height: 232)
+    }
+
+    /// The bar hung below the card, in panel space: leading-offset by the
+    /// placement's x nudge, one bar-height tall. On screen this is x 708–908,
+    /// y 504–548 bottom-leading — just under the card's 548–780 span.
+    private var barBelowCard: CGRect {
+        CGRect(
+            x: websiteCard.minX + Space.one,
+            y: websiteCard.maxY,
+            width: WebsitePill.barWidth,
+            height: WebsitePill.barHeight
+        )
+    }
+
+    /// The bar flipped above a mid-panel card, in panel space. A top card's
+    /// above-hang would sit half off screen, so this uses a lower card: panel
+    /// y 156–200 reads as screen y 600–644 bottom-leading, over the card's
+    /// 368–600 span.
+    private var lowerWebsiteCard: CGRect {
+        CGRect(x: 700, y: 200, width: 280, height: 232)
+    }
+
+    private var barAboveLowerCard: CGRect {
+        CGRect(
+            x: lowerWebsiteCard.minX + Space.one,
+            y: lowerWebsiteCard.minY - WebsitePill.barHeight,
+            width: WebsitePill.barWidth,
+            height: WebsitePill.barHeight
+        )
+    }
+
+    /// A hung bar counts as the panel's while its reported frame joins the
+    /// union: every button across its width answers instead of dismissing.
+    /// (Transparent pixels are unclickable at the view layer, but down here
+    /// only the reported frame matters — the preference carries geometry,
+    /// not pixels.)
+    func testBarHungBelowCardCountsWhenItsFrameJoinsTheUnion() {
+        let cards = [websiteCard, barBelowCard]
+        XCTAssertTrue(check(CGPoint(x: 808, y: 526), cards: cards))
+        // Leading button and trailing menu ends of the bar.
+        XCTAssertTrue(check(CGPoint(x: 718, y: 526), cards: cards))
+        XCTAssertTrue(check(CGPoint(x: 898, y: 526), cards: cards))
+    }
+
+    /// The reported failure: the bar hangs outside every card frame, so
+    /// without its frame in the union a click on it reads as backdrop — the
+    /// panel dismisses (and the click is swallowed, never reaching the app
+    /// below) under the finger.
+    func testBarHungBelowCardDismissesWhenItsFrameIsMissing() {
+        XCTAssertFalse(check(CGPoint(x: 808, y: 526), cards: [websiteCard]))
+        XCTAssertFalse(check(CGPoint(x: 718, y: 526), cards: [websiteCard]))
+        XCTAssertFalse(check(CGPoint(x: 898, y: 526), cards: [websiteCard]))
+    }
+
+    func testBarHungAboveCardCountsWhenItsFrameJoinsTheUnion() {
+        let cards = [lowerWebsiteCard, barAboveLowerCard]
+        XCTAssertTrue(check(CGPoint(x: 808, y: 622), cards: cards))
+        XCTAssertTrue(check(CGPoint(x: 718, y: 622), cards: cards))
+        XCTAssertTrue(check(CGPoint(x: 898, y: 622), cards: cards))
+    }
+
+    func testBarHungAboveCardDismissesWhenItsFrameIsMissing() {
+        XCTAssertFalse(check(CGPoint(x: 808, y: 622), cards: [lowerWebsiteCard]))
+    }
+
+    /// The overflow joins the union; it must not inflate it to a bounding
+    /// box. The gutter between two cards still dismisses with a bar hung
+    /// off one of them.
+    func testGutterStillDismissesWithOverflowJoined() {
+        let overflow = CGRect(
+            x: twoCards[0].minX + Space.one,
+            y: twoCards[0].maxY,
+            width: WebsitePill.barWidth,
+            height: WebsitePill.barHeight
+        )
+        XCTAssertFalse(check(CGPoint(x: 835, y: 700), cards: twoCards + [overflow]))
+        // And the joined bar itself still answers.
+        XCTAssertTrue(check(CGPoint(x: 808, y: 358), cards: twoCards + [overflow]))
+    }
 }

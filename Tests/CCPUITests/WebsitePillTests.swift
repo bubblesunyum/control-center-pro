@@ -79,4 +79,114 @@ final class WebsitePillTests: XCTestCase {
             .aboveTrailing
         )
     }
+
+    func testTrailingCornersFlipTowardRoom() {
+        // The mirror of the leading-corner flip: a bottom-trailing hang near
+        // the display's bottom goes above, a top-trailing hang under the menu
+        // bar goes below.
+        XCTAssertEqual(
+            WebsitePill.placement(for: .bottomTrailing, drawnWidth: 300, barWidth: 200, roomAbove: true, roomBelow: false),
+            .aboveTrailing
+        )
+        XCTAssertEqual(
+            WebsitePill.placement(for: .topTrailing, drawnWidth: 300, barWidth: 200, roomAbove: false, roomBelow: true),
+            .belowTrailing
+        )
+    }
+
+    func testNarrowTrailingCornersStayTrailing() {
+        // The narrow rule dominates the corner: trailing corners on a narrow
+        // card stay trailing with room on both sides.
+        XCTAssertEqual(
+            WebsitePill.placement(for: .bottomTrailing, drawnWidth: 100, barWidth: 200, roomAbove: true, roomBelow: true),
+            .belowTrailing
+        )
+        XCTAssertEqual(
+            WebsitePill.placement(for: .topTrailing, drawnWidth: 100, barWidth: 200, roomAbove: true, roomBelow: true),
+            .aboveTrailing
+        )
+    }
+
+    func testNarrowCardWithoutRoomFlipsVertically() {
+        // Narrow picks the side, room picks above-or-below — the two halves
+        // of the matrix compose independently.
+        XCTAssertEqual(
+            WebsitePill.placement(for: .bottomLeading, drawnWidth: 100, barWidth: 200, roomAbove: true, roomBelow: false),
+            .aboveTrailing
+        )
+        XCTAssertEqual(
+            WebsitePill.placement(for: .topLeading, drawnWidth: 100, barWidth: 200, roomAbove: false, roomBelow: true),
+            .belowTrailing
+        )
+        XCTAssertEqual(
+            WebsitePill.placement(for: .bottomTrailing, drawnWidth: 100, barWidth: 200, roomAbove: true, roomBelow: false),
+            .aboveTrailing
+        )
+        XCTAssertEqual(
+            WebsitePill.placement(for: .topTrailing, drawnWidth: 100, barWidth: 200, roomAbove: false, roomBelow: true),
+            .belowTrailing
+        )
+    }
+
+    func testNarrowKeyboardSummonHangsTrailing() {
+        // Nil hangs below until the display says otherwise — on the trailing
+        // side when the card is narrower than the bar.
+        XCTAssertEqual(
+            WebsitePill.placement(for: nil, drawnWidth: 100, barWidth: 200, roomAbove: true, roomBelow: true),
+            .belowTrailing
+        )
+        XCTAssertEqual(
+            WebsitePill.placement(for: nil, drawnWidth: 100, barWidth: 200, roomAbove: true, roomBelow: false),
+            .aboveTrailing
+        )
+    }
+
+    func testKeyboardSummonUnderTheMenuBarHangsBelow() {
+        // No room above but room below: a keyboard summon hangs below, off
+        // no corner's side.
+        XCTAssertEqual(
+            WebsitePill.placement(for: nil, drawnWidth: 300, barWidth: 200, roomAbove: false, roomBelow: true),
+            .belowLeading
+        )
+    }
+
+    func testNowhereToHangKeepsOffItsOwnSide() {
+        // No room either way: each side flips off itself — a bottom hang goes
+        // above, a top hang goes below — rather than leaving the display.
+        XCTAssertEqual(
+            WebsitePill.placement(for: .bottomLeading, drawnWidth: 300, barWidth: 200, roomAbove: false, roomBelow: false),
+            .aboveLeading
+        )
+        XCTAssertEqual(
+            WebsitePill.placement(for: .topLeading, drawnWidth: 300, barWidth: 200, roomAbove: false, roomBelow: false),
+            .belowLeading
+        )
+    }
+
+    func testNarrowMeansStrictlyNarrowerThanBarPlusAir() {
+        // The flip trips strictly below barWidth + Space.two (216): exactly
+        // 216 still follows its corner.
+        XCTAssertEqual(
+            WebsitePill.placement(for: .bottomLeading, drawnWidth: 216, barWidth: 200, roomAbove: true, roomBelow: true),
+            .belowLeading
+        )
+        XCTAssertEqual(
+            WebsitePill.placement(for: .bottomLeading, drawnWidth: 215.99, barWidth: 200, roomAbove: true, roomBelow: true),
+            .belowTrailing
+        )
+    }
+
+    func testEveryPhysicalCornerSummonsOnANarrowCard() {
+        // On a 100-wide card every point is within proximity of both sides
+        // and the switch prefers leading — so the physical top-right still
+        // reports topLeading. What matters is that all four physical corners
+        // summon (non-nil): the narrow rule then hangs the bar trailing
+        // whatever corner answered.
+        let narrow = CGSize(width: 100, height: 232)
+        XCTAssertNotNil(WebsitePill.corner(at: CGPoint(x: 10, y: 10), in: narrow))
+        XCTAssertNotNil(WebsitePill.corner(at: CGPoint(x: 90, y: 10), in: narrow))
+        XCTAssertNotNil(WebsitePill.corner(at: CGPoint(x: 10, y: 222), in: narrow))
+        XCTAssertNotNil(WebsitePill.corner(at: CGPoint(x: 90, y: 222), in: narrow))
+        XCTAssertNil(WebsitePill.corner(at: CGPoint(x: 50, y: 116), in: narrow))
+    }
 }
