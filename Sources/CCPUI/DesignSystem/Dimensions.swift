@@ -251,10 +251,15 @@ public extension Layout {
     /// The Settings window's content width — wide enough that a label and its
     /// shortcut field sit on one line without crowding.
     static let settingsWidth: CGFloat = 420
-    /// The minimum size of a website login popup sheet. A login page narrower
-    /// than this crowds its own form; the sheet grows with its content past it.
+    /// The minimum size of a website login popup's page. A login page
+    /// narrower than this crowds its own form; past it the page gets the
+    /// size its opener asked for.
     static let websitePopupMinWidth: CGFloat = 480
     static let websitePopupMinHeight: CGFloat = 360
+    /// What a login popup's page leaves of the screen: room for the sheet's
+    /// header and Dismiss row, plus a margin so the sheet never touches the
+    /// screen's edges.
+    static let websitePopupScreenMargin: CGFloat = 160
     /// A newborn popup web view's frame: a real window size, not zero. Some
     /// login flows measure their window on open and bail on a zero rect —
     /// which the site reports as blocking popups. Throwaway (first layout

@@ -147,6 +147,26 @@ private final class WebsiteViewPool {
 private struct LoginPopup: Identifiable {
     let id = UUID()
     let view: WKWebView
+    /// The page size the opener asked for. Login pages lay themselves out
+    /// for it — Notion's is a fixed-height page that cannot scroll — so a
+    /// sheet any shorter cuts off the button that continues the flow.
+    let pageSize: CGSize
+
+    init(view: WKWebView, features: WKWindowFeatures, screen: NSScreen?) {
+        self.view = view
+        let fallback = Layout.websitePopupInitialSize
+        let requested = CGSize(
+            width: features.width.map { CGFloat($0.doubleValue) } ?? fallback.width,
+            height: features.height.map { CGFloat($0.doubleValue) } ?? fallback.height
+        )
+        // The sheet's header and Dismiss row sit around the page; whatever
+        // is left of the screen after them is the most the page can have.
+        let room = (screen?.visibleFrame.size ?? fallback)
+        pageSize = CGSize(
+            width: max(min(requested.width, room.width - Layout.websitePopupScreenMargin), Layout.websitePopupMinWidth),
+            height: max(min(requested.height, room.height - Layout.websitePopupScreenMargin), Layout.websitePopupMinHeight)
+        )
+    }
 }
 
 /// The pooled web view, reattached on every mount. Identity stays with the
@@ -314,8 +334,9 @@ private struct WebsiteWebView: NSViewRepresentable {
             WebsiteConfiguration.applyStoredAgent(for: id, to: popup)
             popup.navigationDelegate = self
             popup.uiDelegate = self
+            let screen = webView.window?.screen
             Task { @MainActor in
-                popupHost.wrappedValue = LoginPopup(view: popup)
+                popupHost.wrappedValue = LoginPopup(view: popup, features: windowFeatures, screen: screen)
             }
             return popup
         }
@@ -829,8 +850,7 @@ private struct WebsiteContent: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             PopupWebView(view: popup.view)
-                .frame(minWidth: Layout.websitePopupMinWidth, minHeight: Layout.websitePopupMinHeight)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(width: popup.pageSize.width, height: popup.pageSize.height)
             HStack {
                 Spacer()
                 Button("Dismiss") { popupHost = nil }
