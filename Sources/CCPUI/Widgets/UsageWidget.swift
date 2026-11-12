@@ -5,12 +5,12 @@ import AppKit
 import CCPKit
 import SwiftUI
 
-/// Agent-usage quota: OpenCode's Go plan windows and Claude's session and
-/// weekly windows, each over the endpoint its own dashboard reads.
+/// Agent-usage quota: OpenCode's Go plan windows, over the endpoint its own
+/// dashboard reads.
 ///
 /// Percentages and resets are server-side — no local ledger can reconstruct
-/// a rolling window — so a failed fetch degrades to an inline state per
-/// provider, never an empty card or a blocked panel.
+/// a rolling window — so a failed fetch degrades to an inline state, never
+/// an empty card or a blocked panel.
 @MainActor
 public final class UsageWidget: CCPWidget {
     public static let descriptor = WidgetDescriptor(
@@ -22,34 +22,28 @@ public final class UsageWidget: CCPWidget {
 
     static let openCodeURL = URL(
         string: "https://opencode.ai/workspace/wrk_01M1QG8Q7R6EVADZ33HGZHTP6H/go")!
-    static let claudeUsageURL = URL(string: "https://claude.ai/settings/usage")!
 
     private let openCode: OpenCodeUsageAdapter
-    private let claude: ClaudeUsageAdapter
 
     public init() {
         self.openCode = OpenCodeUsageAdapter()
-        self.claude = ClaudeUsageAdapter()
     }
 
-    /// Test seam: a widget backed by fake sources.
-    init(openCodeSource: OpenCodeUsageSource, claudeSource: ClaudeUsageSource) {
+    /// Test seam: a widget backed by a fake source.
+    init(openCodeSource: OpenCodeUsageSource) {
         self.openCode = OpenCodeUsageAdapter(source: openCodeSource)
-        self.claude = ClaudeUsageAdapter(source: claudeSource)
     }
 
     public func makeView() -> some View {
-        UsageContent(openCode: openCode, claude: claude)
+        UsageContent(openCode: openCode)
     }
 
     public func activate() {
         openCode.activate()
-        claude.activate()
     }
 
     public func deactivate() {
         openCode.deactivate()
-        claude.deactivate()
     }
 }
 
@@ -57,32 +51,19 @@ public final class UsageWidget: CCPWidget {
 
 private struct UsageContent: View {
     @Bindable var openCode: OpenCodeUsageAdapter
-    @Bindable var claude: ClaudeUsageAdapter
 
     var body: some View {
         WidgetCard(UsageWidget.descriptor) {
-            // The countdowns tick off each adapter's 30s ticker, which lives
+            // The countdowns tick off the adapter's 30s ticker, which lives
             // and dies with activate()/deactivate() — the hosting graph is
             // never torn down, so a view-owned timer would tick while shut.
-            VStack(alignment: .leading, spacing: Space.three) {
-                providerSection(
-                    provider: .openCode,
-                    lastUpdated: openCode.lastUpdated,
-                    lastError: openCodeError
-                ) {
-                    windowRow(provider: .openCode, title: "5 hours", window: openCode.snapshot.rolling, now: openCode.now, paceHours: 5)
-                    windowRow(provider: .openCode, title: "Weekly", window: openCode.snapshot.weekly, now: openCode.now, paceDays: 7)
-                    windowRow(provider: .openCode, title: "Monthly", window: openCode.snapshot.monthly, now: openCode.now, paceDays: 30)
-                }
-                // Claude publishes no monthly limit, so the section ends here.
-                providerSection(
-                    provider: .claude,
-                    lastUpdated: claude.lastUpdated,
-                    lastError: claudeError
-                ) {
-                    windowRow(provider: .claude, title: "5 hours", window: claude.snapshot.rolling, now: claude.now, paceHours: 5)
-                    windowRow(provider: .claude, title: "Weekly", window: claude.snapshot.weekly, now: claude.now, paceDays: 7)
-                }
+            providerSection(
+                lastUpdated: openCode.lastUpdated,
+                lastError: openCodeError
+            ) {
+                windowRow(title: "5 hours", window: openCode.snapshot.rolling, now: openCode.now, paceHours: 5)
+                windowRow(title: "Weekly", window: openCode.snapshot.weekly, now: openCode.now, paceDays: 7)
+                windowRow(title: "Monthly", window: openCode.snapshot.monthly, now: openCode.now, paceDays: 30)
             }
             .padding(.bottom, Space.half)
             // The card puts 8pt between its header and this content; 4pt more
@@ -91,35 +72,25 @@ private struct UsageContent: View {
         }
     }
 
-    /// Erases the two adapters' error types into one section state: either
-    /// half is either missing its login or unreachable, and the section only
-    /// needs to know which.
+    /// Erases the adapter's error type into one section state: a missing
+    /// login or an unreachable endpoint.
     private var openCodeError: ProviderError? {
         openCode.lastError.map(ProviderError.init)
     }
 
-    private var claudeError: ProviderError? {
-        claude.lastError.map(ProviderError.init)
-    }
-
     private func providerSection<Rows: View>(
-        provider: Provider,
         lastUpdated: Date?,
         lastError: ProviderError?,
         @ViewBuilder rows: () -> Rows
     ) -> some View {
         VStack(alignment: .leading, spacing: Space.one) {
-            ProviderHeader(provider: provider)
-            if let lastError, lastError == .missingLogin || lastError == .rejectedToken {
+            ProviderHeader()
+            if let lastError, lastError == .missingLogin {
                 // Logged-out beats stale: rows from a dead grant read as live
-                // numbers. A rejected paste must name its own recovery even
-                // when an older fetch succeeded — the static token outranks
-                // the import, so stale numbers would otherwise sit with no
-                // hint. (Only Claude reports a rejection; the OpenCode half
-                // can never yield it.)
-                errorRow(lastError, provider: provider)
+                // numbers.
+                errorRow(lastError)
             } else if lastUpdated == nil, let lastError {
-                errorRow(lastError, provider: provider)
+                errorRow(lastError)
             } else if lastUpdated == nil {
                 Text("Loading…")
                     .font(.caption2)
@@ -135,7 +106,7 @@ private struct UsageContent: View {
         }
     }
 
-    private func windowRow(provider: Provider, title: String, window: UsageWindow?, now: Date, paceDays: Int? = nil, paceHours: Int? = nil) -> some View {
+    private func windowRow(title: String, window: UsageWindow?, now: Date, paceDays: Int? = nil, paceHours: Int? = nil) -> some View {
         // Even-pace reference, behind the main fill. Nil without a reset to
         // split — no interval, no pace.
         let pace = paceDays.flatMap {
@@ -165,145 +136,44 @@ private struct UsageContent: View {
             UsageBar(fraction: (window?.percent ?? 0) / 100, secondaryFraction: pace)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(provider.title) \(title) \(UsageWidget.percentText(window?.percent)), \(UsageWidget.resetText(until: window?.resetsAt, now: now))")
+        .accessibilityLabel("OpenCode \(title) \(UsageWidget.percentText(window?.percent)), \(UsageWidget.resetText(until: window?.resetsAt, now: now))")
     }
 
     @ViewBuilder
-    private func errorRow(_ error: ProviderError, provider: Provider) -> some View {
-        switch (provider, error) {
-        case (.claude, .missingLogin):
-            ClaudeImportPrompt(
-                importLogin: { try ClaudeLoginImporter().importLogin() },
-                refresh: { await claude.refresh() }
-            )
-        case (.claude, .rejectedToken):
-            Text("That token was rejected — paste a fresh one from claude setup-token in Settings")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .accessibilityLabel("Claude token rejected")
-        case (.openCode, .missingLogin):
+    private func errorRow(_ error: ProviderError) -> some View {
+        switch error {
+        case .missingLogin:
             Text("Connect Go with /connect in OpenCode")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .accessibilityLabel("OpenCode Go not connected")
-        case (_, .unreachable), (.openCode, .rejectedToken):
-            // OpenCode has no token-paste path, so its half can never
-            // report a rejection — shared here to keep the switch total.
+        case .unreachable:
             Text("Couldn't load usage")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .accessibilityLabel("\(provider.title) usage unavailable")
-        }
-    }
-}
-
-/// The Claude empty state: one explicit import behind a button, with the
-/// failure naming its own recovery.
-private struct ClaudeImportPrompt: View {
-    let importLogin: () throws -> Bool
-    let refresh: () async -> Void
-
-    @State private var issue: ImportIssue?
-
-    var body: some View {
-        // The one explicit keychain moment: a single prompt behind this
-        // button copies the login into our private store, and the fetch
-        // path never touches the keychain again.
-        VStack(alignment: .leading, spacing: Space.half) {
-            Button("Import from Claude Code") {
-                Task { @MainActor in
-                    do {
-                        if try importLogin() {
-                            issue = nil
-                            await refresh()
-                        } else {
-                            issue = .noLogin
-                        }
-                    } catch {
-                        issue = .saveFailed
-                    }
-                }
-            }
-            .buttonStyle(.link)
-            .accessibilityLabel("Import Claude login from Claude Code")
-            Text(caption)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-        }
-    }
-
-    private var caption: String {
-        switch issue {
-        case .noLogin:
-            "No Claude login found — run claude auth login first, then import again"
-        case .saveFailed:
-            "Couldn't save the login — check disk space, then import again"
-        case nil:
-            "Requires claude auth login in a terminal first"
-        }
-    }
-}
-
-private enum ImportIssue {
-    case noLogin
-    case saveFailed
-}
-
-private enum Provider {
-    case openCode
-    case claude
-
-    var title: String {
-        switch self {
-        case .openCode: "OpenCode"
-        case .claude: "Claude"
-        }
-    }
-
-    var linkLabel: String {
-        switch self {
-        case .openCode: "Open usage in OpenCode"
-        case .claude: "Open usage in Claude"
-        }
-    }
-
-    var linkURL: URL {
-        switch self {
-        case .openCode: UsageWidget.openCodeURL
-        case .claude: UsageWidget.claudeUsageURL
+                .accessibilityLabel("OpenCode usage unavailable")
         }
     }
 }
 
 private enum ProviderError {
     case missingLogin
-    case rejectedToken
     case unreachable
 
     init(_ error: OpenCodeUsageError) {
         self = error == .missingCredentials ? .missingLogin : .unreachable
-    }
-
-    init(_ error: ClaudeUsageError) {
-        switch error {
-        case .missingCredentials: self = .missingLogin
-        case .invalidToken: self = .rejectedToken
-        case .unavailable: self = .unreachable
-        }
     }
 }
 
 /// A provider's nameplate: small-caps label with a chevron, the whole thing
 /// opening that provider's own usage page.
 private struct ProviderHeader: View {
-    let provider: Provider
-
     var body: some View {
         Button {
-            NSWorkspace.shared.open(provider.linkURL)
+            NSWorkspace.shared.open(UsageWidget.openCodeURL)
         } label: {
             HStack(spacing: Space.half) {
-                Text(provider.title.uppercased())
+                Text("OpenCode".uppercased())
                     .sectionCaps()
                 Image(systemName: "chevron.right")
                     .font(.caption2.weight(.semibold))
@@ -312,7 +182,7 @@ private struct ProviderHeader: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(provider.linkLabel)
+        .accessibilityLabel("Open usage in OpenCode")
         .accessibilityAddTraits(.isLink)
     }
 }
