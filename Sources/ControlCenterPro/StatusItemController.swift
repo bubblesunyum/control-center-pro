@@ -23,6 +23,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let menu: NSMenu
     private var countdownTimer: Timer?
     private var editPill: EditPill?
+    private let trackingWatchdog: StatusItemTrackingWatchdog
 
     /// What the panel anchors itself to. Read by the global shortcut, which
     /// has no click of its own to say which screen the user is on.
@@ -31,7 +32,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     init(panel: ControlPanelController, settingsWindow: SettingsWindowController) {
         self.panel = panel
         self.settingsWindow = settingsWindow
-        item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        item = statusItem
+        trackingWatchdog = StatusItemTrackingWatchdog(statusItem: statusItem)
         // A stable name so the system tracks this item across launches —
         // position, and whether it is shown at all. Nameless items sink into
         // the hidden overflow with no address to bring them back by.
@@ -57,6 +60,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             // (ccp-nbg3). Up-phase dispatch never runs inside tracking.
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
+        trackingWatchdog.start()
     }
 
     /// The rest-state icon. Edit mode never sets an image — the pill carries
