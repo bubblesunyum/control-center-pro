@@ -205,11 +205,13 @@ private struct WebsiteWebView: NSViewRepresentable {
         if webView.uiDelegate !== context.coordinator {
             webView.uiDelegate = context.coordinator
         }
-        // The toggle path applies the new agent and reloads live, so this
-        // only fires when a pooled view somehow outlived its entry's flag —
-        // an agent change without a reload would never take.
+        // The toggle path applies the new agent and reloads live; this also
+        // catches version drift — a pooled view outlives a Safari update, and
+        // its pinned Version/ would otherwise go stale until the site was
+        // re-added. An agent change without a reload would never take.
         let wantTablet = WebsiteStore.shared.entry(for: id)?.requestsTabletSite ?? false
-        if WebsiteConfiguration.isTablet(webView) != wantTablet, let url {
+        let wantAgent = wantTablet ? WebsiteConfiguration.tabletUserAgent : WebsiteConfiguration.desktopUserAgent
+        if webView.customUserAgent != wantAgent, let url {
             WebsiteConfiguration.applyAgent(isTablet: wantTablet, to: webView)
             WebsiteViewPool.shared.load(id, url: url)
             return
