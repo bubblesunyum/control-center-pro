@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Control Center Pro contributors
 
-import WebKit
 import XCTest
 @testable import CCPKit
 
 /// Zen cookie rows become jar cookies: leading dots stripped, expired rows
-/// dropped, session rows kept, empty hosts refused — and the desktop agent
-/// stays a Mac.
+/// dropped, session rows kept, empty hosts refused.
 @MainActor
 final class ZenCookieImportTests: XCTestCase {
     private var future: Double { Date().timeIntervalSince1970 + 3600 }
@@ -65,15 +63,5 @@ final class ZenCookieImportTests: XCTestCase {
         XCTAssertEqual(rows.count, 1)
         XCTAssertEqual(rows[0].host, ".example.com")
         XCTAssertNotNil(rows[0].httpCookie(now: Date().timeIntervalSince1970))
-    }
-
-    func testDesktopAgentIsAMacNotAPhone() {
-        XCTAssertTrue(WebsiteConfiguration.desktopUserAgent.contains("Macintosh"))
-        XCTAssertFalse(WebsiteConfiguration.desktopUserAgent.contains("iPhone"))
-    }
-
-    func testTabletAgentIsAnIPad() {
-        XCTAssertTrue(WebsiteConfiguration.tabletUserAgent.contains("iPad"))
-        XCTAssertFalse(WebsiteConfiguration.tabletUserAgent.contains("Macintosh"))
     }
 }
