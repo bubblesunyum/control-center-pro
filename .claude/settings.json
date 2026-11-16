@@ -2,47 +2,18 @@
   "hooks": {
     "SessionStart": [
       {
+        "matcher": "",
         "hooks": [
           {
-            "command": "cd \"$CLAUDE_PROJECT_DIR\" && scripts/brief.sh --hook",
-            "timeout": 60,
-            "type": "command"
-          },
-          {
-            "command": "cd \"$CLAUDE_PROJECT_DIR\" && scripts/dashboard.py up",
-            "statusMessage": "bringing up the harness dashboard",
-            "timeout": 30,
-            "type": "command"
-          }
-        ],
-        "matcher": ""
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "async": true,
-            "command": "cd \"$CLAUDE_PROJECT_DIR\" && scripts/dashboard.py up",
-            "statusMessage": "bringing up the harness dashboard",
-            "timeout": 120,
-            "type": "command"
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && scripts/h session --hook",
+            "timeout": 60
           }
         ]
       }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "command": "cd \"$CLAUDE_PROJECT_DIR\" && scripts/dashboard.py down",
-            "statusMessage": "stopping the harness dashboard",
-            "timeout": 15,
-            "type": "command"
-          }
-        ],
-        "matcher": ""
-      }
     ]
+  },
+  "permissions": {
+    "allow": ["Bash(scripts/h:*)"]
   }
 }
